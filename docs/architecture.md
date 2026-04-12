@@ -1,0 +1,109 @@
+# Architecture
+
+This document describes the technical foundation of the Matrix, flags what is decided, and explicitly marks what is left open for contributors.
+
+See the [Project Overview](./project-overview.md) for the product and game design context.
+
+---
+
+## Decided Stack
+
+These components are chosen. Proposals to swap them out require an ADR with a strong justification.
+
+| Component | Technology | Role |
+|---|---|---|
+| Game client | [Phaser](https://phaser.io/) | Hex-tile world rendering, spectator and attendee UI |
+| Realtime server | [Colyseus](https://colyseus.io/) | Authoritative world state, WebSocket connections, room management |
+| Horizontal scaling | [Redis](https://redis.io/) (`RedisPresence` + `RedisDriver`) | Colyseus multi-process pub/sub and matchmaking |
+| World model | [Neo4j](https://neo4j.com/) | Tile graph, ghost positions, social graph, goal state, quest progress |
+| Blob storage | S3 (or compatible) | Session recordings, slide assets, post-processed artifacts |
+| Deployment | Docker + Kubernetes | Containerized services, scalable cluster deployment |
+
+**Note on Colyseus + Redis:** Redis is the official Colyseus horizontal scaling mechanism. `RedisPresence` handles pub/sub and shared state across processes; `RedisDriver` handles distributed matchmaking. Single-process development can use the default in-memory presence.
+
+**Note on the ghost agent layer:** Ghosts do not require Phaser. The game client visualizes the world; agents move through it via Colyseus and Neo4j. These are separable concerns.
+
+---
+
+## Open Questions
+
+These are explicitly unresolved. They are contribution surfaces, not gaps. Open an RFC or ADR to propose an answer.
+
+### Agent Framework
+What framework, if any, do ghost agents use for goal decomposition, planning, and execution? Options range from simple state machines to LangGraph, AutoGen, custom implementations, or something purpose-built. The interface matters more than the implementation — whatever is chosen must support the goal/plan/checkpoint model described in the overview.
+
+### Ghost Memory Interface
+What does a memory module expose? At minimum: write a fact, query by relevance or recency, handle conflicts. Beyond that — vector stores, knowledge graphs, episodic memory, continual learning — is open. **Vendor contributions are explicitly invited here.**
+
+### LLM Providers
+Which models power ghost reasoning, speaker agents, and vendor NPCs? Multiple providers should be supportable. The agent layer should be model-agnostic. Latency characteristics at conference-scale (3000+ concurrent ghosts) need to be validated.
+
+### Observability and Telemetry
+How are ghost decisions, checkpoint events, LLM calls, and world state changes captured and surfaced? A structured event log is the minimum. APM, tracing, and the eval layer sit on top of it. Tool choice is open.
+
+### Time-Series / Event Log Backend
+The Matrix generates continuous streams: ghost movements, card exchanges, checkpoint events, quest completions, session attendance. These need to be captured for leaderboards, eval, and post-conference analysis. Options include ClickHouse, TimescaleDB, structured logs to S3 + query layer, or similar. Open.
+
+### Authentication and Identity
+How does an IRL conference badge become a ghost? Options range from simple email-based JWT to OAuth via a conference identity provider to full SSO. Okta/Auth0 (an AIEWF sponsor) is a natural candidate. Privacy and consent for ghost card sharing is a related concern.
+
+### Voice Transcription for Speaker Agents
+IRL talks could feed speaker agents via live transcription (Whisper or similar). This touches live A/V infrastructure at the venue, which is operationally complex. Whether this is in scope for v1, and what the fallback is (slides + abstract), needs a decision.
+
+### CI/CD Pipeline
+What runs on PRs, how are services built and deployed, and how is the Kubernetes cluster managed? Likely GitHub Actions for CI; deployment tooling is open.
+
+---
+
+## Component Map
+
+```
+┌─────────────────────────────────────────────────────┐
+│                   Attendee / Browser                │
+│         Phaser Client  ·  Ghost Management UI       │
+└──────────────────┬──────────────────────────────────┘
+                   │ WebSocket
+┌──────────────────▼──────────────────────────────────┐
+│                  Colyseus Server                    │
+│         Room Management  ·  State Sync              │
+│         Checkpoint Delivery  ·  Notifications       │
+└──────┬───────────────────────────────────┬──────────┘
+       │ RedisPresence / RedisDriver        │ Queries
+┌──────▼──────┐                   ┌────────▼──────────┐
+│    Redis    │                   │      Neo4j        │
+│  Pub/Sub    │                   │   World Graph     │
+│  Presence   │                   │   Social Graph    │
+└─────────────┘                   │   Goal State      │
+                                  └───────────────────┘
+                                           │
+┌──────────────────────────────────────────▼──────────┐
+│                  Agent Layer                        │
+│   Ghost Reasoning  ·  Goal/Plan Engine              │
+│   Memory Module Interface  ·  Checkpoint Logic      │
+│   Speaker Agents  ·  Vendor NPCs                    │
+└──────┬─────────────────────────────────┬────────────┘
+       │                                 │
+┌──────▼──────┐                 ┌────────▼────────────┐
+│ LLM Provider│                 │  Memory Modules     │
+│  (open)     │                 │  (pluggable)        │
+└─────────────┘                 └─────────────────────┘
+                                          │
+┌─────────────────────────────────────────▼───────────┐
+│             Telemetry / Event Log (open)            │
+│   Ghost events  ·  Checkpoints  ·  Quest state      │
+└──────────────────────────┬──────────────────────────┘
+                           │
+              ┌────────────▼────────┐
+              │   S3 / Blob Store   │
+              │  Slides  · Assets   │
+              │  Recorded streams   │
+              └─────────────────────┘
+```
+
+---
+
+## Proposals
+
+See [proposals/](../proposals/) for RFCs and ADRs.  
+See [proposals/adr/README.md](../proposals/adr/README.md) for the ADR format.  
+See [proposals/rfc/README.md](../proposals/rfc/README.md) for the RFC format.

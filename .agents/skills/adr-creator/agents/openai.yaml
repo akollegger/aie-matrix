@@ -1,0 +1,3 @@
+interface:
+  display_name: "ADR Creator"
+  short_description: "Draft repository ADRs from the local template"
