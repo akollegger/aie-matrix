@@ -28,3 +28,10 @@ There is no formal automated test suite yet. For documentation changes, verify i
 
 ## Commit & Pull Request Guidelines
 This repository has no commit history yet, so follow the conventions defined in `CONTRIBUTING.md`. Use imperative, scoped commit messages such as `docs: add vendor NPC RFC` or `adr: choose event log backend`, always with `-s`. Open pull requests from feature branches, reference the related issue or proposal, and include enough context for review. Non-trivial work should begin with an RFC or ADR before implementation.
+
+## Active Technologies
+- TypeScript on Node.js (active LTS) for `server/*`, `client/phaser`, `shared/types`, and `ghosts/*` packages; Python 3.11+ for `ghosts/python-client/` stub only. + Colyseus (authoritative room + WebSocket broadcast to spectators); Phaser 3 (spectator); MCP server/client libraries for `world-api` and SDKs; minimal HTTP stack for `registry` and static or dev-server delivery of Phaser build; JWT handling in `auth` (dev secret for PoC). (001-minimal-poc)
+- N/A for PoC — in-memory Colyseus room state and ephemeral registry/adoption data unless a later task introduces a tiny on-disk fixture. (001-minimal-poc)
+
+## Recent Changes
+- 001-minimal-poc: Added TypeScript on Node.js (active LTS) for `server/*`, `client/phaser`, `shared/types`, and `ghosts/*` packages; Python 3.11+ for `ghosts/python-client/` stub only. + Colyseus (authoritative room + WebSocket broadcast to spectators); Phaser 3 (spectator); MCP server/client libraries for `world-api` and SDKs; minimal HTTP stack for `registry` and static or dev-server delivery of Phaser build; JWT handling in `auth` (dev secret for PoC).
