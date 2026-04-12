@@ -1,0 +1,63 @@
+name: Proposal Branch Scope
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  proposal-branch-scope:
+    name: proposal-branch-scope
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate changed paths for proposal branches
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const headRef = context.payload.pull_request.head.ref;
+
+            if (!headRef.startsWith("proposal/")) {
+              core.info(`Skipping enforcement for non-proposal branch: ${headRef}`);
+              return;
+            }
+
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pull_number = context.payload.pull_request.number;
+            const allowedPrefixes = ["docs/", "proposals/"];
+
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner,
+                repo,
+                pull_number,
+                per_page: 100,
+              }
+            );
+
+            const disallowedFiles = files
+              .map((file) => file.filename)
+              .filter((path) => !allowedPrefixes.some((prefix) => path.startsWith(prefix)));
+
+            if (disallowedFiles.length > 0) {
+              core.setFailed(
+                [
+                  `Branch '${headRef}' is limited to changes under docs/ and proposals/.`,
+                  "Disallowed paths:",
+                  ...disallowedFiles.map((path) => `- ${path}`),
+                ].join("\n")
+              );
+              return;
+            }
+
+            core.info(
+              `Validated ${files.length} changed file(s) for ${headRef}; all are within docs/ or proposals/.`
+            );

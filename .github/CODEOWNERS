@@ -1,0 +1,11 @@
+# Default owner for the repository while maintainer coverage is still small.
+* @akollegger
+
+# Core docs and contribution workflow
+/README.md @akollegger
+/CONTRIBUTING.md @akollegger
+/docs/ @akollegger
+
+# Proposal ownership
+/proposals/adr/ @akollegger
+/proposals/rfc/ @akollegger
