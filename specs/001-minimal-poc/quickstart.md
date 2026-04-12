@@ -5,7 +5,7 @@ This file is the **verification backbone** for the feature spec user stories. Co
 ## 1. Ghost end-to-end (User Story 1)
 
 1. From `/Users/akollegger/Developer/akollegger/aie-matrix`, install and build per root `README.md`.
-2. Start the server bundle: `cd server && npm run dev` (RFC naming).
+2. Start the server bundle: `cd server && pnpm run dev` (RFC naming).
 3. Execute the documented adoption script / `curl` sequence to register **`ghosts/random-house/`** as a GhostHouse and adopt a ghost for a dev caretaker.
 4. Start **`ghosts/random-house/`** per package README.
 5. Confirm MCP-only navigation: valid move succeeds; invalid neighbor or capacity move returns explicit rejection without position corruption.
@@ -26,7 +26,7 @@ This file is the **verification backbone** for the feature spec user stories. Co
 
 ## 4. Compatibility check (User Story 4)
 
-1. With server running: `cd ghosts/tck && npm test`.
+1. With server running: `cd ghosts/tck && pnpm test`.
 2. For cross-language story: point TCK at alternate implementation only after IC-006 parameters for substituting the house or ghost process are defined in `tck` README.
 
 ## Related artifacts

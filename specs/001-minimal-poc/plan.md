@@ -17,6 +17,7 @@ Deliver a runnable local proof-of-concept: world backends (Colyseus authoritativ
 **Testing**: `ghosts/tck/` as primary automated compatibility driver against a live local stack; package-level smoke scripts (documented in `quickstart.md` and package READMEs) for server boot and browser sanity.  
 **Target Platform**: Local developer machines (macOS, Linux; Windows best-effort if dependencies allow).  
 **Project Type**: Multi-package monorepo (`server/`, `client/`, `shared/`, `ghosts/`, `maps/`) introduced by this feature per RFC layout.  
+**Package manager**: [pnpm](https://pnpm.io/) workspaces at the repository root (`pnpm-workspace.yaml`, shared `pnpm-lock.yaml`); TypeScript packages use the `@aie-matrix/*` scope. `ghosts/python-client/` remains Python-only (`pyproject.toml`) outside the pnpm workspace.  
 **Performance Goals**: Not a PoC gate; spectator updates should meet spec SC-003 (order-of-a-second visibility) on a laptop.  
 **Constraints**: Ghosts never connect to Colyseus directly; movement validation only in `world-api`; GhostHouse runtime outside world packages; flat `ghosts/` per FR-019; documented PoC-only shortcuts (single server process, in-process `world-api` → Colyseus).  
 **Scale/Scope**: Small hex map asset; two concurrent ghosts in local demo; minimal TCK step sequence (full TCK spec deferred per RFC).

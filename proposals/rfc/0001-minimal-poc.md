@@ -64,6 +64,8 @@ aie-matrix/
 └── maps/               # Tiled map files (.tmj / .tsx / .png assets)
 ```
 
+**Monorepo tooling** — TypeScript packages are wired as a **pnpm** workspace (`pnpm-workspace.yaml` at the repo root, single `pnpm-lock.yaml`). Run `pnpm install` from the repository root before package-local commands. The **`ghosts/python-client/`** stub ships as **Python** (`pyproject.toml`) only and is intentionally **not** a pnpm workspace member.
+
 **`ghosts/` naming convention** — packages under `ghosts/` are a **flat list**;
 there is no nested subtype hierarchy (for example, no `ghosts/providers/…`).
 
@@ -192,7 +194,7 @@ Any implementation in any language passes if it can drive these steps correctly.
 This is the happy path a contributor follows to verify the PoC is working:
 
 1. `git clone` the repo and run the setup command from the root README (install dependencies, build packages).
-2. Start the server: `npm run dev` from `server/` — starts Colyseus, world-api, and registry in a single process.
+2. Start the server: `pnpm run dev` from `server/` — starts Colyseus, world-api, and registry in a single process.
 3. Open the spectator client: navigate to `http://localhost:3000` in a browser. The hex map renders; no ghosts yet.
 4. Start **`ghosts/random-house/`** (documented command) and complete an adoption
    through the developer-facing flow. The process registers as a GhostHouse,
@@ -200,7 +202,7 @@ This is the happy path a contributor follows to verify the PoC is working:
    walker.
 5. The browser updates in real time as the ghost steps across the map,
    respecting tile-class movement rules.
-6. Run the TCK: `npm test` from `ghosts/tck/`. All steps pass.
+6. Run the TCK: `pnpm test` from `ghosts/tck/`. All steps pass.
 
 A second terminal running a second instance of `ghosts/random-house/` should show
 two ghosts navigating independently.

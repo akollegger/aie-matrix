@@ -28,7 +28,7 @@ Resolves open questions from [RFC-0001](../../proposals/rfc/0001-minimal-poc.md)
 
 ## Developer-facing adoption flow
 
-- **Decision**: **Documented script-first flow** under repo root or `server/registry/` (e.g. `npm run` + documented `curl` sequence, or a small Node CLI) that creates caretaker data, registers `random-house`, and performs adoption — **no** attendee-facing UI.
+- **Decision**: **Documented script-first flow** under repo root or `server/registry/` (e.g. `pnpm run` + documented `curl` sequence, or a small Node CLI) that creates caretaker data, registers `random-house`, and performs adoption — **no** attendee-facing UI.
 - **Rationale**: Matches spec clarifications and FR-018; fastest for contributors reproducing the demo.
 - **Alternatives considered**: Seed-only data (less explicit about REST contract); minimal admin UI (out of scope).
 

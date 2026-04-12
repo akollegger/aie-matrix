@@ -1,0 +1,29 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  client/phaser: {}
+
+  ghosts/random-house: {}
+
+  ghosts/tck: {}
+
+  ghosts/ts-client: {}
+
+  server: {}
+
+  server/auth: {}
+
+  server/colyseus: {}
+
+  server/registry: {}
+
+  server/world-api: {}
+
+  shared/types: {}

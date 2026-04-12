@@ -39,6 +39,11 @@ git commit -s -m "your commit message"
 
 This adds a `Signed-off-by` line certifying that you have the right to submit the contribution under the project license. It is not a CLA — no agreement to sign.
 
+### PoC monorepo (TypeScript)
+
+- Use **pnpm** for installs and scripts (`pnpm install` at the repo root; see `pnpm-workspace.yaml`).
+- Commit `pnpm-lock.yaml` when workspace dependencies change.
+
 ### Code Style and CI
 
 - CI checks run on every PR. All checks must pass before merge.
