@@ -15,8 +15,10 @@ Use this skill to create repository-specific ADRs that follow `proposals/adr/REA
    - shared interface definition
    - expensive-to-reverse decision
    - resolution of an architecture open question
-3. Create or update `proposals/adr/NNNN-short-title.md` using lowercase kebab-case for the filename.
-4. Use this structure exactly:
+3. Determine the ADR filename: `NNNN-short-title` in lowercase kebab-case (e.g. `0001-world-graph-backend`).
+4. Create a branch named `proposal/NNNN-short-title` matching the ADR filename exactly before writing any files. Do not proceed without switching to this branch.
+5. Create or update `proposals/adr/NNNN-short-title.md` on that branch.
+6. Use this structure exactly:
 
 ```markdown
 # ADR-NNNN: Title
@@ -44,4 +46,9 @@ Use this skill to create repository-specific ADRs that follow `proposals/adr/REA
 - Do not invent settled facts; align with `README.md`, `docs/project-overview.md`, and `docs/architecture.md`.
 
 ## Output
-When creating a new ADR, write the file directly under `proposals/adr/` and mention any assumptions that still need maintainer confirmation.
+When creating a new ADR:
+1. Confirm the active branch is `proposal/NNNN-short-title` before writing files.
+2. Write the ADR file under `proposals/adr/`.
+3. Update the index table in `proposals/adr/README.md`.
+4. Mention any assumptions that still need maintainer confirmation.
+5. Remind the author to run `/adr-review` before opening the proposal for comment.

@@ -43,4 +43,6 @@ What becomes easier or harder as a result of this decision?
 
 ## Index
 
-*(none yet — be the first)*
+| ADR | Title | Status |
+|---|---|---|
+| [ADR-0001](0001-mcp-ghost-wire-protocol.md) | MCP as the Ghost Wire Protocol | proposed |
