@@ -45,4 +45,6 @@ What other approaches were considered?
 
 ## Index
 
-*(none yet — be the first)*
+| RFC | Title | Status |
+|---|---|---|
+| [RFC-0001](0001-minimal-poc.md) | Minimal Proof-of-Concept | draft |

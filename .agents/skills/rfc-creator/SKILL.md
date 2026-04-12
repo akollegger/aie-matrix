@@ -14,8 +14,10 @@ Use this skill to draft repository-specific RFCs that follow `proposals/rfc/READ
    - new subsystem, module, or feature
    - significant behavior or API change
    - vendor contribution introducing new interfaces or behavior
-3. Create or update `proposals/rfc/NNNN-short-title.md` using lowercase kebab-case for the filename.
-4. Use this structure exactly:
+3. Determine the RFC filename: `NNNN-short-title` in lowercase kebab-case (e.g. `0001-minimal-poc`).
+4. Create a branch named `proposal/NNNN-short-title` matching the RFC filename exactly before writing any files. Do not proceed without switching to this branch.
+5. Create or update `proposals/rfc/NNNN-short-title.md` on that branch.
+6. Use this structure exactly:
 
 ```markdown
 # RFC-NNNN: Title
@@ -44,4 +46,9 @@ Use this skill to draft repository-specific RFCs that follow `proposals/rfc/READ
 - Keep the proposal consistent with the current architecture unless the RFC explicitly challenges it.
 
 ## Output
-When creating a new RFC, write the file directly under `proposals/rfc/` and call out missing inputs or unresolved dependencies.
+When creating a new RFC:
+1. Confirm the active branch is `proposal/NNNN-short-title` before writing files.
+2. Write the RFC file under `proposals/rfc/`.
+3. Update the index table in `proposals/rfc/README.md`.
+4. Call out missing inputs or unresolved dependencies.
+5. Remind the author to run `/rfc-review` before opening the proposal for comment.
