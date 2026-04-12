@@ -6,13 +6,14 @@
 → **[Architecture](docs/architecture.md)** — tech stack, component map, open questions  
 → **[Contributing](CONTRIBUTING.md)** — how to get involved  
 → **[proposals/](proposals/)** — RFCs, ADRs, and design documents  
+→ **Minimal PoC (001)** — [RFC-0001](proposals/rfc/0001-minimal-poc.md) · [ADR-0001](proposals/adr/0001-mcp-ghost-wire-protocol.md) · [Spec, contracts, tasks](specs/001-minimal-poc/)
 
 ## Directory guide
 
 - **`client/`** — Browser client packages (Phaser spectator for the PoC).
 - **`docs/`** — Product overview, architecture, and contributor-facing deep dives.
 - **`ghosts/`** — Flat namespace for ghost-side code: MCP client SDKs, GhostHouse providers, compatibility kit; Python stub is planned here outside pnpm workspaces.
-- **`maps/`** — Tiled map exports and tileset assets for the hex world (per RFC-0001; add when authoring).
+- **`maps/`** — Tiled map exports and tileset assets for the hex world (e.g. `maps/sandbox/` sandbox hex; expand per RFC-0001).
 - **`proposals/`** — RFCs and ADRs: decisions and scope before implementation lands.
 - **`server/`** — World backend packages (Colyseus room, MCP `world-api`, REST `registry`, dev `auth`) plus the combined PoC dev entry at `server/package.json`.
 - **`shared/`** — Cross-package TypeScript types and tool schemas consumed by server and clients.

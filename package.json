@@ -1,6 +1,16 @@
 {
   "name": "aie-matrix",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "packageManager": "pnpm@10.29.3",
-  "scripts": {}
+  "scripts": {
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "dev": "pnpm --filter @aie-matrix/server dev"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.3"
+  }
 }

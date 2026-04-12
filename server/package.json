@@ -3,5 +3,9 @@
   "version": "0.0.0",
   "private": true,
   "description": "Combined PoC dev process (Colyseus, world-api, registry, auth). Wire scripts per RFC-0001.",
-  "scripts": {}
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch"
+  }
 }

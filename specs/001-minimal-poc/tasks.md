@@ -28,11 +28,11 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 **Purpose**: Repository layout, toolchain pins, and **human-authored map assets** required before the world can validate movement.
 
-- [ ] T001 Extend root `package.json` and `pnpm-workspace.yaml` with scripts, `dependencies`, and workspace `package.json` entries per `proposals/rfc/0001-minimal-poc.md` (pnpm is the package manager; commit `pnpm-lock.yaml`)
-- [ ] T002 [P] Pin active Node LTS for contributors at `.nvmrc`
-- [ ] T003 [P] Add `tsconfig.json` (and `src/` entry stubs) to each pnpm workspace package under `server/*/`, `client/phaser/`, `shared/types/`, `ghosts/ts-client/`, `ghosts/random-house/`, `ghosts/tck/`, and add `ghosts/python-client/pyproject.toml` (Python stub; **not** listed in `pnpm-workspace.yaml`)
-- [ ] T004 **Human (Tiled)**: Design or extend a **flat-top** hex sandbox map in [Tiled](https://www.mapeditor.org/) meeting `specs/001-minimal-poc/contracts/sample-map.md` (Tiled **`type`** as class string per tile, navigable layer; other custom properties optional); export `.tmj` / `.tsx` and referenced PNGs under `maps/` (e.g. `maps/sandbox/freeplay.tmj`)
-- [ ] T005 [P] Link this feature to governing `proposals/rfc/0001-minimal-poc.md` and `proposals/adr/0001-mcp-ghost-wire-protocol.md` in `README.md`
+- [x] T001 Extend root `package.json` and `pnpm-workspace.yaml` with scripts, `dependencies`, and workspace `package.json` entries per `proposals/rfc/0001-minimal-poc.md` (pnpm is the package manager; commit `pnpm-lock.yaml`)
+- [x] T002 [P] Pin active Node LTS for contributors at `.nvmrc`
+- [x] T003 [P] Add `tsconfig.json` (and `src/` entry stubs) to each pnpm workspace package under `server/*/`, `client/phaser/`, `shared/types/`, `ghosts/ts-client/`, `ghosts/random-house/`, `ghosts/tck/`, and add `ghosts/python-client/pyproject.toml` (Python stub; **not** listed in `pnpm-workspace.yaml`)
+- [x] T004 **Human (Tiled)**: Design or extend a **flat-top** hex sandbox map in [Tiled](https://www.mapeditor.org/) meeting `specs/001-minimal-poc/contracts/sample-map.md` (Tiled **`type`** as class string per tile, navigable layer; other custom properties optional); export `.tmj` / `.tsx` and referenced PNGs under `maps/` (e.g. `maps/sandbox/freeplay.tmj`)
+- [x] T005 [P] Link this feature to governing `proposals/rfc/0001-minimal-poc.md` and `proposals/adr/0001-mcp-ghost-wire-protocol.md` in `README.md`
 
 ---
 

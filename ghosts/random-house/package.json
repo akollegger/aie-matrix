@@ -1,5 +1,9 @@
 {
   "name": "@aie-matrix/ghost-random-house",
   "version": "0.0.0",
-  "private": true
+  "private": true,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
 }
