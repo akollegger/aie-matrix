@@ -2,6 +2,7 @@
   "name": "@aie-matrix/server",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "description": "Combined PoC dev process (Colyseus, world-api, registry, auth). Wire scripts per RFC-0001.",
   "scripts": {
     "build": "tsc -p tsconfig.json",

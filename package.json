@@ -1,6 +1,7 @@
 {
   "name": "aie-matrix",
   "private": true,
+  "type": "module",
   "engines": {
     "node": ">=22"
   },

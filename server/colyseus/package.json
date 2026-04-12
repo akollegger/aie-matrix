@@ -2,8 +2,24 @@
   "name": "@aie-matrix/server-colyseus",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aie-matrix/shared-types": "workspace:*",
+    "@colyseus/core": "0.15.17",
+    "@colyseus/schema": "2.0.35",
+    "@colyseus/ws-transport": "0.15.2",
+    "fast-xml-parser": "4.5.0"
   }
 }

@@ -1,2 +1,1 @@
-/** Dev JWT auth — Phase 2+. */
-export {};
+export { getJwtSecret, mintGhostToken, verifyGhostToken, type GhostClaims } from "./jwt.js";

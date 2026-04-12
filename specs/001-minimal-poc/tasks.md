@@ -42,12 +42,12 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 **⚠️ CRITICAL**: User story phases must not start until T006–T011 are done (map files from T004 must exist before T008).
 
-- [ ] T006 Author canonical MCP tool names, payloads, and ghost credential shapes in TypeScript at `shared/types/` aligned to `specs/001-minimal-poc/contracts/ghost-mcp.md` and `specs/001-minimal-poc/contracts/registry-rest.md`
-- [ ] T007 [P] Implement PoC-only JWT mint/verify using documented dev secret at `server/auth/` per `specs/001-minimal-poc/research.md`
-- [ ] T008 Implement map ingestion that **hard-fails** on missing per-tile **`type`** (class) for tiles used on navigable layers, with actionable errors at `server/colyseus/` (loader module next to room code) reading bundled files from `maps/**/*.tmj` per `specs/001-minimal-poc/contracts/sample-map.md` — build a **derived** hex topology from the Tiled staggered grid (not hand-authored edge lists in the map file; **do not require `capacity` or other custom properties for PoC**)
-- [ ] T009 Implement Colyseus room state at `server/colyseus/src/`: an **in-memory graph-like model** (per-cell records with **compass-labeled** neighbor links `n`/`s`/`ne`/`nw`/`se`/`sw` aligned to `server/world-api/README.md`), populated from the T008 loader output, plus occupant tracking and patch broadcast hooks — this is the PoC stand-in for a later **Neo4j** graph with explicit directional relationships
-- [ ] T010 [P] Add machine-readable registry contract artifact (OpenAPI or JSON Schema) at `server/registry/schemas/registry.json` reflecting `specs/001-minimal-poc/contracts/registry-rest.md`
-- [ ] T011 Implement in-process bridge from `server/world-api/` into Colyseus room mutators per `specs/001-minimal-poc/research.md` at `server/world-api/src/colyseus-bridge.ts` (path adjustable to match scaffold; keep single documented module)
+- [x] T006 Author canonical MCP tool names, payloads, and ghost credential shapes in TypeScript at `shared/types/` aligned to `specs/001-minimal-poc/contracts/ghost-mcp.md` and `specs/001-minimal-poc/contracts/registry-rest.md`
+- [x] T007 [P] Implement PoC-only JWT mint/verify using documented dev secret at `server/auth/` per `specs/001-minimal-poc/research.md`
+- [x] T008 Implement map ingestion that **hard-fails** on missing per-tile **`type`** (class) for tiles used on navigable layers, with actionable errors at `server/colyseus/` (loader module next to room code) reading bundled files from `maps/**/*.tmj` per `specs/001-minimal-poc/contracts/sample-map.md` — build a **derived** hex topology from the Tiled staggered grid (not hand-authored edge lists in the map file; **do not require `capacity` or other custom properties for PoC**)
+- [x] T009 Implement Colyseus room state at `server/colyseus/src/`: an **in-memory graph-like model** (per-cell records with **compass-labeled** neighbor links `n`/`s`/`ne`/`nw`/`se`/`sw` aligned to `server/world-api/README.md`), populated from the T008 loader output, plus occupant tracking and patch broadcast hooks — this is the PoC stand-in for a later **Neo4j** graph with explicit directional relationships
+- [x] T010 [P] Add machine-readable registry contract artifact (OpenAPI or JSON Schema) at `server/registry/schemas/registry.json` reflecting `specs/001-minimal-poc/contracts/registry-rest.md`
+- [x] T011 Implement in-process bridge from `server/world-api/` into Colyseus room mutators per `specs/001-minimal-poc/research.md` at `server/world-api/src/colyseus-bridge.ts` (path adjustable to match scaffold; keep single documented module)
 
 **Checkpoint**: Server can boot, load `maps/`, and expose an internal API for room updates even before REST/MCP surfaces are complete.
 

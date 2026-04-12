@@ -1,2 +1,3 @@
-/** Shared MCP + registry types — Phase 2+. */
-export {};
+export * from "./compass.js";
+export * from "./registry.js";
+export * from "./ghostMcp.js";

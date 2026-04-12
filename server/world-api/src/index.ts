@@ -1,2 +1,4 @@
-/** MCP world-api — Phase 2+. */
-export {};
+export {
+  createColyseusBridge,
+  type ColyseusWorldBridge,
+} from "./colyseus-bridge.js";
