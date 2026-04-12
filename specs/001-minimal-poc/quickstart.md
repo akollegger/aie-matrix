@@ -8,9 +8,9 @@ This file is the **verification backbone** for the feature spec user stories. Co
 2. Start the server bundle: `cd server && pnpm run dev` (RFC naming).
 3. Execute the documented adoption script / `curl` sequence to register **`ghosts/random-house/`** as a GhostHouse and adopt a ghost for a dev caretaker.
 4. Start **`ghosts/random-house/`** per package README.
-5. Confirm MCP-only navigation: valid move succeeds; invalid neighbor or capacity move returns explicit rejection without position corruption.
+5. Confirm MCP-only navigation: valid move succeeds; invalid move (for example non-neighbor) returns explicit rejection without position corruption.
 
-**Smoke**: One successful `move_ghost` and one rejected move logged or visible via MCP client traces.
+**Smoke**: One successful `go` and one rejected `go` logged or visible via MCP client traces.
 
 ## 2. Spectator browser (User Story 2)
 

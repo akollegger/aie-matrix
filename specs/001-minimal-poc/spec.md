@@ -130,8 +130,10 @@ for valid behavior and failure for invalid behavior.
 
 - If the sample map is missing required tile metadata, the system must fail with
   a clear startup error rather than running with undefined movement behavior.
-- If a ghost attempts to move into a tile that is full or not reachable, the
-  move must be rejected without corrupting the ghost position.
+- If a ghost attempts a move the world rejects (for example invalid **`toward`**
+  / no neighbor in that compass direction), the move must be rejected without
+  corrupting the ghost position. **Capacity-based “full tile” enforcement is
+  deferred for the PoC.**
 - If multiple ghosts start at nearly the same time, each must receive unique
   identity and credentials through its GhostHouse and move independently.
 - If the spectator connects before any ghosts are active, the map must still
@@ -164,7 +166,9 @@ for valid behavior and failure for invalid behavior.
 - **FR-007**: The PoC MUST include a browser-based spectator experience that
   renders the sample map and updates ghost positions as accepted moves occur.
 - **FR-008**: The PoC MUST load a human-authored sample hex map from repository
-  assets and use tile metadata from that map to drive movement behavior.
+  assets and expose tile metadata from that map to the world engine; **movement
+  policy** (what transitions are allowed) lives in a **ruleset separate from the
+  map** (see RFC-0001), with a permissive PoC default unless documented otherwise.
 - **FR-009**: The PoC MUST define and document the required manual map-authoring
   task, including the expected asset files and tile metadata needed by the world.
 - **FR-010**: The PoC MUST define and document any pre-implementation decisions
@@ -207,12 +211,18 @@ for valid behavior and failure for invalid behavior.
 - **Ghost**: A participant in the world that is adopted from a GhostHouse for a
   caretaker and has an identity, credentials, current tile, and observable
   movement history within the running demo.
-- **Tile**: A map location with an identifier, movement class, capacity, and a
-  set of reachable neighboring tiles.
+- **Tile**: A map location with an identifier, class label (for example from
+  Tiled tile `type`), optional custom properties from the map (none are
+  normatively required for the PoC), runtime occupants as tracked by the world,
+  and neighboring cells implied by the hex grid.
 - **Sample Map Asset**: The human-authored map bundle stored in the repository,
   including geometry and tile metadata required for the PoC.
-- **Movement Rule**: The rule set that determines whether a ghost may enter a
-  given tile and what rejection reason applies when movement is denied.
+- **Movement ruleset**: Configured policy in `world-api`, **separate from map
+  files**, that decides whether a proposed step between adjacent cells is
+  allowed — typically over **edge patterns** `(fromClass)-[:ALLOWED]->(toClass)`
+  with room for future predicates on tile or world state. The PoC MAY ship a
+  permissive no-op ruleset; richer venue behavior layers on later without
+  changing how maps author tile metadata.
 - **Adoption Record**: The association between a caretaker, a GhostHouse, and an
   adopted ghost instance for the duration of a local run, with exclusive
   one-caretaker-to-one-ghost ownership in the PoC.
@@ -236,7 +246,10 @@ for valid behavior and failure for invalid behavior.
 - **IC-004**: The spectator state contract MUST define the minimum world state
   needed for the browser view to render map and ghost positions accurately.
 - **IC-005**: The sample map contract MUST define the required tile identifiers,
-  tile classes, capacity data, and neighbor semantics expected by the world.
+  class labels, neighbor semantics the world reads **from map assets**, and how
+  optional custom properties are surfaced when present; it MUST NOT conflate map
+  metadata with the **movement ruleset** (policy lives in `world-api` per
+  RFC-0001). **PoC does not require `capacity` or other specific custom fields.**
 - **IC-006**: The compatibility check contract MUST define the steps, pass/fail
   expectations, and minimum output needed by ghost implementations in other
   languages, exercising **a house-provisioned ghost** through the published

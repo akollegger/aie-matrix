@@ -11,10 +11,10 @@
 
 1. Register GhostHouse provider.
 2. Adopt one ghost for one caretaker; obtain credentials and MCP parameters.
-3. `get_ghost_position` → valid tile id.
-4. `get_neighbors` → non-empty where map guarantees neighbors.
-5. `move_ghost` to valid neighbor → success acknowledgment and observable state change via MCP subsequent reads.
-6. `move_ghost` invalid → structured rejection with reason; position unchanged.
+3. `whereami` → valid tile id.
+4. `exits` → non-empty where map guarantees neighbors (each exit has `toward` + neighbor tile id).
+5. `go` with valid **`toward`** into an existing neighbor → success acknowledgment and observable state change via MCP subsequent reads.
+6. `go` with invalid **`toward`** (for example off-map) → structured rejection with reason; position unchanged.
 7. Clean shutdown: release handles; optional registry cleanup if defined.
 
 ## Output

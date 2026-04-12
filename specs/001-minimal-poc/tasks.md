@@ -31,7 +31,7 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 - [ ] T001 Extend root `package.json` and `pnpm-workspace.yaml` with scripts, `dependencies`, and workspace `package.json` entries per `proposals/rfc/0001-minimal-poc.md` (pnpm is the package manager; commit `pnpm-lock.yaml`)
 - [ ] T002 [P] Pin active Node LTS for contributors at `.nvmrc`
 - [ ] T003 [P] Add `tsconfig.json` (and `src/` entry stubs) to each pnpm workspace package under `server/*/`, `client/phaser/`, `shared/types/`, `ghosts/ts-client/`, `ghosts/random-house/`, `ghosts/tck/`, and add `ghosts/python-client/pyproject.toml` (Python stub; **not** listed in `pnpm-workspace.yaml`)
-- [ ] T004 **Human (Tiled)**: Design a small **flat-top** hex sandbox map in [Tiled](https://www.mapeditor.org/) meeting `specs/001-minimal-poc/contracts/sample-map.md` (tile ids, `tileClass` ∈ `hallway` \| `session-room` \| `vendor-booth`, capacity on `session-room`, explicit neighbors only); export `.tmj` / optional `.tsx` and referenced PNGs under `maps/` (e.g. `maps/sample-sandbox.tmj`, `maps/tilesets/`, `maps/assets/`)
+- [ ] T004 **Human (Tiled)**: Design or extend a **flat-top** hex sandbox map in [Tiled](https://www.mapeditor.org/) meeting `specs/001-minimal-poc/contracts/sample-map.md` (Tiled **`type`** as class string per tile, navigable layer; other custom properties optional); export `.tmj` / `.tsx` and referenced PNGs under `maps/` (e.g. `maps/sandbox/freeplay.tmj`)
 - [ ] T005 [P] Link this feature to governing `proposals/rfc/0001-minimal-poc.md` and `proposals/adr/0001-mcp-ghost-wire-protocol.md` in `README.md`
 
 ---
@@ -44,8 +44,8 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 - [ ] T006 Author canonical MCP tool names, payloads, and ghost credential shapes in TypeScript at `shared/types/` aligned to `specs/001-minimal-poc/contracts/ghost-mcp.md` and `specs/001-minimal-poc/contracts/registry-rest.md`
 - [ ] T007 [P] Implement PoC-only JWT mint/verify using documented dev secret at `server/auth/` per `specs/001-minimal-poc/research.md`
-- [ ] T008 Implement map ingestion that **hard-fails** on missing `tileClass`, capacity, or neighbor metadata with actionable errors at `server/colyseus/` (loader module next to room code) reading bundled files from `maps/*.tmj` per `specs/001-minimal-poc/contracts/sample-map.md`
-- [ ] T009 Implement Colyseus room state: tile graph, occupant tracking, and patch broadcast hooks at `server/colyseus/src/` (exact entry file to match scaffold)
+- [ ] T008 Implement map ingestion that **hard-fails** on missing per-tile **`type`** (class) for tiles used on navigable layers, with actionable errors at `server/colyseus/` (loader module next to room code) reading bundled files from `maps/**/*.tmj` per `specs/001-minimal-poc/contracts/sample-map.md` — build a **derived** hex topology from the Tiled staggered grid (not hand-authored edge lists in the map file; **do not require `capacity` or other custom properties for PoC**)
+- [ ] T009 Implement Colyseus room state at `server/colyseus/src/`: an **in-memory graph-like model** (per-cell records with **compass-labeled** neighbor links `n`/`s`/`ne`/`nw`/`se`/`sw` aligned to `server/world-api/README.md`), populated from the T008 loader output, plus occupant tracking and patch broadcast hooks — this is the PoC stand-in for a later **Neo4j** graph with explicit directional relationships
 - [ ] T010 [P] Add machine-readable registry contract artifact (OpenAPI or JSON Schema) at `server/registry/schemas/registry.json` reflecting `specs/001-minimal-poc/contracts/registry-rest.md`
 - [ ] T011 Implement in-process bridge from `server/world-api/` into Colyseus room mutators per `specs/001-minimal-poc/research.md` at `server/world-api/src/colyseus-bridge.ts` (path adjustable to match scaffold; keep single documented module)
 
@@ -57,14 +57,14 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 **Goal**: Register `ghosts/random-house/`, adopt a ghost for a caretaker, and navigate exclusively via MCP `world-api` with valid moves accepted and invalid moves rejected without position corruption.
 
-**Independent Test**: Follow §1 of `specs/001-minimal-poc/quickstart.md`: start server, run adoption flow, start `ghosts/random-house/`, confirm one successful `move_ghost` and one structured rejection.
+**Independent Test**: Follow §1 of `specs/001-minimal-poc/quickstart.md`: start server, run adoption flow, start `ghosts/random-house/`, confirm one successful `go` and one structured rejection.
 
 ### Implementation for User Story 1
 
 - [ ] T012 [US1] Implement GhostHouse provider registration HTTP handler at `server/registry/src/routes/register-house.ts` (or equivalent single route module created by scaffold)
 - [ ] T013 [US1] Implement caretaker + adoption endpoints with IC-002 exclusivity errors at `server/registry/src/routes/adoption.ts` backed by in-memory models per `specs/001-minimal-poc/data-model.md`
-- [ ] T014 [US1] Implement MCP `world-api` server registering `get_tile`, `get_neighbors`, `get_ghost_position`, `move_ghost` at `server/world-api/src/mcp-server.ts` using schemas from `shared/types/`
-- [ ] T015 [US1] Enforce movement rules (capacity, adjacency, tile class) only in `server/world-api/src/movement.ts`, updating `server/colyseus/` state on success and returning structured `reason` on rejection per `specs/001-minimal-poc/contracts/ghost-mcp.md`
+- [ ] T014 [US1] Implement MCP `world-api` server registering `whoami`, `whereami`, `look`, `exits`, and `go` at `server/world-api/src/mcp-server.ts` using schemas from `shared/types/` (local-only spatial args: `here` / `around` / `n`…`sw`; **no arbitrary tile-id parameters**; document compass deltas in `server/world-api/README.md` per `specs/001-minimal-poc/contracts/ghost-mcp.md` and `specs/001-minimal-poc/research.md`)
+- [ ] T015 [US1] Implement `server/world-api/src/movement.ts`: hex **adjacency** and a **separate permissive ruleset** (PoC no-op allowing class transitions) per `proposals/rfc/0001-minimal-poc.md` — **defer `capacity` / occupancy limits**; update `server/colyseus/` on success and return structured `reason` on rejection per `specs/001-minimal-poc/contracts/ghost-mcp.md`
 - [ ] T016 [P] [US1] Implement thin MCP HTTP client SDK at `ghosts/ts-client/src/client.ts` (transport per `specs/001-minimal-poc/research.md`)
 - [ ] T017 [US1] Implement `ghosts/random-house/` process: scripted registration + adoption + spawn embedded walker using **only** `ghosts/ts-client/` at `ghosts/random-house/src/index.ts`
 - [ ] T018 [US1] Document env vars, ports, and exact start command for the house at `ghosts/random-house/README.md`

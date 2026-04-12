@@ -95,14 +95,15 @@ For the PoC, all server packages run in a single process. The package boundaries
 
 ### server/world-api — MCP Server
 
-`world-api/` is an MCP server. It exposes four tools that together give a ghost everything it needs to navigate:
+`world-api/` is an MCP server. It exposes **five** short, adventure-flavored tools that together give a ghost everything it needs to navigate (names are stable API identifiers; natural-language flavor lives in MCP tool descriptions):
 
-- **`get_tile`** — returns the class, current occupants, and capacity of a tile
-- **`get_neighbors`** — returns the IDs of adjacent tiles reachable from a given tile
-- **`get_ghost_position`** — returns the tile ID currently occupied by a ghost
-- **`move_ghost`** — requests movement to an adjacent tile; returns success or a rejection reason
+- **`whoami`** — who is this session’s ghost (identity and caretaker linkage for debugging and agent grounding).
+- **`whereami`** — which tile id the ghost currently occupies.
+- **`look`** — inspect **from here only**: class, occupants, and optional map metadata; argument **`at`** is `here` (default), `around`, or one compass face **`n`/`s`/`ne`/`nw`/`se`/`sw`** (see [research.md](../../specs/001-minimal-poc/research.md) ghost compass). **No arbitrary tile-id parameters.**
+- **`exits`** — list traversable faces **from here only** (no arguments): each exit names a **`toward`** direction and the neighbor tile id reached that way.
+- **`go`** — step one face from here; **required `toward`** in `n`/`s`/`ne`/`nw`/`se`/`sw`**. Success or structured rejection. **No destination tile-id parameter** — the server resolves the neighbor from the compass table.
 
-Movement validation happens here. The `move_ghost` tool checks the destination tile against the movement rule table before accepting the move. On acceptance it updates Colyseus state, which triggers the spectator broadcast.
+Movement validation happens here. The **`go`** tool resolves the neighbor from **`toward`** (must exist on the map), then applies the **configured movement ruleset** that is **separate from the map**. **Capacity-based occupancy limits are deferred for the PoC** (no special treatment of `capacity` in validation). On acceptance it updates Colyseus state, which triggers the spectator broadcast.
 
 Tool schemas are defined in `shared/types/` as the canonical source. Python and other language SDKs derive from these definitions.
 
@@ -112,9 +113,13 @@ Colyseus owns the in-memory tile graph and authoritative ghost positions. After 
 
 Ghost agents never connect to Colyseus directly. Phaser clients are read-only.
 
-### Movement Rules
+### Movement ruleset (separate from the map)
 
-Movement rules live in `server/world-api/` — that is where validation happens. Rules are keyed by tile class and evaluated on each `move_ghost` call. For the PoC, three tile classes are sufficient: `hallway` (always passable), `session-room` (capacity-limited), and `vendor-booth` (always passable). Adding a new tile class means adding one rule entry — no changes to ghost or client code.
+Movement policy lives in `server/world-api/` as a **ruleset** that is independent of any particular `.tmj` / `.tsx` file. The map supplies **geometry** and **per-tile metadata** the engine loads (for example Tiled tile `type` as class label). **`capacity` and other custom properties are ordinary optional data** for later rules; the PoC does not require validating moves against them.
+
+Normative direction for richer rules: evaluate **edges** between neighboring cells using the classes of the **exit** and **entry** tiles, along the lines of `(from:Cyan4)-[:ALLOWED]->(to:Green1)`. Later versions may attach predicates to those edges (for example comparing `to.capacity` to a threshold, or consulting world flags). **Venue semantics** (rooms, doors, passages, elevators) are expressed by **which tiles appear on the map** plus **which rules apply** in that context — not by encoding all behavior into tile class names alone.
+
+**PoC default:** ship a **permissive no-op ruleset** that allows every class transition the adjacency graph already permits, so ghosts can wander the sandbox while the stack is still wiring up. Stricter venue rules and predicates land in the same ruleset layer later without changing the map contract.
 
 ### server/registry — Provider Registration And Adoption Lifecycle
 
@@ -142,7 +147,7 @@ LLM-backed ghosts built on agentic frameworks (LangChain, LangGraph, Claude tool
 ### ghosts/python-client — Python MCP Client SDK
 
 `python-client/` provides the same surface in Python. For the PoC a working stub
-covering adoption-time credential use, `get_neighbors`, and `move` is
+covering adoption-time credential use, `exits`, and `go` is
 sufficient. Its presence in the layout signals from the start that non-TypeScript
 ghosts are first-class contributors.
 
@@ -154,8 +159,9 @@ and runs them on behalf of caretakers. For the PoC it can expose a
 developer-facing startup or script flow rather than an attendee-facing UI.
 
 The embedded **random walker** (not a separate top-level package) is built on
-`ts-client/`. After adoption, it loops: query neighbors, pick one at random,
-attempt to move, retry on rejection, wait a configurable tick interval. It has
+`ts-client/`. After adoption, it loops: call **`exits`**, pick one **`toward`**
+direction at random from the listed exits, call **`go`** with that direction,
+retry on rejection, wait a configurable tick interval. It has
 no goal model, no memory, and no LLM — just enough behavior to make the spectator
 view interesting and validate the full stack end-to-end.
 
@@ -165,7 +171,7 @@ Phaser connects to Colyseus via WebSocket and re-renders ghost positions on each
 
 ### Tile Map
 
-A small abstract hex map authored in Tiled is sufficient for the PoC — it does not need to resemble Moscone West yet. Map files live in `maps/` at the repo root, accessible to both the server (loads the tile graph at startup) and Phaser (loads the same file for rendering). Each tile carries a `tileClass` custom property that `world-api/` reads to populate the movement rule dispatch.
+A small abstract hex map authored in Tiled is sufficient for the PoC — it does not need to resemble Moscone West yet. Map files live in `maps/` at the repo root, accessible to both the server (loads the tile graph at startup) and Phaser (loads the same file for rendering). Each tile definition may carry arbitrary metadata the world loads (for example Tiled **`type`** as class string, optional custom properties such as **`capacity`** for future rules). That metadata **feeds** the movement ruleset over time but **is not** the ruleset: policy stays in `world-api/` configuration/code.
 
 ### ghosts/tck — Technology Compatibility Kit
 
@@ -181,10 +187,10 @@ The minimal step sequence is:
 
 1. Register a GhostHouse provider.
 2. Adopt one ghost for one caretaker and receive the credentials needed to run it.
-3. Query current position — receive a valid tile ID.
-4. Query neighbors — receive a non-empty list.
-5. Move to a valid neighbor — receive confirmation.
-6. Attempt an invalid move — receive a rejection with a reason.
+3. **`whereami`** — receive a valid tile ID.
+4. **`exits`** — receive a non-empty list where the map guarantees neighbors.
+5. **`go`** with valid **`toward`** into an existing neighbor — receive confirmation.
+6. Invalid **`go`** (for example **`toward`** with no neighbor off the map edge) — receive a rejection with a reason.
 7. Stop cleanly.
 
 Any implementation in any language passes if it can drive these steps correctly. The full TCK spec is left for a follow-up RFC; the PoC establishes its location and runs a minimal version.
@@ -200,8 +206,8 @@ This is the happy path a contributor follows to verify the PoC is working:
    through the developer-facing flow. The process registers as a GhostHouse,
    provisions an adopted ghost for a caretaker, and runs the embedded random
    walker.
-5. The browser updates in real time as the ghost steps across the map,
-   respecting tile-class movement rules.
+5. The browser updates in real time as the ghost steps across the map under
+   the configured movement ruleset (PoC: permissive default).
 6. Run the TCK: `pnpm test` from `ghosts/tck/`. All steps pass.
 
 A second terminal running a second instance of `ghosts/random-house/` should show
@@ -214,10 +220,10 @@ ghosts/random-house
   │  register provider (REST)
   │  adopt ghost for caretaker (REST) → credentials; provision & run walker (in-process)
   │
-  │  MCP tool calls: get_ghost_position, get_neighbors, move_ghost
+  │  MCP tool calls: whereami, exits, go
   ▼
 server/world-api (MCP server)
-  │  validates movement rules
+  │  validates adjacency and movement ruleset
   │  updates Colyseus room state
   ▼
 server/colyseus

@@ -20,6 +20,12 @@ Resolves open questions from [RFC-0001](../../proposals/rfc/0001-minimal-poc.md)
 - **Rationale**: Single global convention unblocks parallel work; flat-top is widely used in hex grid references and Phaser examples, reducing contributor search cost.
 - **Alternatives considered**: Pointy-top (equally valid; requires explicit doc flip if chosen later).
 
+### Ghost-facing compass (flat-top)
+
+MCP tools (`look`, `exits`, `go`) use **only local** references: **`here`**, **`around`**, or one of **`n`**, **`s`**, **`ne`**, **`nw`**, **`se`**, **`sw`** — the six face directions on the flat-top staggered-x grid (Tiled export). **Implementations MUST NOT accept arbitrary map-global tile ids** as ghost-supplied arguments for sensing or movement.
+
+The authoritative **`(direction → Δcolumn, Δrow)`** mapping for this repo’s Tiled stagger settings **MUST** be documented once in `server/world-api/README.md` and kept identical for Colyseus, Phaser, and MCP so `exits` / `go` / `look` stay consistent.
+
 ## Cross-language tool schema sync
 
 - **Decision**: **`shared/types/`** remains the **canonical compile-time** source for TypeScript tools and serializers. **`python-client/`** PoC stub **MUST** treat **`tools/list` JSON Schema** from a running `world-api` as the **runtime contract check** when implementing calls; add a follow-up task for optional JSON Schema export from TS if stubs graduate beyond PoC.
