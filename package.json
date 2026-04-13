@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "packageManager": "pnpm@10.29.3",
   "pnpm": {
@@ -27,7 +27,7 @@
     "test:tck": "pnpm --filter @aie-matrix/ghost-tck test"
   },
   "devDependencies": {
-    "@types/node": "^22.19.17",
+    "@types/node": "^24.12.2",
     "typescript": "~5.7.3"
   }
 }

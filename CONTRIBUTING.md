@@ -41,6 +41,7 @@ This adds a `Signed-off-by` line certifying that you have the right to submit th
 
 ### PoC monorepo (TypeScript)
 
+- Use **Node.js 24+** (see root `package.json` `engines`, [`.nvmrc`](.nvmrc), and [`.tool-versions`](.tool-versions)).
 - Use **pnpm** for installs and scripts (`pnpm install` at the repo root; see `pnpm-workspace.yaml`).
 - Commit `pnpm-lock.yaml` when workspace dependencies change.
 

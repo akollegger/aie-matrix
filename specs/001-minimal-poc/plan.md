@@ -11,7 +11,7 @@ Deliver a runnable local proof-of-concept: world backends (Colyseus authoritativ
 
 ## Technical Context
 
-**Language/Version**: TypeScript on Node.js (active LTS) for `server/*`, `client/phaser`, `shared/types`, and `ghosts/*` packages; Python 3.11+ for `ghosts/python-client/` stub only.  
+**Language/Version**: TypeScript on Node.js **24+** (pinned **24.14.1** in [`.nvmrc`](../../.nvmrc) / [`.tool-versions`](../../.tool-versions); root `engines.node`) for `server/*`, `client/phaser`, `shared/types`, and `ghosts/*` packages; Python 3.11+ for `ghosts/python-client/` stub only.  
 **Primary Dependencies**: Colyseus (authoritative room + WebSocket broadcast to spectators); Phaser 3 (spectator); MCP server/client libraries for `world-api` and SDKs; minimal HTTP stack for `registry` and static or dev-server delivery of Phaser build; JWT handling in `auth` (dev secret for PoC).  
 **Storage**: N/A for PoC — in-memory Colyseus room state and ephemeral registry/adoption data unless a later task introduces a tiny on-disk fixture.  
 **Testing**: Root Playwright `pnpm run test:e2e:autostart` plus quickstart smoke paths; **`ghosts/tck/`** only as a **tiny** live-stack check (registry adopt + `whereami`) per [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)—not the primary regression driver.  

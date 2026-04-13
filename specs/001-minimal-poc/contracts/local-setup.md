@@ -4,7 +4,7 @@
 
 ## Prerequisites
 
-- Supported Node.js version (pin in root `package.json` / `.nvmrc` when added)
+- Node.js **24+** (root `engines`, [`.nvmrc`](../../../.nvmrc) / [`.tool-versions`](../../../.tool-versions) pin **24.14.1**)
 - Python 3.11+ only when exercising `ghosts/python-client/` beyond stub
 - Browser for the Phaser Vite dev URL (default `http://127.0.0.1:5174/`; see root `README.md` / `quickstart.md`)
 

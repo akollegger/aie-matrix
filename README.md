@@ -53,7 +53,7 @@ Goal: combined server + Phaser spectator + reference ghost moving on the sample 
    - `rainbow-hexes.png` — tileset image referenced by the TSX  
    If these are missing or inconsistent, the combined server fails at startup with an explicit map error rather than silent bad behavior.
 2. **Environment** — Optional: copy [`.env.example`](.env.example) to `.env` at the repo root for non-default ports or URLs. The `@aie-matrix/root-env` workspace package (`shared/root-env/`) loads `.env` for Node processes; Vite reads the same file for `VITE_*` keys (see `client/phaser/README.md`).
-3. **Tooling** — Node **≥22** (see `engines` and [`.nvmrc`](.nvmrc)); **pnpm `10.29.3`** from the root `packageManager` field. `corepack enable` (once per machine) lets Node install that pnpm version automatically.
+3. **Tooling** — Node **≥24** (see `engines`, [`.nvmrc`](.nvmrc), and [`.tool-versions`](.tool-versions); contributors use **24.14.1**); **pnpm `10.29.3`** from the root `packageManager` field. `corepack enable` (once per machine) lets Node install that pnpm version automatically.
 
 ### Typical commands (repo root)
 
@@ -68,7 +68,7 @@ Goal: combined server + Phaser spectator + reference ghost moving on the sample 
 | `pnpm run poc:ghost` | `tsc` + `node` for `ghosts/random-house` (registers house, adopts, walks via MCP) |
 | `pnpm run poc:ports` | List processes **listening** on **8787** / **5174** / **5179** (`lsof`; safe, port-scoped) |
 | `pnpm run poc:kill-ports` | **SIGTERM** those listeners (orphaned `poc:*`, Playwright `webServer`, or crashed demos). For **SIGKILL**, run `node scripts/kill-poc-ports.mjs --kill --force`. Override ports: `PORTS=8787,9090 pnpm run poc:ports` |
-| `pnpm run test:e2e` | Playwright smoke (starts server + Vite preview + one ghost); `pnpm run test:e2e:autostart` is the same; set `CI=1` in automation |
+| `pnpm run test:e2e` | Playwright smoke (starts server + Vite preview + one ghost); `pnpm run test:e2e:autostart` is the same; set `CI=1` in automation. E2E scripts run **`pnpm run install:browsers`** first because Playwright’s **Chromium binary is not installed by `pnpm install`** (it is cached on disk); see [`e2e/README.md`](e2e/README.md). |
 | `pnpm run test:tck` | Minimal IC-006 smoke (**server must already be running**): registry + MCP `whereami` |
 
 Registry-only `curl` flows (caretaker → house → adopt) for debugging are documented in [`server/registry/README.md`](server/registry/README.md).

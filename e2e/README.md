@@ -2,10 +2,12 @@
 
 Playwright guards the Phaser spectator **Colyseus `ghostTiles` sync** (regression for passing `WorldSpectatorState` into `joinById`). The test spawns **random-house** and waits for `window.__aieSpectatorE2e.ghostTilesSize()` (only when `?debug=1`; see `client/phaser/src/scenes/WorldScene.ts`).
 
-## One-time setup
+## Browser install (Chromium)
+
+`@playwright/test` is a normal devDependency, but **browser binaries are not** — they live under Playwright’s OS cache (for example `~/Library/Caches/ms-playwright/` on macOS). The **`install:browsers`** script (`playwright install chromium`) runs at the start of every `test` / `test:manual` / `test:ui` / `test:autostart` script, so **`pnpm run test:e2e`** usually works right after `pnpm install`. If you skip those scripts, install explicitly:
 
 ```bash
-pnpm --filter @aie-matrix/e2e exec playwright install chromium
+pnpm --filter @aie-matrix/e2e run install:browsers
 ```
 
 ## Run (default: Playwright starts the stack)

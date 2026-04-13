@@ -86,7 +86,7 @@ This runs **`poc:server`**, waits until **`GET /spectator/room`** succeeds, then
 
 ## 3. Contributor setup ≤ 15 minutes (User Story 3)
 
-**Goal** (SC-001): On a prepared laptop (Node 22+, pnpm, browser), clone → install → server → client → ghost → visible motion without reading `server/` internals.
+**Goal** (SC-001): On a prepared laptop (Node 24+, pnpm, browser), clone → install → server → client → ghost → visible motion without reading `server/` internals.
 
 1. Confirm [Human prerequisites](../../README.md#human-prerequisites-read-before-debugging-code) in the root `README.md` (map files + optional `.env`).
 2. Follow **§1** and **§2** above in order, using **`pnpm run poc:*`** aliases where helpful.
