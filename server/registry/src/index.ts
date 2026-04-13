@@ -8,8 +8,18 @@ export { RegistryConflictError, assertAdoptionAllowed } from "./session-guard.js
 export { handleRegisterGhostHouse } from "./routes/register-house.js";
 export { handleAdoptGhost, type AdoptionDeps } from "./routes/adoption.js";
 
+/** Match OPTIONS + route handlers so browser tooling always sees CORS on JSON errors. */
+const REGISTRY_CORS_HEADERS: Record<string, string> = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
-  res.writeHead(status, { "Content-Type": "application/json" });
+  res.writeHead(status, {
+    "Content-Type": "application/json",
+    ...REGISTRY_CORS_HEADERS,
+  });
   res.end(JSON.stringify(body));
 }
 
@@ -45,19 +55,10 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
     const path = url.pathname;
 
     if (req.method === "OPTIONS") {
-      res.writeHead(204, {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-      });
+      res.writeHead(204, REGISTRY_CORS_HEADERS);
       res.end();
       return;
     }
-
-    const cors = {
-      "Access-Control-Allow-Origin": "*",
-      "Content-Type": "application/json",
-    };
 
     try {
       if (path === "/registry/caretakers" && req.method === "POST") {
@@ -65,15 +66,13 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
         try {
           body = await readJsonBody(req);
         } catch {
-          res.writeHead(400, cors);
-          res.end(JSON.stringify({ error: "BAD_JSON", message: "Invalid JSON body" }));
+          sendJson(res, 400, { error: "BAD_JSON", message: "Invalid JSON body" });
           return;
         }
         const label = (body as { label?: string }).label;
         const id = createCaretakerId();
         config.store.caretakers.set(id, { id, label: typeof label === "string" ? label : undefined });
-        res.writeHead(201, cors);
-        res.end(JSON.stringify({ caretakerId: id }));
+        sendJson(res, 201, { caretakerId: id });
         return;
       }
 
