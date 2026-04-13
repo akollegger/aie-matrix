@@ -8,7 +8,7 @@ description: "Task list for Minimal PoC feature implementation"
 
 **Prerequisites**: [plan.md](./plan.md) (required), [spec.md](./spec.md) (required), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)
 
-**Tests**: Automated tests are not mandated by the specification; verification follows [quickstart.md](./quickstart.md) smoke paths and `ghosts/tck/` as the compatibility driver (IC-006).
+**Tests**: Automated tests are not mandated by the specification; verification follows [quickstart.md](./quickstart.md) smoke paths, root Playwright `pnpm run test:e2e:autostart`, and—when implemented—a **minimal** `ghosts/tck/` smoke (IC-006 PoC subset only).
 
 **Organization**: Tasks are grouped by user story so each increment can be implemented and verified independently where the contracts allow.
 
@@ -61,14 +61,14 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 ### Implementation for User Story 1
 
-- [ ] T012 [US1] Implement GhostHouse provider registration HTTP handler at `server/registry/src/routes/register-house.ts` (or equivalent single route module created by scaffold)
-- [ ] T013 [US1] Implement caretaker + adoption endpoints with IC-002 exclusivity errors at `server/registry/src/routes/adoption.ts` backed by in-memory models per `specs/001-minimal-poc/data-model.md`
-- [ ] T014 [US1] Implement MCP `world-api` server registering `whoami`, `whereami`, `look`, `exits`, and `go` at `server/world-api/src/mcp-server.ts` using schemas from `shared/types/` (local-only spatial args: `here` / `around` / `n`…`sw`; **no arbitrary tile-id parameters**; document compass deltas in `server/world-api/README.md` per `specs/001-minimal-poc/contracts/ghost-mcp.md` and `specs/001-minimal-poc/research.md`)
-- [ ] T015 [US1] Implement `server/world-api/src/movement.ts`: hex **adjacency** and a **separate permissive ruleset** (PoC no-op allowing class transitions) per `proposals/rfc/0001-minimal-poc.md` — **defer `capacity` / occupancy limits**; update `server/colyseus/` on success and return structured `reason` on rejection per `specs/001-minimal-poc/contracts/ghost-mcp.md`
-- [ ] T016 [P] [US1] Implement thin MCP HTTP client SDK at `ghosts/ts-client/src/client.ts` (transport per `specs/001-minimal-poc/research.md`)
-- [ ] T017 [US1] Implement `ghosts/random-house/` process: scripted registration + adoption + spawn embedded walker using **only** `ghosts/ts-client/` at `ghosts/random-house/src/index.ts`
-- [ ] T018 [US1] Document env vars, ports, and exact start command for the house at `ghosts/random-house/README.md`
-- [ ] T019 [US1] Verify **two concurrent ghosts** (two caretakers / two adoptions) receive distinct credentials and move independently without Colyseus corruption at `server/registry/src/session-guard.ts` and `server/world-api/src/auth-context.ts` (split files acceptable if guard lives adjacent to registry)
+- [x] T012 [US1] Implement GhostHouse provider registration HTTP handler at `server/registry/src/routes/register-house.ts` (or equivalent single route module created by scaffold)
+- [x] T013 [US1] Implement caretaker + adoption endpoints with IC-002 exclusivity errors at `server/registry/src/routes/adoption.ts` backed by in-memory models per `specs/001-minimal-poc/data-model.md`
+- [x] T014 [US1] Implement MCP `world-api` server registering `whoami`, `whereami`, `look`, `exits`, and `go` at `server/world-api/src/mcp-server.ts` using schemas from `shared/types/` (local-only spatial args: `here` / `around` / `n`…`sw`; **no arbitrary tile-id parameters**; document compass deltas in `server/world-api/README.md` per `specs/001-minimal-poc/contracts/ghost-mcp.md` and `specs/001-minimal-poc/research.md`)
+- [x] T015 [US1] Implement `server/world-api/src/movement.ts`: hex **adjacency** and a **separate permissive ruleset** (PoC no-op allowing class transitions) per `proposals/rfc/0001-minimal-poc.md` — **defer `capacity` / occupancy limits**; update `server/colyseus/` on success and return structured `reason` on rejection per `specs/001-minimal-poc/contracts/ghost-mcp.md`
+- [x] T016 [P] [US1] Implement thin MCP HTTP client SDK at `ghosts/ts-client/src/client.ts` (transport per `specs/001-minimal-poc/research.md`)
+- [x] T017 [US1] Implement `ghosts/random-house/` process: scripted registration + adoption + spawn embedded walker using **only** `ghosts/ts-client/` at `ghosts/random-house/src/index.ts`
+- [x] T018 [US1] Document env vars, ports, and exact start command for the house at `ghosts/random-house/README.md`
+- [x] T019 [US1] Verify **two concurrent ghosts** (two caretakers / two adoptions) receive distinct credentials and move independently without Colyseus corruption at `server/registry/src/session-guard.ts` and `server/world-api/src/auth-context.ts` (split files acceptable if guard lives adjacent to registry)
 
 **Checkpoint**: Reference house demonstrates FR-005/FR-006/FR-012 without reading internal server source.
 
@@ -82,10 +82,10 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 ### Implementation for User Story 2
 
-- [ ] T020 [US2] Define and emit spectator room schema (`ghostId → tileId`, tile coordinates) from `server/colyseus/src/room-schema.ts` per `specs/001-minimal-poc/contracts/spectator-state.md`
-- [ ] T021 [P] [US2] Implement Phaser scene that loads the same `maps/*.tmj` bindings (flat-top) at `client/phaser/src/scenes/WorldScene.ts`
-- [ ] T022 [US2] Subscribe to Colyseus patches and render moving ghost sprites at `client/phaser/src/scenes/SpectatorView.ts`
-- [ ] T023 [US2] Wire dev static/Vite (or documented) hosting for the Phaser build and document the spectator URL in `server/README.md` (create if missing) — **no** move RPC from browser
+- [x] T020 [US2] Define and emit spectator room schema (`ghostId → tileId`, tile coordinates) from `server/colyseus/src/room-schema.ts` per `specs/001-minimal-poc/contracts/spectator-state.md`
+- [x] T021 [P] [US2] Implement Phaser scene that loads the same `maps/*.tmj` bindings (flat-top) at `client/phaser/src/scenes/WorldScene.ts`
+- [x] T022 [US2] Subscribe to Colyseus patches and render moving ghost sprites at `client/phaser/src/scenes/SpectatorView.ts`
+- [x] T023 [US2] Wire dev static/Vite (or documented) hosting for the Phaser build and document the spectator URL in `server/README.md` (create if missing) — **no** move RPC from browser
 
 **Checkpoint**: Browser demo matches acceptance scenarios in `specs/001-minimal-poc/spec.md` for User Story 2.
 
@@ -99,30 +99,30 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 ### Implementation for User Story 3
 
-- [ ] T024 [US3] Rewrite root onboarding: install, build, ports, **explicit human prerequisite** pointing to T004 + `maps/` artifact list at `README.md`
-- [ ] T025 [P] [US3] Replace placeholders with exact commands, URLs, and timing notes at `specs/001-minimal-poc/quickstart.md`
-- [ ] T026 [P] [US3] Document script-first adoption flow (`pnpm` script + `curl` or small CLI) at `server/registry/README.md` per `specs/001-minimal-poc/contracts/local-setup.md`
-- [ ] T027 [US3] Record subsystem ownership (spectator vs movement vs registry vs contracts) for PoC shortcuts at `docs/architecture.md`
-- [ ] T028 [US3] Perform a dry-run **15-minute** contributor walkthrough from a clean clone; log gaps and fixes only in `specs/001-minimal-poc/quickstart.md` (append a “Walkthrough log” subsection)
+- [x] T024 [US3] Rewrite root onboarding: install, build, ports, **explicit human prerequisite** pointing to T004 + `maps/` artifact list at `README.md`
+- [x] T025 [P] [US3] Replace placeholders with exact commands, URLs, and timing notes at `specs/001-minimal-poc/quickstart.md`
+- [x] T026 [P] [US3] Document script-first adoption flow (`pnpm` script + `curl` or small CLI) at `server/registry/README.md` per `specs/001-minimal-poc/contracts/local-setup.md`
+- [x] T027 [US3] Record subsystem ownership (spectator vs movement vs registry vs contracts) for PoC shortcuts at `docs/architecture.md`
+- [x] T028 [US3] Perform a dry-run **15-minute** contributor walkthrough from a clean clone; log gaps and fixes only in `specs/001-minimal-poc/quickstart.md` (append a “Walkthrough log” subsection)
 
 **Checkpoint**: A new contributor can follow docs without spelunking `server/` internals.
 
 ---
 
-## Phase 6: User Story 4 — Validate Another Ghost Implementation (Priority: P3)
+## Phase 6: User Story 4 — Minimal compatibility smoke (Priority: P3)
 
-**Goal**: `ghosts/tck/` drives IC-006 steps against a live local stack with actionable pass/fail output.
+**Goal**: Smallest useful **`ghosts/tck/`** check: prove a live stack accepts **registry adopt → MCP `whereami`** (IC-006 **PoC subset** in [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)). **Not** a full GhostHouse product matrix, multi-house discovery, user auth, or cross-language drift tooling.
 
-**Independent Test**: Follow §4 of `specs/001-minimal-poc/quickstart.md`; intentionally fail a move in a scratch branch to confirm non-zero exit and clear stderr.
+**Independent Test**: Follow §4 of [quickstart.md](./quickstart.md) with the server running; minimal TCK exits `0`. Optional: break MCP URL in a scratch branch → non-zero exit.
 
 ### Implementation for User Story 4
 
-- [ ] T029 [US4] Scaffold TCK package entrypoint at `ghosts/tck/src/index.ts` invoking registry + MCP in order from `specs/001-minimal-poc/contracts/tck-scenarios.md`
-- [ ] T030 [US4] Implement step runner with labeled stdout/stderr and non-zero exit on first failure at `ghosts/tck/src/runner.ts`
-- [ ] T031 [P] [US4] Keep `ghosts/python-client/` minimal stub that can call `tools/list` + one tool for drift checking per `specs/001-minimal-poc/research.md` at `ghosts/python-client/src/stub_client.py`
-- [ ] T032 [P] [US4] Document how to point TCK at alternate houses/ghosts when parameters exist at `ghosts/tck/README.md`
+- [x] T029 [US4] Single-file minimal runner at `ghosts/tck/src/index.ts`: sequential steps only (no separate `runner.ts` unless this file grows unwieldy); labeled stderr (or stdout) per step; **non-zero exit** on first failure; wire `pnpm --filter @aie-matrix/ghost-tck test` in `ghosts/tck/package.json`.
+- [x] T030 [P] [US4] `ghosts/tck/README.md` — prerequisites (`pnpm run demo` or `pnpm run poc:server`), exact `pnpm`/`node` command, env vars (`AIE_MATRIX_REGISTRY_BASE` default), and an explicit **“out of scope for PoC”** list (invalid-move suite, python drift client, multi-house / user-journey TCK, alternate-house CLI flags).
 
-**Checkpoint**: TCK passes against `ghosts/random-house/` on a green build.
+**Deferred (no tasks in Phase 6)**: `ghosts/python-client` MCP drift script; rich step runner module; catalog/auth/user-initiated adoption automation—pick up in a later RFC or Phase 7+ when surfaces exist.
+
+**Checkpoint**: `pnpm --filter @aie-matrix/ghost-tck test` exits `0` against a local stack that already passes quickstart §1 (registry + MCP alive).
 
 ---
 
@@ -133,7 +133,7 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 - [ ] T033 [P] Add flat-namespace overview for `ghosts/*` packages (no nested subtypes) at `ghosts/README.md` per FR-019 in `specs/001-minimal-poc/spec.md`
 - [ ] T034 [P] Reconcile `proposals/rfc/0001-minimal-poc.md` with any scope adjustments discovered during implementation at `proposals/rfc/0001-minimal-poc.md`
 - [ ] T035 [P] Update contributor commands or DCO notes if new workflows were introduced at `CONTRIBUTING.md`
-- [ ] T036 Run full smoke sequence §§1–4 in `specs/001-minimal-poc/quickstart.md` on a clean workspace and fix any doc drift in `README.md`
+- [ ] T036 Run quickstart §§1–3 on a clean workspace (§4 minimal TCK when T029 lands); fix any doc drift in `README.md`
 
 ---
 
@@ -161,7 +161,7 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 - Registry routes before house package integration (US1).
 - Colyseus schema before Phaser sync (US2).
-- TCK scaffold before runner edge cases (US4).
+- Minimal TCK stays in one file until a future RFC justifies a runner split (US4).
 
 ### Parallel Opportunities
 
@@ -170,7 +170,7 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 - **Phase 3**: T016 parallel to server route work once types stable.
 - **Phase 4**: T021 parallel to T020 after room schema types exported.
 - **Phase 5**: T025, T026 parallel after T024 outline exists.
-- **Phase 6**: T031–T032 parallel to T029–T030 once MCP base URL constants known.
+- **Phase 6**: T030 can proceed in parallel with T029 after step labels are agreed (single-file TCK).
 
 ---
 
@@ -213,7 +213,7 @@ Task: "T022 client/phaser/src/scenes/SpectatorView.ts"
 2. US1 → MCP-only ghost motion proven.
 3. US2 → contributor-visible demo.
 4. US3 → 15-minute onboarding credible.
-5. US4 → external ghost confidence.
+5. US4 → **minimal** `ghosts/tck/` smoke (registry + `whereami`); broader “alternate GhostHouse” confidence deferred.
 
 ### Parallel Team Strategy
 

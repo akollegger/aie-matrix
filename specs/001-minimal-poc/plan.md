@@ -7,14 +7,14 @@
 
 ## Summary
 
-Deliver a runnable local proof-of-concept: world backends (Colyseus authoritative state + MCP `world-api` for ghost navigation + REST `registry` + dev `auth`), Phaser spectator, flat `ghosts/` packages (`ts-client/`, `python-client/` stub, `random-house/` reference GhostHouse with embedded random walker, `tck/`), and repository map assets. A contributor clones the repo, starts the combined server, opens the browser, starts `ghosts/random-house/` for adoption-driven movement, and runs `ghosts/tck/` for compatibility validation. Pre-implementation choices called out in the RFC (transport, hex orientation, schema sync, adoption UX) are resolved for planning in [research.md](./research.md); interface shapes are captured under [contracts/](./contracts/).
+Deliver a runnable local proof-of-concept: world backends (Colyseus authoritative state + MCP `world-api` for ghost navigation + REST `registry` + dev `auth`), Phaser spectator, flat `ghosts/` packages (`ts-client/`, `python-client/` stub, `random-house/` reference GhostHouse with embedded random walker, `tck/`), and repository map assets. A contributor clones the repo, starts the combined server, opens the browser, starts `ghosts/random-house/` for adoption-driven movement; **`ghosts/tck/`** is a **minimal** registry+MCP smoke (see [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)), not a full alternate-house certification. Pre-implementation choices called out in the RFC (transport, hex orientation, schema sync, adoption UX) are resolved for planning in [research.md](./research.md); interface shapes are captured under [contracts/](./contracts/).
 
 ## Technical Context
 
 **Language/Version**: TypeScript on Node.js (active LTS) for `server/*`, `client/phaser`, `shared/types`, and `ghosts/*` packages; Python 3.11+ for `ghosts/python-client/` stub only.  
 **Primary Dependencies**: Colyseus (authoritative room + WebSocket broadcast to spectators); Phaser 3 (spectator); MCP server/client libraries for `world-api` and SDKs; minimal HTTP stack for `registry` and static or dev-server delivery of Phaser build; JWT handling in `auth` (dev secret for PoC).  
 **Storage**: N/A for PoC — in-memory Colyseus room state and ephemeral registry/adoption data unless a later task introduces a tiny on-disk fixture.  
-**Testing**: `ghosts/tck/` as primary automated compatibility driver against a live local stack; package-level smoke scripts (documented in `quickstart.md` and package READMEs) for server boot and browser sanity.  
+**Testing**: Root Playwright `pnpm run test:e2e:autostart` plus quickstart smoke paths; **`ghosts/tck/`** only as a **tiny** live-stack check (registry adopt + `whereami`) per [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)—not the primary regression driver.  
 **Target Platform**: Local developer machines (macOS, Linux; Windows best-effort if dependencies allow).  
 **Project Type**: Multi-package monorepo (`server/`, `client/`, `shared/`, `ghosts/`, `maps/`) introduced by this feature per RFC layout.  
 **Package manager**: [pnpm](https://pnpm.io/) workspaces at the repository root (`pnpm-workspace.yaml`, shared `pnpm-lock.yaml`); TypeScript packages use the `@aie-matrix/*` scope. `ghosts/python-client/` remains Python-only (`pyproject.toml`) outside the pnpm workspace.  

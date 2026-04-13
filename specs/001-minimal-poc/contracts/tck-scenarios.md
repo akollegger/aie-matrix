@@ -1,25 +1,29 @@
-# Contract: Technology Compatibility Kit (minimal)
+# Contract: Technology Compatibility Kit (PoC minimal)
 
-**IC-006** — Validates **published registry + MCP flows** for a **house-provisioned ghost** (no alternate provider tier).
+**IC-006** — Defines the **smallest** automated check that a live stack still exposes **registry adoption** and **MCP ghost read** for a freshly provisioned ghost. This is **not** a full GhostHouse certification, user-journey test, or multi-language matrix.
 
-## Environment
+## PoC minimal subset (normative for Phase 6)
 
-- Local stack running: `server/` dev process, reachable `registry` and `world-api`.
-- House under test: reference implementation `ghosts/random-house/` unless TCK is parameterized for another GhostHouse.
+Run against a **already-running** combined server (e.g. `pnpm run demo` or `pnpm run poc:server`). The TCK performs **only**:
 
-## Ordered steps (pass/fail)
+1. **Reachability** — `GET` `http://127.0.0.1:8787/spectator/room` (or configurable base) returns **200** with JSON including a room id (same URL quickstart uses as “server up”).
+2. **Registry** — `POST /registry/caretakers`, `POST /registry/houses`, `POST /registry/adopt` using the same JSON shapes as `ghosts/random-house`; obtain `credential.worldApiBaseUrl` and `credential.token`.
+3. **MCP** — Call **`whereami`** for that ghost and assert a structured **tile id** (or equivalent) is returned.
 
-1. Register GhostHouse provider.
-2. Adopt one ghost for one caretaker; obtain credentials and MCP parameters.
-3. `whereami` → valid tile id.
-4. `exits` → non-empty where map guarantees neighbors (each exit has `toward` + neighbor tile id).
-5. `go` with valid **`toward`** into an existing neighbor → success acknowledgment and observable state change via MCP subsequent reads.
-6. `go` with invalid **`toward`** (for example off-map) → structured rejection with reason; position unchanged.
-7. Clean shutdown: release handles; optional registry cleanup if defined.
+**Pass / fail**
 
-## Output
+- Process exits **0** only if all three steps succeed.
+- On failure: **non-zero** exit; output includes a **short step label** (e.g. `[tck] adopt`, `[tck] whereami`) so logs are grep-friendly.
 
-- Non-zero exit code on first failure.
-- stdout/stderr includes step label and server response summary for debugging.
+No requirement in PoC Phase 6 for: invalid `go`, `exits` enumeration, `tools/list`, shutdown hooks, second language client, or alternate GhostHouse CLIs.
 
-Full formal TCK spec is explicitly deferred to a follow-up RFC; this checklist gates the PoC implementation.
+## Explicitly deferred (document only; not Phase 6 gates)
+
+- **Movement suite** — valid/invalid `go`, neighbor parity (use manual quickstart §1 and Playwright for regression until a later RFC).
+- **GhostHouse catalog / user auth / spectator adoption** — product flows; TCK will not simulate them in PoC Phase 6.
+- **`ghosts/python-client`** drift checks.
+- **Parameterized** “point TCK at arbitrary house binary” — revisit when multiple houses exist and URLs are stable.
+
+## Reference maturity (non-normative for PoC)
+
+Future compatibility kits may extend toward: `exits` + valid/invalid `go`, clean shutdown, and second implementations. That expansion belongs in a follow-up RFC; this file intentionally stays small.

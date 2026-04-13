@@ -1,2 +1,1 @@
-/** TypeScript MCP client SDK for ghosts — Phase 3+. */
-export {};
+export { GhostMcpClient, type GhostMcpClientOptions } from "./client.js";

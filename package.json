@@ -6,10 +6,23 @@
     "node": ">=22"
   },
   "packageManager": "pnpm@10.29.3",
+  "pnpm": {
+    "overrides": {
+      "@colyseus/core": "0.15.57"
+    }
+  },
   "scripts": {
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
-    "dev": "pnpm --filter @aie-matrix/server dev"
+    "dev": "pnpm --filter @aie-matrix/server dev",
+    "poc:server": "pnpm --filter @aie-matrix/server start",
+    "poc:server:dev": "pnpm --filter @aie-matrix/server dev",
+    "poc:client": "pnpm --filter @aie-matrix/client-phaser dev",
+    "poc:ghost": "pnpm --filter @aie-matrix/ghost-random-house build && pnpm --filter @aie-matrix/ghost-random-house start",
+    "demo": "node scripts/demo.mjs",
+    "test:e2e": "pnpm --filter @aie-matrix/e2e test",
+    "test:e2e:autostart": "pnpm --filter @aie-matrix/e2e run test:autostart",
+    "test:tck": "pnpm --filter @aie-matrix/ghost-tck test"
   },
   "devDependencies": {
     "typescript": "~5.7.3"

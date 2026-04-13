@@ -8,7 +8,7 @@ Machine- and human-readable contract artifacts for cross-package, cross-process,
 | [ghost-mcp.md](./ghost-mcp.md) | IC-003 |
 | [spectator-state.md](./spectator-state.md) | IC-004 |
 | [sample-map.md](./sample-map.md) | IC-005 |
-| [tck-scenarios.md](./tck-scenarios.md) | IC-006 |
+| [tck-scenarios.md](./tck-scenarios.md) | IC-006 (PoC **minimal** smoke only) |
 | [local-setup.md](./local-setup.md) | IC-007, SC-001 |
 
 Implementations MUST keep these documents aligned when changing public surfaces.

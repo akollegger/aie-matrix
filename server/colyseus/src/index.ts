@@ -1,5 +1,11 @@
 export { loadHexMap } from "./mapLoader.js";
-export { MatrixRoom, WorldSyncState, type MatrixRoomOptions } from "./MatrixRoom.js";
+export { MatrixRoom, type MatrixRoomOptions } from "./MatrixRoom.js";
+export {
+  TileCoord,
+  WorldSpectatorState,
+  WorldSyncState,
+  type SpectatorStateSnapshot,
+} from "./room-schema.js";
 export {
   oddqOffsetToAxial,
   axialToOddqOffset,

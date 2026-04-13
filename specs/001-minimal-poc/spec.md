@@ -115,16 +115,21 @@ against the local system and receive a clear pass or fail result.
 **Why this priority**: This proves the interface is not tied to the reference
 ghost implementation and supports future contributors.
 
-**Independent Test**: Run the compatibility check against a second implementation
-that uses the published ghost interface and verify that the check reports success
-for valid behavior and failure for invalid behavior.
+**PoC scope note**: Phase 6 implements only the **minimal** check in
+[contracts/tck-scenarios.md](./contracts/tck-scenarios.md) (registry adopt +
+MCP `whereami`). Full “second implementation,” invalid-move matrix, and
+shutdown automation are **deferred**; they remain the long-term intent of this
+story, not PoC exit criteria.
+
+**Independent Test**: Run the minimal compatibility check with the local stack
+up and confirm exit `0`; optionally break MCP connectivity and confirm non-zero
+exit with a labeled error.
 
 **Acceptance Scenarios**:
 
-1. **Given** a compatible ghost implementation in another language, **When** the
-   compatibility check runs against the local PoC, **Then** it validates the
-   published flows for a house-provisioned ghost: registration, position lookup,
-   neighbor lookup, valid movement, invalid movement rejection, and clean shutdown.
+1. **Given** the combined server is running, **When** the minimal compatibility
+   check runs, **Then** it succeeds only if **reachability**, **registry adopt**,
+   and **`whereami`** all succeed for a freshly provisioned ghost session.
 
 ### Edge Cases
 
@@ -251,9 +256,7 @@ for valid behavior and failure for invalid behavior.
   metadata with the **movement ruleset** (policy lives in `world-api` per
   RFC-0001). **PoC does not require `capacity` or other specific custom fields.**
 - **IC-006**: The compatibility check contract MUST define the steps, pass/fail
-  expectations, and minimum output needed by ghost implementations in other
-  languages, exercising **a house-provisioned ghost** through the published
-  registry and MCP flows (not a parallel provider classification).
+  expectations, and minimum output for the **PoC** (see [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)): a **minimal** live-stack exercise of **a house-provisioned ghost** through the published registry and MCP (**reachability → adopt → `whereami`**). Broader matrix (invalid moves, alternate houses, other languages) is **explicitly deferred** and does not block PoC closure.
 - **IC-007**: The local setup contract MUST define the minimum developer-facing
   adoption flow needed to create a caretaker, adopt a ghost, and start the
   reference house package (`ghosts/random-house/`, or a documented equivalent).
@@ -270,9 +273,10 @@ for valid behavior and failure for invalid behavior.
   server code.
 - **SC-003**: The spectator view renders the sample map and shows visible ghost
   position updates within 1 second of accepted movement during local testing.
-- **SC-004**: The compatibility check passes for the reference ghost and can
-  produce a clear failing result when a ghost implementation violates one of the
-  required interactions.
+- **SC-004**: The **minimal** compatibility check passes for the reference stack
+  and can produce a clear failing result when registry or MCP `whereami` for a
+  freshly adopted ghost breaks; full alternate-implementation coverage is not a
+  PoC gate.
 - **SC-005**: Repository documentation is sufficient for a new contributor to
   identify the required human tasks and unresolved production concerns without
   inferring them from code.

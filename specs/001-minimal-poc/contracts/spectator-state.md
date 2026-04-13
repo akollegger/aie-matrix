@@ -15,4 +15,4 @@ Sufficient for Phaser to render:
 - No write or move RPC from Phaser to world in PoC.
 - Updates arrive as authoritative patches after accepted moves only.
 
-Exact room schema: document in `server/colyseus/` README and mirror here when stabilized.
+Exact room schema: see [`server/colyseus/src/room-schema.ts`](../../../server/colyseus/src/room-schema.ts) and [`server/colyseus/README.md`](../../../server/colyseus/README.md). The Colyseus `WorldSpectatorState` fields are the wire source of truth; this contract describes their semantics.

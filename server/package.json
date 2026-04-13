@@ -7,6 +7,22 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "dev": "tsc -p tsconfig.json --watch"
+    "predev": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/shared-types run build && pnpm --filter @aie-matrix/server-auth run build && pnpm --filter @aie-matrix/server-colyseus run build && pnpm --filter @aie-matrix/server-registry run build && pnpm --filter @aie-matrix/server-world-api run build",
+    "prestart": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/shared-types run build && pnpm --filter @aie-matrix/server-auth run build && pnpm --filter @aie-matrix/server-colyseus run build && pnpm --filter @aie-matrix/server-registry run build && pnpm --filter @aie-matrix/server-world-api run build",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "@aie-matrix/root-env": "workspace:*",
+    "@aie-matrix/server-auth": "workspace:*",
+    "@aie-matrix/server-colyseus": "workspace:*",
+    "@aie-matrix/server-registry": "workspace:*",
+    "@aie-matrix/server-world-api": "workspace:*",
+    "@colyseus/core": "0.15.57",
+    "@colyseus/ws-transport": "0.15.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17",
+    "tsx": "^4.21.0"
   }
 }

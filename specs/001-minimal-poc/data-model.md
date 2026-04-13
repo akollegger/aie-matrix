@@ -77,4 +77,4 @@ Bundled under `maps/`; see [contracts/sample-map.md](./contracts/sample-map.md).
 
 ## Compatibility Check Case
 
-Ordered checklist aligning with IC-006: provider registration → adoption → position → neighbors → valid move → invalid move → shutdown. Pass/fail and stderr/stdout requirements documented in [contracts/tck-scenarios.md](./contracts/tck-scenarios.md).
+PoC **IC-006** minimal path: reachability → registry adopt → MCP **`whereami`** (see [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)). Extended sequences (neighbors, valid/invalid `go`, shutdown) are reference-only until a later RFC.
