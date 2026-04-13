@@ -1,8 +1,30 @@
-import { spawn } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
+import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+/**
+ * Playwright starts `webServer` before `globalSetup`, so production bundles must
+ * exist before `pnpm --filter @aie-matrix/server start` / Vite preview run.
+ */
+function ensureClientPreviewBuild() {
+  const marker = path.join(root, "client/phaser/dist/index.html");
+  if (fs.existsSync(marker) && process.env.CI !== "1") {
+    console.info("[e2e dev-stack] client/phaser dist present; skipping client build");
+    return;
+  }
+  console.info("[e2e dev-stack] building client for Vite preview…");
+  execSync("pnpm --filter @aie-matrix/client-phaser run copy-map-assets", {
+    cwd: root,
+    stdio: "inherit",
+  });
+  execSync("pnpm --filter @aie-matrix/client-phaser build", {
+    cwd: root,
+    stdio: "inherit",
+  });
+}
 
 async function waitUrl(url, label, maxMs = 120_000) {
   const start = Date.now();
@@ -47,6 +69,7 @@ let vite = null;
 if (await tryOk("http://127.0.0.1:5179/")) {
   console.info("[e2e dev-stack] reusing existing listener on :5179");
 } else {
+  ensureClientPreviewBuild();
   vite = spawn(
     "pnpm",
     ["--filter", "@aie-matrix/client-phaser", "exec", "vite", "preview", "--host", "127.0.0.1", "--port", "5179", "--strictPort"],

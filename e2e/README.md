@@ -8,29 +8,25 @@ Playwright guards the Phaser spectator **Colyseus `ghostTiles` sync** (regressio
 pnpm --filter @aie-matrix/e2e exec playwright install chromium
 ```
 
+## Run (default: Playwright starts the stack)
+
+`pnpm run test:e2e` (repo root) and `pnpm --filter @aie-matrix/e2e test` set `E2E_AUTOSTART=1`: the combined server plus Vite **preview** on **5179** via `e2e/dev-stack.mjs` (reuses `:8787` / `:5179` if they already respond). Same behavior as `pnpm run test:e2e:autostart`.
+
+In CI, set `CI=1` so `reuseExistingServer` is disabled and ports are not accidentally reused.
+
 ## Run (against dev servers you already started)
 
-Default `baseURL` is `http://127.0.0.1:5174` (Vite’s default port). Start the combined server (`8787`) and Phaser dev client first (e.g. cmux **aie-server** + **aie-client**), then:
+Start the combined server (`8787`) and Phaser Vite dev client (default **5174**), then:
 
 ```bash
-pnpm run test:e2e
+pnpm --filter @aie-matrix/e2e run test:manual
 ```
 
 If Vite is on another port:
 
 ```bash
-E2E_BASE_URL=http://127.0.0.1:5175 pnpm run test:e2e
+E2E_BASE_URL=http://127.0.0.1:5175 pnpm --filter @aie-matrix/e2e run test:manual
 ```
-
-## Run (Playwright starts the stack)
-
-Opt-in — starts the combined server + Vite on **5179** via `e2e/dev-stack.mjs` (reuses `:8787` / `:5179` if they already respond):
-
-```bash
-pnpm --filter @aie-matrix/e2e run test:autostart
-```
-
-In CI, set `CI=1` so `reuseExistingServer` is disabled and ports are not accidentally reused.
 
 ## `global-setup`
 

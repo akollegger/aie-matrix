@@ -66,7 +66,7 @@ Goal: combined server + Phaser spectator + reference ghost moving on the sample 
 | `pnpm run poc:server:dev` | Same stack under `tsx watch` while editing server code |
 | `pnpm run poc:client` | Phaser spectator (Vite); default **http://127.0.0.1:5174** (see terminal for exact URL) |
 | `pnpm run poc:ghost` | `tsc` + `node` for `ghosts/random-house` (registers house, adopts, walks via MCP) |
-| `pnpm run test:e2e:autostart` | Playwright smoke (starts server + Vite preview + one ghost); set `CI=1` in automation |
+| `pnpm run test:e2e` | Playwright smoke (starts server + Vite preview + one ghost); `pnpm run test:e2e:autostart` is the same; set `CI=1` in automation |
 | `pnpm run test:tck` | Minimal IC-006 smoke (**server must already be running**): registry + MCP `whereami` |
 
 Registry-only `curl` flows (caretaker → house → adopt) for debugging are documented in [`server/registry/README.md`](server/registry/README.md).

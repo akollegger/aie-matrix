@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const autostart = process.env.E2E_AUTOSTART === "1";
-/** Autostart stack serves Phaser via `vite preview` on 5179; manual runs default to Vite dev on 5174. */
+/** `E2E_AUTOSTART=1` (default `pnpm run test:e2e`): `vite preview` on 5179 via `dev-stack.mjs`. `test:manual` defaults to Vite dev on 5174. */
 const baseURL =
   process.env.E2E_BASE_URL ??
   (autostart ? "http://127.0.0.1:5179" : "http://127.0.0.1:5174");

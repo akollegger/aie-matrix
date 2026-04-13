@@ -8,7 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "predev": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/shared-types run build && pnpm --filter @aie-matrix/server-auth run build && pnpm --filter @aie-matrix/server-colyseus run build && pnpm --filter @aie-matrix/server-registry run build && pnpm --filter @aie-matrix/server-world-api run build",
-    "prestart": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/shared-types run build && pnpm --filter @aie-matrix/server-auth run build && pnpm --filter @aie-matrix/server-colyseus run build && pnpm --filter @aie-matrix/server-registry run build && pnpm --filter @aie-matrix/server-world-api run build",
+    "prestart": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/shared-types run build && pnpm --filter @aie-matrix/server-auth run build && pnpm --filter @aie-matrix/server-colyseus run build && pnpm --filter @aie-matrix/server-registry run build && pnpm --filter @aie-matrix/server-world-api run build && pnpm run build",
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts"
   },
