@@ -20,6 +20,8 @@
     "poc:client": "pnpm --filter @aie-matrix/client-phaser dev",
     "poc:ghost": "pnpm --filter @aie-matrix/ghost-random-house build && pnpm --filter @aie-matrix/ghost-random-house start",
     "demo": "node scripts/demo.mjs",
+    "poc:ports": "node scripts/kill-poc-ports.mjs",
+    "poc:kill-ports": "node scripts/kill-poc-ports.mjs --kill",
     "test:e2e": "pnpm --filter @aie-matrix/e2e test",
     "test:e2e:autostart": "pnpm run test:e2e",
     "test:tck": "pnpm --filter @aie-matrix/ghost-tck test"

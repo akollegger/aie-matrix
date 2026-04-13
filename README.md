@@ -18,7 +18,7 @@
 - **`server/`** — World backend packages (Colyseus room, MCP `world-api`, REST `registry`, dev `auth`) plus the combined PoC dev entry at `server/package.json`.
 - **`shared/`** — Cross-package TypeScript types and tool schemas consumed by server and clients.
 - **`specs/`** — Feature folders: plans, contracts, quickstarts, and task lists (e.g. minimal PoC under `specs/001-minimal-poc/`).
-- **`scripts/`** — Small repo-root helpers (e.g. `demo.mjs` for one-terminal PoC).
+- **`scripts/`** — Small repo-root helpers (e.g. `demo.mjs` for one-terminal PoC; `kill-poc-ports.mjs` to list or stop listeners on default PoC ports).
 - **`.github/`** — CI workflows and repository automation.
 - **`.specify/`** — Speckit templates and scripts for spec-driven feature workflow (optional for day-to-day code reading).
 - **`.agents/`**, **`.claude/`** — Agent skill packs for Cursor / Claude Code (optional tooling, not runtime).
@@ -66,6 +66,8 @@ Goal: combined server + Phaser spectator + reference ghost moving on the sample 
 | `pnpm run poc:server:dev` | Same stack under `tsx watch` while editing server code |
 | `pnpm run poc:client` | Phaser spectator (Vite); default **http://127.0.0.1:5174** (see terminal for exact URL) |
 | `pnpm run poc:ghost` | `tsc` + `node` for `ghosts/random-house` (registers house, adopts, walks via MCP) |
+| `pnpm run poc:ports` | List processes **listening** on **8787** / **5174** / **5179** (`lsof`; safe, port-scoped) |
+| `pnpm run poc:kill-ports` | **SIGTERM** those listeners (orphaned `poc:*`, Playwright `webServer`, or crashed demos). For **SIGKILL**, run `node scripts/kill-poc-ports.mjs --kill --force`. Override ports: `PORTS=8787,9090 pnpm run poc:ports` |
 | `pnpm run test:e2e` | Playwright smoke (starts server + Vite preview + one ghost); `pnpm run test:e2e:autostart` is the same; set `CI=1` in automation |
 | `pnpm run test:tck` | Minimal IC-006 smoke (**server must already be running**): registry + MCP `whereami` |
 
