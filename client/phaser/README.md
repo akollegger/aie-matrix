@@ -6,9 +6,9 @@ Read-only hex map view driven by Colyseus `WorldSpectatorState` (IC-004).
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `VITE_SERVER_HTTP` | *(dev: same-origin via Vite proxy; prod build: `http://127.0.0.1:8787`)* | HTTP root for `/spectator/room` and `/maps/*` when not using the dev proxy |
+| `VITE_SERVER_HTTP` | *(dev: same-origin via Vite proxy for spectator requests; prod build: `http://127.0.0.1:8787`)* | HTTP root for `/spectator/room` and for server-hosted `/maps/*` when the client hits `:8787` directly (not the usual Vite dev path for maps) |
 | `VITE_SERVER_WS` | *(derived from `VITE_SERVER_HTTP`)* | Colyseus WebSocket URL (always hits the game server port, e.g. `ws://127.0.0.1:8787`) |
-| `VITE_DEV_PROXY_TARGET` | `http://127.0.0.1:8787` | Vite dev proxy target for `/spectator` and `/maps` (see `vite.config.ts`) |
+| `VITE_DEV_PROXY_TARGET` | `http://127.0.0.1:8787` | Vite dev proxy target for `/spectator` only (see `vite.config.ts`); `/maps/*` in dev are served from the Vite origin after `copy-map-assets` |
 
 ## Commands
 
