@@ -13,14 +13,14 @@ Sync Impact Report
 - Removed sections:
   - None
 - Templates requiring updates:
-  - ✅ updated /Users/akollegger/Developer/akollegger/aie-matrix/.specify/templates/plan-template.md
-  - ✅ updated /Users/akollegger/Developer/akollegger/aie-matrix/.specify/templates/spec-template.md
-  - ✅ updated /Users/akollegger/Developer/akollegger/aie-matrix/.specify/templates/tasks-template.md
+  - ✅ updated `.specify/templates/plan-template.md`
+  - ✅ updated `.specify/templates/spec-template.md`
+  - ✅ updated `.specify/templates/tasks-template.md`
 - Runtime guidance reviewed:
-  - ✅ reviewed /Users/akollegger/Developer/akollegger/aie-matrix/README.md
-  - ✅ reviewed /Users/akollegger/Developer/akollegger/aie-matrix/docs/architecture.md
-  - ✅ reviewed /Users/akollegger/Developer/akollegger/aie-matrix/CONTRIBUTING.md
-  - ✅ reviewed /Users/akollegger/Developer/akollegger/aie-matrix/AGENTS.md
+  - ✅ reviewed `README.md`
+  - ✅ reviewed `docs/architecture.md`
+  - ✅ reviewed `CONTRIBUTING.md`
+  - ✅ reviewed `AGENTS.md`
 - Deferred items:
   - None
 -->
