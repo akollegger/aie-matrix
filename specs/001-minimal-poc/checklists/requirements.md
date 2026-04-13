@@ -2,7 +2,7 @@
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-04-12  
-**Feature**: [/Users/akollegger/Developer/akollegger/aie-matrix/specs/001-minimal-poc/spec.md](/Users/akollegger/Developer/akollegger/aie-matrix/specs/001-minimal-poc/spec.md)
+**Feature**: [spec.md](../spec.md)
 
 ## Content Quality
 
