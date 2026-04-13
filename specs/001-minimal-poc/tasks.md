@@ -4,7 +4,7 @@ description: "Task list for Minimal PoC feature implementation"
 
 # Tasks: Minimal PoC
 
-**Input**: Design documents from `/Users/akollegger/Developer/akollegger/aie-matrix/specs/001-minimal-poc/`
+**Input**: Design documents from [`specs/001-minimal-poc/`](./) (this directory)
 
 **Prerequisites**: [plan.md](./plan.md) (required), [spec.md](./spec.md) (required), [research.md](./research.md), [data-model.md](./data-model.md), [contracts/](./contracts/), [quickstart.md](./quickstart.md)
 
