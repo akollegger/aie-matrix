@@ -1,0 +1,19 @@
+{
+  "name": "@aie-matrix/ghost-random-house",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prebuild": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/ghost-ts-client run build",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@aie-matrix/ghost-ts-client": "workspace:*",
+    "@aie-matrix/root-env": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.17"
+  }
+}

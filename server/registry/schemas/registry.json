@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aie-matrix.local/schemas/registry.json",
+  "title": "aie-matrix registry (PoC)",
+  "description": "JSON Schema fragments for IC-001 / IC-002 bodies; HTTP paths finalized in implementation.",
+  "$defs": {
+    "RegisterGhostHouseRequest": {
+      "type": "object",
+      "required": ["displayName"],
+      "properties": {
+        "displayName": { "type": "string" },
+        "baseUrl": { "type": "string", "format": "uri" }
+      },
+      "additionalProperties": false
+    },
+    "RegisterGhostHouseResponse": {
+      "type": "object",
+      "required": ["ghostHouseId", "registeredAt"],
+      "properties": {
+        "ghostHouseId": { "type": "string" },
+        "registeredAt": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": true
+    },
+    "AdoptGhostRequest": {
+      "type": "object",
+      "required": ["caretakerId", "ghostHouseId"],
+      "properties": {
+        "caretakerId": { "type": "string" },
+        "ghostHouseId": { "type": "string" },
+        "ghostTemplateId": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "GhostSessionCredential": {
+      "type": "object",
+      "required": ["token", "worldApiBaseUrl", "transport"],
+      "properties": {
+        "token": { "type": "string" },
+        "worldApiBaseUrl": { "type": "string", "format": "uri" },
+        "transport": { "type": "string", "enum": ["http", "stdio"] }
+      },
+      "additionalProperties": false
+    },
+    "AdoptGhostResponse": {
+      "type": "object",
+      "required": ["ghostId", "caretakerId", "credential"],
+      "properties": {
+        "ghostId": { "type": "string" },
+        "caretakerId": { "type": "string" },
+        "credential": { "$ref": "#/$defs/GhostSessionCredential" }
+      },
+      "additionalProperties": false
+    },
+    "RegistryErrorBody": {
+      "type": "object",
+      "required": ["error", "message"],
+      "properties": {
+        "error": {
+          "type": "string",
+          "enum": [
+            "UNKNOWN_CARETAKER",
+            "UNKNOWN_GHOST_HOUSE",
+            "CARETAKER_ALREADY_HAS_GHOST",
+            "GHOST_ALREADY_ADOPTED",
+            "REASSIGNMENT_NOT_ALLOWED"
+          ]
+        },
+        "message": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

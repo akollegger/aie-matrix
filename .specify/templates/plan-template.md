@@ -31,7 +31,17 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+- Proposal linkage identified (`proposals/rfc/...` or `proposals/adr/...`) and
+  scope matches the planned work.
+- Planned structure preserves documented architectural boundaries or explicitly
+  records any PoC-only shortcut.
+- Shared interfaces and cross-language touchpoints have contract artifacts planned
+  under `contracts/` or equivalent design docs.
+- Verification covers each user slice; if runnable code is introduced, at least
+  one smoke test and local run instructions are included.
+- Documentation impact is enumerated for `README.md`, `docs/architecture.md`,
+  `docs/project-overview.md`, `CONTRIBUTING.md`, and any package README files
+  affected by the work.
 
 ## Project Structure
 
@@ -91,8 +101,8 @@ ios/ or android/
 └── [platform-specific structure: feature modules, UI flows, platform tests]
 ```
 
-**Structure Decision**: [Document the selected structure and reference the real
-directories captured above]
+**Structure Decision**: [Document the selected structure, justify any new
+top-level directory, and reference the real directories captured above]
 
 ## Complexity Tracking
 

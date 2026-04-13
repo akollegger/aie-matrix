@@ -1,0 +1,27 @@
+{
+  "name": "@aie-matrix/client-phaser",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "copy-map-assets": "node scripts/copy-map-assets.mjs",
+    "predev": "pnpm run copy-map-assets",
+    "prebuild": "pnpm run copy-map-assets",
+    "dev": "vite",
+    "cmux-browser": "node scripts/cmux-browser.mjs",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aie-matrix/server-colyseus": "workspace:*",
+    "@colyseus/schema": "2.0.35",
+    "colyseus.js": "0.15.28",
+    "phaser": "^3.88.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "typescript": "~5.7.3",
+    "vite": "^6.3.5"
+  }
+}

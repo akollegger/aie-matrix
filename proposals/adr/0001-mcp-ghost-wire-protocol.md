@@ -14,10 +14,11 @@ Ghost agents span a wide implementation range: rule-based walkers (the PoC), LLM
 
 The world-api interaction surface is small and well-scoped:
 
-- Query current position
-- Query neighbors of a tile
-- Request movement to an adjacent tile
-- Query tile properties
+- Resolve session identity (`whoami`)
+- Query current tile (`whereami`)
+- Inspect relative to here (`look` with `here` / `around` / compass face only)
+- List exits from here (`exits`, no args)
+- Step one hex face (`go` with `toward` compass only — no arbitrary tile-id args)
 
 This is precisely the shape that MCP tools are designed to expose.
 
@@ -29,13 +30,13 @@ REST is not a primary ghost interface. It may remain as a secondary surface for 
 
 ## Rationale
 
-**LLM frameworks speak MCP natively.** The majority of ghost implementations will be built on agentic frameworks (LangChain, LangGraph, AutoGen, Claude tool use, etc.). These frameworks support MCP tool servers without custom integration. Pointing a framework at an MCP server gives it immediate access to `move_ghost`, `get_neighbors`, and `get_tile_info` as callable tools — no adapter code, no HTTP plumbing in the agent. With REST, every framework requires a custom wrapper.
+**LLM frameworks speak MCP natively.** The majority of ghost implementations will be built on agentic frameworks (LangChain, LangGraph, AutoGen, Claude tool use, etc.). These frameworks support MCP tool servers without custom integration. Pointing a framework at an MCP server gives it immediate access to short, adventure-flavored tools such as **`go`**, **`exits`**, **`look`**, **`whereami`**, and **`whoami`** (see RFC-0001 / IC-003) — no adapter code, no HTTP plumbing in the agent. With REST, every framework requires a custom wrapper.
 
 **Tool discovery removes hardcoding.** MCP's `tools/list` returns machine-readable JSON Schema descriptions of available tools. An LLM agent can ask "what can I do here?" and get a complete, accurate answer. REST has no intrinsic equivalent; OpenAPI helps but is not consumed natively by LLM frameworks.
 
-**The interaction surface is a natural fit.** `move_ghost`, `get_neighbors`, `get_tile_info` are discrete, named, argument-bearing operations — the exact shape MCP tools are designed for. There is no streaming state, no resource subscription, no complex query language. The surface maps cleanly.
+**The interaction surface is a natural fit.** Those tools are discrete, named, argument-bearing operations — the exact shape MCP tools are designed for. There is no streaming state, no resource subscription, no complex query language. The surface maps cleanly.
 
-**Rule-based agents are not disadvantaged.** MCP client SDKs exist for TypeScript and Python. A rule-based random walker calling `move_ghost` via an MCP client SDK is no more complex than calling a REST endpoint. The PoC is not harder; future LLM-backed ghosts are significantly easier.
+**Rule-based agents are not disadvantaged.** MCP client SDKs exist for TypeScript and Python. A rule-based random walker calling `go` / `exits` via an MCP client SDK is no more complex than calling a REST endpoint. The PoC is not harder; future LLM-backed ghosts are significantly easier.
 
 **The protocol signals intent.** Adopting MCP communicates that ghosts are first-class AI agents, not REST API consumers. This shapes how contributors think about ghost architecture and lowers the barrier for contributors whose primary tooling is already MCP-aware.
 

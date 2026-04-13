@@ -1,50 +1,114 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+- Version change: template -> 1.0.0
+- Modified principles:
+  - Template principle 1 -> I. Proposal-First Delivery
+  - Template principle 2 -> II. Boundary-Preserving Design
+  - Template principle 3 -> III. Verifiable Increments
+  - Template principle 4 -> IV. Contract-Explicit Interfaces
+  - Template principle 5 -> V. Contribution Hygiene
+- Added sections:
+  - Implementation Constraints
+  - Review and Quality Gates
+- Removed sections:
+  - None
+- Templates requiring updates:
+  - ✅ updated `.specify/templates/plan-template.md`
+  - ✅ updated `.specify/templates/spec-template.md`
+  - ✅ updated `.specify/templates/tasks-template.md`
+- Runtime guidance reviewed:
+  - ✅ reviewed `README.md`
+  - ✅ reviewed `docs/architecture.md`
+  - ✅ reviewed `CONTRIBUTING.md`
+  - ✅ reviewed `AGENTS.md`
+- Deferred items:
+  - None
+-->
+
+# aie-matrix Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Proposal-First Delivery
+Non-trivial changes MUST begin with a written proposal before implementation.
+Feature work belongs in an RFC under `proposals/rfc/`; architectural decisions,
+cross-cutting technology choices, and costly-to-reverse structure changes belong
+in an ADR under `proposals/adr/`. Plans, tasks, and implementation branches MUST
+trace back to that proposal. Small, well-understood fixes MAY proceed with a PR
+description only when they do not alter architecture, public contracts, or repo
+structure.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Boundary-Preserving Design
+Implementations MUST preserve the architectural boundaries documented in
+`docs/architecture.md` and ratified ADRs. Contributors MUST state which package
+or subsystem owns each behavior, data contract, and integration point. PoC
+shortcuts are allowed only when they are explicitly called out as temporary,
+scoped to local development, and documented so they are not mistaken for the
+target production design.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Verifiable Increments
+Each feature plan MUST define independently demonstrable user slices and a
+concrete verification path for each slice. Documentation-only changes MUST be
+verified for internal consistency and link integrity. Any change that adds
+runnable code MUST also add at least one smoke test or equivalent executable
+verification step, and the package README or quickstart MUST document how to run
+it locally.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Contract-Explicit Interfaces
+Every interface shared across packages, processes, or languages MUST have an
+explicit contract artifact before implementation is considered complete. Acceptable
+artifacts include tool schemas, API specs, message formats, data model docs, and
+TCK expectations. Contract changes MUST identify downstream consumers and update
+their documentation, fixtures, or compatibility checks in the same change.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Contribution Hygiene
+All work MUST happen on branches, flow through pull requests, and use imperative,
+scoped commit messages with DCO sign-off (`git commit -s`). Repository additions
+MUST stay minimal: new top-level directories require proposal justification, new
+files should follow existing naming conventions, and Markdown should remain short,
+explicit, and repository-specific. Contributors MUST prefer the smallest change
+that satisfies the proposal and defer speculative expansion.
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Implementation Constraints
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+The repository is specification-first and documentation-heavy until a proposal
+explicitly introduces runnable packages. Plans MUST name the intended source
+layout, dependencies, testing approach, and local developer commands instead of
+assuming an application scaffold already exists.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+When code is introduced, package-level documentation MUST state setup, smoke-test,
+and ownership expectations. Cross-language support MUST be treated as a design
+constraint when proposals claim it; stubs are acceptable for a PoC only if the
+plan states what is intentionally deferred.
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+## Review and Quality Gates
+
+Every plan and pull request MUST pass these checks:
+
+- Proposal linkage is explicit and matches the scope of the change.
+- Architecture changes either follow an accepted ADR or include a new ADR.
+- Public or shared interfaces have updated contract documentation.
+- Verification steps are documented and were actually run, or the omission is
+  called out with a reason.
+- Documentation touched by the change remains consistent with `README.md`,
+  `docs/architecture.md`, `docs/project-overview.md`, and `CONTRIBUTING.md`.
+
+Reviews SHOULD prioritize behavioral regressions, boundary violations, contract
+drift, and missing verification before style-level comments.
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+This constitution overrides conflicting local habits and template defaults.
+Amendments require a documented rationale in the change that introduces them and
+MUST update any affected Spec Kit templates in the same change. Versioning follows
+semantic versioning for governance:
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- MAJOR: removes or materially redefines a principle or gate.
+- MINOR: adds a new principle, section, or mandatory workflow requirement.
+- PATCH: clarifies wording without changing intent.
+
+Compliance is checked during proposal review, planning, task generation, and pull
+request review. `AGENTS.md`, `README.md`, and the files under `.specify/templates/`
+are the operational guidance that MUST stay aligned with this constitution.
+
+**Version**: 1.0.0 | **Ratified**: 2026-04-12 | **Last Amended**: 2026-04-12

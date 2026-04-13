@@ -39,6 +39,23 @@ git commit -s -m "your commit message"
 
 This adds a `Signed-off-by` line certifying that you have the right to submit the contribution under the project license. It is not a CLA — no agreement to sign.
 
+### PoC monorepo (TypeScript)
+
+- Use **pnpm** for installs and scripts (`pnpm install` at the repo root; see `pnpm-workspace.yaml`).
+- Commit `pnpm-lock.yaml` when workspace dependencies change.
+
+**Common PoC commands** (from repo root; DCO **`git commit -s`** still applies):
+
+| Command | When to use |
+|---------|-------------|
+| `pnpm run demo` | One terminal: combined server + Vite spectator + `random-house` |
+| `pnpm run poc:server` / `pnpm run poc:server:dev` | Server only (production-like `start` vs `tsx watch`) |
+| `pnpm run poc:client` / `pnpm run poc:ghost` | Phaser or ghost alone (multi-shell debugging) |
+| `pnpm run test:e2e` | Playwright (CI-friendly autostart; needs Chromium via Playwright install); `pnpm run test:e2e:autostart` is equivalent |
+| `pnpm run test:tck` | Minimal `ghosts/tck` smoke — **start the server first** |
+
+Details: root [`README.md`](README.md), [`specs/001-minimal-poc/quickstart.md`](specs/001-minimal-poc/quickstart.md), and per-package READMEs under `server/`, `client/phaser/`, `ghosts/*/`.
+
 ### Code Style and CI
 
 - CI checks run on every PR. All checks must pass before merge.

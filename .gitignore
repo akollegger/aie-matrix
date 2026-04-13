@@ -93,6 +93,9 @@ coverage.xml
 # Jupyter
 .ipynb_checkpoints/
 
+# Tiled editor local session (absolute paths; noisy diffs)
+*.tiled-session
+
 # --- Misc ---
 *.log
 tmp/

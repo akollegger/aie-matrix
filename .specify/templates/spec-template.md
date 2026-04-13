@@ -5,6 +5,12 @@
 **Status**: Draft  
 **Input**: User description: "$ARGUMENTS"
 
+## Proposal Context *(mandatory)*
+
+- **Related Proposal**: [RFC/ADR path or PR description for trivial work]
+- **Scope Boundary**: [What is explicitly in scope]
+- **Out of Scope**: [What this feature will not do]
+
 ## User Scenarios & Testing *(mandatory)*
 
 <!--
@@ -100,6 +106,11 @@
 - **[Entity 1]**: [What it represents, key attributes without implementation]
 - **[Entity 2]**: [What it represents, relationships to other entities]
 
+### Interface Contracts *(mandatory when crossing package/process/language boundaries)*
+
+- **IC-001**: [Shared interface, schema, or protocol that MUST be defined]
+- **IC-002**: [Downstream consumer or compatibility requirement]
+
 ## Success Criteria *(mandatory)*
 
 <!--
@@ -126,3 +137,7 @@
 - [Assumption about scope boundaries, e.g., "Mobile support is out of scope for v1"]
 - [Assumption about data/environment, e.g., "Existing authentication system will be reused"]
 - [Dependency on existing system/service, e.g., "Requires access to the existing user profile API"]
+
+## Documentation Impact *(mandatory)*
+
+- [Docs that MUST be updated together with this feature, or state "None" with a reason]

@@ -1,0 +1,61 @@
+name: E2E (Playwright)
+
+# Run when the authoritative server stack (or its workspace deps) changes.
+# The job still builds and exercises Phaser + random-house against that server.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/e2e.yml"
+      - "e2e/**"
+      - "server/**"
+      - "shared/root-env/**"
+      - "shared/types/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/e2e.yml"
+      - "e2e/**"
+      - "server/**"
+      - "shared/root-env/**"
+      - "shared/types/**"
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    name: spectator ghosts
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.29.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium (system deps)
+        run: pnpm --filter @aie-matrix/e2e exec playwright install chromium --with-deps
+
+      - name: Run E2E (server start + Vite preview on 5179)
+        run: CI=1 pnpm run test:e2e:autostart
+
+      - name: Upload Playwright traces and report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: e2e/test-results/
+          if-no-files-found: ignore

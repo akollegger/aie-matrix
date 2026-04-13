@@ -1,0 +1,18 @@
+{
+  "name": "@aie-matrix/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "E2E_AUTOSTART=1 playwright test",
+    "test:manual": "playwright test",
+    "test:autostart": "E2E_AUTOSTART=1 playwright test",
+    "test:ui": "playwright test --ui",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "@types/node": "^22.13.10",
+    "typescript": "~5.7.3"
+  }
+}

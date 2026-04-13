@@ -102,6 +102,23 @@ What runs on PRs, how are services built and deployed, and how is the Kubernetes
 
 ---
 
+## Minimal PoC (001) — subsystem ownership
+
+The [Minimal PoC](../specs/001-minimal-poc/) combines several packages in **one Node process** (`@aie-matrix/server`). Boundaries below describe **who owns what** for that shortcut; they are not the long-term production split.
+
+| Concern | PoC owner (code) | Notes |
+|--------|-------------------|--------|
+| **Spectator state** (read-only Colyseus schema, `ghostTiles` / `tileCoords`) | `server/colyseus/` (`room-schema.ts`, `MatrixRoom.ts`) | IC-004; consumed by `client/phaser` via `colyseus.js`. |
+| **Movement & MCP tools** (`go`, `exits`, validation) | `server/world-api/` (`mcp-server.ts`, `movement.ts`, `auth-context.ts`) | Ghosts talk MCP only; no direct Colyseus from browser or ghost SDK. |
+| **World ↔ room bridge** | `server/world-api/src/colyseus-bridge.ts` | In-process calls into Colyseus mutators (PoC only). |
+| **Registry & adoption** | `server/registry/` | REST `/registry/*`; in-memory store + session guard (IC-002). |
+| **Ghost credentials** | `server/auth/` | Dev JWT mint/verify for adopted ghosts. |
+| **Contracts & shared types** | `shared/types/`, `specs/001-minimal-poc/contracts/` | Source of truth for REST/MCP shapes; keep docs and code aligned. |
+| **Phaser spectator** | `client/phaser/` | Loads `maps/` assets; **no** move RPC. |
+| **Reference GhostHouse** | `ghosts/random-house/` | Registration + adoption + MCP walker (uses `ghosts/ts-client/`). |
+
+---
+
 ## Proposals
 
 See [proposals/](../proposals/) for RFCs and ADRs.  

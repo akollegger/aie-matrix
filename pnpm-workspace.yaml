@@ -1,0 +1,13 @@
+packages:
+  - server
+  - server/colyseus
+  - server/world-api
+  - server/registry
+  - server/auth
+  - client/phaser
+  - shared/types
+  - shared/root-env
+  - ghosts/ts-client
+  - ghosts/random-house
+  - ghosts/tck
+  - e2e
