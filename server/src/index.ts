@@ -54,7 +54,9 @@ function serveMapsIfMatched(urlPath: string, res: import("node:http").ServerResp
     return false;
   }
   const decoded = decodeURIComponent(urlPath);
-  const absolute = normalize(join(repoRoot, decoded));
+  // `path.join` ignores prior segments when the right-hand side is absolute; strip the leading `/`.
+  const relativeFromRoot = decoded.startsWith("/") ? decoded.slice(1) : decoded;
+  const absolute = normalize(join(repoRoot, relativeFromRoot));
   const prefix = mapsRoot.endsWith(sep) ? mapsRoot : `${mapsRoot}${sep}`;
   if (absolute !== mapsRoot && !absolute.startsWith(prefix)) {
     res.writeHead(403, { "Content-Type": "text/plain", ...corsHeaders });
