@@ -80,8 +80,7 @@ performs GhostHouse duties and embeds the rule-based random walker (built on
 `ts-client/`). Splitting walker logic into a separate package under `ghosts/` is
 out of scope for the PoC unless reuse pressure appears.
 
-An optional **`ghosts/README.md`** may summarize this namespace; it documents
-the convention rather than working around a deeper directory tree.
+The **`ghosts/README.md`** file summarizes this namespace for contributors (FR-019); it documents the convention rather than working around a deeper directory tree.
 
 Packages are sized for parallel contribution — each has a single focused
 capability. `server/colyseus/`, `server/world-api/`, `server/registry/`, and
@@ -136,11 +135,7 @@ for the session and does not support reassignment.
 
 ### ghosts/ts-client — TypeScript MCP Client SDK
 
-`ts-client/` wraps the MCP client protocol behind a clean async interface:
-`getPosition()`, `getNeighbors()`, `move()`. Ghost implementations built on
-`ts-client` have no direct dependency on MCP protocol details or Colyseus. Any
-provider registration or adoption step happens before the ghost begins using the
-navigation tools.
+`ts-client/` wraps Streamable HTTP MCP behind **`GhostMcpClient`** (`connect`, `callTool`, …). Ghost implementations call world tools such as **`whoami`**, **`whereami`**, **`exits`**, and **`go`** without Colyseus knowledge. Provider registration and adoption happen **before** the ghost session uses MCP (typically via REST in the house process).
 
 LLM-backed ghosts built on agentic frameworks (LangChain, LangGraph, Claude tool use, etc.) can instead point their framework's MCP client directly at `world-api/` and use tool calling natively — `ts-client/` is primarily for rule-based and custom agent implementations.
 
@@ -175,43 +170,22 @@ A small abstract hex map authored in Tiled is sufficient for the PoC — it does
 
 ### ghosts/tck — Technology Compatibility Kit
 
-The TCK is a test suite that runs against a live local server and validates **the
-published registry and MCP contracts** for **a house-provisioned ghost** — that
-is, a ghost that has been adopted and is exercised through the same registration,
-adoption, and tool flows any GhostHouse-backed ghost must support. It does not
-introduce a separate “provider tier” or alternate classification beyond those
-published interfaces. For the reference PoC stack, the TCK may drive or assume
-`ghosts/random-house/` as the house that provisions the ghost under test.
+The TCK validates **published registry + MCP** behavior against a **live** combined server. It does not introduce a separate provider tier beyond those interfaces.
 
-The minimal step sequence is:
+**PoC as-shipped (normative):** the minimal step subset lives in [`specs/001-minimal-poc/contracts/tck-scenarios.md`](../specs/001-minimal-poc/contracts/tck-scenarios.md) — **reachability** (`GET /spectator/room`) → **registry adopt** → **MCP `whereami`**. Run: `pnpm run test:tck` from the repo root (**server must already be running**).
 
-1. Register a GhostHouse provider.
-2. Adopt one ghost for one caretaker and receive the credentials needed to run it.
-3. **`whereami`** — receive a valid tile ID.
-4. **`exits`** — receive a non-empty list where the map guarantees neighbors.
-5. **`go`** with valid **`toward`** into an existing neighbor — receive confirmation.
-6. Invalid **`go`** (for example **`toward`** with no neighbor off the map edge) — receive a rejection with a reason.
-7. Stop cleanly.
-
-Any implementation in any language passes if it can drive these steps correctly. The full TCK spec is left for a follow-up RFC; the PoC establishes its location and runs a minimal version.
+**Longer-term target** (non-blocking for PoC closure): extend toward `exits`, valid/invalid `go`, shutdown, and second-language drivers; capture in a follow-up RFC when user-journey and multi-house surfaces stabilize.
 
 ### Demo Scenario
 
-This is the happy path a contributor follows to verify the PoC is working:
+Happy path aligned with the **root** `README.md` and [`specs/001-minimal-poc/quickstart.md`](../specs/001-minimal-poc/quickstart.md):
 
-1. `git clone` the repo and run the setup command from the root README (install dependencies, build packages).
-2. Start the server: `pnpm run dev` from `server/` — starts Colyseus, world-api, and registry in a single process.
-3. Open the spectator client: navigate to `http://localhost:3000` in a browser. The hex map renders; no ghosts yet.
-4. Start **`ghosts/random-house/`** (documented command) and complete an adoption
-   through the developer-facing flow. The process registers as a GhostHouse,
-   provisions an adopted ghost for a caretaker, and runs the embedded random
-   walker.
-5. The browser updates in real time as the ghost steps across the map under
-   the configured movement ruleset (PoC: permissive default).
-6. Run the TCK: `pnpm test` from `ghosts/tck/`. All steps pass.
+1. `git clone` → **`pnpm install`** at the repo root (`corepack enable` once if you rely on the pinned pnpm).
+2. **`pnpm run demo`** — one terminal starts the combined server, Phaser (Vite), and `random-house` (see `scripts/demo.mjs`). Alternatively use **`pnpm run poc:server`**, **`pnpm run poc:client`**, and **`pnpm run poc:ghost`** in separate shells for debugging.
+3. Open the **Vite “Local”** URL (default **http://127.0.0.1:5174/** or `http://localhost:5174/`). Map renders; ghost markers appear once the house has adopted.
+4. Optional smoke: with the server still up, **`pnpm run test:tck`** exercises the minimal registry + **`whereami`** gate.
 
-A second terminal running a second instance of `ghosts/random-house/` should show
-two ghosts navigating independently.
+**Two ghosts:** `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2` (one house, two caretakers) or two separate `pnpm run poc:ghost` processes (two houses).
 
 ### Data Flow
 

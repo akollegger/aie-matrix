@@ -130,10 +130,10 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 
 **Purpose**: Namespace docs, RFC alignment, final smoke across all stories.
 
-- [ ] T033 [P] Add flat-namespace overview for `ghosts/*` packages (no nested subtypes) at `ghosts/README.md` per FR-019 in `specs/001-minimal-poc/spec.md`
-- [ ] T034 [P] Reconcile `proposals/rfc/0001-minimal-poc.md` with any scope adjustments discovered during implementation at `proposals/rfc/0001-minimal-poc.md`
-- [ ] T035 [P] Update contributor commands or DCO notes if new workflows were introduced at `CONTRIBUTING.md`
-- [ ] T036 Run quickstart §§1–3 on a clean workspace (§4 minimal TCK when T029 lands); fix any doc drift in `README.md`
+- [x] T033 [P] Add flat-namespace overview for `ghosts/*` packages (no nested subtypes) at `ghosts/README.md` per FR-019 in `specs/001-minimal-poc/spec.md`
+- [x] T034 [P] Reconcile `proposals/rfc/0001-minimal-poc.md` with any scope adjustments discovered during implementation at `proposals/rfc/0001-minimal-poc.md`
+- [x] T035 [P] Update contributor commands or DCO notes if new workflows were introduced at `CONTRIBUTING.md`
+- [x] T036 Run quickstart §§1–3 on a clean workspace (§4 minimal TCK when T029 lands); fix any doc drift in `README.md`
 
 ---
 

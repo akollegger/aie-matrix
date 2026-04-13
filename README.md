@@ -12,7 +12,7 @@
 
 - **`client/`** — Browser client packages (Phaser spectator for the PoC).
 - **`docs/`** — Product overview, architecture, and contributor-facing deep dives.
-- **`ghosts/`** — Flat namespace for ghost-side code: MCP client SDKs, GhostHouse providers, compatibility kit; Python stub is planned here outside pnpm workspaces.
+- **`ghosts/`** — Flat namespace for ghost-side code: MCP client SDKs, GhostHouse providers, compatibility kit; Python stub is planned here outside pnpm workspaces. See [`ghosts/README.md`](ghosts/README.md) for package naming (FR-019).
 - **`maps/`** — Tiled map exports and tileset assets for the hex world (e.g. `maps/sandbox/` sandbox hex; expand per RFC-0001).
 - **`proposals/`** — RFCs and ADRs: decisions and scope before implementation lands.
 - **`server/`** — World backend packages (Colyseus room, MCP `world-api`, REST `registry`, dev `auth`) plus the combined PoC dev entry at `server/package.json`.
