@@ -14,6 +14,7 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 |---|---|---|
 | Game client | [Phaser](https://phaser.io/) | Hex-tile world rendering, spectator and attendee UI |
 | Realtime server | [Colyseus](https://colyseus.io/) | Authoritative world state, WebSocket connections, room management |
+| Server orchestration | [Effect-ts](https://effect.website/) | Dependency injection, typed error handling, structured concurrency, observability |
 | Horizontal scaling | [Redis](https://redis.io/) (`RedisPresence` + `RedisDriver`) | Colyseus multi-process pub/sub and matchmaking |
 | World model | [Neo4j](https://neo4j.com/) | Tile graph, ghost positions, social graph, goal state, quest progress |
 | Blob storage | S3 (or compatible) | Session recordings, slide assets, post-processed artifacts |
@@ -39,7 +40,7 @@ What does a memory module expose? At minimum: write a fact, query by relevance o
 Which models power ghost reasoning, speaker agents, and vendor NPCs? Multiple providers should be supportable. The agent layer should be model-agnostic. Latency characteristics at conference-scale (3000+ concurrent ghosts) need to be validated.
 
 ### Observability and Telemetry
-How are ghost decisions, checkpoint events, LLM calls, and world state changes captured and surfaced? A structured event log is the minimum. APM, tracing, and the eval layer sit on top of it. Tool choice is open.
+**Status: Decided (ADR-0002).** The server will use Effect-ts's built-in tracing and structured logging infrastructure. Request tracing via unique trace IDs is a first-class requirement. Tool choice for downstream analytics, APM, and the eval layer remains open.
 
 ### Time-Series / Event Log Backend
 The Matrix generates continuous streams: ghost movements, card exchanges, checkpoint events, quest completions, session attendance. These need to be captured for leaderboards, eval, and post-conference analysis. Options include ClickHouse, TimescaleDB, structured logs to S3 + query layer, or similar. Open.

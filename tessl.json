@@ -1,0 +1,12 @@
+{
+  "name": "my-project",
+  "mode": "vendored",
+  "dependencies": {
+    "tessl/npm-phaser": {
+      "version": "3.90.0"
+    },
+    "pantheon-ai/colyseus-multiplayer": {
+      "version": "0.1.1"
+    }
+  }
+}
