@@ -19,7 +19,8 @@
     "@aie-matrix/server-registry": "workspace:*",
     "@aie-matrix/server-world-api": "workspace:*",
     "@colyseus/core": "0.15.57",
-    "@colyseus/ws-transport": "0.15.2"
+    "@colyseus/ws-transport": "0.15.2",
+    "effect": "^3.21.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

@@ -20,10 +20,10 @@
 
 **Purpose**: Add the `effect` dependency and create the new file structure. No behavior changes.
 
-- [ ] T001 Add `effect` (v3+) to dependencies in `server/package.json` and run `pnpm install` from repo root
-- [ ] T002 [P] Create `server/src/services/` directory with `.gitkeep` placeholder (will hold WorldBridgeService, RegistryStoreService, ServerConfigService, TranscriptHubService)
-- [ ] T003 [P] Verify `pnpm typecheck` passes at baseline before any code changes (confirms clean starting state)
-- [ ] T004 Confirm ADR-0002 reference is present in `CLAUDE.md` Active Technologies section (already added by agent context update)
+- [X] T001 Add `effect` (v3+) to dependencies in `server/package.json` and run `pnpm install` from repo root
+- [X] T002 [P] Create `server/src/services/` directory with `.gitkeep` placeholder (will hold WorldBridgeService, RegistryStoreService, ServerConfigService, TranscriptHubService)
+- [X] T003 [P] Verify `pnpm typecheck` passes at baseline before any code changes (confirms clean starting state)
+- [X] T004 Confirm ADR-0002 reference is present in `CLAUDE.md` Active Technologies section (already added by agent context update)
 
 **Checkpoint**: `effect` is installed, directory structure exists, baseline typecheck is green.
 
@@ -35,12 +35,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T005 Create `server/src/errors.ts` — define all `Data.TaggedError` types: `AuthError` (MissingCredentials, InvalidToken, MalformedClaims, ExpiredToken), `RegistryError` (UnknownCaretaker, UnknownGhostHouse, CaretakerAlreadyHasGhost), `WorldApiError` (NoPosition, UnknownCell, MapIntegrity, MovementBlocked), `WorldBridgeError` (NotReady, NoNavigableCells), `McpHandlerError`
-- [ ] T006 Add `errorToResponse()` function to `server/src/errors.ts` — maps all error types to `{ status: number, body: string }` using `Match.tag` with `Match.exhaustive` (implements IC-001 contract)
-- [ ] T007 [P] Create `server/src/services/WorldBridgeService.ts` — `Context.Tag("aie-matrix/WorldBridgeService")` using `ColyseusWorldBridge` interface from `@aie-matrix/server-world-api`; export `makeWorldBridgeLayer(bridge: ColyseusWorldBridge): Layer`
-- [ ] T008 [P] Create `server/src/services/RegistryStoreService.ts` — `Context.Tag("aie-matrix/RegistryStoreService")` using `RegistryStore` from `@aie-matrix/server-registry`; export `makeRegistryStoreLayer(store: RegistryStore): Layer`
-- [ ] T009 [P] Create `server/src/services/ServerConfigService.ts` — `Context.Tag("aie-matrix/ServerConfigService")` with `{ httpPort, mapPath, mapsRoot, corsHeaders, debugEnabled }`; export `makeServerConfigLayer(env: NodeJS.ProcessEnv): Layer`
-- [ ] T010 Verify `pnpm typecheck` passes after adding services and errors — new service tags must compile without circular imports
+- [X] T005 Create `server/src/errors.ts` — define all `Data.TaggedError` types: `AuthError` (MissingCredentials, InvalidToken, MalformedClaims, ExpiredToken), `RegistryError` (UnknownCaretaker, UnknownGhostHouse, CaretakerAlreadyHasGhost), `WorldApiError` (NoPosition, UnknownCell, MapIntegrity, MovementBlocked), `WorldBridgeError` (NotReady, NoNavigableCells), `McpHandlerError`
+- [X] T006 Add `errorToResponse()` function to `server/src/errors.ts` — maps all error types to `{ status: number, body: string }` using `Match.tag` with `Match.exhaustive` (implements IC-001 contract)
+- [X] T007 [P] Create `server/src/services/WorldBridgeService.ts` — `Context.Tag("aie-matrix/WorldBridgeService")` using `ColyseusWorldBridge` interface from `@aie-matrix/server-world-api`; export `makeWorldBridgeLayer(bridge: ColyseusWorldBridge): Layer`
+- [X] T008 [P] Create `server/src/services/RegistryStoreService.ts` — `Context.Tag("aie-matrix/RegistryStoreService")` using `RegistryStore` from `@aie-matrix/server-registry`; export `makeRegistryStoreLayer(store: RegistryStore): Layer`
+- [X] T009 [P] Create `server/src/services/ServerConfigService.ts` — `Context.Tag("aie-matrix/ServerConfigService")` with `{ httpPort, mapPath, mapsRoot, corsHeaders, debugEnabled }`; export `makeServerConfigLayer(env: NodeJS.ProcessEnv): Layer`
+- [X] T010 Verify `pnpm typecheck` passes after adding services and errors — new service tags must compile without circular imports
 
 **Checkpoint**: Error types defined, service tags defined, TypeScript compiles. US1 and US2 can now proceed.
 
