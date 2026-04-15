@@ -4,5 +4,12 @@
     "rootDir": "src",
     "outDir": "dist"
   },
+  "references": [
+    { "path": "../shared/root-env" },
+    { "path": "./auth" },
+    { "path": "./colyseus" },
+    { "path": "./world-api" },
+    { "path": "./registry" }
+  ],
   "include": ["src/**/*.ts"]
 }

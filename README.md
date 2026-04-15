@@ -15,18 +15,16 @@
 - **`ghosts/`** — Flat namespace for ghost-side code: MCP client SDKs, GhostHouse providers, compatibility kit; Python stub is planned here outside pnpm workspaces. See [`ghosts/README.md`](ghosts/README.md) for package naming (FR-019).
 - **`maps/`** — Tiled map exports and tileset assets for the hex world (e.g. `maps/sandbox/` sandbox hex; expand per RFC-0001).
 - **`proposals/`** — RFCs and ADRs: decisions and scope before implementation lands.
-- **`server/`** — World backend packages (Colyseus room, MCP `world-api`, REST `registry`, dev `auth`) plus the combined PoC dev entry at `server/package.json`.
+- **`server/`** — World backend packages (Colyseus room, MCP `world-api`, REST `registry`, dev `auth`) plus the combined PoC dev entry at `server/package.json`. The combined server package depends on **[Effect](https://effect.website/)** (`effect` v3+) for service wiring (`Layer` / `Context.Tag`), typed errors, and the shared `ManagedRuntime`; see [`docs/guides/effect-ts.md`](docs/guides/effect-ts.md).
 - **`shared/`** — Cross-package TypeScript types and tool schemas consumed by server and clients.
 - **`specs/`** — Feature folders: plans, contracts, quickstarts, and task lists (e.g. minimal PoC under `specs/001-minimal-poc/`).
 - **`scripts/`** — Small repo-root helpers (e.g. `demo.mjs` for one-terminal PoC; `kill-poc-ports.mjs` to list or stop listeners on default PoC ports).
-- **`.github/`** — CI workflows and repository automation.
-- **`.specify/`** — Speckit templates and scripts for spec-driven feature workflow (optional for day-to-day code reading).
-- **`.agents/`**, **`.claude/`** — Agent skill packs for Cursor / Claude Code (optional tooling, not runtime).
 
 Root **`package.json`**, **`pnpm-workspace.yaml`**, and **`pnpm-lock.yaml`** define the pnpm monorepo; **`AGENTS.md`** summarizes repository rules for humans and automation.
 
 Built for [AIEWF 2026](https://www.ai.engineer/worldsfair), June 29 – July 2, Moscone West, San Francisco.  
-Open to every vendor, sponsor, and speaker at the conference.
+
+Contributions welcome from every vendor, sponsor, speaker, and attendee.
 
 ## Development (PoC monorepo)
 
@@ -43,7 +41,13 @@ The pinned pnpm version is declared in the root `package.json` `packageManager` 
 
 Goal: combined server + Phaser spectator + reference ghost moving on the sample map. Detailed checks live in [`specs/001-minimal-poc/quickstart.md`](specs/001-minimal-poc/quickstart.md).
 
-**Fewest steps from clone**: `git clone` → `cd` → **`pnpm install`** → **`pnpm run demo`** → open the Vite **Local** URL from the log (often **http://localhost:5174/** or **http://127.0.0.1:5174/**). One terminal; **Ctrl+C** stops server, client, and ghost. Two walkers in one house: **`pnpm run demo -- --ghosts 2`**. Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run poc:server`**, **`pnpm run poc:client`**, and **`pnpm run poc:ghost`** shells instead.
+**Fewest steps from clone**: 
+
+1. `git clone` → `cd` → **`pnpm install`**
+2.  **`pnpm run demo --ghosts 5`** 
+3. open the Vite **Local** URL from the log (often **http://localhost:5174/** or **http://127.0.0.1:5174/**). 
+
+One terminal; **Ctrl+C** stops server, client, and 5 ghosts. Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run poc:server`**, **`pnpm run poc:client`**, and **`pnpm run poc:ghost`** shells instead.
 
 ### Human prerequisites (read before debugging code)
 
@@ -60,10 +64,11 @@ Goal: combined server + Phaser spectator + reference ghost moving on the sample 
 | Command | Purpose |
 |---------|---------|
 | `pnpm install` | Install all workspace dependencies |
+| `pnpm dev` | **Watch-mode combined server** (same as `pnpm run poc:server:dev`): runs `tsx watch` on `server/src/index.ts` after workspace prebuilds; HTTP + Colyseus on **http://127.0.0.1:8787** |
 | `pnpm run demo` | **All-in-one PoC**: `poc:server` → wait for `/spectator/room` → `poc:client` + `poc:ghost` in parallel (single terminal; Ctrl+C stops children) |
 | `pnpm run build` | Build every workspace package (first time or after large pulls) |
 | `pnpm run poc:server` | Combined server: HTTP + Colyseus on **http://127.0.0.1:8787** (runs `prestart` builds, then `node dist/index.js`) |
-| `pnpm run poc:server:dev` | Same stack under `tsx watch` while editing server code |
+| `pnpm run poc:server:dev` | Same as **`pnpm dev`**: combined server under `tsx watch` while editing server code |
 | `pnpm run poc:client` | Phaser spectator (Vite); default **http://127.0.0.1:5174** (see terminal for exact URL) |
 | `pnpm run poc:ghost` | `tsc` + `node` for `ghosts/random-house` (registers house, adopts, walks via MCP) |
 | `pnpm run poc:ports` | List processes **listening** on **8787** / **5174** / **5179** (`lsof`; safe, port-scoped) |

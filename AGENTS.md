@@ -1,39 +1,89 @@
-# Repository Guidelines
+# Agent Guidelines for aie-matrix
 
-## Project Structure & Module Organization
-This repository is currently specification-first and documentation-heavy. Start with `README.md`, then read `docs/project-overview.md` for product context and `docs/architecture.md` for the decided stack and open design questions. Use `proposals/adr/` for architecture decisions and `proposals/rfc/` for feature proposals; both directories define the required file format in their local `README.md`. Keep new top-level directories rare and justified in a proposal.
+This file is for AI agents contributing to the repository. It complements `CLAUDE.md` (loaded automatically) with agent-specific navigation guidance.
 
-## Build, Test, and Development Commands
-The PoC TypeScript monorepo uses **pnpm** (`pnpm-workspace.yaml` at the repo root). Install with `pnpm install` from the repository root; run package scripts with `pnpm run <script>` inside a workspace package or use `pnpm --filter <package> run <script>` from the root.
+---
 
-There is no full application build pipeline yet beyond workspace scaffolding. The core documentation workflow is reading, proposing, and reviewing:
+## How to orient yourself
+
+Start here, in order:
+
+1. `CLAUDE.md` — active tech stack, commands, and pointers to everything else
+2. `docs/project-overview.md` — what we're building and why
+3. `docs/architecture.md` — decided stack, open questions, Effect-ts orchestration model
+4. The relevant **technical guide** in `docs/guides/` before writing code in that area
+
+For decisions already made, read the relevant ADR in `proposals/adr/` before proposing changes to the stack.
+
+---
+
+## Documentation structure
+
+This repository uses a **layered knowledge architecture**. Each layer answers a different question:
+
+| Layer | Location | Answers |
+|---|---|---|
+| Navigation | `CLAUDE.md` | What exists, where to look |
+| Process | `CONTRIBUTING.md` | How to participate, workflow, setup |
+| Technical guides | `docs/guides/` | How specific technologies work *in this project* |
+| Decisions | `proposals/adr/` | Why things are the way they are |
+| Proposals | `proposals/rfc/` | What is being considered |
+| Feature specs | `specs/<branch>/` | What a specific feature does, step by step |
+
+**Before writing code**, identify which technical guide applies and read it. Guides document the patterns already established — following them keeps the codebase consistent and avoids introducing patterns that duplicate or conflict with existing ones.
+
+---
+
+## Available technical guides
+
+| Guide | Read before… |
+|---|---|
+| `docs/guides/effect-ts.md` | Writing any server handler, service, or error type |
+
+More guides will be added as patterns are established in other subsystems.
+
+---
+
+## Non-obvious conventions
+
+**Effect `R` channel as a compile gate.** If you add a new service dependency (`yield* SomeService`) to an Effect but don't add its `Layer` to `ManagedRuntime.make(...)` in `server/src/index.ts`, `pnpm typecheck` will fail. This is intentional — the type system enforces wiring correctness.
+
+**`Match.exhaustive` as a compile gate for errors.** Adding a new `Data.TaggedError` type and including it in the `HttpMappingError` union in `server/src/errors.ts` without adding a `Match.tag` branch in `errorToResponse` will fail the build. Always do both steps together.
+
+**Colyseus internals are off-limits.** `server/colyseus/src/` (MatrixRoom, room-schema, map loader) is not modified by the Effect-ts transition. Effect wraps around Colyseus at the bridge seam (`server/world-api/src/colyseus-bridge.ts`), not inside it.
+
+**DCO sign-off is required.** All commits need `git commit -s`. This is checked in CI.
+
+---
+
+## Proposing changes
+
+- **Significant design decisions** → open an ADR in `proposals/adr/` before implementation
+- **New features or components** → open an RFC in `proposals/rfc/` before implementation
+- **Small, well-understood changes** → a clear PR description is enough
+
+See `proposals/adr/README.md` and `proposals/rfc/README.md` for file formats.
+
+---
+
+## Build, test, type-check
 
 ```bash
-rg --files
-git status
-git commit -s -m "docs: add ghost memory RFC"
+pnpm install             # workspace install
+pnpm dev                 # combined server + watch
+pnpm typecheck           # TypeScript across all packages (primary correctness gate)
+pnpm test                # unit / TCK
+pnpm test:e2e            # Playwright (auto-starts server)
+pnpm test:tck            # ghost contract tests (start server first)
+pnpm run lint
 ```
 
-Use `rg --files` to inspect the repo quickly, `git status` to confirm your change set, and `git commit -s` because DCO sign-off is required for all commits. When you add runnable code, document local setup and smoke-test commands in the package-level `README.md` and keep examples on **pnpm** (not `npm`/`yarn`).
+`pnpm typecheck` is the first thing to run after any structural change. An unsatisfied Effect `R` channel or a missing `Match.tag` branch will surface here before any test.
 
-## Coding Style & Naming Conventions
-Write Markdown with short sections, explicit headings, and direct language. Match existing filename patterns:
+---
 
-- ADRs: `proposals/adr/NNNN-short-title.md`
-- RFCs: `proposals/rfc/NNNN-short-title.md`
-- Branches: `feature/<short-description>`, `fix/<short-description>`, `proposal/<short-description>`
+## How documentation grows
 
-Prefer lowercase kebab-case for new document filenames. Keep examples concrete and repository-specific.
+When you establish a new pattern that other contributors will need to follow, update the relevant guide in `docs/guides/` in the same PR as the code. If no guide exists yet for that area, create one. Keep guides focused on *how this project uses* the technology, not on general tutorials.
 
-## Testing Guidelines
-There is no formal automated test suite yet. For documentation changes, verify internal links, heading structure, and consistency with `README.md`, `docs/architecture.md`, and `CONTRIBUTING.md`. For future code contributions, include at least a smoke test and document how to run it.
-
-## Commit & Pull Request Guidelines
-This repository has no commit history yet, so follow the conventions defined in `CONTRIBUTING.md`. Use imperative, scoped commit messages such as `docs: add vendor NPC RFC` or `adr: choose event log backend`, always with `-s`. Open pull requests from feature branches, reference the related issue or proposal, and include enough context for review. Non-trivial work should begin with an RFC or ADR before implementation.
-
-## Active Technologies
-- **pnpm** workspaces for the TypeScript monorepo; TypeScript on Node.js **24+** for `server/*`, `client/phaser`, `shared/types`, and `ghosts/*` packages; Python 3.11+ for `ghosts/python-client/` stub only. + Colyseus (authoritative room + WebSocket broadcast to spectators); Phaser 3 (spectator); MCP server/client libraries for `world-api` and SDKs; minimal HTTP stack for `registry` and static or dev-server delivery of Phaser build; JWT handling in `auth` (dev secret for PoC). (001-minimal-poc)
-- N/A for PoC — in-memory Colyseus room state and ephemeral registry/adoption data unless a later task introduces a tiny on-disk fixture. (001-minimal-poc)
-
-## Recent Changes
-- 001-minimal-poc: Standardized on **pnpm** workspaces (`pnpm-workspace.yaml`, `pnpm-lock.yaml`); TypeScript on Node.js **24+** for `server/*`, `client/phaser`, `shared/types`, and `ghosts/*` packages; Python 3.11+ for `ghosts/python-client/` stub only. + Colyseus (authoritative room + WebSocket broadcast to spectators); Phaser 3 (spectator); MCP server/client libraries for `world-api` and SDKs; minimal HTTP stack for `registry` and static or dev-server delivery of Phaser build; JWT handling in `auth` (dev secret for PoC).
+When you make an architectural decision, record it as an ADR. When you remove a guide because the technology was replaced, remove it — stale guides cause more harm than no guide.

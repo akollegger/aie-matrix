@@ -2,7 +2,13 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
-    "outDir": "dist"
+    "outDir": "dist",
+    "composite": true
   },
+  "references": [
+    { "path": "../auth" },
+    { "path": "../colyseus" },
+    { "path": "../../shared/types" }
+  ],
   "include": ["src/**/*.ts"]
 }

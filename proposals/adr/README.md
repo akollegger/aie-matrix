@@ -46,3 +46,4 @@ What becomes easier or harder as a result of this decision?
 | ADR | Title | Status |
 |---|---|---|
 | [ADR-0001](0001-mcp-ghost-wire-protocol.md) | MCP as the Ghost Wire Protocol | proposed |
+| [ADR-0002](0002-adopt-effect-ts.md) | Adopting Effect-ts for Server Orchestration and Concurrency | accepted |
