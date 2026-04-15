@@ -128,11 +128,11 @@
 
 **Independent Test**: Send one MCP `go` request; search server logs for the request's trace ID; confirm it appears in the entry log, the WorldBridge call log, and the state-change log.
 
-- [ ] T041 [US4] Add trace ID generation at the `/mcp` route boundary in `server/src/index.ts` — use `Effect.withSpan` or a `FiberRef` scoped to each request; include trace ID in all log output within the request pipeline
-- [ ] T042 [US4] Propagate trace ID through `WorldBridgeService` calls in `server/world-api/src/mcp-server.ts` — ensure `setGhostCell` and `getGhostCell` log the trace ID alongside the ghost and cell IDs
-- [ ] T043 [P] [US4] Add structured logging to `server/registry/src/routes/adoption.ts` — log adoption request with caretakerId, ghostId, and trace ID (or request correlation ID)
-- [ ] T044 [P] [US4] Add structured logging to each MCP tool handler in `server/world-api/src/mcp-server.ts` — log tool name, ghost ID, input, and outcome (success/error type) with trace ID
-- [ ] T045 [US4] Manual trace verification: send a `go` MCP request, capture server logs, confirm a unique ID appears consistently across entry, bridge, and state-change log lines; document the verification step in `quickstart.md`
+- [X] T041 [US4] Add trace ID generation at the `/mcp` route boundary in `server/src/index.ts` — use `Effect.withSpan` or a `FiberRef` scoped to each request; include trace ID in all log output within the request pipeline
+- [X] T042 [US4] Propagate trace ID through `WorldBridgeService` calls in `server/world-api/src/mcp-server.ts` — ensure `setGhostCell` and `getGhostCell` log the trace ID alongside the ghost and cell IDs
+- [X] T043 [P] [US4] Add structured logging to `server/registry/src/routes/adoption.ts` — log adoption request with caretakerId, ghostId, and trace ID (or request correlation ID)
+- [X] T044 [P] [US4] Add structured logging to each MCP tool handler in `server/world-api/src/mcp-server.ts` — log tool name, ghost ID, input, and outcome (success/error type) with trace ID
+- [X] T045 [US4] Manual trace verification: send a `go` MCP request, capture server logs, confirm a unique ID appears consistently across entry, bridge, and state-change log lines; document the verification step in `quickstart.md`
 
 **Checkpoint**: US4 complete — every MCP request is traceable end-to-end via a unique ID in structured logs.
 

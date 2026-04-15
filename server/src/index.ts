@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { createReadStream, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, join, normalize, sep } from "node:path";
@@ -9,9 +10,12 @@ import { MatrixRoom } from "@aie-matrix/server-colyseus";
 import { createRegistryRequestListener, createRegistryStore } from "@aie-matrix/server-registry";
 import {
   createColyseusBridge,
+  getRequestTraceId,
   handleGhostMcpEffect,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
+  runWithRequestTrace,
+  withRequestTraceFiber,
 } from "@aie-matrix/server-world-api";
 import { Effect, Exit, Layer, ManagedRuntime, pipe } from "effect";
 import * as EffectScope from "effect/Scope";
@@ -126,6 +130,17 @@ async function main(): Promise<void> {
     getLoadedMap: () => colyseusBridge.getLoadedMap(),
     getGhostCell(ghostId: string): string | undefined {
       const gid = String(ghostId).trim();
+      const traceId = getRequestTraceId();
+      if (traceId) {
+        console.info(
+          JSON.stringify({
+            kind: "world-bridge",
+            op: "getGhostCell",
+            traceId,
+            ghostId: gid,
+          }),
+        );
+      }
       const fromRoom = colyseusBridge.getGhostCell(gid);
       if (fromRoom !== undefined && fromRoom !== "") {
         ghostAuthority.set(gid, fromRoom);
@@ -141,7 +156,28 @@ async function main(): Promise<void> {
     setGhostCell(ghostId: string, cellId: string): void {
       const gid = String(ghostId).trim();
       const cid = String(cellId).trim();
+      const traceId = getRequestTraceId() ?? null;
+      console.info(
+        JSON.stringify({
+          kind: "world-bridge",
+          op: "setGhostCell",
+          phase: "before-colyseus",
+          traceId,
+          ghostId: gid,
+          cellId: cid,
+        }),
+      );
       colyseusBridge.setGhostCell(gid, cid);
+      console.info(
+        JSON.stringify({
+          kind: "world-bridge",
+          op: "setGhostCell",
+          phase: "after-colyseus",
+          traceId,
+          ghostId: gid,
+          cellId: cid,
+        }),
+      );
       ghostAuthority.set(gid, cid);
       const ghost = store.ghosts.get(gid);
       if (ghost) {
@@ -332,19 +368,25 @@ async function main(): Promise<void> {
           res.end(JSON.stringify({ error: "BAD_JSON", message: "Body must be JSON" }));
           return;
         }
-        await runtime.runPromise(
-          handleGhostMcpEffect(req, res, parsed).pipe(
-            Effect.catchAll((e) =>
-              Effect.sync(() => {
-                if (!res.headersSent && !res.writableEnded) {
-                  const { status, body } = errorToResponse(e as HttpMappingError);
-                  res.writeHead(status, {
-                    "Content-Type": "application/json",
-                    ...corsHeaders,
-                  });
-                  res.end(body);
-                }
-              }),
+        const traceId = randomUUID();
+        await runWithRequestTrace(traceId, () =>
+          runtime.runPromise(
+            withRequestTraceFiber(
+              traceId,
+              handleGhostMcpEffect(req, res, parsed).pipe(
+                Effect.catchAll((e) =>
+                  Effect.sync(() => {
+                    if (!res.headersSent && !res.writableEnded) {
+                      const { status, body } = errorToResponse(e as HttpMappingError);
+                      res.writeHead(status, {
+                        "Content-Type": "application/json",
+                        ...corsHeaders,
+                      });
+                      res.end(body);
+                    }
+                  }),
+                ),
+              ),
             ),
           ),
         );

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AdoptGhostRequest, AdoptGhostResponse } from "@aie-matrix/shared-types";
 import { Effect } from "effect";
+import { getRequestTraceId } from "@aie-matrix/server-world-api";
 import { mintGhostToken } from "@aie-matrix/server-auth";
 import { WorldBridgeNoNavigableCells, WorldBridgeService } from "@aie-matrix/server-world-api";
 import { assertAdoptionAllowed } from "../session-guard.js";
@@ -38,6 +39,15 @@ export function handleAdoptGhostEffect(
     }
     const store = yield* RegistryStoreService;
     yield* assertAdoptionAllowed(store, parsed.caretakerId, parsed.ghostHouseId);
+    console.info(
+      JSON.stringify({
+        kind: "registry.adopt",
+        phase: "start",
+        traceId: getRequestTraceId() ?? null,
+        caretakerId: parsed.caretakerId,
+        ghostHouseId: parsed.ghostHouseId,
+      }),
+    );
     const bridge = yield* WorldBridgeService;
     const map = bridge.getLoadedMap();
     const first = map.cells.keys().next().value;
@@ -71,6 +81,15 @@ export function handleAdoptGhostEffect(
       },
     };
     yield* sendJson(res, corsHeaders, 201, out);
+    console.info(
+      JSON.stringify({
+        kind: "registry.adopt",
+        phase: "success",
+        traceId: getRequestTraceId() ?? null,
+        caretakerId: parsed.caretakerId,
+        ghostId,
+      }),
+    );
     deps.forkTranscriptSubscriber?.(ghostId);
   });
 }

@@ -129,4 +129,11 @@ If a request returns an unexpected error shape, check:
 1. **`R` channel errors at startup**: TypeScript compile errors mean a required service Layer was not provided. Run `pnpm typecheck` to surface these before runtime.
 2. **503 "World is still initializing"**: The `WorldBridgeService` Layer construction depends on Colyseus being ready. The new code waits for this explicitly — a 503 at steady state indicates the Colyseus room failed to create.
 3. **401 on all MCP requests**: Check that the ghost JWT includes both `sub` (ghostId) and `caretakerId` claims, and that the token is not expired.
-4. **Request tracing**: All requests processed through the Effect pipeline are tagged with a trace ID. Search logs for the trace ID to follow the full execution path.
+4. **Request tracing (US4 / Phase 6)**: Each `POST /mcp` request gets a UUID written as `traceId` on structured `console.info` JSON lines (`kind`: `mcp.request`, `mcp.tool`, `world-bridge`, and MCP-layer `getGhostCell`/`setGhostCell`). The combined server also logs `traceId` on `/registry/adopt` as `registry.adopt`. Search the server log output for a single `traceId` to correlate entry → tools → bridge → Colyseus (`world-bridge` `setGhostCell` `after-colyseus` is the last app-controlled line before `MatrixRoom` applies state; enable `AIE_MATRIX_DEBUG=1` to see `MatrixRoom.setGhostCell` and correlate by ghost id and ordering).
+
+### Manual trace verification (`go` tool)
+
+1. Run `pnpm dev` and complete registry smoke steps so you have a ghost JWT (`Authorization: Bearer <token>`).
+2. Call `tools/call` for `go` with a valid `toward` (e.g. `n`) using the same base URL as the server.
+3. Copy one `traceId` from a log line with `"kind":"mcp.request"` and `"phase":"entry"`.
+4. Search the captured logs for that UUID and confirm it appears on the `mcp.tool` start/end lines for `go`, on `world-bridge` / MCP `getGhostCell` / `setGhostCell` lines for that request, and (with `AIE_MATRIX_DEBUG=1`) that the matching `MatrixRoom.setGhostCell` line follows the `world-bridge` `after-colyseus` line for the same ghost and cell.

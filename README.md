@@ -19,14 +19,12 @@
 - **`shared/`** — Cross-package TypeScript types and tool schemas consumed by server and clients.
 - **`specs/`** — Feature folders: plans, contracts, quickstarts, and task lists (e.g. minimal PoC under `specs/001-minimal-poc/`).
 - **`scripts/`** — Small repo-root helpers (e.g. `demo.mjs` for one-terminal PoC; `kill-poc-ports.mjs` to list or stop listeners on default PoC ports).
-- **`.github/`** — CI workflows and repository automation.
-- **`.specify/`** — Speckit templates and scripts for spec-driven feature workflow (optional for day-to-day code reading).
-- **`.agents/`**, **`.claude/`** — Agent skill packs for Cursor / Claude Code (optional tooling, not runtime).
 
 Root **`package.json`**, **`pnpm-workspace.yaml`**, and **`pnpm-lock.yaml`** define the pnpm monorepo; **`AGENTS.md`** summarizes repository rules for humans and automation.
 
 Built for [AIEWF 2026](https://www.ai.engineer/worldsfair), June 29 – July 2, Moscone West, San Francisco.  
-Open to every vendor, sponsor, and speaker at the conference.
+
+Contributions welcome from every vendor, sponsor, speaker, and attendee.
 
 ## Development (PoC monorepo)
 

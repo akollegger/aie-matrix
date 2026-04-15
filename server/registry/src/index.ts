@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect, ManagedRuntime } from "effect";
 import { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
 import { handleRegisterGhostHouseEffect } from "./routes/register-house.js";
 import { createCaretakerId, type RegistryStore } from "./store.js";
 import type { WorldBridgeService } from "@aie-matrix/server-world-api";
+import { runWithRequestTrace } from "@aie-matrix/server-world-api";
 import { RegistryStoreService } from "@aie-matrix/server-world-api";
 import { readJsonBody, sendJson, sendRawJsonBody } from "./utils/http.js";
 import { RegistryBadJson } from "./registry-errors.js";
@@ -99,11 +101,14 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
       }
 
       if (path === "/registry/adopt" && req.method === "POST") {
-        await config.runtime.runPromise(
-          withRegistryRouteRecovery(
-            res,
-            handleAdoptGhostEffect(req, res, REGISTRY_CORS_HEADERS, config.adoption),
-            config.mapHttpError,
+        const traceId = randomUUID();
+        await runWithRequestTrace(traceId, () =>
+          config.runtime.runPromise(
+            withRegistryRouteRecovery(
+              res,
+              handleAdoptGhostEffect(req, res, REGISTRY_CORS_HEADERS, config.adoption),
+              config.mapHttpError,
+            ),
           ),
         );
         return;

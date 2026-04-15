@@ -32,6 +32,7 @@ import {
   type WorldApiError,
 } from "./world-api-errors.js";
 import { evaluateGo } from "./movement.js";
+import { getRequestTraceId } from "./request-trace.js";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -40,6 +41,20 @@ const compassEnum = z.enum(["n", "s", "ne", "nw", "se", "sw"]);
 const lookAtSchema = z.union([z.literal("here"), z.literal("around"), compassEnum]);
 
 type ToolServices = WorldBridgeService | RegistryStoreService;
+
+function logJson(record: Record<string, unknown>): void {
+  console.info(JSON.stringify(record));
+}
+
+function logMcpBridgeOp(
+  op: "getGhostCell" | "setGhostCell",
+  fields: Record<string, unknown>,
+): Effect.Effect<void> {
+  return Effect.sync(() => {
+    const traceId = getRequestTraceId() ?? null;
+    logJson({ kind: "world-bridge", op, traceId, ...fields });
+  });
+}
 
 function textResult(value: unknown): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(value) }] };
@@ -121,6 +136,7 @@ function authoritativeGhostTileEffect(
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
     const raw = bridge.getGhostCell(ghostId) as CellId | undefined;
+    yield* logMcpBridgeOp("getGhostCell", { ghostId, cellId: raw ?? null });
     const fromRoom = normalizeCellId(raw);
     if (fromRoom !== undefined) {
       return fromRoom;
@@ -129,6 +145,7 @@ function authoritativeGhostTileEffect(
     const fromReg = normalizeCellId(regRaw);
     if (fromReg !== undefined) {
       bridge.setGhostCell(ghostId, fromReg);
+      yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: fromReg, reason: "reseed-from-registry" });
       return fromReg;
     }
     return yield* Effect.fail(new WorldApiNoPosition({ ghostId }));
@@ -275,13 +292,67 @@ function goEffect(
       return yield* Effect.fail(goFailureToWorldApi(hereId, result));
     }
     bridge.setGhostCell(ghostId, result.tileId);
+    yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: result.tileId, reason: "go" });
     return result;
   });
 }
 
 function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServer {
-  const runTool = <A>(eff: Effect.Effect<A, AuthError | WorldApiError, ToolServices>): Promise<CallToolResult> =>
-    Effect.runPromiseExit(Effect.provide(eff, servicesLayer)).then(effectExitToCallToolResult);
+  const runTool = <A>(
+    toolName: string,
+    input: unknown,
+    eff: Effect.Effect<A, AuthError | WorldApiError, ToolServices>,
+  ): Promise<CallToolResult> =>
+    Effect.runPromise(
+      Effect.gen(function* () {
+        const traceId = getRequestTraceId() ?? null;
+        logJson({ kind: "mcp.tool", phase: "start", tool: toolName, traceId, input });
+        const exit = yield* Effect.exit(Effect.provide(eff, servicesLayer));
+        const tid = getRequestTraceId() ?? null;
+        Exit.match(exit, {
+          onFailure: (cause) => {
+            const errOpt = Cause.failureOption(cause);
+            if (Option.isSome(errOpt)) {
+              const err = errOpt.value as { _tag: string; ghostId?: string; cellId?: string };
+              logJson({
+                kind: "mcp.tool",
+                phase: "end",
+                tool: toolName,
+                traceId: tid || null,
+                outcome: "failure",
+                errorTag: err._tag,
+                ghostId: err.ghostId ?? null,
+                cellId: err.cellId ?? null,
+              });
+            } else {
+              logJson({
+                kind: "mcp.tool",
+                phase: "end",
+                tool: toolName,
+                traceId: tid || null,
+                outcome: "defect",
+                cause: Cause.pretty(cause),
+              });
+            }
+          },
+          onSuccess: (value) => {
+            const ghostFromResult =
+              value && typeof value === "object" && "ghostId" in value && typeof (value as { ghostId: unknown }).ghostId === "string"
+                ? (value as { ghostId: string }).ghostId
+                : null;
+            logJson({
+              kind: "mcp.tool",
+              phase: "end",
+              tool: toolName,
+              traceId: tid || null,
+              outcome: "success",
+              ghostId: ghostFromResult,
+            });
+          },
+        });
+        return effectExitToCallToolResult(exit);
+      }),
+    );
 
   const server = new McpServer(
     { name: "aie-matrix-world-api", version: "0.0.0" },
@@ -293,7 +364,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     {
       description: "Who am I? Resolve this ghost's id and caretaker for the current session.",
     },
-    async (extra) => runTool(whoamiEffect(extra)),
+    async (extra) => runTool("whoami", {}, whoamiEffect(extra)),
   );
 
   server.registerTool(
@@ -301,7 +372,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     {
       description: "Where am I standing? Returns the occupied tile id and map coordinates.",
     },
-    async (extra) => runTool(whereamiEffect(extra)),
+    async (extra) => runTool("whereami", {}, whereamiEffect(extra)),
   );
 
   server.registerTool(
@@ -313,7 +384,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         at: lookAtSchema.optional().describe("Where to look: here (default), around, or a compass face."),
       },
     },
-    async ({ at }, extra) => runTool(lookEffect(at, extra)),
+    async ({ at }, extra) => runTool("look", { at }, lookEffect(at, extra)),
   );
 
   server.registerTool(
@@ -321,7 +392,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     {
       description: "List exits from your current tile — compass direction and neighbor tile id only.",
     },
-    async (extra) => runTool(exitsEffect(extra)),
+    async (extra) => runTool("exits", {}, exitsEffect(extra)),
   );
 
   server.registerTool(
@@ -333,7 +404,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         toward: compassEnum.describe("Which face to step through from your current cell."),
       },
     },
-    async ({ toward }, extra) => runTool(goEffect(toward, extra)),
+    async ({ toward }, extra) => runTool("go", { toward }, goEffect(toward, extra)),
   );
 
   return server;
@@ -349,6 +420,14 @@ export function handleGhostMcpEffect(
   parsedBody: unknown,
 ): Effect.Effect<void, AuthError | McpHandlerError, ToolServices> {
   return Effect.gen(function* () {
+    const traceId = getRequestTraceId() ?? null;
+    logJson({
+      kind: "mcp.request",
+      phase: "entry",
+      traceId,
+      method: req.method ?? null,
+      path: "/mcp",
+    });
     const auth = yield* authenticateGhostRequestEffect(req);
     req.auth = auth;
     const bridge = yield* WorldBridgeService;
