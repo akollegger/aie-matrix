@@ -11,10 +11,9 @@ Replace the permissive no-op movement ruleset shipped in RFC-0001 with a
 rule-based system that evaluates a ghost's proposed action as a constraint
 satisfaction problem over the properties of the current tile, the destination
 tile (if any), and the ghost itself. Rules are expressed as a typed-relationship
-graph — a state machine where ghost actions are relationship types and
-multi-labeled nodes represent tile and ghost types — stored independently of
-the map and evaluated by `server/world-api/` against live world state at
-action time.
+graph — a state machine where tile class nodes are connected by action-typed
+edges that carry optional ghost constraints — stored independently of the map
+and evaluated by `server/world-api/` against live world state at action time.
 
 ## Motivation
 
@@ -84,49 +83,58 @@ that calls `pick_up` triggers evaluation of `PICK_UP` relationships. This makes
 the ruleset graph a direct expression of the world's response to ghost behavior
 rather than an abstract policy layer.
 
-Each relationship type carries properties specific to that action:
+Each relationship type carries properties specific to that action. All action
+relationships may also carry ghost constraint properties (`ghostClass`,
+`ghostRole`, or other ghost features); a rule with no ghost constraints matches
+any ghost.
 
-- `GO` carries `direction` (n, s, ne, nw, se, sw) and optionally `cost`.
+- `GO` carries `toward` (n, s, ne, nw, se, sw) and optionally `cost`.
 - `JUMP` carries a destination label or identifier and optionally `cost`.
 - `PICK_UP` and `PUT_DOWN` carry item type constraints.
 - `TOGGLE` carries the property name being mutated.
 - Future action types define their own property vocabulary.
 
-Example rule: an Attendee ghost may go north into a Hallway tile:
+Example rule: any ghost may move north from a Red tile into a Hallway tile:
 
 ```
-(ghost:Attendee)-[:GO {direction: "n"}]->(tile:Hallway)
+(from:Red)-[:GO {toward: "n"}]->(to:Hallway)
+```
+
+Example rule: only Attendee ghosts may move from a Hallway into a Stage tile:
+
+```
+(from:Hallway)-[:GO {ghostClass: "Attendee"}]->(to:Stage)
 ```
 
 Example rule: any ghost may pick up an item on an Entrance tile:
 
 ```
-(ghost:Ghost)-[:PICK_UP]->(tile:Entrance)
+(tile:Entrance)-[:PICK_UP]->(tile:Entrance)
 ```
 
 ### Multi-label nodes
 
-Both ghost nodes and tile nodes may carry multiple labels, enabling rules at
-any level of specificity:
+Tile class nodes in the ruleset graph may carry multiple labels, enabling rules
+at any level of specificity:
 
 - A tile may be labeled `Blue:Hallway`, `Red:Stage`, or `Green:Entrance:Doorway`.
-- A ghost may be labeled `Ghost:Attendee`, `Ghost:Speaker`, or `Ghost:VIP`.
 
 Rules match by label intersection. A rule targeting `:Hallway` matches any tile
 with that label regardless of its other labels. This allows general rules
-(any ghost may enter any Hallway) to coexist with specific overrides (only VIPs
-may enter a VIP:Lounge tile) without conflict.
+(any ghost may enter any Hallway tile) to coexist with specific overrides
+(only Attendees may enter a VIP:Lounge tile, expressed as a `ghostClass`
+constraint on that edge) without conflict.
 
 ### In-place actions as self-loops
 
 Actions that do not change a ghost's position are represented as self-loops in
-the ruleset graph — the origin and destination node carry the same tile label.
+the ruleset graph — the origin and destination node are the same tile class node.
 Picking up an item, putting one down, or toggling a switch all loop on the
 current tile class:
 
 ```
-(ghost:Attendee)-[:PICK_UP]->(tile:Hallway)
-(ghost:Attendee)-[:TOGGLE]->(tile:ControlRoom)
+(tile:Hallway)-[:PICK_UP]->(tile:Hallway)
+(tile:ControlRoom)-[:TOGGLE]->(tile:ControlRoom)
 ```
 
 The consequence of an in-place action is a mutation to world state — an item
@@ -143,16 +151,19 @@ When a ghost requests an action, the evaluator:
 1. Queries the world state graph for local context: current tile, destination
    tile (if applicable), ghost labels, ghost inventory, and any relevant dynamic
    tile properties.
-2. Traverses the ruleset graph for relationships matching the action type, the
-   ghost's labels, and the tile's labels.
+2. Traverses the ruleset graph for edges originating at a node matching the
+   current tile's labels, targeting a node matching the destination tile's
+   labels (or the same node for in-place actions), with a relationship type
+   matching the action, and ghost constraint properties (if any) satisfied by
+   the acting ghost.
 3. Evaluates conditions on matching relationships against the context.
 4. Returns **permitted** (with optional cost) or **denied** (with reason code
    and optional hint).
 
 Rules follow **allow-list semantics**: an action is denied unless at least one
 matching rule explicitly permits it. The existing permissive PoC default
-(`(ghost:Ghost)-[:GO]->(tile:Tile)` with wildcard labels) remains available as
-a named ruleset.
+(`(tile:Tile)-[:GO]->(tile:Tile)` matching any tile class pair) remains
+available as a named ruleset.
 
 ### Ghost information model
 
@@ -177,14 +188,19 @@ Action evaluation remains in `server/world-api/`. The ruleset graph loader and
 evaluator are new additions to the same package. Shared action type definitions
 and label conventions belong in `shared/types/`. No changes to
 `server/colyseus/`, `client/phaser/`, or ghost-side packages are required by
-this RFC.
+this RFC for the `GO` action. Non-movement actions (PICK_UP, PUT_DOWN, TOGGLE,
+JUMP) referenced in this RFC as illustrative of the general rule mechanism will
+require follow-up changes to the ghost MCP interface and shared types before
+they can be fully implemented.
 
 ### Demo scenario
 
 With a sample map containing at least two tile classes (e.g. Red and Blue):
 
-1. Author a ruleset permitting `(ghost:Ghost)-[:GO {direction:"n"}]->(tile:Blue)`
-   and `(ghost:Ghost)-[:GO]->(tile:Blue)` but no rule for `Blue -> Red`.
+1. Author a ruleset with two rules:
+   - `(from:Red)-[:GO]->(to:Blue)` — any ghost may move from a Red tile into a Blue tile.
+   - `(from:Blue)-[:GO]->(to:Blue)` — any ghost may move between Blue tiles.
+   No rule exists for `(from:Blue)-[:GO]->(to:Red)`.
 2. Start the server with that ruleset active.
 3. Spawn a ghost on a Red tile. Observe via Phaser the ghost can move to an
    adjacent Blue tile.
