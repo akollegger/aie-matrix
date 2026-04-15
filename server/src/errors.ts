@@ -1,96 +1,49 @@
-import { Data, Match, pipe } from "effect";
+import type {
+  RegistryCaretakerAlreadyHasGhost,
+  RegistryUnknownCaretaker,
+  RegistryUnknownGhostHouse,
+} from "@aie-matrix/server-registry";
+import type {
+  AuthError,
+  McpHandlerError,
+  WorldApiError,
+  WorldBridgeError,
+} from "@aie-matrix/server-world-api";
+import { Match, pipe } from "effect";
 
-/** --- Auth (401, IC-001) --- */
+export {
+  AuthExpiredToken,
+  AuthInvalidToken,
+  AuthMalformedClaims,
+  AuthMissingCredentials,
+  type AuthError,
+} from "@aie-matrix/server-world-api";
+export {
+  RegistryCaretakerAlreadyHasGhost,
+  RegistryUnknownCaretaker,
+  RegistryUnknownGhostHouse,
+} from "@aie-matrix/server-registry";
+export type { RegistryHttpError as RegistryError } from "@aie-matrix/server-registry";
+export {
+  McpHandlerError,
+  WorldBridgeNoNavigableCells,
+  WorldBridgeNotReady,
+  type WorldBridgeError,
+} from "@aie-matrix/server-world-api";
+export {
+  WorldApiMapIntegrity,
+  WorldApiMovementBlocked,
+  WorldApiNoPosition,
+  WorldApiUnknownCell,
+  type WorldApiError,
+} from "@aie-matrix/server-world-api";
 
-export class AuthMissingCredentials extends Data.TaggedError("AuthError.MissingCredentials")<{
-  readonly message?: string;
-}> {}
-
-export class AuthInvalidToken extends Data.TaggedError("AuthError.InvalidToken")<{
-  readonly message?: string;
-}> {}
-
-export class AuthMalformedClaims extends Data.TaggedError("AuthError.MalformedClaims")<{
-  readonly message?: string;
-}> {}
-
-export class AuthExpiredToken extends Data.TaggedError("AuthError.ExpiredToken")<{
-  readonly message?: string;
-}> {}
-
-export type AuthError =
-  | AuthMissingCredentials
-  | AuthInvalidToken
-  | AuthMalformedClaims
-  | AuthExpiredToken;
-
-/** --- Registry (409, IC-001) — `error` field matches legacy codes verbatim --- */
-
-export class RegistryUnknownCaretaker extends Data.TaggedError("RegistryError.UnknownCaretaker")<{
-  readonly message: string;
-}> {}
-
-export class RegistryUnknownGhostHouse extends Data.TaggedError("RegistryError.UnknownGhostHouse")<{
-  readonly message: string;
-}> {}
-
-export class RegistryCaretakerAlreadyHasGhost extends Data.TaggedError(
-  "RegistryError.CaretakerAlreadyHasGhost",
-)<{
-  readonly message: string;
-}> {}
-
-export type RegistryError =
-  | RegistryUnknownCaretaker
-  | RegistryUnknownGhostHouse
-  | RegistryCaretakerAlreadyHasGhost;
-
-/** --- World API / MCP domain (IC-001) --- */
-
-export class WorldApiNoPosition extends Data.TaggedError("WorldApiError.NoPosition")<{
-  readonly ghostId: string;
-}> {}
-
-export class WorldApiUnknownCell extends Data.TaggedError("WorldApiError.UnknownCell")<{
-  readonly cellId: string;
-}> {}
-
-export class WorldApiMapIntegrity extends Data.TaggedError("WorldApiError.MapIntegrity")<{
-  readonly message: string;
-}> {}
-
-export class WorldApiMovementBlocked extends Data.TaggedError("WorldApiError.MovementBlocked")<{
-  readonly message: string;
-}> {}
-
-export type WorldApiError =
-  | WorldApiNoPosition
-  | WorldApiUnknownCell
-  | WorldApiMapIntegrity
-  | WorldApiMovementBlocked;
-
-/** --- Bridge readiness (503, IC-001) --- */
-
-export class WorldBridgeNotReady extends Data.TaggedError("WorldBridgeError.NotReady")<{
-  readonly message?: string;
-}> {}
-
-export class WorldBridgeNoNavigableCells extends Data.TaggedError("WorldBridgeError.NoNavigableCells")<{
-  readonly message: string;
-}> {}
-
-export type WorldBridgeError = WorldBridgeNotReady | WorldBridgeNoNavigableCells;
-
-/** --- MCP handler defects (500, IC-001) --- */
-
-export class McpHandlerError extends Data.TaggedError("McpHandlerError")<{
-  readonly message: string;
-}> {}
+type RegistryErrorUnion = RegistryUnknownCaretaker | RegistryUnknownGhostHouse | RegistryCaretakerAlreadyHasGhost;
 
 /** Union matched exhaustively by {@link errorToResponse}. */
 export type HttpMappingError =
   | AuthError
-  | RegistryError
+  | RegistryErrorUnion
   | WorldApiError
   | WorldBridgeError
   | McpHandlerError;
@@ -102,10 +55,6 @@ function authErrorBody(error: AuthError): string {
     message: error.message ?? error._tag,
     variant,
   });
-}
-
-function registryCode(error: RegistryError): string {
-  return error._tag.slice("RegistryError.".length);
 }
 
 /**
@@ -123,12 +72,12 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
       (e) => ({ status: 401, body: authErrorBody(e) }),
     ),
     Match.tag(
-      "RegistryError.UnknownCaretaker",
-      "RegistryError.UnknownGhostHouse",
-      "RegistryError.CaretakerAlreadyHasGhost",
+      "RegistryError.UNKNOWN_CARETAKER",
+      "RegistryError.UNKNOWN_GHOST_HOUSE",
+      "RegistryError.CARETAKER_ALREADY_HAS_GHOST",
       (e) => ({
-        status: 409,
-        body: JSON.stringify({ error: registryCode(e), message: e.message }),
+        status: e.httpStatus,
+        body: JSON.stringify({ error: e.code, message: e.message }),
       }),
     ),
     Match.tag("WorldApiError.NoPosition", (e) => ({

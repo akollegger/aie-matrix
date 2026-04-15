@@ -58,12 +58,29 @@ curl -s http://localhost:8787/spectator/room | jq .
 
 Verify typed error mapping — call the MCP endpoint without auth:
 ```bash
-curl -s -X POST http://localhost:8787/mcp \
+curl -s -w "\nHTTP:%{http_code}\n" -X POST http://localhost:8787/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"tools/call","params":{"name":"whereami","arguments":{}},"id":1}'
-# Expected: 401 with { "error": "AUTH_ERROR", ... }
+# Expected: HTTP 401 and body { "error": "AUTH_ERROR", "variant": "MissingCredentials", ... }
 # Previously: 500 with generic catch-all
 ```
+
+---
+
+## Notes (US2 — MCP typed errors, Phase 4)
+
+After Phase 4, **auth failures at the `/mcp` boundary** (missing or invalid `Authorization`) still return **HTTP 401** with a JSON body shaped like `{ "error": "AUTH_ERROR", "variant": "...", "message": "..." }` — the Effect handler fails before the MCP transport runs.
+
+**Tool-level domain errors** (`NO_POSITION`, `UNKNOWN_CELL`, `MOVEMENT_BLOCKED`, malformed auth inside a tool session, etc.) are returned as normal MCP **`tools/call` successes** with **`result.isError": true`** and `content[0].text` set to a JSON string such as `{"error":"UNKNOWN_CELL","cellId":"…"}`. The Streamable HTTP transport typically responds with **HTTP 200** for those JSON-RPC responses; clients (including `GhostMcpClient`) treat `isError` as a failed tool and surface the JSON text as the error.
+
+**Smoke checks (2026-04-14)** with `pnpm dev` / server on port 8787:
+
+| Check | Command / expectation |
+|-------|-------------------------|
+| Missing auth | `curl` POST `/mcp` `tools/call` `whereami` **without** `Authorization` → **401** + `AUTH_ERROR` |
+| TCK | `pnpm test:tck` with server running → **PASS** (`whereami` returns a real `tileId`) |
+
+To inspect a tool error payload from the shell (adopt a ghost first for a JWT), call `tools/call` with auth and decode the JSON-RPC `result` object; `isError` and `content[0].text` carry the structured `{ "error": "…" }` codes used by agents and TCK-oriented tooling.
 
 ---
 

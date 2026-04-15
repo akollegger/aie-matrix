@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./src/index.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./src/index.ts",
       "import": "./dist/index.js"
     }
   },
@@ -20,6 +20,7 @@
     "@aie-matrix/server-colyseus": "workspace:*",
     "@aie-matrix/shared-types": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "effect": "^3.21.0",
     "zod": "^3.25.76"
   }
 }

@@ -54,28 +54,28 @@
 
 ### Wave 1 — Leaf Node Refactors
 
-- [ ] T011 [US1] Refactor `server/auth/src/jwt.ts` — replace `throw new Error("JWT missing sub")` and similar throws with `JwtError` variants; change `verifyGhostToken` signature to return `Effect<JwtClaims, JwtError>` (or `Either` if callers are not yet Effect-based)
-- [ ] T012 [US1] Refactor `server/registry/src/session-guard.ts` — replace `throw new RegistryConflictError(...)` with `yield* new RegistryError({ code: ..., message: ... })`; change `assertAdoptionAllowed` return type to `Effect<void, RegistryError>`; preserve existing `RegistryConflictError` code strings verbatim
+- [X] T011 [US1] Refactor `server/auth/src/jwt.ts` — replace `throw new Error("JWT missing sub")` and similar throws with `JwtError` variants; change `verifyGhostToken` signature to return `Effect<JwtClaims, JwtError>` (or `Either` if callers are not yet Effect-based)
+- [X] T012 [US1] Refactor `server/registry/src/session-guard.ts` — replace `throw new RegistryConflictError(...)` with `yield* new RegistryError({ code: ..., message: ... })`; change `assertAdoptionAllowed` return type to `Effect<void, RegistryError>`; preserve existing `RegistryConflictError` code strings verbatim
 
 ### Wave 2 — Auth Layer
 
-- [ ] T013 [US1] Refactor `server/world-api/src/auth-context.ts` — replace silent `undefined` return on JWT failure with `AuthError.MissingCredentials`; replace `throw` in `requireGhostAuth` and `ghostIdsFromAuth` with `AuthError` variants; return `Effect<AuthInfo, AuthError>` and `Effect<{ ghostId, caretakerId }, AuthError>`
+- [X] T013 [US1] Refactor `server/world-api/src/auth-context.ts` — replace silent `undefined` return on JWT failure with `AuthError.MissingCredentials`; replace `throw` in `requireGhostAuth` and `ghostIdsFromAuth` with `AuthError` variants; return `Effect<AuthInfo, AuthError>` and `Effect<{ ghostId, caretakerId }, AuthError>`
 
 ### Wave 3 — Registry Route Handlers
 
-- [ ] T014 [P] [US1] Create `server/registry/src/utils/http.ts` — shared Effect-aware `readJsonBody` and `sendJson` helpers to eliminate the three duplicate copies in `index.ts`, `adoption.ts`, and `register-house.ts`
-- [ ] T015 [P] [US1] Refactor `server/registry/src/routes/register-house.ts` — migrate `handleRegisterGhostHouse` to an Effect pipeline consuming `RegistryStoreService`; replace inline `readJsonBody`/`sendJson` with `server/registry/src/utils/http.ts`
-- [ ] T016 [US1] Refactor `server/registry/src/routes/adoption.ts` — migrate `handleAdoptGhost` to an Effect pipeline consuming `RegistryStoreService` and `WorldBridgeService`; replace `instanceof RegistryConflictError` catch with `Effect.catchAll(errorToResponse)`; replace `spawnGhostOnMap` closure with `Effect.flatMap(WorldBridgeService, bridge => ...)`
-- [ ] T017 [US1] Refactor `server/registry/src/index.ts` — compose Wave 3 handlers into a `createRegistryRequestListener` that uses a shared `ManagedRuntime`; consolidate duplicate `readJsonBody`/`sendJson` by importing from `server/registry/src/utils/http.ts`
+- [X] T014 [P] [US1] Create `server/registry/src/utils/http.ts` — shared Effect-aware `readJsonBody` and `sendJson` helpers to eliminate the three duplicate copies in `index.ts`, `adoption.ts`, and `register-house.ts`
+- [X] T015 [P] [US1] Refactor `server/registry/src/routes/register-house.ts` — migrate `handleRegisterGhostHouse` to an Effect pipeline consuming `RegistryStoreService`; replace inline `readJsonBody`/`sendJson` with `server/registry/src/utils/http.ts`
+- [X] T016 [US1] Refactor `server/registry/src/routes/adoption.ts` — migrate `handleAdoptGhost` to an Effect pipeline consuming `RegistryStoreService` and `WorldBridgeService`; replace `instanceof RegistryConflictError` catch with `Effect.catchAll(errorToResponse)`; replace `spawnGhostOnMap` closure with `Effect.flatMap(WorldBridgeService, bridge => ...)`
+- [X] T017 [US1] Refactor `server/registry/src/index.ts` — compose Wave 3 handlers into a `createRegistryRequestListener` that uses a shared `ManagedRuntime`; consolidate duplicate `readJsonBody`/`sendJson` by importing from `server/registry/src/utils/http.ts`
 
 ### Wave 5 — Orchestration (The God File)
 
-- [ ] T018 [US1] Refactor `server/src/index.ts` — after `createColyseusBridge(room)`, build `ManagedRuntime.make(Layer.mergeAll(makeWorldBridgeLayer(bridge), makeRegistryStoreLayer(store), makeServerConfigLayer(process.env)))` and assign to `const runtime`
-- [ ] T019 [US1] Remove `let bridge: ... | undefined` from `server/src/index.ts` — replace all `if (!bridge)` 503 guards with `WorldBridgeError.NotReady` routed through `errorToResponse`; the bridge is now guaranteed by the Layer construction sequence
-- [ ] T020 [US1] Add `process.on("SIGTERM", async () => { await runtime.dispose(); process.exit(0) })` to `server/src/index.ts` replacing scattered cleanup code
-- [ ] T021 [US1] Update `/mcp` POST route in `server/src/index.ts` to call `runtime.runPromise(handleMcpEffect(parsed).pipe(Effect.catchAll(errorToResponse)))` with structured response writing; all other routes remain imperative
-- [ ] T022 [US1] Run `pnpm typecheck` — confirm zero `R`-channel violations across all `server/` packages; fix any compile errors before proceeding
-- [ ] T023 [US1] Smoke test: start server with `pnpm dev`, run quickstart.md verification commands — confirm `/spectator/room` returns 200, `/registry/adopt` succeeds, unauthenticated `/mcp` POST returns 401
+- [X] T018 [US1] Refactor `server/src/index.ts` — after `createColyseusBridge(room)`, build `ManagedRuntime.make(Layer.mergeAll(makeWorldBridgeLayer(bridge), makeRegistryStoreLayer(store), makeServerConfigLayer(process.env)))` and assign to `const runtime`
+- [X] T019 [US1] Remove `let bridge: ... | undefined` from `server/src/index.ts` — replace all `if (!bridge)` 503 guards with `WorldBridgeError.NotReady` routed through `errorToResponse`; the bridge is now guaranteed by the Layer construction sequence
+- [X] T020 [US1] Add `process.on("SIGTERM", async () => { await runtime.dispose(); process.exit(0) })` to `server/src/index.ts` replacing scattered cleanup code
+- [X] T021 [US1] Update `/mcp` POST route in `server/src/index.ts` to call `runtime.runPromise(handleMcpEffect(parsed).pipe(Effect.catchAll(errorToResponse)))` with structured response writing; all other routes remain imperative
+- [X] T022 [US1] Run `pnpm typecheck` — confirm zero `R`-channel violations across all `server/` packages; fix any compile errors before proceeding
+- [X] T023 [US1] Smoke test: start server with `pnpm dev`, run quickstart.md verification commands — confirm `/spectator/room` returns 200, `/registry/adopt` succeeds, unauthenticated `/mcp` POST returns 401
 
 **Checkpoint**: US1 complete — service injection via Effect Layer, no `if (!bridge)` patterns, TypeScript enforces correctness at compile time. TCK passes.
 
@@ -89,15 +89,15 @@
 
 ### Wave 4 — MCP Tool Handlers
 
-- [ ] T024 [P] [US2] Refactor MCP tool handler `whoami` in `server/world-api/src/mcp-server.ts` — remove per-tool `try/catch`; yield `AuthError` variants instead of calling `toolError()` on auth failure
-- [ ] T025 [P] [US2] Refactor MCP tool handler `whereami` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError.NoPosition` when ghost has no recorded cell rather than returning a generic tool error
-- [ ] T026 [P] [US2] Refactor MCP tool handler `look` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError` variants for missing cell/ghost; remove per-tool `try/catch`
-- [ ] T027 [P] [US2] Refactor MCP tool handler `exits` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError.UnknownCell` when cell not in map; remove per-tool `try/catch`
-- [ ] T028 [US2] Refactor MCP tool handler `go` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError.MovementBlocked` or `WorldApiError.UnknownCell` based on `GoFailure` discriminant from `movement.ts`; remove per-tool `try/catch`
-- [ ] T029 [US2] Add single Effect-to-`CallToolResult` adapter function in `server/world-api/src/mcp-server.ts` — converts Effect exit (success/failure) to MCP `CallToolResult`; replaces per-tool `try/catch` boilerplate (implements IC-001 MCP error mapping section)
-- [ ] T030 [US2] Refactor `handleGhostMcpRequest` in `server/world-api/src/mcp-server.ts` — provide `WorldBridgeService` and `RegistryStoreService` via `Layer.provide` or `ManagedRuntime`; replace prop-drilled `bridge` argument and `getRegistryGhostTile` callback with service yields
-- [ ] T031 [US2] Verify typed errors via smoke test: use curl commands from `quickstart.md` to confirm 401 for missing auth, 404 for non-existent ghost, 422 for blocked movement — capture results in `quickstart.md` Notes section
-- [ ] T032 [US2] Run `pnpm test:tck` — confirm all TCK ghost contract tests pass with no regressions
+- [X] T024 [P] [US2] Refactor MCP tool handler `whoami` in `server/world-api/src/mcp-server.ts` — remove per-tool `try/catch`; yield `AuthError` variants instead of calling `toolError()` on auth failure
+- [X] T025 [P] [US2] Refactor MCP tool handler `whereami` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError.NoPosition` when ghost has no recorded cell rather than returning a generic tool error
+- [X] T026 [P] [US2] Refactor MCP tool handler `look` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError` variants for missing cell/ghost; remove per-tool `try/catch`
+- [X] T027 [P] [US2] Refactor MCP tool handler `exits` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError.UnknownCell` when cell not in map; remove per-tool `try/catch`
+- [X] T028 [US2] Refactor MCP tool handler `go` in `server/world-api/src/mcp-server.ts` — yield `WorldApiError.MovementBlocked` or `WorldApiError.UnknownCell` based on `GoFailure` discriminant from `movement.ts`; remove per-tool `try/catch`
+- [X] T029 [US2] Add single Effect-to-`CallToolResult` adapter function in `server/world-api/src/mcp-server.ts` — converts Effect exit (success/failure) to MCP `CallToolResult`; replaces per-tool `try/catch` boilerplate (implements IC-001 MCP error mapping section)
+- [X] T030 [US2] Refactor `handleGhostMcpRequest` in `server/world-api/src/mcp-server.ts` — provide `WorldBridgeService` and `RegistryStoreService` via `Layer.provide` or `ManagedRuntime`; replace prop-drilled `bridge` argument and `getRegistryGhostTile` callback with service yields
+- [X] T031 [US2] Verify typed errors via smoke test: use curl commands from `quickstart.md` to confirm 401 for missing auth, 404 for non-existent ghost, 422 for blocked movement — capture results in `quickstart.md` Notes section
+- [X] T032 [US2] Run `pnpm test:tck` — confirm all TCK ghost contract tests pass with no regressions
 
 **Checkpoint**: US2 complete — every expected domain error maps to a typed HTTP response. 500 responses are defects only, never expected domain failures.
 

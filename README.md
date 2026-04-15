@@ -43,7 +43,13 @@ The pinned pnpm version is declared in the root `package.json` `packageManager` 
 
 Goal: combined server + Phaser spectator + reference ghost moving on the sample map. Detailed checks live in [`specs/001-minimal-poc/quickstart.md`](specs/001-minimal-poc/quickstart.md).
 
-**Fewest steps from clone**: `git clone` → `cd` → **`pnpm install`** → **`pnpm run demo`** → open the Vite **Local** URL from the log (often **http://localhost:5174/** or **http://127.0.0.1:5174/**). One terminal; **Ctrl+C** stops server, client, and ghost. Two walkers in one house: **`pnpm run demo -- --ghosts 2`**. Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run poc:server`**, **`pnpm run poc:client`**, and **`pnpm run poc:ghost`** shells instead.
+**Fewest steps from clone**: 
+
+1. `git clone` → `cd` → **`pnpm install`**
+2.  **`pnpm run demo --ghosts 5`** 
+3. open the Vite **Local** URL from the log (often **http://localhost:5174/** or **http://127.0.0.1:5174/**). 
+
+One terminal; **Ctrl+C** stops server, client, and 5 ghosts. Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run poc:server`**, **`pnpm run poc:client`**, and **`pnpm run poc:ghost`** shells instead.
 
 ### Human prerequisites (read before debugging code)
 

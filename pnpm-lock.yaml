@@ -123,6 +123,9 @@ importers:
 
   server/auth:
     dependencies:
+      effect:
+        specifier: ^3.21.0
+        version: 3.21.0
       jsonwebtoken:
         specifier: 9.0.2
         version: 9.0.2
@@ -157,9 +160,15 @@ importers:
       '@aie-matrix/server-auth':
         specifier: workspace:*
         version: link:../auth
+      '@aie-matrix/server-world-api':
+        specifier: workspace:*
+        version: link:../world-api
       '@aie-matrix/shared-types':
         specifier: workspace:*
         version: link:../../shared/types
+      effect:
+        specifier: ^3.21.0
+        version: 3.21.0
 
   server/world-api:
     dependencies:
@@ -175,6 +184,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
+      effect:
+        specifier: ^3.21.0
+        version: 3.21.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76

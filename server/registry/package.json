@@ -17,6 +17,8 @@
   },
   "dependencies": {
     "@aie-matrix/server-auth": "workspace:*",
-    "@aie-matrix/shared-types": "workspace:*"
+    "@aie-matrix/server-world-api": "workspace:*",
+    "@aie-matrix/shared-types": "workspace:*",
+    "effect": "^3.21.0"
   }
 }
