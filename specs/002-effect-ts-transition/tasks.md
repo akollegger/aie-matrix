@@ -109,14 +109,14 @@
 
 **Independent Test**: Start server with 10 simulated ghost subscriptions; publish a `TranscriptEvent` to the hub; verify all 10 receive it. Confirm slow subscribers do not block the publisher (dropping semantics). TypeScript compile confirms `TranscriptHub` Layer is wired in `ManagedRuntime`.
 
-- [ ] T033 [US3] Create `server/src/services/TranscriptHubService.ts` — define `TranscriptEvent` interface (source, text, timestamp) per IC-002; define `TranscriptHub` Context.Tag wrapping `PubSub<TranscriptEvent>`
-- [ ] T034 [US3] Add `TranscriptHubLayer` to `server/src/services/TranscriptHubService.ts` — `Layer.scoped` wrapping `PubSub.dropping<TranscriptEvent>(256)` with `Effect.addFinalizer(() => PubSub.shutdown(hub))`
-- [ ] T035 [US3] Implement `publishTranscript(event: TranscriptEvent)` in `server/src/services/TranscriptHubService.ts` — `Effect<boolean, never, TranscriptHub>`; returns `true` if published, `false` if dropped
-- [ ] T036 [US3] Implement `subscribeGhostToHub(ghostId: string)` in `server/src/services/TranscriptHubService.ts` — subscribes to hub via `PubSub.subscribe`; loops via `Effect.forever` calling `Queue.take` then `notifyGhost`; returns `Effect<never, never, TranscriptHub | WorldBridgeService>`
-- [ ] T037 [US3] Wire `TranscriptHubLayer` into `ManagedRuntime.make(Layer.mergeAll(..., TranscriptHubLayer))` in `server/src/index.ts`
-- [ ] T038 [US3] In `server/registry/src/routes/adoption.ts` adoption success path — fork `subscribeGhostToHub(ghostId)` as a scoped fiber via `Effect.forkScoped` so each adopted ghost gets a subscriber fiber tied to its session scope
-- [ ] T039 [US3] Add a stub ingestion endpoint (`POST /transcripts`) in `server/src/index.ts` that calls `publishTranscript` — accepts `{ source, text }` body; returns 200 or 207 (partial delivery); note this endpoint is a placeholder until the IRL transcript source interface is decided (open question in `docs/architecture.md`)
-- [ ] T040 [US3] Verify TypeScript compiles with `TranscriptHub` in `ManagedRuntime` R channel satisfied; run `pnpm dev` and confirm server starts without error
+- [X] T033 [US3] Create `server/src/services/TranscriptHubService.ts` — define `TranscriptEvent` interface (source, text, timestamp) per IC-002; define `TranscriptHub` Context.Tag wrapping `PubSub<TranscriptEvent>`
+- [X] T034 [US3] Add `TranscriptHubLayer` to `server/src/services/TranscriptHubService.ts` — `Layer.scoped` wrapping `PubSub.dropping<TranscriptEvent>(256)` with `Effect.addFinalizer(() => PubSub.shutdown(hub))`
+- [X] T035 [US3] Implement `publishTranscript(event: TranscriptEvent)` in `server/src/services/TranscriptHubService.ts` — `Effect<boolean, never, TranscriptHub>`; returns `true` if published, `false` if dropped
+- [X] T036 [US3] Implement `subscribeGhostToHub(ghostId: string)` in `server/src/services/TranscriptHubService.ts` — subscribes to hub via `PubSub.subscribe`; loops via `Effect.forever` calling `Queue.take` then `notifyGhost`; returns `Effect<never, never, TranscriptHub | WorldBridgeService>`
+- [X] T037 [US3] Wire `TranscriptHubLayer` into `ManagedRuntime.make(Layer.mergeAll(..., TranscriptHubLayer))` in `server/src/index.ts`
+- [X] T038 [US3] In `server/registry/src/routes/adoption.ts` adoption success path — fork `subscribeGhostToHub(ghostId)` as a scoped fiber via `Effect.forkScoped` so each adopted ghost gets a subscriber fiber tied to its session scope
+- [X] T039 [US3] Add a stub ingestion endpoint (`POST /transcripts`) in `server/src/index.ts` that calls `publishTranscript` — accepts `{ source, text }` body; returns 200 or 207 (partial delivery); note this endpoint is a placeholder until the IRL transcript source interface is decided (open question in `docs/architecture.md`)
+- [X] T040 [US3] Verify TypeScript compiles with `TranscriptHub` in `ManagedRuntime` R channel satisfied; run `pnpm dev` and confirm server starts without error
 
 **Checkpoint**: US3 complete — non-blocking fan-out architecture in place; 5,000 fiber capacity available once ghosts adopt.
 

@@ -12,6 +12,8 @@ import { readJsonBody, sendJson } from "../utils/http.js";
 
 export interface AdoptionRuntimeDeps {
   readonly worldApiBaseUrl: string;
+  /** When set, combined server forks a transcript subscriber fiber per adopted ghost. */
+  readonly forkTranscriptSubscriber?: (ghostId: string) => void;
 }
 
 export function handleAdoptGhostEffect(
@@ -69,5 +71,6 @@ export function handleAdoptGhostEffect(
       },
     };
     yield* sendJson(res, corsHeaders, 201, out);
+    deps.forkTranscriptSubscriber?.(ghostId);
   });
 }
