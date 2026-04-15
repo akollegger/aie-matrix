@@ -26,6 +26,42 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 
 ---
 
+## Effect-ts Orchestration Layer
+
+The server back-end uses Effect-ts as its orchestration framework (ADR-0002). This is a **binding contract** for all new server handlers and services.
+
+### Service / Layer pattern
+
+Every injectable dependency is a `Context.Tag` wrapping an interface. Implementations are provided as `Layer` values composed into a single `ManagedRuntime` at server startup. TypeScript enforces that every Effect's `R` channel (requirements) is satisfied before the code compiles.
+
+```
+Context.Tag  ←  the DI key / service identity
+Layer        ←  provides an implementation of a Tag
+ManagedRuntime  ←  composes all Layers; runs Effects at the HTTP boundary
+```
+
+New handlers must consume dependencies via `yield* SomeService` inside `Effect.gen`, never by direct import of a global or singleton.
+
+### Typed error channels
+
+Domain failures extend `Data.TaggedError`. The `E` channel of every Effect is explicit in the type signature. All error types that can reach an HTTP boundary must be covered in `errorToResponse()` (`server/src/errors.ts`) using `Match.exhaustive` — this is a compile-time guarantee.
+
+### Structured concurrency
+
+The transcript broadcast path uses `PubSub.dropping` backed by `Layer.scoped`, with one subscriber fiber forked per adopted ghost via `Effect.forkScoped`. The scope is tied to the ghost's session — when the session ends, the fiber is cleaned up automatically.
+
+### Observability
+
+Each request through `/mcp` and `/registry/adopt` carries a UUID trace ID propagated via two mechanisms:
+- `AsyncLocalStorage` — covers `await` chains outside Effect fibers (MCP SDK callbacks)
+- `FiberRef` — scoped to the Effect fiber tree
+
+Structured log lines emit JSON objects with a `kind`, `op`, `traceId`, and relevant identifiers. See `docs/guides/effect-ts.md` for the logging convention.
+
+**Guide:** `docs/guides/effect-ts.md` — patterns, examples, anti-patterns, and how to add new services and handlers.
+
+---
+
 ## Open Questions
 
 These are explicitly unresolved. They are contribution surfaces, not gaps. Open an RFC or ADR to propose an answer.
@@ -40,7 +76,7 @@ What does a memory module expose? At minimum: write a fact, query by relevance o
 Which models power ghost reasoning, speaker agents, and vendor NPCs? Multiple providers should be supportable. The agent layer should be model-agnostic. Latency characteristics at conference-scale (3000+ concurrent ghosts) need to be validated.
 
 ### Observability and Telemetry
-**Status: Decided (ADR-0002).** The server will use Effect-ts's built-in tracing and structured logging infrastructure. Request tracing via unique trace IDs is a first-class requirement. Tool choice for downstream analytics, APM, and the eval layer remains open.
+**Status: Implemented (ADR-0002, branch 002-effect-ts-transition).** The server uses request-scoped trace IDs propagated via `AsyncLocalStorage` and `FiberRef`, with structured JSON log lines tagged by `kind`, `op`, `traceId`, and entity IDs. Tool choice for downstream analytics, APM, and the eval layer remains open.
 
 ### Time-Series / Event Log Backend
 The Matrix generates continuous streams: ghost movements, card exchanges, checkpoint events, quest completions, session attendance. These need to be captured for leaderboards, eval, and post-conference analysis. Options include ClickHouse, TimescaleDB, structured logs to S3 + query layer, or similar. Open.

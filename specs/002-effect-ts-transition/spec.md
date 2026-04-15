@@ -124,6 +124,8 @@ The developer can trace the lifecycle of a single AI ghost's request from the HT
 
 ## Documentation Impact
 
-- **docs/architecture.md**: MUST be updated to describe the Effect-ts service architecture and the new concurrency model.
+- **docs/architecture.md**: MUST be updated to describe the Effect-ts service architecture and the new concurrency model; close the "Observability and Telemetry" open question.
+- **docs/guides/effect-ts.md**: Create a technical guide documenting the service/Layer pattern, typed errors, ManagedRuntime wiring, and request tracing as established in this codebase. This is the ADR-0002 mitigation item ("shared internal guide for common patterns").
+- **CLAUDE.md**: Update to serve as the navigation hub — brief pointers to docs/guides/, proposals/adr/, and specs/.
+- **AGENTS.md**: Update to reflect the layered documentation approach and current conventions.
 - **README.md**: Update server start-up and development instructions to reflect the new structure.
-- **CONTRIBUTING.md**: Add guidelines for writing new services and handlers using the Effect pattern.

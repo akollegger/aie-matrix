@@ -15,7 +15,7 @@
 - **`ghosts/`** — Flat namespace for ghost-side code: MCP client SDKs, GhostHouse providers, compatibility kit; Python stub is planned here outside pnpm workspaces. See [`ghosts/README.md`](ghosts/README.md) for package naming (FR-019).
 - **`maps/`** — Tiled map exports and tileset assets for the hex world (e.g. `maps/sandbox/` sandbox hex; expand per RFC-0001).
 - **`proposals/`** — RFCs and ADRs: decisions and scope before implementation lands.
-- **`server/`** — World backend packages (Colyseus room, MCP `world-api`, REST `registry`, dev `auth`) plus the combined PoC dev entry at `server/package.json`.
+- **`server/`** — World backend packages (Colyseus room, MCP `world-api`, REST `registry`, dev `auth`) plus the combined PoC dev entry at `server/package.json`. The combined server package depends on **[Effect](https://effect.website/)** (`effect` v3+) for service wiring (`Layer` / `Context.Tag`), typed errors, and the shared `ManagedRuntime`; see [`docs/guides/effect-ts.md`](docs/guides/effect-ts.md).
 - **`shared/`** — Cross-package TypeScript types and tool schemas consumed by server and clients.
 - **`specs/`** — Feature folders: plans, contracts, quickstarts, and task lists (e.g. minimal PoC under `specs/001-minimal-poc/`).
 - **`scripts/`** — Small repo-root helpers (e.g. `demo.mjs` for one-terminal PoC; `kill-poc-ports.mjs` to list or stop listeners on default PoC ports).
@@ -64,10 +64,11 @@ One terminal; **Ctrl+C** stops server, client, and 5 ghosts. Orchestration lives
 | Command | Purpose |
 |---------|---------|
 | `pnpm install` | Install all workspace dependencies |
+| `pnpm dev` | **Watch-mode combined server** (same as `pnpm run poc:server:dev`): runs `tsx watch` on `server/src/index.ts` after workspace prebuilds; HTTP + Colyseus on **http://127.0.0.1:8787** |
 | `pnpm run demo` | **All-in-one PoC**: `poc:server` → wait for `/spectator/room` → `poc:client` + `poc:ghost` in parallel (single terminal; Ctrl+C stops children) |
 | `pnpm run build` | Build every workspace package (first time or after large pulls) |
 | `pnpm run poc:server` | Combined server: HTTP + Colyseus on **http://127.0.0.1:8787** (runs `prestart` builds, then `node dist/index.js`) |
-| `pnpm run poc:server:dev` | Same stack under `tsx watch` while editing server code |
+| `pnpm run poc:server:dev` | Same as **`pnpm dev`**: combined server under `tsx watch` while editing server code |
 | `pnpm run poc:client` | Phaser spectator (Vite); default **http://127.0.0.1:5174** (see terminal for exact URL) |
 | `pnpm run poc:ghost` | `tsc` + `node` for `ghosts/random-house` (registers house, adopts, walks via MCP) |
 | `pnpm run poc:ports` | List processes **listening** on **8787** / **5174** / **5179** (`lsof`; safe, port-scoped) |

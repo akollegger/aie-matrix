@@ -142,13 +142,13 @@
 
 **Purpose**: Documentation updates required by the constitution and final validation across the full system.
 
-- [ ] T046 [P] Update `docs/architecture.md` — add orchestration layer section documenting the Layer/Context service pattern as a binding contract for new handlers; mark "Observability and Telemetry" open question as decided (resolved by ADR-0002 + this implementation)
-- [ ] T047 [P] Update `README.md` — note `effect` dependency in server package; update server startup instructions if commands changed; confirm `pnpm dev` instructions are accurate
-- [ ] T048 Update `CONTRIBUTING.md` — add Effect pattern guidelines: how to define a new service (Context.Tag + Layer), how to write a typed error (Data.TaggedError), how to compose handlers in Effect.gen, how to add a new Layer to ManagedRuntime
-- [ ] T049 Run `pnpm test:e2e` — confirm all existing end-to-end tests pass with no regressions introduced by the migration
-- [ ] T050 Run `pnpm test:tck` — confirm all TCK ghost contract tests pass
-- [ ] T051 Run `pnpm typecheck` across all workspace packages — confirm zero TypeScript errors
-- [ ] T052 Review `server/src/index.ts` for any remaining `if (!x)` null guard patterns that should have been removed — fix any missed instances
+- [X] T046 [P] Update `docs/architecture.md` — add orchestration layer section documenting the Layer/Context service pattern as a binding contract for new handlers; mark "Observability and Telemetry" open question as implemented (resolved by ADR-0002 + this implementation)
+- [X] T047 [P] Update `README.md` — note `effect` dependency in server package; update server startup instructions if commands changed; confirm `pnpm dev` instructions are accurate
+- [X] T048 Create `docs/guides/effect-ts.md` — Effect pattern guide for this codebase: service definition (Context.Tag + Layer), typed errors (Data.TaggedError), Effect.gen pipelines, ManagedRuntime composition, exhaustive error mapping, request tracing, anti-patterns, and how to add new services and handlers. Update `CLAUDE.md` as navigation hub. Update `AGENTS.md` to describe the layered docs approach.
+- [X] T049 Run `pnpm test:e2e` — confirm all existing end-to-end tests pass with no regressions introduced by the migration
+- [X] T050 Run `pnpm test:tck` — confirm all TCK ghost contract tests pass
+- [X] T051 Run `pnpm typecheck` across all workspace packages — confirm zero TypeScript errors
+- [X] T052 Review `server/src/index.ts` for any remaining `if (!x)` null guard patterns that should have been removed — fix any missed instances
 
 **Checkpoint**: All documentation updated, all tests pass, TypeScript clean across workspace.
 
