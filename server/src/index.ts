@@ -15,7 +15,6 @@ import {
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
   runWithRequestTrace,
-  withRequestTraceFiber,
 } from "@aie-matrix/server-world-api";
 import { Effect, Exit, Layer, ManagedRuntime, pipe, Scope } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
@@ -380,21 +379,18 @@ async function main(): Promise<void> {
         const traceId = randomUUID();
         await runWithRequestTrace(traceId, () =>
           runtime.runPromise(
-            withRequestTraceFiber(
-              traceId,
-              handleGhostMcpEffect(req, res, parsed).pipe(
-                Effect.catchAll((e) =>
-                  Effect.sync(() => {
-                    if (!res.headersSent && !res.writableEnded) {
-                      const { status, body } = errorToResponse(e as HttpMappingError);
-                      res.writeHead(status, {
-                        "Content-Type": "application/json",
-                        ...corsHeaders,
-                      });
-                      res.end(body);
-                    }
-                  }),
-                ),
+            handleGhostMcpEffect(req, res, parsed).pipe(
+              Effect.catchAll((e) =>
+                Effect.sync(() => {
+                  if (!res.headersSent && !res.writableEnded) {
+                    const { status, body } = errorToResponse(e as HttpMappingError);
+                    res.writeHead(status, {
+                      "Content-Type": "application/json",
+                      ...corsHeaders,
+                    });
+                    res.end(body);
+                  }
+                }),
               ),
             ),
           ),

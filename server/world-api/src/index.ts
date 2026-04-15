@@ -45,8 +45,6 @@ export {
 export { handleGhostMcpEffect } from "./mcp-server.js";
 export {
   getRequestTraceId,
-  requestTraceIdRef,
   runWithRequestTrace,
-  withRequestTraceFiber,
   type RequestTrace,
 } from "./request-trace.js";
