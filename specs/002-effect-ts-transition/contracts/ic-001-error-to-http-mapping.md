@@ -16,16 +16,19 @@ All HTTP response mapping happens at the request handler boundary, not inside do
 
 | Error Type | `_tag` | HTTP Status | Response Body Shape |
 |---|---|---|---|
-| `AuthError` (any variant) | `"AuthError"` | 401 | `{ error: "AUTH_ERROR", message: string, variant: string }` |
-| `RegistryError.UnknownCaretaker` | `"RegistryError"` | 404 | `{ error: code, message: string }` |
-| `RegistryError.UnknownGhostHouse` | `"RegistryError"` | 404 | `{ error: code, message: string }` |
-| `RegistryError.CaretakerAlreadyHasGhost` | `"RegistryError"` | 409 | `{ error: code, message: string }` |
-| `WorldApiError.NoPosition` | `"WorldApiError"` | 404 | `{ error: "NO_POSITION", ghostId: string }` |
-| `WorldApiError.UnknownCell` | `"WorldApiError"` | 404 | `{ error: "UNKNOWN_CELL", cellId: string }` |
-| `WorldApiError.MovementBlocked` | `"WorldApiError"` | 422 | `{ error: "MOVEMENT_BLOCKED", message: string }` |
-| `WorldApiError.MapIntegrity` | `"WorldApiError"` | 500 | `{ error: "MAP_INTEGRITY", message: string }` |
-| `WorldBridgeError.NotReady` | `"WorldBridgeError"` | 503 | `{ error: "STARTING", message: "World is still initializing" }` |
-| `WorldBridgeError.NoNavigableCells` | `"WorldBridgeError"` | 503 | `{ error: "NO_NAVIGABLE_CELLS", message: string }` |
+| `AuthMissingCredentials` | `"AuthError.MissingCredentials"` | 401 | `{ error: "AUTH_ERROR", message: string, variant: string }` |
+| `AuthInvalidToken` | `"AuthError.InvalidToken"` | 401 | `{ error: "AUTH_ERROR", message: string, variant: string }` |
+| `AuthMalformedClaims` | `"AuthError.MalformedClaims"` | 401 | `{ error: "AUTH_ERROR", message: string, variant: string }` |
+| `AuthExpiredToken` | `"AuthError.ExpiredToken"` | 401 | `{ error: "AUTH_ERROR", message: string, variant: string }` |
+| `RegistryUnknownCaretaker` | `"RegistryError.UNKNOWN_CARETAKER"` | 404 | `{ error: "UNKNOWN_CARETAKER", message: string }` |
+| `RegistryUnknownGhostHouse` | `"RegistryError.UNKNOWN_GHOST_HOUSE"` | 404 | `{ error: "UNKNOWN_GHOST_HOUSE", message: string }` |
+| `RegistryCaretakerAlreadyHasGhost` | `"RegistryError.CARETAKER_ALREADY_HAS_GHOST"` | 409 | `{ error: "CARETAKER_ALREADY_HAS_GHOST", message: string }` |
+| `WorldApiNoPosition` | `"WorldApiError.NoPosition"` | 404 | `{ error: "NO_POSITION", ghostId: string }` |
+| `WorldApiUnknownCell` | `"WorldApiError.UnknownCell"` | 404 | `{ error: "UNKNOWN_CELL", cellId: string }` |
+| `WorldApiMovementBlocked` | `"WorldApiError.MovementBlocked"` | 422 | `{ error: "MOVEMENT_BLOCKED", message: string }` |
+| `WorldApiMapIntegrity` | `"WorldApiError.MapIntegrity"` | 500 | `{ error: "MAP_INTEGRITY", message: string }` |
+| `WorldBridgeNotReady` | `"WorldBridgeError.NotReady"` | 503 | `{ error: "STARTING", message: "World is still initializing" }` |
+| `WorldBridgeNoNavigableCells` | `"WorldBridgeError.NoNavigableCells"` | 503 | `{ error: "NO_NAVIGABLE_CELLS", message: string }` |
 | `McpHandlerError` | `"McpHandlerError"` | 500 | `{ error: "MCP_HANDLER", message: string }` |
 
 ### MCP Tool Error Mapping
@@ -34,9 +37,11 @@ MCP tool handlers (`go`, `whereami`, `look`, `exits`, `whoami`) use the MCP SDK'
 
 | Error Type | MCP Result | `isError` |
 |---|---|---|
-| `WorldApiError` (any) | `{ content: [{ type: "text", text: error.message }] }` | `true` |
-| `AuthError` (any) | `{ content: [{ type: "text", text: "Unauthorized: ..." }] }` | `true` |
+| `WorldApiError` (any) | `{ content: [{ type: "text", text: JSON.stringify({ error: code, ...fields }) }] }` | `true` |
+| `AuthError` (any) | `{ content: [{ type: "text", text: JSON.stringify({ error: "AUTH_ERROR", message: string, variant: string }) }] }` | `true` |
 | Success | `{ content: [{ type: "text", text: JSON.stringify(result) }] }` | `false` |
+
+The payload shapes for `WorldApiError` follow the same `error` codes as the HTTP table above (e.g. `{ error: "NO_POSITION", ghostId }`, `{ error: "UNKNOWN_CELL", cellId }`, etc.).
 
 The outer HTTP `/mcp` endpoint itself still uses the error-to-status table for non-MCP-tool errors (e.g., body parse failures, bridge not ready).
 
