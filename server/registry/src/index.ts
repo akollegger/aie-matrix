@@ -3,7 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect, ManagedRuntime } from "effect";
 import { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
 import { handleRegisterGhostHouseEffect } from "./routes/register-house.js";
-import { createCaretakerId, type RegistryStore } from "./store.js";
+import { createCaretakerId } from "./store.js";
 import type { WorldBridgeService } from "@aie-matrix/server-world-api";
 import { runWithRequestTrace } from "@aie-matrix/server-world-api";
 import { RegistryStoreService } from "@aie-matrix/server-world-api";
@@ -30,7 +30,6 @@ export type RegistryManagedRuntime = ManagedRuntime.ManagedRuntime<
 >;
 
 export interface RegistryHttpConfig {
-  store: RegistryStore;
   adoption: AdoptionRuntimeDeps;
   runtime: RegistryManagedRuntime;
   /** Maps registry / bridge domain failures to HTTP (combined server passes `errorToResponse`). */

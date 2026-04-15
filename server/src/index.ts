@@ -206,7 +206,6 @@ async function main(): Promise<void> {
   });
 
   const registryListener = createRegistryRequestListener({
-    store,
     adoption: {
       worldApiBaseUrl,
       forkTranscriptSubscriber: (ghostId: string) => {
