@@ -3,7 +3,12 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    "composite": true,
     "experimentalDecorators": true
   },
+  "references": [
+    { "path": "../../shared/root-env" },
+    { "path": "../../shared/types" }
+  ],
   "include": ["src/**/*.ts"]
 }

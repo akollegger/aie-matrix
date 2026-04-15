@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./shared/root-env" },
+    { "path": "./shared/types" },
+    { "path": "./server/auth" },
+    { "path": "./server/colyseus" },
+    { "path": "./server/world-api" },
+    { "path": "./server/registry" },
+    { "path": "./server" }
+  ]
+}
