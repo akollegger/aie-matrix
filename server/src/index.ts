@@ -235,6 +235,7 @@ async function main(): Promise<void> {
 
   httpServer.on("request", (req, res) => {
     void (async () => {
+      try {
       // Colyseus installs a wrapping `request` listener, then this handler is added as a second
       // `request` listener. Skip if a prior listener already responded, or if the URL is owned by
       // Colyseus matchmake (it sends headers only after `req` ends — see `/matchmake` guard below).
@@ -399,6 +400,13 @@ async function main(): Promise<void> {
       if (!res.headersSent && !res.writableEnded) {
         res.writeHead(404, { "Content-Type": "text/plain", ...corsHeaders });
         res.end("Not found");
+      }
+      } catch (e) {
+        console.error("Unhandled request error", e);
+        if (!res.headersSent && !res.writableEnded) {
+          res.writeHead(500, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "INTERNAL", message: e instanceof Error ? e.message : String(e) }));
+        }
       }
     })();
   });
