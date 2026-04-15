@@ -30,6 +30,11 @@ const defaultCorsHeaders: Record<string, string> = {
 
 export function parseServerConfigFromEnv(env: NodeJS.ProcessEnv): ServerConfig {
   const httpPort = Number(env.AIE_MATRIX_HTTP_PORT ?? "8787");
+  if (!Number.isInteger(httpPort) || httpPort < 1 || httpPort > 65535) {
+    throw new Error(
+      `AIE_MATRIX_HTTP_PORT must be an integer between 1 and 65535, got: ${env.AIE_MATRIX_HTTP_PORT ?? "(unset)"}`,
+    );
+  }
   const mapPath =
     env.AIE_MATRIX_MAP ?? join(repoRoot, "maps/sandbox/freeplay.tmj");
   const mapsRoot = normalize(join(repoRoot, "maps"));
