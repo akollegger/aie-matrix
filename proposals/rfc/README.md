@@ -48,3 +48,4 @@ What other approaches were considered?
 | RFC | Title | Status |
 |---|---|---|
 | [RFC-0001](0001-minimal-poc.md) | Minimal Proof-of-Concept | draft |
+| [RFC-0002](0002-rule-based-movement.md) | Rule-Based Movement Mechanics Using Pattern Matching | draft |
