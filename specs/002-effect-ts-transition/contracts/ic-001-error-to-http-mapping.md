@@ -17,8 +17,8 @@ All HTTP response mapping happens at the request handler boundary, not inside do
 | Error Type | `_tag` | HTTP Status | Response Body Shape |
 |---|---|---|---|
 | `AuthError` (any variant) | `"AuthError"` | 401 | `{ error: "AUTH_ERROR", message: string, variant: string }` |
-| `RegistryError.UnknownCaretaker` | `"RegistryError"` | 409 | `{ error: code, message: string }` |
-| `RegistryError.UnknownGhostHouse` | `"RegistryError"` | 409 | `{ error: code, message: string }` |
+| `RegistryError.UnknownCaretaker` | `"RegistryError"` | 404 | `{ error: code, message: string }` |
+| `RegistryError.UnknownGhostHouse` | `"RegistryError"` | 404 | `{ error: code, message: string }` |
 | `RegistryError.CaretakerAlreadyHasGhost` | `"RegistryError"` | 409 | `{ error: code, message: string }` |
 | `WorldApiError.NoPosition` | `"WorldApiError"` | 404 | `{ error: "NO_POSITION", ghostId: string }` |
 | `WorldApiError.UnknownCell` | `"WorldApiError"` | 404 | `{ error: "UNKNOWN_CELL", cellId: string }` |

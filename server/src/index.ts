@@ -17,8 +17,7 @@ import {
   runWithRequestTrace,
   withRequestTraceFiber,
 } from "@aie-matrix/server-world-api";
-import { Effect, Exit, Layer, ManagedRuntime, pipe } from "effect";
-import * as EffectScope from "effect/Scope";
+import { Effect, Exit, Layer, ManagedRuntime, pipe, Scope } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
 import { patchMatchmakeCorsForCredentials } from "./colyseus-cors-patch.js";
 import { errorToResponse, type HttpMappingError } from "./errors.js";
@@ -187,7 +186,7 @@ async function main(): Promise<void> {
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
   };
 
-  const ghostSubscriberScope = await Effect.runPromise(EffectScope.make());
+  const ghostSubscriberScope = await Effect.runPromise(Scope.make());
 
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
@@ -201,7 +200,7 @@ async function main(): Promise<void> {
   process.on("SIGTERM", () => {
     void Effect.runPromise(
       Effect.gen(function* () {
-        yield* EffectScope.close(ghostSubscriberScope, Exit.void);
+        yield* Scope.close(ghostSubscriberScope, Exit.void);
         yield* Effect.promise(() => runtime.dispose());
       }),
     ).finally(() => process.exit(0));
@@ -214,8 +213,18 @@ async function main(): Promise<void> {
       forkTranscriptSubscriber: (ghostId: string) => {
         runtime.runFork(
           pipe(
-            Effect.forkScoped(subscribeGhostToHub(ghostId)),
-            Effect.provideService(EffectScope.Scope, ghostSubscriberScope),
+            Effect.forkScoped(
+              subscribeGhostToHub(ghostId).pipe(
+                Effect.tapDefect((cause) =>
+                  Effect.sync(() =>
+                    console.error(
+                      JSON.stringify({ kind: "transcript-hub", op: "defect", ghostId, cause: String(cause) }),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Effect.provideService(Scope.Scope, ghostSubscriberScope),
           ),
         );
       },

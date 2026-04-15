@@ -1,7 +1,0 @@
-{
-  "name": "tessl/npm-phaser",
-  "version": "3.90.0",
-  "docs": "docs/index.md",
-  "describes": "pkg:npm/phaser@3.90.0",
-  "summary": "A fast, free and fun HTML5 Game Framework for Desktop and Mobile web browsers"
-}

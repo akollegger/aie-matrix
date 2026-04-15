@@ -31,6 +31,11 @@ export const publishTranscript = (
     return yield* PubSub.publish(hub, event);
   });
 
+/**
+ * Phase 5 stub: infrastructure wired, actual ghost delivery not yet implemented.
+ * When complete, this will push the transcript event to the ghost via WorldBridgeService
+ * (e.g. a Colyseus message or SSE). For now it only logs in debug mode.
+ */
 function notifyGhost(
   ghostId: string,
   event: TranscriptEvent,
