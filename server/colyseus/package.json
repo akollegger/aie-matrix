@@ -25,6 +25,6 @@
     "@colyseus/core": "0.15.57",
     "@colyseus/schema": "2.0.35",
     "@colyseus/ws-transport": "0.15.2",
-    "fast-xml-parser": "4.5.0"
+    "fast-xml-parser": "4.5.5"
   }
 }
