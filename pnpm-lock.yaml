@@ -152,8 +152,8 @@ importers:
         specifier: 0.15.2
         version: 0.15.2(@colyseus/schema@2.0.35)
       fast-xml-parser:
-        specifier: 4.5.0
-        version: 4.5.0
+        specifier: 4.5.5
+        version: 4.5.5
 
   server/registry:
     dependencies:
@@ -901,8 +901,8 @@ packages:
   fast-uri@3.1.0:
     resolution: {integrity: sha512-iPeeDKJSWf4IEOasVVrknXpaBV0IApz/gp7S2bb7Z4Lljbl2MGJRqInZiUrQwV16cpzw/D3S5j5Julj/gT52AA==}
 
-  fast-xml-parser@4.5.0:
-    resolution: {integrity: sha512-/PlTQCI96+fZMAOLMZK4CWG1ItCbfZ/0jx7UIJFChPNrx7tcEgerUgWbeieCM9MfHInUDyK8DWYZ+YrywDJuTg==}
+  fast-xml-parser@4.5.5:
+    resolution: {integrity: sha512-cK9c5I/DwIOI7/Q7AlGN3DuTdwN61gwSfL8rvuVPK+0mcCNHHGxRrpiFtaZZRfRMJL3Gl8B2AFlBG6qXf03w9A==}
     hasBin: true
 
   fdir@6.5.0:
@@ -1927,7 +1927,7 @@ snapshots:
 
   fast-uri@3.1.0: {}
 
-  fast-xml-parser@4.5.0:
+  fast-xml-parser@4.5.5:
     dependencies:
       strnum: 1.1.2
 
