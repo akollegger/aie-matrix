@@ -23,12 +23,12 @@ independent implementation and testing of each story.
 **Purpose**: Create the `ghosts/ghost-cli/` pnpm workspace package so subsequent phases
 have a place to land. Nothing in this phase is functional; it just establishes the skeleton.
 
-- [ ] T001 Add `ghosts/ghost-cli` to `pnpm-workspace.yaml` (one line addition after `ghosts/random-house`)
-- [ ] T002 Create `ghosts/ghost-cli/package.json` — name `@aie-matrix/ghost-cli`, private, ESM, scripts: `build`, `typecheck`, `start`, `test`; deps: `effect`, `@effect/cli`, `@effect/platform-node`, `ink`, `react`; workspace deps: `@aie-matrix/ghost-ts-client`, `@aie-matrix/root-env`
-- [ ] T003 [P] Create `ghosts/ghost-cli/tsconfig.json` extending `../../tsconfig.base.json`, add `jsx: react-jsx` for `.tsx` files, include `src/**/*`
-- [ ] T004 [P] Create directory skeleton: `ghosts/ghost-cli/src/preflight/`, `src/services/`, `src/oneshot/`, `src/repl/`, `tests/`
-- [ ] T005 Create stub `ghosts/ghost-cli/src/index.ts` (empty main, NodeRuntime.runMain placeholder) so `pnpm build` succeeds
-- [ ] T006 Run `pnpm install` from repo root and verify `@aie-matrix/ghost-cli` appears in workspace; run `pnpm --filter @aie-matrix/ghost-cli run build` — must succeed
+- [X] T001 Add `ghosts/ghost-cli` to `pnpm-workspace.yaml` (one line addition after `ghosts/random-house`)
+- [X] T002 Create `ghosts/ghost-cli/package.json` — name `@aie-matrix/ghost-cli`, private, ESM, scripts: `build`, `typecheck`, `start`, `test`; deps: `effect`, `@effect/cli`, `@effect/platform-node`, `ink`, `react`; workspace deps: `@aie-matrix/ghost-ts-client`, `@aie-matrix/root-env`
+- [X] T003 [P] Create `ghosts/ghost-cli/tsconfig.json` extending `../../tsconfig.base.json`, add `jsx: react-jsx` for `.tsx` files, include `src/**/*`
+- [X] T004 [P] Create directory skeleton: `ghosts/ghost-cli/src/preflight/`, `src/services/`, `src/oneshot/`, `src/repl/`, `tests/`
+- [X] T005 Create stub `ghosts/ghost-cli/src/index.ts` (empty main, NodeRuntime.runMain placeholder) so `pnpm build` succeeds
+- [X] T006 Run `pnpm install` from repo root and verify `@aie-matrix/ghost-cli` appears in workspace; run `pnpm --filter @aie-matrix/ghost-cli run build` — must succeed
 
 **Checkpoint**: `pnpm --filter @aie-matrix/ghost-cli run build` exits 0
 
@@ -42,13 +42,13 @@ until this phase is complete.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T007 Create `ghosts/ghost-cli/src/config.ts` — `GhostConfig` interface and `@effect/cli` `Config` layer resolving `token` (`--token` / `GHOST_TOKEN` / `.env`), `url` (`--url` / `WORLD_API_URL` / `.env`), `debug` (`--debug`, boolean), `json` (`--json`, boolean)
-- [ ] T008 Create `ghosts/ghost-cli/src/services/GhostClientService.ts` — `GhostClientError` tagged error types (`GhostClient.NetworkError`, `GhostClient.ProtocolError`, `GhostClient.ToolError` with `{ code, message }`); `GhostClientService` `Context.Tag`; `GhostClientLayer` as `Layer.scoped` wrapping `GhostMcpClient` from `@aie-matrix/ghost-ts-client` — connect on acquire, disconnect in `Effect.addFinalizer`
-- [ ] T009 [P] Create `ghosts/ghost-cli/src/preflight/index.ts` — `runPreflight(config)` that runs phases 1–3 sequentially, short-circuiting on the first `PreFlightError`; returns `Effect.Effect<GhostIdentity, PreFlightError>`
-- [ ] T010 [P] Create `ghosts/ghost-cli/src/preflight/env-scan.ts` — Phase 1: validates `token` and `url` presence and format; yields `PreFlight.EnvMissingToken`, `PreFlight.EnvMissingUrl`, `PreFlight.UrlMissingMcpSuffix` as appropriate; detects `inRepoRoot` by checking for `pnpm-workspace.yaml` in cwd ancestors
-- [ ] T011 [P] Create `ghosts/ghost-cli/src/preflight/reachability.ts` — Phase 2: fast HTTP probe to `<host>:<port>/` (server health); yields `PreFlight.ServerUnreachable` (with `errno`), `PreFlight.HostNotFound`, `PreFlight.McpEndpointNotFound`
-- [ ] T012 [P] Create `ghosts/ghost-cli/src/preflight/handshake.ts` — Phase 3: MCP connect + `whoami` call; yields `PreFlight.TokenRejected` (401), `PreFlight.GhostNotFound` (404/ghost not found); returns `GhostIdentity` on success
-- [ ] T013 Create `ghosts/ghost-cli/src/diagnostics.ts` — `formatDiagnostic(e: PreFlightError): { message: string; remedy: string }` pure function covering all nine `PreFlightError` variants; `toExitCode(e: PreFlightError): 1 | 2 | 3` mapping per IC-005
+- [X] T007 Create `ghosts/ghost-cli/src/config.ts` — `GhostConfig` interface and `@effect/cli` `Config` layer resolving `token` (`--token` / `GHOST_TOKEN` / `.env`), `url` (`--url` / `WORLD_API_URL` / `.env`), `debug` (`--debug`, boolean), `json` (`--json`, boolean)
+- [X] T008 Create `ghosts/ghost-cli/src/services/GhostClientService.ts` — `GhostClientError` tagged error types (`GhostClient.NetworkError`, `GhostClient.ProtocolError`, `GhostClient.ToolError` with `{ code, message }`); `GhostClientService` `Context.Tag`; `GhostClientLayer` as `Layer.scoped` wrapping `GhostMcpClient` from `@aie-matrix/ghost-ts-client` — connect on acquire, disconnect in `Effect.addFinalizer`
+- [X] T009 [P] Create `ghosts/ghost-cli/src/preflight/index.ts` — `runPreflight(config)` that runs phases 1–3 sequentially, short-circuiting on the first `PreFlightError`; returns `Effect.Effect<GhostIdentity, PreFlightError>`
+- [X] T010 [P] Create `ghosts/ghost-cli/src/preflight/env-scan.ts` — Phase 1: validates `token` and `url` presence and format; yields `PreFlight.EnvMissingToken`, `PreFlight.EnvMissingUrl`, `PreFlight.UrlMissingMcpSuffix` as appropriate; detects `inRepoRoot` by checking for `pnpm-workspace.yaml` in cwd ancestors
+- [X] T011 [P] Create `ghosts/ghost-cli/src/preflight/reachability.ts` — Phase 2: fast HTTP probe to `<host>:<port>/` (server health); yields `PreFlight.ServerUnreachable` (with `errno`), `PreFlight.HostNotFound`, `PreFlight.McpEndpointNotFound`
+- [X] T012 [P] Create `ghosts/ghost-cli/src/preflight/handshake.ts` — Phase 3: MCP connect + `whoami` call; yields `PreFlight.TokenRejected` (401), `PreFlight.GhostNotFound` (404/ghost not found); returns `GhostIdentity` on success
+- [X] T013 Create `ghosts/ghost-cli/src/diagnostics.ts` — `formatDiagnostic(e: PreFlightError): { message: string; remedy: string }` pure function covering all nine `PreFlightError` variants; `toExitCode(e: PreFlightError): 1 | 2 | 3` mapping per IC-005
 
 **Checkpoint**: `pnpm --filter @aie-matrix/ghost-cli run typecheck` exits 0
 
@@ -71,17 +71,17 @@ pnpm --filter @aie-matrix/ghost-cli start -- whoami         # exits 1, diagnosti
 
 ### Implementation for User Story 1 + 4
 
-- [ ] T014 [US1] Create `ghosts/ghost-cli/src/oneshot/commands.ts` — Effect handler for each of the five MCP tool calls (`whoami`, `whereami`, `look`, `exits`, `go`); each handler runs `runPreflight`, calls `GhostClientService.callTool`, formats result as prose or JSON per `GhostConfig.json`; `go` result includes movement-denial codes rendered as game prose
-- [ ] T015 [P] [US1] Create `ghosts/ghost-cli/src/cli.ts` — `@effect/cli` `Command` tree: root command with `--token`, `--url`, `--debug`, `--json` options; five subcommands (`whoami`, `whereami`, `look [here|around|<face>]`, `exits`, `go <face>`); non-TTY check gates the interactive path
-- [ ] T016 [US1] Wire `ghosts/ghost-cli/src/index.ts` — `NodeRuntime.runMain(Command.run(rootCommand)(process.argv))` with `Layer.mergeAll(GhostClientLayer, GhostConfigLayer)` as the runtime; `toExitCode` maps pre-flight errors to exit codes before `NodeRuntime.runMain` sees them
-- [ ] T017 [P] [US1] Implement `--debug` flag behaviour in `src/oneshot/commands.ts` — when `GhostConfig.debug` is true, emit raw MCP payload and `Effect.Cause` chain to stderr before returning
-- [ ] T018 [P] [US1] Implement `--json` flag behaviour — when `GhostConfig.json` is true, write `JSON.stringify(rawMcpResult)` to stdout; when false, write formatted prose; stdout and stderr are strictly separated in all cases
+- [X] T014 [US1] Create `ghosts/ghost-cli/src/oneshot/commands.ts` — Effect handler for each of the five MCP tool calls (`whoami`, `whereami`, `look`, `exits`, `go`); each handler runs `runPreflight`, calls `GhostClientService.callTool`, formats result as prose or JSON per `GhostConfig.json`; `go` result includes movement-denial codes rendered as game prose
+- [X] T015 [P] [US1] Create `ghosts/ghost-cli/src/cli.ts` — `@effect/cli` `Command` tree: root command with `--token`, `--url`, `--debug`, `--json` options; five subcommands (`whoami`, `whereami`, `look [here|around|<face>]`, `exits`, `go <face>`); non-TTY check gates the interactive path
+- [X] T016 [US1] Wire `ghosts/ghost-cli/src/index.ts` — `NodeRuntime.runMain(Command.run(rootCommand)(process.argv))` with `Layer.mergeAll(GhostClientLayer, GhostConfigLayer)` as the runtime; `toExitCode` maps pre-flight errors to exit codes before `NodeRuntime.runMain` sees them
+- [X] T017 [P] [US1] Implement `--debug` flag behaviour in `src/oneshot/commands.ts` — when `GhostConfig.debug` is true, emit raw MCP payload and `Effect.Cause` chain to stderr before returning
+- [X] T018 [P] [US1] Implement `--json` flag behaviour — when `GhostConfig.json` is true, write `JSON.stringify(rawMcpResult)` to stdout; when false, write formatted prose; stdout and stderr are strictly separated in all cases
 
 ### Tests for User Story 1 + 4
 
-- [ ] T019 [P] [US1] Create `ghosts/ghost-cli/tests/preflight.test.ts` — unit tests for Phase 1 (`env-scan.ts`): token absent, URL absent, URL missing `/mcp` suffix, both present and valid; all tests run without network
-- [ ] T020 [P] [US1] Create `ghosts/ghost-cli/tests/diagnostics.test.ts` — one assertion per `PreFlightError` variant: `formatDiagnostic` returns non-empty `message` and `remedy`; `toExitCode` returns correct code per IC-005
-- [ ] T021 [P] [US1] Create `ghosts/ghost-cli/tests/command-parser.test.ts` — unit tests for `ReplCommand` parser (from `src/repl/repl-state.ts`, stub the type if REPL phase not yet done): each vocabulary word, invalid face direction → `unknown`, empty input → `unknown`
+- [X] T019 [P] [US1] Create `ghosts/ghost-cli/tests/preflight.test.ts` — unit tests for Phase 1 (`env-scan.ts`): token absent, URL absent, URL missing `/mcp` suffix, both present and valid; all tests run without network
+- [X] T020 [P] [US1] Create `ghosts/ghost-cli/tests/diagnostics.test.ts` — one assertion per `PreFlightError` variant: `formatDiagnostic` returns non-empty `message` and `remedy`; `toExitCode` returns correct code per IC-005
+- [X] T021 [P] [US1] Create `ghosts/ghost-cli/tests/command-parser.test.ts` — unit tests for `ReplCommand` parser (from `src/repl/repl-state.ts`, stub the type if REPL phase not yet done): each vocabulary word, invalid face direction → `unknown`, empty input → `unknown`
 
 **Checkpoint**: All three smoke test commands above pass; `pnpm --filter @aie-matrix/ghost-cli run test` exits 0
 
