@@ -68,10 +68,10 @@
 
 **Goal**: Operators swap rules artifacts via configuration only; same map geometry, different outcomes.
 
-**Independent Test**: Two env configurations (different `AIE_MATRIX_RULES_PATH` or mode) over the same `LoadedMap` fixture yield different permit/deny for at least one step.
+**Independent Test**: Two env configurations (different `AIE_MATRIX_RULES` values) over the same `LoadedMap` fixture yield different permit/deny for at least one step.
 
 - [X] T017 [US2] Add `server/world-api/src/rules/fixtures/restrictive.rules.gram` with a different allow-list than `server/world-api/src/rules/fixtures/sandbox.rules.gram` (both valid Gram)
-- [X] T018 [US2] Document `AIE_MATRIX_RULES_PATH` and `AIE_MATRIX_RULES_MODE` (`authored` | `permissive`) in `server/world-api/README.md` and `.env.example` at repository root
+- [X] T018 [US2] Document `AIE_MATRIX_RULES` (path or unset → permissive) in `server/world-api/README.md` and `.env.example` at repository root
 - [X] T019 [P] [US2] Add `server/world-api/src/rules_mode_switch.test.ts` demonstrating identical map + direction is permitted under one loaded rules file and denied under the other (no map mutation between assertions)
 
 **Checkpoint**: US2 done — configuration-driven policy swap is tested and documented.

@@ -23,7 +23,9 @@ function stringProperty(subject: Subject, key: string): string | undefined {
 
 /**
  * All labels required by a rule node must be present in the tile's label set (AND semantics).
- * `(:Red)` requires the tile to have "Red". `(:Hallway:VIP)` requires both "Hallway" and "VIP".
+ * `(red:Red)` requires the tile to have "Red". `(from:Hallway:VIP)` requires both "Hallway" and "VIP".
+ * Labels are resolved via `ruleGraph.nodeLabels(identity)` — label-only nodes `(:Red)` have no
+ * identity and will never match.
  */
 function tileLabelsMatch(
   required: ReadonlySet<string>,

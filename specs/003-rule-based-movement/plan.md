@@ -10,7 +10,7 @@ Replace the permissive `rulesetAllowsMove` stub in `server/world-api` with **aut
 ## Technical Context
 
 **Language/Version**: TypeScript 5.7 / Node.js 24 (repo standard)  
-**Primary Dependencies**: `effect` ^3.21 (existing); **`@relateby/pattern` ^0.2.9** (adds `Gram`, `Pattern`, `Subject`, graph helpers; peer `effect >= 3`)  
+**Primary Dependencies**: `effect` ^3.21 (existing); **`@relateby/pattern` ^0.4.0** (adds `Gram`, `Pattern`, `Subject`, graph helpers; peer `effect >= 3`)  
 **Storage**: Rules as **repository files** (`.rules.gram`); no new database for this slice  
 **Testing**: Add **`node:test`** (built-in) or minimal test runner under `server/world-api` for `evaluateGo` fixtures; optional TCK extension later  
 **Target Platform**: Combined server / local PoC (`pnpm run poc:server`)  

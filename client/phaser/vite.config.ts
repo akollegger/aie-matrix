@@ -9,7 +9,11 @@ export default defineConfig(({ mode }) => {
   const gameServer =
     env.VITE_SERVER_HTTP ?? env.VITE_DEV_PROXY_TARGET ?? "http://127.0.0.1:8787";
 
-  /** Derive client map path from the shared AIE_MATRIX_MAP env var by stripping the leading `maps/`. */
+  /**
+   * Derive client map path from the shared AIE_MATRIX_MAP env var by stripping the leading `maps/`.
+   * Only repo-relative paths starting with `maps/` are valid here; absolute filesystem paths are
+   * meaningful to the server but cannot be converted into a browser-accessible URL.
+   */
   const mapPath = (env.AIE_MATRIX_MAP ?? "maps/sandbox/freeplay.tmj").replace(/^maps\//, "");
 
   return {

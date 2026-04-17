@@ -116,22 +116,25 @@ Example rule: any ghost may pick up an item on an Entrance tile:
 
 Rulesets are authored as UTF-8 text files using [Gram notation](https://www.npmjs.com/package/@relateby/pattern), with the `.rules.gram` extension. One relationship per line; blank lines and comments are ignored by the parser.
 
-**Required syntax:** every node in every rule must carry its full label set. Aliases (the identity portion before the colon) are positional descriptors that aid readability but do not substitute for labels. Back-references — an alias appearing without labels after it was defined in another rule — are not supported by the current toolchain and will silently drop the label information.
+**Required syntax:** introduce each node with its identity and full label set on first use. Back-references — a bare identity like `(red)` used in subsequent rules — are supported and resolve to the labels of that identity's first labelled occurrence. Label-only nodes `(:Red)` — no identity — are **not** supported and will fail to match.
 
 ```
-# Correct: full labels on every node
+# Canonical: introduce with identity+labels, then back-reference freely
+(red:Red)-[:GO]->(blue:Blue)
+(blue)-[:GO]->(blue)            # back-reference: 'blue' resolves to Blue
+
+# Also correct: different aliases on every line (identity carries label for each use)
 (from:Red)-[:GO]->(to:Blue)
 (from:Blue)-[:GO]->(to:Blue)
 
-# Correct: self-loop repeats alias and label on both sides
+# Correct: self-loop with back-reference
 (tile:Hallway)-[:PICK_UP]->(tile:Hallway)
 
-# Incorrect: back-reference loses labels
-(red:Red)-[:GO]->(blue:Blue)
-(red)-[:GO]->(red)          # 'red' has no labels here; match fails
+# Incorrect: label-only node (no identity), fails to match
+(:Red)-[:GO]->(blue:Blue)
 ```
 
-Common alias conventions: `from`/`to` for directional moves, `tile`/`self` for in-place actions. The alias choice does not affect evaluation — only the labels matter.
+Common alias conventions: `from`/`to` for directional moves, `tile`/`self` for in-place actions, or mirror-label identities like `(red:Red)` for direct readability. The alias choice does not affect evaluation — labels determine matching.
 
 ### Multi-label nodes
 

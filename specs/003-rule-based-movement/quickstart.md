@@ -20,12 +20,11 @@ Covers Gram parse fixtures, `evaluateGo` with authored vs permissive rules, asym
 See `server/world-api/README.md` and root `.env.example`.
 
 ```bash
-# Default: permissive (no Gram file required)
-export AIE_MATRIX_RULES_MODE=permissive
+# Default: permissive (unset = no Gram file required)
+unset AIE_MATRIX_RULES
 
-# Authored allow-list (path is repo-relative or absolute)
-export AIE_MATRIX_RULES_MODE=authored
-export AIE_MATRIX_RULES_PATH=server/world-api/src/rules/fixtures/demo-asymmetric.rules.gram
+# Authored allow-list (repo-relative or absolute path to a .gram file)
+export AIE_MATRIX_RULES=server/world-api/src/rules/fixtures/demo-asymmetric.rules.gram
 ```
 
 Then start the combined server (`pnpm run poc:server` or `pnpm dev`). **Invalid Gram in authored mode** exits the process during startup.

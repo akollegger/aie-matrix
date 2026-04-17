@@ -29,7 +29,7 @@ Author movement policy as **Gram notation** in repository files (for example `sa
 
 ### Decision
 
-Add **`@relateby/pattern`** (current registry version **0.2.9**) as a dependency of `@aie-matrix/server-world-api`.
+Add **`@relateby/pattern`** (current registry version **^0.4.0**) as a dependency of `@aie-matrix/server-world-api`.
 
 ### Rationale
 

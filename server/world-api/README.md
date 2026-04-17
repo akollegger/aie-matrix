@@ -8,19 +8,22 @@ Rule-based adjacent `go` is specified in [RFC-0002](../../proposals/rfc/0002-rul
 
 | Env | Values | Purpose |
 |-----|--------|---------|
-| `AIE_MATRIX_RULES` | Absolute or repo-relative path to a `.gram` file, or unset | When set, authored mode is active and the file is loaded at startup. When absent, permissive mode (all geometrically valid steps allowed). Example: `maps/sandbox/green0trap.rules.gram` |
+| `AIE_MATRIX_RULES` | Absolute or repo-relative path to a `.gram` file, or unset | When set, authored mode is active and the file is loaded at startup. When absent, permissive mode (all geometrically valid steps allowed). Example: `maps/sandbox/green-trap.rules.gram` |
 
-**Gram shape (v1):** one relationship per top-level line. Every node must carry its full label set — back-references (alias without labels) silently drop label information and will fail to match.
+**Gram shape (v1):** one relationship per top-level line. Introduce each node with its identity and full label set on first use; subsequent rules may use bare back-references (identity only) which resolve to the labels of the first labelled occurrence. Label-only nodes `(:Red)` — no identity — are **not** supported and will fail to match.
+
+Canonical authoring style (identity mirrors label on first use, bare back-reference thereafter):
 
 ```
-(from:Red)-[:GO]->(to:Blue)
+(red:Red)-[:GO]->(blue:Blue)
+(blue)-[:GO]->(blue)           # back-reference: 'blue' resolves to Blue
 (from:Hallway:VIP)-[:GO]->(to:Lobby)
 (from:Blue)-[:GO {toward: "n"}]->(to:Blue)
 (from:Red)-[:GO {ghostClass: "VIP"}]->(to:Blue)
 (tile:Hallway)-[:PICK_UP]->(tile:Hallway)
 ```
 
-Aliases (`from`, `to`, `tile`) are readability conventions; only labels matter for matching. Multi-label nodes like `(from:Hallway:VIP)` require the tile to carry **all** listed labels (AND semantics). Ghost and directional constraints belong on the relationship, not on tile nodes. See [RFC-0002](../../proposals/rfc/0002-rule-based-movement.md) for the full rule file format spec.
+Multi-label nodes like `(from:Hallway:VIP)` require the tile to carry **all** listed labels (AND semantics). Ghost and directional constraints belong on the relationship, not on tile nodes. See [RFC-0002](../../proposals/rfc/0002-rule-based-movement.md) for the full rule file format spec.
 
 **Parse failures** when `AIE_MATRIX_RULES` is set fail server startup (logged to stderr).
 
