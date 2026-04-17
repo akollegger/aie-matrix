@@ -1,15 +1,12 @@
 import type { CellId, LoadedMap } from "@aie-matrix/server-colyseus";
 import type { Compass, GoFailure, GoSuccess } from "@aie-matrix/shared-types";
+import { goStepPermittedByRules } from "./rules/match-go.js";
+import type { ParsedRuleset } from "./rules/movement-rules-service.js";
+import { tileLabelsFromClass } from "./rules/tile-labels.js";
 
-/**
- * PoC movement ruleset: permissive no-op over class pairs (RFC-0001).
- * Capacity / occupancy are intentionally not enforced here.
- */
-export function rulesetAllowsMove(
-  _fromClass: string,
-  _toClass: string,
-): boolean {
-  return true;
+export interface GhostMoveContext {
+  /** Labels or roles used by `ghostClass` constraints on `GO` edges; may be empty. */
+  readonly ghostLabels: ReadonlySet<string>;
 }
 
 export function resolveNeighbor(
@@ -21,10 +18,15 @@ export function resolveNeighbor(
   return cell?.neighbors[toward];
 }
 
+/**
+ * Evaluate an adjacent `go` step: geometry first, then rules (allow-list when authored).
+ */
 export function evaluateGo(
   map: LoadedMap,
   fromCell: CellId,
   toward: Compass,
+  rules: ParsedRuleset,
+  ghostContext: GhostMoveContext = { ghostLabels: new Set() },
 ): GoSuccess | GoFailure {
   const cell = map.cells.get(fromCell);
   if (!cell) {
@@ -38,8 +40,20 @@ export function evaluateGo(
   if (!destRecord) {
     return { ok: false, reason: "Neighbor cell missing from map graph", code: "MAP_INTEGRITY" };
   }
-  if (!rulesetAllowsMove(cell.tileClass, destRecord.tileClass)) {
-    return { ok: false, reason: "Movement blocked by world ruleset", code: "RULESET_DENY" };
+
+  if (rules.mode === "permissive") {
+    return { ok: true, tileId: dest };
+  }
+
+  const originLabels = tileLabelsFromClass(cell.tileClass);
+  const destLabels = tileLabelsFromClass(destRecord.tileClass);
+  const permitted = goStepPermittedByRules(rules.ruleGraph, originLabels, destLabels, toward, ghostContext.ghostLabels);
+  if (!permitted) {
+    return {
+      ok: false,
+      reason: "Movement blocked by world ruleset",
+      code: "RULESET_DENY",
+    };
   }
   return { ok: true, tileId: dest };
 }

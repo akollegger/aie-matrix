@@ -95,7 +95,14 @@ async function runWalker(
       const moved = (await mcp.callTool("go", { toward: pick.toward })) as { ok?: boolean };
       console.log(`[${ghostLabel}] go`, pick.toward, moved);
     } catch (e) {
-      console.warn(`[${ghostLabel}] go failed`, pick.toward, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      let code: string | undefined;
+      try { code = (JSON.parse(msg) as { code?: string }).code; } catch { /* not JSON */ }
+      if (code === "RULESET_DENY" || code === "NO_NEIGHBOR" || code === "MAP_INTEGRITY") {
+        console.log(`[${ghostLabel}] go`, pick.toward, "denied", code);
+      } else {
+        console.warn(`[${ghostLabel}] go failed`, pick.toward, e);
+      }
     }
     await delay(walkIntervalMs);
   }

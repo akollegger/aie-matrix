@@ -60,6 +60,10 @@ Structured log lines emit JSON objects with a `kind`, `op`, `traceId`, and relev
 
 **Guide:** `docs/guides/effect-ts.md` — patterns, examples, anti-patterns, and how to add new services and handlers.
 
+### Movement policy vs map geometry (PoC)
+
+Adjacent ghost `go` steps are evaluated in **`server/world-api`** (not inside Colyseus room code). The **map** supplies hex geometry and per-cell **tile classes** (Tiled types). An optional **Gram ruleset** under `server/world-api/src/rules/fixtures/` (loaded via env; see `server/world-api/README.md`) supplies allow-list **policy** as `GO` edges between class labels. Leaving **`AIE_MATRIX_RULES`** unset preserves the original permissive “any adjacent step on the map graph” baseline; setting **`AIE_MATRIX_RULES`** to a `.gram` file path enables authored policy.
+
 ---
 
 ## Open Questions

@@ -49,14 +49,15 @@ export class WorldScene extends Phaser.Scene {
   }
 
   preload(): void {
-    this.load.spritesheet("hex", `${this.assetBaseUrl}/maps/sandbox/rainbow-hexes.png`, {
+    const mapDir = __AIE_MAP_PATH__.replace(/\/[^/]+$/, "");
+    this.load.spritesheet("hex", `${this.assetBaseUrl}/maps/${mapDir}/rainbow-hexes.png`, {
       frameWidth: 32,
       frameHeight: 28,
     });
   }
 
   async create(): Promise<void> {
-    const res = await fetch(`${this.assetBaseUrl}/maps/sandbox/freeplay.tmj`);
+    const res = await fetch(`${this.assetBaseUrl}/maps/${__AIE_MAP_PATH__}`);
     const tmj = (await res.json()) as TmjMap;
     const layer = tmj.layers?.[0];
     if (!layer?.data?.length) {

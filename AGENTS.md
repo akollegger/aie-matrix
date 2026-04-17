@@ -87,3 +87,6 @@ pnpm run lint
 When you establish a new pattern that other contributors will need to follow, update the relevant guide in `docs/guides/` in the same PR as the code. If no guide exists yet for that area, create one. Keep guides focused on *how this project uses* the technology, not on general tutorials.
 
 When you make an architectural decision, record it as an ADR. When you remove a guide because the technology was replaced, remove it — stale guides cause more harm than no guide.
+
+## Recent Changes
+- 003-rule-based-movement: Planned Gram-authored rulesets (`*.rules.gram`) evaluated with `@relateby/pattern` (`Gram`, `Pattern`, `Subject`) in `server/world-api`; see `specs/003-rule-based-movement/plan.md`.

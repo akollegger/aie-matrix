@@ -50,19 +50,20 @@ export function handleAdoptGhostEffect(
     );
     const bridge = yield* WorldBridgeService;
     const map = bridge.getLoadedMap();
-    const first = map.cells.keys().next().value;
-    if (!first) {
+    const cellIds = [...map.cells.keys()];
+    if (cellIds.length === 0) {
       return yield* Effect.fail(
         new WorldBridgeNoNavigableCells({ message: "Map has no navigable cells" }),
       );
     }
+    const spawnCell = cellIds[Math.floor(Math.random() * cellIds.length)];
     const ghostId = createGhostId();
-    bridge.setGhostCell(ghostId, first);
+    bridge.setGhostCell(ghostId, spawnCell);
     store.ghosts.set(ghostId, {
       id: ghostId,
       ghostHouseId: parsed.ghostHouseId,
       caretakerId: parsed.caretakerId,
-      tileId: first,
+      tileId: spawnCell,
       status: "active",
     });
     store.activeByCaretaker.set(parsed.caretakerId, ghostId);

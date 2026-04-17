@@ -13,3 +13,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Injected at build time by vite.config.ts from AIE_MATRIX_MAP (strips leading `maps/`). */
+declare const __AIE_MAP_PATH__: string;
