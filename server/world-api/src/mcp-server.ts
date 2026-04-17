@@ -23,6 +23,7 @@ import type { AuthError } from "./auth-errors.js";
 import { AuthMissingCredentials } from "./auth-errors.js";
 import { McpHandlerError } from "./mcp-handler-error.js";
 import { RegistryStoreService } from "./RegistryStoreService.js";
+import { MovementRulesService } from "./rules/movement-rules-service.js";
 import { WorldBridgeService } from "./WorldBridgeService.js";
 import {
   WorldApiMapIntegrity,
@@ -40,7 +41,7 @@ const compassEnum = z.enum(["n", "s", "ne", "nw", "se", "sw"]);
 
 const lookAtSchema = z.union([z.literal("here"), z.literal("around"), compassEnum]);
 
-type ToolServices = WorldBridgeService | RegistryStoreService;
+type ToolServices = WorldBridgeService | RegistryStoreService | MovementRulesService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -83,7 +84,11 @@ function worldApiErrorToToolPayload(error: WorldApiError): Record<string, unknow
     case "WorldApiError.UnknownCell":
       return { error: "UNKNOWN_CELL", cellId: error.cellId };
     case "WorldApiError.MovementBlocked":
-      return { error: "MOVEMENT_BLOCKED", message: error.message };
+      return {
+        error: "MOVEMENT_BLOCKED",
+        message: error.message,
+        ...(error.code !== undefined ? { code: error.code } : {}),
+      };
     case "WorldApiError.MapIntegrity":
       return { error: "MAP_INTEGRITY", message: error.message };
     default:
@@ -274,7 +279,10 @@ function goFailureToWorldApi(fromCell: CellId, failure: GoFailure): WorldApiErro
   if (code === "MAP_INTEGRITY") {
     return new WorldApiMapIntegrity({ message: failure.reason });
   }
-  return new WorldApiMovementBlocked({ message: failure.reason });
+  return new WorldApiMovementBlocked({
+    message: failure.reason,
+    ...(failure.code !== undefined ? { code: failure.code } : {}),
+  });
 }
 
 function goEffect(
@@ -285,9 +293,10 @@ function goEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const bridge = yield* WorldBridgeService;
+    const rules = yield* MovementRulesService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
-    const result = evaluateGo(map, hereId, toward);
+    const result = evaluateGo(map, hereId, toward, rules, { ghostLabels: new Set() });
     if (!result.ok) {
       return yield* Effect.fail(goFailureToWorldApi(hereId, result));
     }
@@ -412,7 +421,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
 
 /**
  * Stateless Streamable HTTP MCP handler (one `McpServer` instance per request), per SDK guidance.
- * Requires `WorldBridgeService` and `RegistryStoreService` in the Effect context (combined server `ManagedRuntime`).
+ * Requires `WorldBridgeService`, `RegistryStoreService`, and `MovementRulesService` in the Effect context (combined server `ManagedRuntime`).
  */
 export function handleGhostMcpEffect(
   req: IncomingMessage,
@@ -432,9 +441,11 @@ export function handleGhostMcpEffect(
     req.auth = auth;
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
+    const rules = yield* MovementRulesService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
+      Layer.succeed(MovementRulesService, rules),
     );
     yield* Effect.tryPromise({
       try: async () => {

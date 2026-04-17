@@ -16,7 +16,7 @@ Define how movement rules are **represented in source** and **loaded** so that:
 
 - **Format**: UTF-8 text containing **Gram notation** accepted by `Gram.parse` from `@relateby/pattern`.
 - **Naming**: Convention `*.rules.gram` (e.g. `sandbox.rules.gram`); multiple files MAY be composed by implementation if needed (concatenate before parse, or parse separately and merge pattern arrays).
-- **Semantics**: Patterns MUST express **directed** relationships compatible with RFC-0002 (origin subject → relationship type → destination subject), with optional properties on the relationship for `toward`, ghost constraints, etc. Exact property keys MUST be documented alongside the first implementation (stable catalog).
+- **Semantics**: Patterns MUST express **directed** relationships compatible with RFC-0002 (origin subject → relationship type → destination subject). **Canonical node syntax uses labels** (`(:Red)`, `(:Hallway:VIP)`) to identify tile classes. The identity-as-label form `(Red)` is accepted as a single-label shorthand for backward compatibility. Multi-label nodes use AND semantics: all listed labels must be present on the tile. Ghost constraints (`ghostClass`) and directional constraints (`toward`) belong as properties on the relationship subject, not on tile nodes. Exact property keys MUST be documented alongside the first implementation (stable catalog).
 
 ## Loading contract
 

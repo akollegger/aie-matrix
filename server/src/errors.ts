@@ -90,7 +90,11 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
     })),
     Match.tag("WorldApiError.MovementBlocked", (e) => ({
       status: 422,
-      body: JSON.stringify({ error: "MOVEMENT_BLOCKED", message: e.message }),
+      body: JSON.stringify({
+        error: "MOVEMENT_BLOCKED",
+        message: e.message,
+        ...(e.code !== undefined ? { code: e.code } : {}),
+      }),
     })),
     Match.tag("WorldApiError.MapIntegrity", (e) => ({
       status: 500,

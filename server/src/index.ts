@@ -12,6 +12,8 @@ import {
   createColyseusBridge,
   getRequestTraceId,
   handleGhostMcpEffect,
+  loadMovementRulesFromEnv,
+  makeMovementRulesLayer,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
   runWithRequestTrace,
@@ -187,10 +189,19 @@ async function main(): Promise<void> {
 
   const ghostSubscriberScope = await Effect.runPromise(Scope.make());
 
+  let movementRules;
+  try {
+    movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env));
+  } catch (e) {
+    console.error("[aie-matrix] Failed to load movement rules (Gram / env):", e);
+    process.exit(1);
+  }
+
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
       makeWorldBridgeLayer(bridge),
       makeRegistryStoreLayer(store),
+      makeMovementRulesLayer(movementRules),
       makeServerConfigLayer(process.env),
       TranscriptHubLayer,
     ),

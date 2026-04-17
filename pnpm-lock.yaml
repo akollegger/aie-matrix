@@ -184,12 +184,19 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@3.25.76)
+      '@relateby/pattern':
+        specifier: ^0.4.0
+        version: 0.4.0(effect@3.21.0)
       effect:
         specifier: ^3.21.0
         version: 3.21.0
       zod:
         specifier: ^3.25.76
         version: 3.25.76
+    devDependencies:
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
 
   shared/root-env:
     dependencies:
@@ -587,6 +594,11 @@ packages:
     resolution: {integrity: sha512-PG6q63nQg5c9rIi4/Z5lR5IVF7yU5MqmKaPOe0HSc0O2cX1fPi96sUQu5j7eo4gKCkB2AnNGoWt7y4/Xx3Kcqg==}
     engines: {node: '>=18'}
     hasBin: true
+
+  '@relateby/pattern@0.4.0':
+    resolution: {integrity: sha512-c60F5397j1dwzyLdITrdwR/+pZGdW4rzUqckoDN9SaZufq8UiNQzBz02OwgHM0fA2nLCYt3qveKYwhalebn7Rg==}
+    peerDependencies:
+      effect: '>=3.0.0'
 
   '@rollup/rollup-android-arm-eabi@4.60.1':
     resolution: {integrity: sha512-d6FinEBLdIiK+1uACUttJKfgZREXrF0Qc2SmLII7W2AD8FfiZ9Wjd+rD/iRuf5s5dWrr1GgwXCvPqOuDquOowA==}
@@ -1608,6 +1620,10 @@ snapshots:
   '@playwright/test@1.59.1':
     dependencies:
       playwright: 1.59.1
+
+  '@relateby/pattern@0.4.0(effect@3.21.0)':
+    dependencies:
+      effect: 3.21.0
 
   '@rollup/rollup-android-arm-eabi@4.60.1':
     optional: true

@@ -38,6 +38,16 @@ export interface ExitInfo {
   tileId: string;
 }
 
+/** Machine-stable `code` values on {@link GoFailure} from the `go` tool (IC-003). */
+export const GO_MOVEMENT_FAILURE_CODES = [
+  "UNKNOWN_CELL",
+  "NO_NEIGHBOR",
+  "MAP_INTEGRITY",
+  "RULESET_DENY",
+] as const;
+
+export type GoMovementFailureCode = (typeof GO_MOVEMENT_FAILURE_CODES)[number];
+
 export interface GoArgs {
   toward: Compass;
 }

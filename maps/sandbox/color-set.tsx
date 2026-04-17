@@ -9,7 +9,7 @@
     columns="8"
 >
  <image source="rainbow-hexes.png" width="256" height="112" />
- <tile id="0" type="Blue1">
+ <tile id="0" type="Blue">
   <properties>
    <property name="capacity" value="1" />
   </properties>
@@ -32,7 +32,7 @@
  </properties>
 </tile>
 
- <tile id="4" type="Red1">
+ <tile id="4" type="Red">
  <properties>
   <property name="capacity" value="1" />
  </properties>
@@ -145,7 +145,7 @@
   <property name="capacity" value="1" />
  </properties>
 </tile>
- <tile id="25" type="Cyan4">
+ <tile id="25" type="Blue">
  <properties>
   <property name="capacity" value="1" />
  </properties>
@@ -160,7 +160,7 @@
   <property name="capacity" value="1" />
  </properties>
 </tile>
- <tile id="28" type="Red4">
+ <tile id="28" type="Red">
  <properties>
   <property name="capacity" value="1" />
  </properties>

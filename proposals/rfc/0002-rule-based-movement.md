@@ -112,6 +112,27 @@ Example rule: any ghost may pick up an item on an Entrance tile:
 (tile:Entrance)-[:PICK_UP]->(tile:Entrance)
 ```
 
+### Rule file format
+
+Rulesets are authored as UTF-8 text files using [Gram notation](https://www.npmjs.com/package/@relateby/pattern), with the `.rules.gram` extension. One relationship per line; blank lines and comments are ignored by the parser.
+
+**Required syntax:** every node in every rule must carry its full label set. Aliases (the identity portion before the colon) are positional descriptors that aid readability but do not substitute for labels. Back-references — an alias appearing without labels after it was defined in another rule — are not supported by the current toolchain and will silently drop the label information.
+
+```
+# Correct: full labels on every node
+(from:Red)-[:GO]->(to:Blue)
+(from:Blue)-[:GO]->(to:Blue)
+
+# Correct: self-loop repeats alias and label on both sides
+(tile:Hallway)-[:PICK_UP]->(tile:Hallway)
+
+# Incorrect: back-reference loses labels
+(red:Red)-[:GO]->(blue:Blue)
+(red)-[:GO]->(red)          # 'red' has no labels here; match fails
+```
+
+Common alias conventions: `from`/`to` for directional moves, `tile`/`self` for in-place actions. The alias choice does not affect evaluation — only the labels matter.
+
 ### Multi-label nodes
 
 Tile class nodes in the ruleset graph may carry multiple labels, enabling rules
@@ -119,11 +140,12 @@ at any level of specificity:
 
 - A tile may be labeled `Blue:Hallway`, `Red:Stage`, or `Green:Entrance:Doorway`.
 
-Rules match by label intersection. A rule targeting `:Hallway` matches any tile
-with that label regardless of its other labels. This allows general rules
-(any ghost may enter any Hallway tile) to coexist with specific overrides
-(only Attendees may enter a VIP:Lounge tile, expressed as a `ghostClass`
-constraint on that edge) without conflict.
+Rules match by label **intersection (AND semantics)**: a rule node with labels
+`Hallway:VIP` requires the tile to carry *both* labels. A rule targeting only
+`:Hallway` matches any tile with that label regardless of its other labels.
+This allows general rules (any ghost may enter any Hallway tile) to coexist
+with specific overrides (only Attendees may enter a `VIP:Lounge` tile,
+expressed as a `ghostClass` constraint on that edge) without conflict.
 
 ### In-place actions as self-loops
 
@@ -193,6 +215,36 @@ JUMP) referenced in this RFC as illustrative of the general rule mechanism will
 require follow-up changes to the ghost MCP interface and shared types before
 they can be fully implemented.
 
+### Storage and co-location with world data
+
+`.rules.gram` files are the authoring surface; Neo4j is the target for
+production graph storage. Both the world state graph and one or more ruleset
+graphs will live in the same database, which creates a label namespace
+collision: a `Red` node in the world graph is a tile instance; a `Red` node in
+a ruleset graph is a tile-class policy node. A naive `MATCH (n:Red) RETURN n`
+returns both.
+
+The persistence layer (the component responsible for loading `.rules.gram`
+files into Neo4j) resolves this by adding an extra `:Rule` label to every node
+in the ruleset graph at write time. Rule authors do not write `:Rule` in their
+`.gram` files. At the macro level, a `RuleSet` node scopes the entire graph:
+
+```
+(rs:RuleSet)-[:APPLIES_TO]->(w:World)
+(rs:RuleSet)-[:CONTAINS]->(n:Red:Rule)
+```
+
+Scoped queries become unambiguous:
+
+```cypher
+MATCH (rs:RuleSet)-[:CONTAINS]->(n:Red) RETURN n   -- rule nodes only
+MATCH (w:World)-[:CONTAINS]->(n:Red) RETURN n       -- tile instances only
+```
+
+Relationship types in the ruleset graph (`GO`, `LOOK`, `PICK_UP`, etc.) are
+action verbs and will not collide with world graph relationship types, which
+are structural (`ADJACENT`, `OCCUPIED_BY`, `CONTAINS`).
+
 ### Demo scenario
 
 With a sample map containing at least two tile classes (e.g. Red and Blue):
@@ -211,10 +263,11 @@ With a sample map containing at least two tile classes (e.g. Red and Blue):
 
 ## Open Questions
 
-1. **Ruleset storage format** — the ruleset graph can be expressed as a
-   Cypher-seeded Neo4j graph, a JSON/YAML file interpreted at startup, or a
-   TypeScript DSL compiled into a graph structure. The choice affects tooling,
-   live-reload, and contributor accessibility.
+1. **Ruleset storage format** — ~~resolved~~: `.rules.gram` Gram notation is
+   the authoring format (see [Rule file format](#rule-file-format)). The open
+   question is now the **Neo4j persistence pipeline**: when and how are
+   `.rules.gram` files parsed and written into Neo4j, what triggers a reload,
+   and how are `RuleSet` nodes versioned or replaced during a live event.
 
 2. **Jump connections** — non-geometric tile connections (portals, elevators)
    require explicit adjacency data beyond what the map's geometry supplies.

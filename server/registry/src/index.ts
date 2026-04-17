@@ -24,10 +24,12 @@ const REGISTRY_CORS_HEADERS: Record<string, string> = {
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
-export type RegistryManagedRuntime = ManagedRuntime.ManagedRuntime<
-  RegistryStoreService | WorldBridgeService,
-  never
->;
+/**
+ * Registry HTTP handlers only *require* {@link RegistryStoreService} and {@link WorldBridgeService}.
+ * The combined server passes a richer runtime; we type it as `unknown` here to avoid a dependency
+ * cycle on every orchestration-layer service tag.
+ */
+export type RegistryManagedRuntime = ManagedRuntime.ManagedRuntime<unknown, never>;
 
 export interface RegistryHttpConfig {
   adoption: AdoptionRuntimeDeps;

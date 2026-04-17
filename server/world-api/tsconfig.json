@@ -10,5 +10,5 @@
     { "path": "../colyseus" },
     { "path": "../../shared/types" }
   ],
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "src/**/*.test.ts"]
 }

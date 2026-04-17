@@ -1,38 +1,35 @@
-# Quickstart: Rule-Based Movement (planned implementation)
+# Quickstart: Rule-Based Movement
 
-Verification backbone for [spec.md](./spec.md) once code lands. Paths are from the **repository root** unless noted.
+Verification for [spec.md](./spec.md). Paths are from the **repository root** unless noted.
 
 ## Prerequisites
 
-- Same PoC stack as [001-minimal-poc quickstart](../001-minimal-poc/quickstart.md): `pnpm install`, combined server, optional Phaser + ghost.
-- A **Gram rules file** checked in (e.g. `server/world-api/rules/demo-asymmetric.gram`) and configuration pointing the world API at **authored** rules mode (exact env key will match implementation — see `server/world-api/README.md` when added).
+- `pnpm install`
+- Same PoC stack as [001-minimal-poc quickstart](../001-minimal-poc/quickstart.md) when exercising MCP end-to-end.
 
-## 1. Parse smoke (developer)
-
-After implementation, this should succeed without starting Colyseus:
+## 1. Unit tests (primary gate)
 
 ```bash
-pnpm --filter @aie-matrix/server-world-api exec node --import tsx ./scripts/parse-rules-smoke.mjs
+pnpm --filter @aie-matrix/server-world-api test
 ```
 
-*(Script path is illustrative; add the real script in the implementation PR.)*
+Covers Gram parse fixtures, `evaluateGo` with authored vs permissive rules, asymmetric **A→B / B→B / deny B→A**, and switching rules files without changing map data.
 
-Expected: prints pattern count, exits 0. Non-zero on Gram errors.
+## 2. Configuration
 
-## 2. Asymmetric two-class demo (User Story 3)
+See `server/world-api/README.md` and root `.env.example`.
 
-1. Start the server with the **demo rules** + sample map containing tile classes **A** and **B** matching the rules (see fixture comments in the `.gram` file).
-2. Spawn a ghost on class **A**, `go` into **B**, move **B → B**, then attempt **B → A**.
-3. Assert: first two moves succeed; third returns denied with `code` present and ghost still on **B**.
+```bash
+# Default: permissive (no Gram file required)
+export AIE_MATRIX_RULES_MODE=permissive
 
-**Automation**: Prefer a unit test in `server/world-api` calling `evaluateGo` with a small in-memory `LoadedMap` fixture + parsed rules; optionally extend `ghost-tck` if an HTTP-level check is needed.
+# Authored allow-list (path is repo-relative or absolute)
+export AIE_MATRIX_RULES_MODE=authored
+export AIE_MATRIX_RULES_PATH=server/world-api/src/rules/fixtures/demo-asymmetric.rules.gram
+```
 
-## 3. Permissive mode regression
+Then start the combined server (`pnpm run poc:server` or `pnpm dev`). **Invalid Gram in authored mode** exits the process during startup.
 
-Toggle configuration to **permissive** rules mode. Repeat geometrically valid moves: none should fail with `RULESET_DENY`.
+## 3. Manual MCP check (optional)
 
-## 4. Documentation to update in the implementation PR
-
-- `server/world-api/README.md` — rules file location, env vars, failure modes.
-- `docs/architecture.md` — short subsection on “ruleset vs map” if not already covered elsewhere.
-- Ghost / TCK docs — new or refined `RULESET_DENY` subcodes if introduced.
+With `authored` + `demo-asymmetric.rules.gram`, adopt a ghost on a **Red** tile (see sandbox map: one **Red** cell is placed on the mostly-**Blue** field), then drive `go` per User Story 3 in [spec.md](./spec.md).

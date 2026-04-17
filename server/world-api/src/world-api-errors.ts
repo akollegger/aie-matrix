@@ -14,6 +14,8 @@ export class WorldApiMapIntegrity extends Data.TaggedError("WorldApiError.MapInt
 
 export class WorldApiMovementBlocked extends Data.TaggedError("WorldApiError.MovementBlocked")<{
   readonly message: string;
+  /** Machine-stable code when the failure originated from movement evaluation (e.g. `RULESET_DENY`). */
+  readonly code?: string;
 }> {}
 
 export type WorldApiError =

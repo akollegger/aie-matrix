@@ -2,7 +2,29 @@ export {
   createColyseusBridge,
   type ColyseusWorldBridge,
 } from "./colyseus-bridge.js";
-export { evaluateGo, resolveNeighbor, rulesetAllowsMove } from "./movement.js";
+export { evaluateGo, resolveNeighbor, type GhostMoveContext } from "./movement.js";
+export {
+  MovementRulesService,
+  makeMovementRulesLayer,
+  permissiveRuleset,
+  authoredRuleset,
+  type ParsedRuleset,
+  type RulesMode,
+} from "./rules/movement-rules-service.js";
+export {
+  RuleGraph,
+  isRelationshipPattern,
+  fromNode,
+  toNode,
+  relSubject,
+  subjectLabels,
+  type RelationshipPattern,
+} from "./rules/rule-graph.js";
+export {
+  loadMovementRulesFromEnv,
+  AIE_MATRIX_RULES_MODE_ENV,
+  AIE_MATRIX_RULES_PATH_ENV,
+} from "./rules/load-movement-rules.js";
 export {
   authenticateGhostRequest,
   authenticateGhostRequestEffect,

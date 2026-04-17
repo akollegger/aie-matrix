@@ -21,9 +21,9 @@
 
 **Purpose**: Dependency, directories, and traceability to the governing RFC/spec.
 
-- [ ] T001 Add `@relateby/pattern` to `server/world-api/package.json` and run `pnpm install` from repository root
-- [ ] T002 [P] Create directory `server/world-api/src/rules/` and `server/world-api/src/rules/fixtures/` with a minimal valid starter `server/world-api/src/rules/fixtures/sandbox.rules.gram` (parseable by `Gram.parse`)
-- [ ] T003 Link `proposals/rfc/0002-rule-based-movement.md` and `specs/003-rule-based-movement/plan.md` from `server/world-api/README.md`
+- [X] T001 Add `@relateby/pattern` to `server/world-api/package.json` and run `pnpm install` from repository root
+- [X] T002 [P] Create directory `server/world-api/src/rules/` and `server/world-api/src/rules/fixtures/` with a minimal valid starter `server/world-api/src/rules/fixtures/sandbox.rules.gram` (parseable by `Gram.parse`)
+- [X] T003 Link `proposals/rfc/0002-rule-based-movement.md` and `specs/003-rule-based-movement/plan.md` from `server/world-api/README.md`
 
 **Checkpoint**: Dependency installed, fixture path exists, docs point to proposals.
 
@@ -35,13 +35,13 @@
 
 **⚠️ CRITICAL**: No user story phase work until this checkpoint passes.
 
-- [ ] T004 Add `test` script (Node.js built-in test runner + TypeScript execution via `tsx` or documented equivalent) to `server/world-api/package.json`; add `tsx` to `server/world-api/package.json` `devDependencies` if not already available to that package
-- [ ] T005 Create `MovementRulesService` `Context.Tag` and `ParsedRuleset` / mode types in `server/world-api/src/rules/movement-rules-service.ts`
-- [ ] T006 Implement multi-label helper for map `tileClass` strings in `server/world-api/src/rules/tile-labels.ts` (colon-separated token convention until map schema grows explicit arrays)
-- [ ] T007 Implement `server/world-api/src/rules/gram-rules.ts` — read UTF-8 rules file from disk and `Gram.parse` via `@relateby/pattern` into `Effect` (surface `GramParseError` per package API)
-- [ ] T008 Implement allow-list `GO` matcher in `server/world-api/src/rules/match-go.ts` using parsed `Pattern<Subject>` data (direction + origin/destination label overlap + optional ghost constraints as design permits in v1)
-- [ ] T009 Extend `server/world-api/src/movement.ts` `evaluateGo` to accept rules configuration (permissive vs authored) and invoke matcher; return `GoFailure` with non-empty `code` and `reason` when no rule permits, per `specs/003-rule-based-movement/contracts/ic-003-go-evaluation.md`
-- [ ] T010 Export rule-loading utilities and types needed by orchestration from `server/world-api/src/index.ts`
+- [X] T004 Add `test` script (Node.js built-in test runner + TypeScript execution via `tsx` or documented equivalent) to `server/world-api/package.json`; add `tsx` to `server/world-api/package.json` `devDependencies` if not already available to that package
+- [X] T005 Create `MovementRulesService` `Context.Tag` and `ParsedRuleset` / mode types in `server/world-api/src/rules/movement-rules-service.ts`
+- [X] T006 Implement multi-label helper for map `tileClass` strings in `server/world-api/src/rules/tile-labels.ts` (colon-separated token convention until map schema grows explicit arrays)
+- [X] T007 Implement `server/world-api/src/rules/gram-rules.ts` — read UTF-8 rules file from disk and `Gram.parse` via `@relateby/pattern` into `Effect` (surface `GramParseError` per package API)
+- [X] T008 Implement allow-list `GO` matcher in `server/world-api/src/rules/match-go.ts` using parsed `Pattern<Subject>` data (direction + origin/destination label overlap + optional ghost constraints as design permits in v1)
+- [X] T009 Extend `server/world-api/src/movement.ts` `evaluateGo` to accept rules configuration (permissive vs authored) and invoke matcher; return `GoFailure` with non-empty `code` and `reason` when no rule permits, per `specs/003-rule-based-movement/contracts/ic-003-go-evaluation.md`
+- [X] T010 Export rule-loading utilities and types needed by orchestration from `server/world-api/src/index.ts`
 
 **Checkpoint**: `pnpm --filter @aie-matrix/server-world-api typecheck` passes; matcher unit-testable in isolation.
 
@@ -53,12 +53,12 @@
 
 **Independent Test**: In-memory `LoadedMap` with two tile classes + authored rules: matching step succeeds; non-matching step returns denial with `code` + `reason`; permissive mode allows valid geometry.
 
-- [ ] T011 [US1] Extend `ToolServices` in `server/world-api/src/mcp-server.ts` to include `MovementRulesService`; merge `Layer.succeed(MovementRulesService, snapshot)` in the `servicesLayer` built inside `handleGhostMcpEffect` (alongside `WorldBridgeService` and `RegistryStoreService`)
-- [ ] T012 [US1] Update `goEffect` in `server/world-api/src/mcp-server.ts` to `yield* MovementRulesService` and pass rules snapshot + ghost context fields available from `RegistryStoreService` into `evaluateGo` (or thin wrapper), preserving geometry-first ordering from `contracts/ic-003-go-evaluation.md`
-- [ ] T013 [US1] In `server/src/index.ts`, load rules at startup with `Effect.runPromise` (from exports in T010), read `process.env` for mode + rules path (exact names documented in T018), compose `makeMovementRulesLayer` into `ManagedRuntime.make(Layer.mergeAll(...))`, fail fast on `GramParseError` when mode is authored per `contracts/ic-003-gram-ruleset.md`
-- [ ] T014 [P] [US1] Add `server/world-api/src/rules/gram-rules.test.ts` asserting `Gram.parse` succeeds for `server/world-api/src/rules/fixtures/sandbox.rules.gram`
-- [ ] T015 [US1] Add `server/world-api/src/movement_go_rules.test.ts` with a minimal `LoadedMap` fixture proving an allowed class transition succeeds and a disallowed transition returns `ok: false` with populated `code` and `reason`
-- [ ] T016 [US1] Extend tests in `server/world-api/src/movement_go_rules.test.ts` to cover **permissive** mode: no `RULESET_DENY` (or equivalent) for geometrically valid neighbor steps
+- [X] T011 [US1] Extend `ToolServices` in `server/world-api/src/mcp-server.ts` to include `MovementRulesService`; merge `Layer.succeed(MovementRulesService, snapshot)` in the `servicesLayer` built inside `handleGhostMcpEffect` (alongside `WorldBridgeService` and `RegistryStoreService`)
+- [X] T012 [US1] Update `goEffect` in `server/world-api/src/mcp-server.ts` to `yield* MovementRulesService` and pass rules snapshot + ghost context fields available from `RegistryStoreService` into `evaluateGo` (or thin wrapper), preserving geometry-first ordering from `contracts/ic-003-go-evaluation.md`
+- [X] T013 [US1] In `server/src/index.ts`, load rules at startup with `Effect.runPromise` (from exports in T010), read `process.env` for mode + rules path (exact names documented in T018), compose `makeMovementRulesLayer` into `ManagedRuntime.make(Layer.mergeAll(...))`, fail fast on `GramParseError` when mode is authored per `contracts/ic-003-gram-ruleset.md`
+- [X] T014 [P] [US1] Add `server/world-api/src/rules/gram-rules.test.ts` asserting `Gram.parse` succeeds for `server/world-api/src/rules/fixtures/sandbox.rules.gram`
+- [X] T015 [US1] Add `server/world-api/src/movement_go_rules.test.ts` with a minimal `LoadedMap` fixture proving an allowed class transition succeeds and a disallowed transition returns `ok: false` with populated `code` and `reason`
+- [X] T016 [US1] Extend tests in `server/world-api/src/movement_go_rules.test.ts` to cover **permissive** mode: no `RULESET_DENY` (or equivalent) for geometrically valid neighbor steps
 
 **Checkpoint**: US1 done — MCP `go` uses rules service; automated tests green for authored + permissive paths.
 
@@ -70,9 +70,9 @@
 
 **Independent Test**: Two env configurations (different `AIE_MATRIX_RULES_PATH` or mode) over the same `LoadedMap` fixture yield different permit/deny for at least one step.
 
-- [ ] T017 [US2] Add `server/world-api/src/rules/fixtures/restrictive.rules.gram` with a different allow-list than `server/world-api/src/rules/fixtures/sandbox.rules.gram` (both valid Gram)
-- [ ] T018 [US2] Document `AIE_MATRIX_RULES_PATH` and `AIE_MATRIX_RULES_MODE` (`authored` | `permissive`) in `server/world-api/README.md` and `.env.example` at repository root
-- [ ] T019 [P] [US2] Add `server/world-api/src/rules_mode_switch.test.ts` demonstrating identical map + direction is permitted under one loaded rules file and denied under the other (no map mutation between assertions)
+- [X] T017 [US2] Add `server/world-api/src/rules/fixtures/restrictive.rules.gram` with a different allow-list than `server/world-api/src/rules/fixtures/sandbox.rules.gram` (both valid Gram)
+- [X] T018 [US2] Document `AIE_MATRIX_RULES_PATH` and `AIE_MATRIX_RULES_MODE` (`authored` | `permissive`) in `server/world-api/README.md` and `.env.example` at repository root
+- [X] T019 [P] [US2] Add `server/world-api/src/rules_mode_switch.test.ts` demonstrating identical map + direction is permitted under one loaded rules file and denied under the other (no map mutation between assertions)
 
 **Checkpoint**: US2 done — configuration-driven policy swap is tested and documented.
 
@@ -84,9 +84,9 @@
 
 **Independent Test**: Scripted sequence A→B, B→B succeeds; B→A denied with structured feedback.
 
-- [ ] T020 [P] [US3] Author `server/world-api/src/rules/fixtures/demo-asymmetric.rules.gram` encoding asymmetric transitions consistent with [spec.md](./spec.md) User Story 3
-- [ ] T021 [US3] Add `server/world-api/src/movement_asymmetric.test.ts` implementing the full A/B/B then blocked B→A sequence against `demo-asymmetric.rules.gram`
-- [ ] T022 [US3] Align PoC map tile classes with the demo rules by editing `client/phaser/public/maps/sandbox/color-set.tsx` and `client/phaser/public/maps/sandbox/freeplay.tmj` (then run `client/phaser/scripts/copy-map-assets.mjs` if your workflow requires syncing built assets)
+- [X] T020 [P] [US3] Author `server/world-api/src/rules/fixtures/demo-asymmetric.rules.gram` encoding asymmetric transitions consistent with [spec.md](./spec.md) User Story 3
+- [X] T021 [US3] Add `server/world-api/src/movement_asymmetric.test.ts` implementing the full A/B/B then blocked B→A sequence against `demo-asymmetric.rules.gram`
+- [X] T022 [US3] Align PoC map tile classes with the demo rules by editing `client/phaser/public/maps/sandbox/color-set.tsx` and `client/phaser/public/maps/sandbox/freeplay.tmj` (then run `client/phaser/scripts/copy-map-assets.mjs` if your workflow requires syncing built assets)
 
 **Checkpoint**: US3 done — asymmetric demo is reproducible in tests; manual Phaser path possible when map edits land.
 
@@ -96,11 +96,11 @@
 
 **Purpose**: Contract completeness, architecture notes, quickstart accuracy, regression gates.
 
-- [ ] T023 Extend `WorldApiMovementBlocked` in `server/world-api/src/world-api-errors.ts` with optional stable `code?: string`; update `worldApiErrorToToolPayload` in `server/world-api/src/mcp-server.ts` and `errorToResponse` in `server/src/errors.ts` using `Match.exhaustive` so MCP/HTTP clients receive machine-readable movement denial codes per IC-001
-- [ ] T024 [P] Document enumerable `go` denial codes (including `RULESET_DENY` and any new subcodes) in `shared/types/src/ghostMcp.ts` comments or exported constants per `contracts/ic-003-go-evaluation.md`
-- [ ] T025 [P] Add a short subsection on ruleset vs map geometry to `docs/architecture.md` referencing `server/world-api/src/rules/`
-- [ ] T026 Update `specs/003-rule-based-movement/quickstart.md` with final env var names and the exact `pnpm --filter @aie-matrix/server-world-api test` command once scripts exist
-- [ ] T027 Run `pnpm typecheck` and `pnpm --filter @aie-matrix/server-world-api test` from repository root; fix all failures before merge
+- [X] T023 Extend `WorldApiMovementBlocked` in `server/world-api/src/world-api-errors.ts` with optional stable `code?: string`; update `worldApiErrorToToolPayload` in `server/world-api/src/mcp-server.ts` and `errorToResponse` in `server/src/errors.ts` using `Match.exhaustive` so MCP/HTTP clients receive machine-readable movement denial codes per IC-001
+- [X] T024 [P] Document enumerable `go` denial codes (including `RULESET_DENY` and any new subcodes) in `shared/types/src/ghostMcp.ts` comments or exported constants per `contracts/ic-003-go-evaluation.md`
+- [X] T025 [P] Add a short subsection on ruleset vs map geometry to `docs/architecture.md` referencing `server/world-api/src/rules/`
+- [X] T026 Update `specs/003-rule-based-movement/quickstart.md` with final env var names and the exact `pnpm --filter @aie-matrix/server-world-api test` command once scripts exist
+- [X] T027 Run `pnpm typecheck` and `pnpm --filter @aie-matrix/server-world-api test` from repository root; fix all failures before merge
 
 **Checkpoint**: Feature branch merge-ready — types, tests, and cross-package error mapping consistent.
 
