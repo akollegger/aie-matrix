@@ -26,10 +26,11 @@ const REGISTRY_CORS_HEADERS: Record<string, string> = {
 
 /**
  * Registry HTTP handlers only *require* {@link RegistryStoreService} and {@link WorldBridgeService}.
- * The combined server passes a richer runtime; we type it as `unknown` here to avoid a dependency
- * cycle on every orchestration-layer service tag.
+ * The combined server passes a richer runtime; we type it as `any` here to avoid a dependency
+ * cycle on every orchestration-layer service tag. `unknown` causes an invariance error in Effect v3.
  */
-export type RegistryManagedRuntime = ManagedRuntime.ManagedRuntime<unknown, never>;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type RegistryManagedRuntime = ManagedRuntime.ManagedRuntime<any, never>;
 
 export interface RegistryHttpConfig {
   adoption: AdoptionRuntimeDeps;

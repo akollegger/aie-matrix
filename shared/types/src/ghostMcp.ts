@@ -61,7 +61,7 @@ export interface GoFailure {
   ok: false;
   reason: string;
   /** Machine-stable code for TCK / agents. */
-  code?: string;
+  code: string;
 }
 
 export type GoResult = GoSuccess | GoFailure;

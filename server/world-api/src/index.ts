@@ -22,8 +22,7 @@ export {
 } from "./rules/rule-graph.js";
 export {
   loadMovementRulesFromEnv,
-  AIE_MATRIX_RULES_MODE_ENV,
-  AIE_MATRIX_RULES_PATH_ENV,
+  AIE_MATRIX_RULES_ENV,
 } from "./rules/load-movement-rules.js";
 export {
   authenticateGhostRequest,

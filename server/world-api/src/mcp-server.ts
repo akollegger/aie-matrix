@@ -281,7 +281,7 @@ function goFailureToWorldApi(fromCell: CellId, failure: GoFailure): WorldApiErro
   }
   return new WorldApiMovementBlocked({
     message: failure.reason,
-    ...(failure.code !== undefined ? { code: failure.code } : {}),
+    code: failure.code,
   });
 }
 

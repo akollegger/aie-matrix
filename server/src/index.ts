@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream, statSync } from "node:fs";
 import { createServer } from "node:http";
-import { dirname, extname, join, normalize, sep } from "node:path";
+import { dirname, extname, isAbsolute, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readFile } from "node:fs/promises";
 import { Server, matchMaker } from "@colyseus/core";
@@ -38,7 +38,10 @@ if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const httpPort = Number(process.env.AIE_MATRIX_HTTP_PORT ?? "8787");
-const mapPath = process.env.AIE_MATRIX_MAP ?? join(repoRoot, "maps/sandbox/freeplay.tmj");
+const mapPathRaw = process.env.AIE_MATRIX_MAP;
+const mapPath = mapPathRaw
+  ? (isAbsolute(mapPathRaw) ? mapPathRaw : join(repoRoot, mapPathRaw))
+  : join(repoRoot, "maps/sandbox/freeplay.tmj");
 const mapsRoot = normalize(join(repoRoot, "maps"));
 
 /** PoC-wide CORS for browser clients (Phaser on Vite, etc.). */
@@ -191,7 +194,7 @@ async function main(): Promise<void> {
 
   let movementRules;
   try {
-    movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env));
+    movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
   } catch (e) {
     console.error("[aie-matrix] Failed to load movement rules (Gram / env):", e);
     process.exit(1);
