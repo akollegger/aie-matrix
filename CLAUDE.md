@@ -5,6 +5,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 ## Active Technologies
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@effect/cli`, `@effect/platform-node`, `ink` (v5+), `react` (v18) (004-ghost-cli)
 - None (stateless CLI; reads `.env` via `@aie-matrix/root-env`) (004-ghost-cli)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `h3-js` (new, all affected packages), `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `effect` v3+, `zod` 3 (005-h3-coordinate-system)
+- Neo4j (world graph — cell identity property changes to `h3Index`); in-memory Colyseus schema (005-h3-coordinate-system)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -52,4 +54,5 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 005-h3-coordinate-system: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `h3-js` (new, all affected packages), `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `effect` v3+, `zod` 3
 - 004-ghost-cli: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@effect/cli`, `@effect/platform-node`, `ink` (v5+), `react` (v18)
