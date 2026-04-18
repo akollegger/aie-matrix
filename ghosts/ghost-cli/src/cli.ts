@@ -6,6 +6,7 @@ import { ConfigProvider, Console, Effect, Layer, pipe } from "effect";
 import {
   GhostConfigLive,
   debugOption,
+  interactiveOption,
   jsonOption,
   makeGhostConfigLayer,
   tokenOption,
@@ -22,12 +23,18 @@ import {
   ProtocolError,
   ToolError,
 } from "./services/GhostClientService.js";
+import { startInteractiveRepl } from "./repl/start-interactive.js";
 
 const globals = {
   token: tokenOption,
   url: urlOption,
   debug: debugOption,
   json: jsonOption,
+};
+
+const rootOnly = {
+  ...globals,
+  interactive: interactiveOption,
 };
 
 const toConfig = (p: { token: string; url: string; debug: boolean; json: boolean }): GhostConfig => ({
@@ -99,15 +106,44 @@ const goCmd = Command.make("go", { ...globals, toward: towardArg }, (p) => wrapO
 
 const root = Command.make(
   "ghost-cli",
-  {},
-  () =>
+  rootOnly,
+  (p) =>
     Effect.gen(function* () {
-      if (process.stdout.isTTY) {
-        yield* Console.error("Interactive REPL is not enabled in this build. Use a subcommand (see --help).");
-      } else {
-        yield* Console.error("Non-interactive use requires a subcommand (for example `ghost-cli whoami`).");
+      const cfg = toConfig(p);
+
+      if (p.interactive && !process.stdout.isTTY) {
+        yield* Console.error(
+          "ghost-cli: --interactive requires a terminal (TTY). Example one-shot: `ghost-cli whoami`.",
+        );
+        yield* Effect.sync(() => process.exit(1));
+        return;
       }
-      yield* Effect.sync(() => process.exit(1));
+
+      // FR-016 / RFC Q4: non-TTY defaults to plain-text one-shot `whoami` instead of Ink.
+      if (!process.stdout.isTTY) {
+        yield* wrapOneshot(p, runWhoami);
+        return;
+      }
+
+      // Machine-readable output should not launch the REPL on a TTY.
+      if (cfg.json) {
+        yield* wrapOneshot(p, runWhoami);
+        return;
+      }
+
+      yield* Effect.async<void>((resume) => {
+        void startInteractiveRepl(cfg)
+          .then(() => {
+            process.exit(0);
+            resume(Effect.void);
+          })
+          .catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e);
+            console.error(`ghost-cli: ${msg}`);
+            process.exit(1);
+            resume(Effect.void);
+          });
+      });
     }),
 ).pipe(Command.withSubcommands([whoamiCmd, whereamiCmd, lookCmd, exitsCmd, goCmd]));
 
@@ -119,5 +155,5 @@ export const cli = Command.run(root, {
 const platform = Layer.mergeAll(NodeContext.layer, Layer.setConfigProvider(ConfigProvider.fromEnv()));
 
 export const runMain = (): void => {
-  cli(process.argv).pipe(Effect.provide(platform), NodeRuntime.runMain);
+  cli(process.argv).pipe(Effect.provide(platform), (e) => NodeRuntime.runMain(e, { disableErrorReporting: true }));
 };

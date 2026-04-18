@@ -6,22 +6,25 @@
 
 ## Prerequisites
 
-- Combined server running: `pnpm run poc:server` (from repo root)
-- A ghost token: `pnpm run poc:ghost` (run in a second terminal; note the `ghostId` and `token` in the output)
+- Combined server running: `pnpm run server` (from repo root)
 - Node.js 24, pnpm 10 installed
 
 ---
 
-## Step 1 — Configure credentials
+## Step 1 — Register a ghost and configure credentials
 
 ```bash
-# Option A: environment variables (recommended for one-shot testing)
-export GHOST_TOKEN=<token-from-poc:ghost>
-export WORLD_API_URL=http://127.0.0.1:8787/mcp
+# One-shot: adopts a ghost and writes GHOST_TOKEN (and WORLD_API_URL if unset) to .env
+pnpm run ghost:register
+```
 
-# Option B: add to repo-root .env (persists across shell sessions)
-echo "GHOST_TOKEN=<token>" >> .env
-echo "WORLD_API_URL=http://127.0.0.1:8787/mcp" >> .env
+This writes credentials to `.env` at the repo root. No manual copy-paste needed.
+
+If you prefer to set credentials manually:
+
+```bash
+export GHOST_TOKEN=<token>
+export WORLD_API_URL=http://127.0.0.1:8787/mcp
 ```
 
 ---
@@ -37,7 +40,7 @@ pnpm --filter @aie-matrix/ghost-cli run build
 ## Step 3 — Verify with one-shot commands
 
 ```bash
-# Confirm identity
+# Confirm identity (from repo root you can use: pnpm run ghost:cli -- whoami)
 pnpm --filter @aie-matrix/ghost-cli start -- whoami
 
 # Check current position as JSON
@@ -90,12 +93,12 @@ Test each pre-flight phase by simulating the failure condition:
 # Phase 1: missing token
 unset GHOST_TOKEN
 pnpm --filter @aie-matrix/ghost-cli start -- whoami
-# Expected: "No ghost token. Run `pnpm run poc:ghost`…"
+# Expected: "No ghost token. Run `pnpm run ghost:register`…"
 
 # Phase 2: server not running (stop the server first)
 export GHOST_TOKEN=<any-value>
 pnpm --filter @aie-matrix/ghost-cli start -- whoami
-# Expected: "The world server isn't running at 127.0.0.1:8787. Start it with pnpm run poc:server."
+# Expected: "The world server isn't running at 127.0.0.1:8787. Start it with pnpm run server."
 
 # Phase 1: wrong URL format
 export GHOST_TOKEN=<valid-token>
@@ -111,9 +114,9 @@ pnpm --filter @aie-matrix/ghost-cli start -- whoami
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
 | `GHOST_TOKEN` warning on startup | Token not set | See Step 1 |
-| Connection refused | Server not running | `pnpm run poc:server` |
-| Token rejected | Server was restarted (tokens expire) | `pnpm run poc:ghost` again |
-| Ghost not found | Ghost was evicted after restart | `pnpm run poc:ghost` again |
+| Connection refused | Server not running | `pnpm run server` |
+| Token rejected | Server was restarted (tokens expire) | `pnpm run ghost:register` again |
+| Ghost not found | Ghost was evicted after restart | `pnpm run ghost:register` again |
 | Interactive UI not rendering | stdout is not a TTY | Use one-shot mode or run in a real terminal |
 
 For raw protocol-level debugging:

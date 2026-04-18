@@ -12,7 +12,7 @@ After **`pnpm install`**:
 pnpm run demo
 ```
 
-This runs **`poc:server`**, waits until **`GET /spectator/room`** succeeds, then starts **`poc:client`** and **`random-house`** (build + start). Open the Vite URL from the terminal; **Ctrl+C** stops all three processes. Extra args are forwarded to the ghost process, e.g. **`pnpm run demo -- --ghosts 2`**. Use separate **`pnpm run poc:server`**, **`poc:client`**, and **`poc:ghost`** terminals when you want cleaner logs or to restart one surface without the others.
+This runs **`pnpm run server`** (combined server), waits until **`GET /spectator/room`** succeeds, then starts **`pnpm run spectator`** (Phaser) and **`random-house`** (build + start). Open the Vite URL from the terminal; **Ctrl+C** stops all three processes. Extra args are forwarded to the ghost process, e.g. **`pnpm run demo -- --ghosts 2`**. Use separate **`pnpm run server`**, **`pnpm run spectator`**, and **`pnpm run ghost:house`** terminals when you want cleaner logs or to restart one surface without the others.
 
 ---
 
@@ -33,13 +33,13 @@ This runs **`poc:server`**, waits until **`GET /spectator/room`** succeeds, then
    - **Split terminals** — combined server first (first cold start ~1–3 min while `prestart` builds deps; later starts are faster):
 
      ```bash
-     pnpm run poc:server
+     pnpm run server
      ```
 
      For day-to-day server hacking (watch + reload):
 
      ```bash
-     pnpm run poc:server:dev
+     pnpm run server:dev
      ```
 
 3. **GhostHouse + adoption** (skip if you already used **`pnpm run demo`**, which starts the ghost for you) — either:
@@ -47,7 +47,7 @@ This runs **`poc:server`**, waits until **`GET /spectator/room`** succeeds, then
    - **Script-first** — from a **second** terminal (unless `demo` is running):
 
      ```bash
-     pnpm run poc:ghost
+     pnpm run ghost:house
      ```
 
      Multi-ghost on one process (two caretakers, one house):
@@ -58,7 +58,17 @@ This runs **`poc:server`**, waits until **`GET /spectator/room`** succeeds, then
 
    - **Raw HTTP (registry debugging)** — same sequence `random-house` performs; see [server/registry/README.md](../../server/registry/README.md).
 
-4. **Watch MCP traffic** — `random-house` logs `whoami`, `whereami`, `exits`, and each `go`. Invalid moves surface as tool errors or structured `ok: false` per [contracts/ghost-mcp.md](./contracts/ghost-mcp.md).
+4. **Verify with ghost-cli (optional)** — after adoption, exercise the same MCP tools from a shell (requires the combined server still running):
+
+   ```bash
+   export GHOST_TOKEN=<token from adoption output>
+   export WORLD_API_URL=http://127.0.0.1:8787/mcp
+   pnpm run ghost:cli -- whoami
+   ```
+
+   See [specs/004-ghost-cli/quickstart.md](../004-ghost-cli/quickstart.md) for one-shot commands, JSON output, and the interactive REPL.
+
+5. **Watch MCP traffic** — `random-house` logs `whoami`, `whereami`, `exits`, and each `go`. Invalid moves surface as tool errors or structured `ok: false` per [contracts/ghost-mcp.md](./contracts/ghost-mcp.md).
 
 **Smoke**: At least one `go` succeeds and the ghost keeps moving; if you force an illegal direction, the world rejects without corrupting stored tile (see server logs / MCP response).
 
@@ -68,19 +78,19 @@ This runs **`poc:server`**, waits until **`GET /spectator/room`** succeeds, then
 
 **Goal**: Read-only map + ghost markers synced from Colyseus within ~1s of accepted moves (SC-003).
 
-1. With **`pnpm run poc:server`** (or `poc:server:dev`) already running, open a **third** terminal:
+1. With **`pnpm run server`** (or `pnpm run server:dev`) already running, open a **third** terminal:
 
    ```bash
-   pnpm run poc:client
+   pnpm run spectator
    ```
 
 2. Open the **Local** URL Vite prints (default **http://127.0.0.1:5174/**). There are **no** move controls in the UI.
 
-3. With **`pnpm run poc:ghost`** (or `start -- --ghosts 2`) running, confirm markers move without refreshing.
+3. With **`pnpm run ghost:house`** (or `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2`) running, confirm markers move without refreshing.
 
 4. **Debug hook** — append **`?debug=1`** for extra HUD / logs (`window.__aieSpectatorE2e` for Playwright). See `client/phaser/README.md`.
 
-**Two ghosts**: `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2` **or** two shells each running `pnpm run poc:ghost` (two separate GhostHouse registrations).
+**Two ghosts**: `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2` **or** two shells each running `pnpm run ghost:house` (two separate GhostHouse registrations).
 
 ---
 
@@ -89,14 +99,14 @@ This runs **`poc:server`**, waits until **`GET /spectator/room`** succeeds, then
 **Goal** (SC-001): On a prepared laptop (Node 24+, pnpm, browser), clone → install → server → client → ghost → visible motion without reading `server/` internals.
 
 1. Confirm [Human prerequisites](../../README.md#human-prerequisites-read-before-debugging-code) in the root `README.md` (map files + optional `.env`).
-2. Follow **§1** and **§2** above in order, using **`pnpm run poc:*`** aliases where helpful.
-3. If something fails, check: port **8787** free; map paths under `maps/sandbox/` present; first **`poc:server`** run allowed to finish `prestart` builds.
+2. Follow **§1** and **§2** above in order, using the root scripts in the [main README](../../README.md#typical-commands-repo-root) where helpful.
+3. If something fails, check: port **8787** free; map paths under `maps/sandbox/` present; first **`pnpm run server`** allowed to finish `prestart` builds.
 
 ---
 
 ## 4. Compatibility check (User Story 4)
 
-With the combined server already running (**`pnpm run poc:server`**, **`pnpm run demo`**, etc.):
+With the combined server already running (**`pnpm run server`**, **`pnpm run demo`**, etc.):
 
 ```bash
 pnpm --filter @aie-matrix/ghost-tck test
@@ -117,13 +127,13 @@ Dry-run notes (maintainer, **2026-04-13**, existing dev laptop with warm `pnpm` 
 | Clone | `git clone … && cd aie-matrix` | 1–2 min |
 | Install | `pnpm install` | 2–4 min (network) |
 | All-in-one (optional) | `pnpm run demo` (server + Vite + `random-house`) | first run ~3–6 min incl. builds; Ctrl+C stops all |
-| Server | First `pnpm run poc:server` (includes `prestart` builds) | 2–4 min |
-| Later server | Subsequent `poc:server` / `poc:server:dev` | &lt; 30 s |
-| Client | `pnpm run poc:client` (runs `predev` / `copy-map-assets`) | &lt; 1 min to ready URL |
-| Ghost | `pnpm run poc:ghost` | ~30–60 s including `tsc` |
+| Server | First `pnpm run server` (includes `prestart` builds) | 2–4 min |
+| Later server | Subsequent `pnpm run server` / `pnpm run server:dev` | &lt; 30 s |
+| Client | `pnpm run spectator` (runs `predev` / `copy-map-assets`) | &lt; 1 min to ready URL |
+| Ghost | `pnpm run ghost:house` | ~30–60 s including `tsc` |
 | Browser | Open Vite URL, confirm motion | 1–2 min |
 
-**Gaps addressed during this pass**: Root `README.md` now lists map artifacts and `poc:*` scripts; this file replaces placeholder commands; registry `curl` flow lives in `server/registry/README.md`; **`pnpm --filter @aie-matrix/ghost-tck test`** implements minimal Phase 6 smoke (see [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)); the 15-minute path still does not require it.
+**Gaps addressed during this pass**: Root `README.md` lists map artifacts and repo-root scripts; this file replaces placeholder commands; registry `curl` flow lives in `server/registry/README.md`; **`pnpm --filter @aie-matrix/ghost-tck test`** implements minimal Phase 6 smoke (see [contracts/tck-scenarios.md](./contracts/tck-scenarios.md)); the 15-minute path still does not require it.
 
 ---
 

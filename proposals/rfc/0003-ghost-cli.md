@@ -110,8 +110,8 @@ diagnostics:
 
 | Condition | Message |
 |-----------|---------|
-| `GHOST_TOKEN` absent, appears to be in repo root | "No ghost token. Run `pnpm run poc:ghost` to adopt a ghost and capture its token." |
-| `GHOST_TOKEN` absent, not in repo root | "No ghost token. You appear to be outside the repo root — try `cd <repo>` first, then `pnpm run poc:ghost`." |
+| `GHOST_TOKEN` absent, appears to be in repo root | "No ghost token. Run `pnpm run ghost:register` to adopt a ghost and capture its token." |
+| `GHOST_TOKEN` absent, not in repo root | "No ghost token. You appear to be outside the repo root — try `cd <repo>` first, then `pnpm run ghost:register`." |
 | `WORLD_API_URL` absent, `.env` present | "No world API URL. Add `WORLD_API_URL=http://127.0.0.1:8787/mcp` to your `.env`, or pass `--url`." |
 | URL present but missing `/mcp` suffix | "The URL `<url>` looks like a server base URL. Try `<url>/mcp`." |
 
@@ -122,7 +122,7 @@ before the MCP handshake. Illustrative diagnostics:
 
 | Condition | Message |
 |-----------|---------|
-| `ECONNREFUSED` on default port | "The world server isn't running at `127.0.0.1:8787`. Start it with `pnpm run poc:server` from the repo root." |
+| `ECONNREFUSED` on default port | "The world server isn't running at `127.0.0.1:8787`. Start it with `pnpm run server` from the repo root." |
 | `ECONNREFUSED` on non-default port | "Nothing is listening at `<host>:<port>`. Is the server running on a different port?" |
 | `ENOTFOUND` | "Hostname `<host>` can't be resolved. Check `WORLD_API_URL` for typos." |
 | Server reachable, `/mcp` returns 404 | "The server is running but the MCP endpoint wasn't found at `<url>`. The correct path is usually `/mcp`." |
@@ -133,8 +133,8 @@ Confirms the token is valid and the ghost exists. Illustrative diagnostics:
 
 | Condition | Message |
 |-----------|---------|
-| 401 from world-api | "Your ghost token was rejected. Tokens expire when the server restarts. Re-run `pnpm run poc:ghost` to get a fresh one." |
-| 404 / ghost not found | "The server doesn't recognise this ghost. It may have been evicted after a server restart. Re-adopt with `pnpm run poc:ghost`." |
+| 401 from world-api | "Your ghost token was rejected. Tokens expire when the server restarts. Run `pnpm run ghost:register` again to get a fresh one." |
+| 404 / ghost not found | "The server doesn't recognise this ghost. It may have been evicted after a server restart. Re-adopt with `pnpm run ghost:register`." |
 | Handshake succeeds | Pre-flight passes silently; CLI proceeds. |
 
 ### Failure taxonomy and self-healing stance
@@ -232,8 +232,8 @@ The status strip transitions on connection state changes:
 
 ```
 ◌ RECONNECTING   lost connection — retrying in 3s   (attempt 2 of 5)
-✗ DISCONNECTED   server unreachable — start with: pnpm run poc:server
-⚠ TOKEN EXPIRED  re-adopt to continue: pnpm run poc:ghost
+✗ DISCONNECTED   server unreachable — start with: pnpm run server
+⚠ TOKEN EXPIRED  re-adopt to continue: pnpm run ghost:register
 ```
 
 Panels:
@@ -285,8 +285,8 @@ established in ADR-0002 and documented in `docs/guides/effect-ts.md`.
 
 ### Demo scenario
 
-With the combined server running (`pnpm run poc:server`) and a ghost already adopted
-(e.g. via `pnpm run poc:ghost` in another shell, which logs the token and URL):
+With the combined server running (`pnpm run server`) and a ghost already adopted
+(e.g. via `pnpm run ghost:register`, which writes credentials to `.env`, or via `pnpm run ghost:house` during development):
 
 ```bash
 export GHOST_TOKEN=<token-from-adoption>
@@ -320,10 +320,9 @@ and resolving at least one pre-flight diagnostic.
 ## Open Questions
 
 1. **Token capture in the quickstart.** Pre-flight can explain that a token is
-   needed and how to get one, but `poc:ghost` currently logs the token mixed with
-   other output. Should a `poc:ghost` variant write the token to `.env`
-   automatically? This affects how precise the phase-1 remediation message can be
-   and whether the demo scenario above can be simplified to "run one command."
+   needed and how to get one. `pnpm run ghost:register` writes `GHOST_TOKEN` to `.env`;
+   `pnpm run ghost:house` still emits adoption output in-process. Should remediation
+   messages prefer one path over the other?
 
 2. **Auto-refresh cadence.** Should the World View and Ghost panels poll for updates
    while the ghost is idle (reflecting other occupants arriving or leaving), or
@@ -341,9 +340,9 @@ and resolving at least one pre-flight diagnostic.
    rather than crashing. This is likely a small implementation concern but worth
    surfacing as a named behaviour.
 
-5. **`poc:cli` root alias.** Should a `poc:cli` alias be added to the root
-   `package.json` alongside `poc:ghost` and `poc:server`, or is
-   `pnpm --filter @aie-matrix/ghost-cli start` sufficient for the PoC phase?
+5. **Root CLI script.** Resolved for the PoC phase: **`pnpm run ghost:cli`** in root
+   `package.json` forwards to **`pnpm --filter @aie-matrix/ghost-cli start`** (same as
+   calling the package script directly).
 
 ## Alternatives
 

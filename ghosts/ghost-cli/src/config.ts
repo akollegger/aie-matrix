@@ -32,3 +32,9 @@ export const urlOption = Options.text("url").pipe(
 export const debugOption = Options.boolean("debug", { ifPresent: true }).pipe(Options.withDefault(false));
 
 export const jsonOption = Options.boolean("json", { ifPresent: true }).pipe(Options.withDefault(false));
+
+/** Root command only — enter the Ink REPL when set, or when no subcommand is given on a TTY. */
+export const interactiveOption = Options.boolean("interactive", { ifPresent: true }).pipe(
+  Options.withAlias("i"),
+  Options.withDefault(false),
+);

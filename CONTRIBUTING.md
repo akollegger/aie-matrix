@@ -50,8 +50,10 @@ This adds a `Signed-off-by` line certifying that you have the right to submit th
 | Command | When to use |
 |---------|-------------|
 | `pnpm run demo` | One terminal: combined server + Vite spectator + `random-house` |
-| `pnpm run poc:server` / `pnpm run poc:server:dev` | Server only (production-like `start` vs `tsx watch`) |
-| `pnpm run poc:client` / `pnpm run poc:ghost` | Phaser or ghost alone (multi-shell debugging) |
+| `pnpm run server` / `pnpm run server:dev` | Server only (production-like `start` vs `tsx watch`) |
+| `pnpm run spectator` / `pnpm run ghost:house` | Phaser spectator or ghost walker alone (multi-shell debugging) |
+| `pnpm run ghost:register` | One-shot: adopt a ghost and write `GHOST_TOKEN` to `.env` |
+| `pnpm run ghost:cli` | Interactive ghost CLI (or one-shot: `ghost:cli -- whoami`) |
 | `pnpm run test:e2e` | Playwright (CI-friendly autostart; needs Chromium via Playwright install); `pnpm run test:e2e:autostart` is equivalent |
 | `pnpm run test:tck` | Minimal `ghosts/tck` smoke — **start the server first** |
 

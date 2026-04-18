@@ -2,6 +2,8 @@ import { Data } from "effect";
 
 export class EnvMissingToken extends Data.TaggedError("PreFlight.EnvMissingToken")<{
   readonly inRepoRoot: boolean;
+  /** Present when `inRepoRoot` is false but a workspace root was found (for `cd` in diagnostics). */
+  readonly workspaceRoot?: string;
 }> {}
 
 export class EnvMissingUrl extends Data.TaggedError("PreFlight.EnvMissingUrl")<{
@@ -24,6 +26,8 @@ export class HostNotFound extends Data.TaggedError("PreFlight.HostNotFound")<{
 
 export class McpEndpointNotFound extends Data.TaggedError("PreFlight.McpEndpointNotFound")<{
   readonly url: string;
+  /** HTTP status from `GET` on the server origin (`/`), if the probe completed before MCP 404. */
+  readonly originStatus?: number;
 }> {}
 
 export class TokenRejected extends Data.TaggedError("PreFlight.TokenRejected")<{}> {}

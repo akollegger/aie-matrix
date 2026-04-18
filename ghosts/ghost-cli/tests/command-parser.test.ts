@@ -17,6 +17,21 @@ describe("parseReplCommand", () => {
     expect(parseReplCommand("look here")).toEqual({ _tag: "look", at: "here" });
     expect(parseReplCommand("look around")).toEqual({ _tag: "look", at: "around" });
     expect(parseReplCommand("look ne")).toEqual({ _tag: "look", at: "ne" });
+    expect(parseReplCommand("LOOK NW")).toEqual({ _tag: "look", at: "nw" });
+  });
+
+  it("parses look for every face", () => {
+    const faces = ["n", "s", "ne", "nw", "se", "sw"] as const;
+    for (const f of faces) {
+      expect(parseReplCommand(`look ${f}`)).toEqual({ _tag: "look", at: f });
+    }
+  });
+
+  it("parses go with every face", () => {
+    const faces = ["n", "s", "ne", "nw", "se", "sw"] as const;
+    for (const f of faces) {
+      expect(parseReplCommand(`go ${f}`)).toEqual({ _tag: "go", toward: f });
+    }
   });
 
   it("parses go with a face", () => {
@@ -31,5 +46,9 @@ describe("parseReplCommand", () => {
   it("returns unknown for empty input", () => {
     expect(parseReplCommand("")).toEqual({ _tag: "unknown", raw: "" });
     expect(parseReplCommand("   ")).toEqual({ _tag: "unknown", raw: "" });
+  });
+
+  it("returns unknown for stray text", () => {
+    expect(parseReplCommand("xyzzy")).toEqual({ _tag: "unknown", raw: "xyzzy" });
   });
 });

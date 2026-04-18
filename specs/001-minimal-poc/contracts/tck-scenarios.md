@@ -4,7 +4,7 @@
 
 ## PoC minimal subset (normative for Phase 6)
 
-Run against a **already-running** combined server (e.g. `pnpm run demo` or `pnpm run poc:server`). The TCK performs **only**:
+Run against a **already-running** combined server (e.g. `pnpm run demo` or `pnpm run server`). The TCK performs **only**:
 
 1. **Reachability** — `GET` `http://127.0.0.1:8787/spectator/room` (or configurable base) returns **200** with JSON including a room id (same URL quickstart uses as “server up”).
 2. **Registry** — `POST /registry/caretakers`, `POST /registry/houses`, `POST /registry/adopt` using the same JSON shapes as `ghosts/random-house`; obtain `credential.worldApiBaseUrl` and `credential.token`.

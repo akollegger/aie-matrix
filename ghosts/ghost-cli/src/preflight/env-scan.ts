@@ -26,14 +26,15 @@ function findWorkspaceRoot(start: string): string | undefined {
 export function detectRepoContext(cwd: string): {
   readonly inRepoRoot: boolean;
   readonly hasEnvFile: boolean;
+  readonly workspaceRoot: string | undefined;
 } {
   const workspace = findWorkspaceRoot(cwd);
   if (!workspace) {
-    return { inRepoRoot: false, hasEnvFile: false };
+    return { inRepoRoot: false, hasEnvFile: false, workspaceRoot: undefined };
   }
   const hasEnvFile = existsSync(join(workspace, ".env"));
   const inRepoRoot = resolve(cwd) === resolve(workspace);
-  return { inRepoRoot, hasEnvFile };
+  return { inRepoRoot, hasEnvFile, workspaceRoot: workspace };
 }
 
 function urlHasMcpSuffix(url: string): boolean {
@@ -57,7 +58,12 @@ export const runEnvScan = (
     const ctx = detectRepoContext(cwd);
     const token = input.token.trim();
     if (!token) {
-      return yield* Effect.fail(new EnvMissingToken({ inRepoRoot: ctx.inRepoRoot }));
+      return yield* Effect.fail(
+        new EnvMissingToken({
+          inRepoRoot: ctx.inRepoRoot,
+          workspaceRoot: ctx.inRepoRoot ? undefined : ctx.workspaceRoot,
+        }),
+      );
     }
     const url = input.url.trim();
     if (!url) {

@@ -181,11 +181,11 @@ The TCK validates **published registry + MCP** behavior against a **live** combi
 Happy path aligned with the **root** `README.md` and [`specs/001-minimal-poc/quickstart.md`](../specs/001-minimal-poc/quickstart.md):
 
 1. `git clone` → **`pnpm install`** at the repo root (`corepack enable` once if you rely on the pinned pnpm).
-2. **`pnpm run demo`** — one terminal starts the combined server, Phaser (Vite), and `random-house` (see `scripts/demo.mjs`). Alternatively use **`pnpm run poc:server`**, **`pnpm run poc:client`**, and **`pnpm run poc:ghost`** in separate shells for debugging.
+2. **`pnpm run demo`** — one terminal starts the combined server, Phaser (Vite), and `random-house` (see `scripts/demo.mjs`). Alternatively use **`pnpm run server`**, **`pnpm run spectator`**, and **`pnpm run ghost:house`** in separate shells for debugging.
 3. Open the **Vite “Local”** URL (default **http://127.0.0.1:5174/** or `http://localhost:5174/`). Map renders; ghost markers appear once the house has adopted.
 4. Optional smoke: with the server still up, **`pnpm run test:tck`** exercises the minimal registry + **`whereami`** gate.
 
-**Two ghosts:** `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2` (one house, two caretakers) or two separate `pnpm run poc:ghost` processes (two houses).
+**Two ghosts:** `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2` (one house, two caretakers) or two separate `pnpm run ghost:house` processes (two houses).
 
 ### Data Flow
 

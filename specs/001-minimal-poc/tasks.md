@@ -118,7 +118,7 @@ Monorepo layout per [plan.md](./plan.md): `server/`, `client/phaser/`, `shared/t
 ### Implementation for User Story 4
 
 - [x] T029 [US4] Single-file minimal runner at `ghosts/tck/src/index.ts`: sequential steps only (no separate `runner.ts` unless this file grows unwieldy); labeled stderr (or stdout) per step; **non-zero exit** on first failure; wire `pnpm --filter @aie-matrix/ghost-tck test` in `ghosts/tck/package.json`.
-- [x] T030 [P] [US4] `ghosts/tck/README.md` — prerequisites (`pnpm run demo` or `pnpm run poc:server`), exact `pnpm`/`node` command, env vars (`AIE_MATRIX_REGISTRY_BASE` default), and an explicit **“out of scope for PoC”** list (invalid-move suite, python drift client, multi-house / user-journey TCK, alternate-house CLI flags).
+- [x] T030 [P] [US4] `ghosts/tck/README.md` — prerequisites (`pnpm run demo` or `pnpm run server`), exact `pnpm`/`node` command, env vars (`AIE_MATRIX_REGISTRY_BASE` default), and an explicit **“out of scope for PoC”** list (invalid-move suite, python drift client, multi-house / user-journey TCK, alternate-house CLI flags).
 
 **Deferred (no tasks in Phase 6)**: `ghosts/python-client` MCP drift script; rich step runner module; catalog/auth/user-initiated adoption automation—pick up in a later RFC or Phase 7+ when surfaces exist.
 

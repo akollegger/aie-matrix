@@ -97,7 +97,7 @@ a token, a stopped server, an expired token, or a malformed URL gets the exact f
 ```bash
 # Server stopped, valid token:
 pnpm --filter @aie-matrix/ghost-cli start -- whoami
-# stderr contains "pnpm run poc:server", exits 2
+# stderr contains "pnpm run server", exits 2
 
 # Wrong URL format:
 WORLD_API_URL=http://127.0.0.1:8787 pnpm --filter @aie-matrix/ghost-cli start -- whoami
@@ -105,15 +105,15 @@ WORLD_API_URL=http://127.0.0.1:8787 pnpm --filter @aie-matrix/ghost-cli start --
 
 # Expired token (restart server without re-adopting):
 pnpm --filter @aie-matrix/ghost-cli start -- whoami
-# stderr contains "pnpm run poc:ghost", exits 3
+# stderr contains "pnpm run ghost:register", exits 3
 ```
 
 ### Implementation for User Story 2
 
-- [ ] T022 [US2] Expand `ghosts/ghost-cli/src/preflight/reachability.ts` — distinguish: `ECONNREFUSED` on default port 8787 ("world server isn't running") vs non-default port ("nothing listening on `<host>:<port>`"), `ENOTFOUND` ("hostname can't be resolved"), 200 from server but 404 from `/mcp` endpoint ("server running but MCP path not found")
-- [ ] T023 [US2] Expand `ghosts/ghost-cli/src/preflight/env-scan.ts` — `EnvMissingToken` with `inRepoRoot: true` produces repo-specific message; `EnvMissingToken` with `inRepoRoot: false` notes to `cd <repo>` first; `EnvMissingUrl` with `hasEnvFile: true` instructs adding `WORLD_API_URL` to `.env`
-- [ ] T024 [US2] Expand `ghosts/ghost-cli/src/diagnostics.ts` — verify all nine `PreFlightError` variants have a `remedy` string that is a single shell command or a single file edit instruction (not a list of possibilities); add the `PreFlight.UnknownNetworkError` informative-blocking variant that states what was observed and directs to server logs
-- [ ] T025 [P] [US2] Expand `ghosts/ghost-cli/tests/diagnostics.test.ts` — add assertions for the four new `reachability.ts` variants and the two expanded `env-scan.ts` variants; verify `remedy` is non-empty for all guided-resolution types; verify `remedy` is empty for `UnknownNetworkError`
+- [X] T022 [US2] Expand `ghosts/ghost-cli/src/preflight/reachability.ts` — distinguish: `ECONNREFUSED` on default port 8787 ("world server isn't running") vs non-default port ("nothing listening on `<host>:<port>`"), `ENOTFOUND` ("hostname can't be resolved"), 200 from server but 404 from `/mcp` endpoint ("server running but MCP path not found")
+- [X] T023 [US2] Expand `ghosts/ghost-cli/src/preflight/env-scan.ts` — `EnvMissingToken` with `inRepoRoot: true` produces repo-specific message; `EnvMissingToken` with `inRepoRoot: false` notes to `cd <repo>` first; `EnvMissingUrl` with `hasEnvFile: true` instructs adding `WORLD_API_URL` to `.env`
+- [X] T024 [US2] Expand `ghosts/ghost-cli/src/diagnostics.ts` — verify all nine `PreFlightError` variants have a `remedy` string that is a single shell command or a single file edit instruction (not a list of possibilities); add the `PreFlight.UnknownNetworkError` informative-blocking variant that states what was observed and directs to server logs
+- [X] T025 [P] [US2] Expand `ghosts/ghost-cli/tests/diagnostics.test.ts` — add assertions for the four new `reachability.ts` variants and the two expanded `env-scan.ts` variants; verify `remedy` is non-empty for all guided-resolution types; verify `remedy` is empty for `UnknownNetworkError`
 
 **Checkpoint**: All three smoke tests above pass; `tests/diagnostics.test.ts` exits 0 with all nine variants covered
 
@@ -137,18 +137,18 @@ pnpm --filter @aie-matrix/ghost-cli start
 
 ### Implementation for User Story 3
 
-- [ ] T026 [US3] Create `ghosts/ghost-cli/src/repl/repl-state.ts` — Effect `Ref` declarations for `connectionStateRef`, `identityRef`, `positionRef`, `tileViewRef`, `exitsRef`, `logRef`; `ReplCommand` discriminated union type and `parseReplCommand(input: string): ReplCommand` pure function
-- [ ] T027 [P] [US3] Create `ghosts/ghost-cli/src/repl/StatusStrip.tsx` — Ink component reading `connectionStateRef` via a `useEffect`/polling adapter; renders color-coded strip with four states (Connected/Reconnecting/Disconnected/TokenExpired) per data-model.md
-- [ ] T028 [P] [US3] Create `ghosts/ghost-cli/src/repl/WorldView.tsx` — renders `tileViewRef` prose; shows placeholder "looking…" before first `look here` result
-- [ ] T029 [P] [US3] Create `ghosts/ghost-cli/src/repl/GhostPanel.tsx` — renders `identityRef` (ghostId) and `positionRef` (tileId, col, row); shows "—" before first `whereami` result
-- [ ] T030 [P] [US3] Create `ghosts/ghost-cli/src/repl/ExitsPanel.tsx` — renders `exitsRef` exit list; shows "none" when empty
-- [ ] T031 [P] [US3] Create `ghosts/ghost-cli/src/repl/LogPanel.tsx` — renders last N entries from `logRef` where N fits terminal height; windowed scrolling; never shows raw error traces
-- [ ] T032 [P] [US3] Create `ghosts/ghost-cli/src/repl/InputBar.tsx` — Ink `TextInput` component; grays out with "(reconnecting…)" label while `connectionState` is not `Connected`; queues input during reconnect and replays on reconnect
-- [ ] T033 [US3] Create `ghosts/ghost-cli/src/repl/App.tsx` — Ink root component composing all panels in the layout from RFC-0003 (status strip top, left/right split, log strip, input bar); receives all Refs as props; wires up MCP command dispatch loop
-- [ ] T034 [US3] Implement REPL command dispatch in `src/repl/App.tsx` — on submit, `parseReplCommand` → dispatch to appropriate `GhostClientService.callTool` call → update relevant Refs → append `LogEntry`; after any `go` command, auto-call `look here` and `exits` to refresh panels; unknown command appends help text to log
-- [ ] T035 [US3] Implement reconnect fiber in `src/cli.ts` interactive branch — Effect fiber watches `connectionStateRef`; on `NetworkError`, updates state to `Reconnecting`, retries with `Schedule.exponential("1 second").pipe(Schedule.upTo("30 seconds"))`; re-runs pre-flight phases 2+3 before resuming; sets `TokenExpired` state on `PreFlight.TokenRejected`
-- [ ] T036 [US3] Wire interactive mode into `src/cli.ts` — when no subcommand and `process.stdout.isTTY` is true, render `<App>` via Ink `render()`; when `isTTY` is false, print one-line message and fall through to one-shot mode
-- [ ] T037 [P] [US3] Update `ghosts/ghost-cli/tests/command-parser.test.ts` — finalize tests now that `parseReplCommand` is implemented: all vocabulary words, all face directions, `look around`, `exit`/`quit`, empty string, unknown input
+- [X] T026 [US3] Create `ghosts/ghost-cli/src/repl/repl-state.ts` — Effect `Ref` declarations for `connectionStateRef`, `identityRef`, `positionRef`, `tileViewRef`, `exitsRef`, `logRef`; `ReplCommand` discriminated union type and `parseReplCommand(input: string): ReplCommand` pure function
+- [X] T027 [P] [US3] Create `ghosts/ghost-cli/src/repl/StatusStrip.tsx` — Ink component reading `connectionStateRef` via a `useEffect`/polling adapter; renders color-coded strip with four states (Connected/Reconnecting/Disconnected/TokenExpired) per data-model.md
+- [X] T028 [P] [US3] Create `ghosts/ghost-cli/src/repl/WorldView.tsx` — renders `tileViewRef` prose; shows placeholder "looking…" before first `look here` result
+- [X] T029 [P] [US3] Create `ghosts/ghost-cli/src/repl/GhostPanel.tsx` — renders `identityRef` (ghostId) and `positionRef` (tileId, col, row); shows "—" before first `whereami` result
+- [X] T030 [P] [US3] Create `ghosts/ghost-cli/src/repl/ExitsPanel.tsx` — renders `exitsRef` exit list; shows "none" when empty
+- [X] T031 [P] [US3] Create `ghosts/ghost-cli/src/repl/LogPanel.tsx` — renders last N entries from `logRef` where N fits terminal height; windowed scrolling; never shows raw error traces
+- [X] T032 [P] [US3] Create `ghosts/ghost-cli/src/repl/InputBar.tsx` — Ink `TextInput` component; grays out with "(reconnecting…)" label while `connectionState` is not `Connected`; queues input during reconnect and replays on reconnect
+- [X] T033 [US3] Create `ghosts/ghost-cli/src/repl/App.tsx` — Ink root component composing all panels in the layout from RFC-0003 (status strip top, left/right split, log strip, input bar); receives all Refs as props; wires up MCP command dispatch loop
+- [X] T034 [US3] Implement REPL command dispatch in `src/repl/App.tsx` — on submit, `parseReplCommand` → dispatch to appropriate `GhostClientService.callTool` call → update relevant Refs → append `LogEntry`; after any `go` command, auto-call `look here` and `exits` to refresh panels; unknown command appends help text to log
+- [X] T035 [US3] Implement reconnect fiber in `src/cli.ts` interactive branch — Effect fiber watches `connectionStateRef`; on `NetworkError`, updates state to `Reconnecting`, retries with `Schedule.exponential("1 second").pipe(Schedule.upTo("30 seconds"))`; re-runs pre-flight phases 2+3 before resuming; sets `TokenExpired` state on `PreFlight.TokenRejected`
+- [X] T036 [US3] Wire interactive mode into `src/cli.ts` — when no subcommand and `process.stdout.isTTY` is true, render `<App>` via Ink `render()`; when `isTTY` is false, print one-line message and fall through to one-shot mode
+- [X] T037 [P] [US3] Update `ghosts/ghost-cli/tests/command-parser.test.ts` — finalize tests now that `parseReplCommand` is implemented: all vocabulary words, all face directions, `look around`, `exit`/`quit`, empty string, unknown input
 
 **Checkpoint**: Interactive REPL smoke test passes; `pnpm --filter @aie-matrix/ghost-cli run test` exits 0
 
@@ -158,13 +158,13 @@ pnpm --filter @aie-matrix/ghost-cli start
 
 **Purpose**: Documentation updates and root alias. Resolves RFC-0003 open questions 1, 3, 5.
 
-- [ ] T038 [P] Update `ghosts/README.md` — add `ghost-cli` row to packages table: `| [ghost-cli/](./ghost-cli/) | @aie-matrix/ghost-cli | Interactive REPL and one-shot CLI for human-operated ghost debugging. |`
-- [ ] T039 [P] Update root `package.json` — add `"poc:cli": "pnpm --filter @aie-matrix/ghost-cli start"` to scripts (resolves RFC-0003 Q5)
-- [ ] T040 [P] Update `docs/project-overview.md` — add `ghost-cli` under debugging / developer tools section noting one-shot and interactive REPL modes
-- [ ] T041 [P] Update `specs/001-minimal-poc/quickstart.md` — add "Verify with ghost-cli" step after the ghost adoption step, referencing `pnpm run poc:cli whoami`
-- [ ] T042 Run full quickstart.md validation: start server (`pnpm run poc:server`), adopt ghost (`pnpm run poc:ghost`), run each one-shot command, launch interactive REPL, confirm all steps from `specs/004-ghost-cli/quickstart.md` succeed
-- [ ] T043 Run `pnpm typecheck` across all workspace packages and confirm exit 0
-- [ ] T044 Run `pnpm --filter @aie-matrix/ghost-cli run test` and confirm all test suites pass
+- [X] T038 [P] Update `ghosts/README.md` — add `ghost-cli` row to packages table: `| [ghost-cli/](./ghost-cli/) | @aie-matrix/ghost-cli | Interactive REPL and one-shot CLI for human-operated ghost debugging. |`
+- [X] T039 [P] Update root `package.json` — add `ghost:cli` (RFC-0003 Q5)
+- [X] T040 [P] Update `docs/project-overview.md` — add `ghost-cli` under debugging / developer tools section noting one-shot and interactive REPL modes
+- [X] T041 [P] Update `specs/001-minimal-poc/quickstart.md` — add "Verify with ghost-cli" step after the ghost adoption step, referencing `pnpm run ghost:cli -- whoami`
+- [X] T042 Run full quickstart.md validation: start server (`pnpm run server`), adopt or run a ghost (`pnpm run ghost:register` / `pnpm run ghost:house` as appropriate), run each one-shot command, launch interactive REPL, confirm all steps from `specs/004-ghost-cli/quickstart.md` succeed
+- [X] T043 Run `pnpm typecheck` across all workspace packages and confirm exit 0
+- [X] T044 Run `pnpm --filter @aie-matrix/ghost-cli run test` and confirm all test suites pass
 
 ---
 
@@ -232,7 +232,7 @@ Task T033: "App.tsx root component"
 1. Phase 1: Scaffold the package
 2. Phase 2: Build GhostClientService + pre-flight types
 3. Phase 3: All five one-shot commands + tests
-4. **STOP and VALIDATE**: `pnpm run poc:cli whoami` works; JSON flag works; missing token gives a message
+4. **STOP and VALIDATE**: `pnpm run ghost:cli -- whoami` works; JSON flag works; missing token gives a message
 5. This is already useful for spot-inspection and shell scripting
 
 ### Incremental Delivery

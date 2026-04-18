@@ -13,7 +13,7 @@ Replace the permissive `rulesetAllowsMove` stub in `server/world-api` with **aut
 **Primary Dependencies**: `effect` ^3.21 (existing); **`@relateby/pattern` ^0.4.0** (adds `Gram`, `Pattern`, `Subject`, graph helpers; peer `effect >= 3`)  
 **Storage**: Rules as **repository files** (`.rules.gram`); no new database for this slice  
 **Testing**: Add **`node:test`** (built-in) or minimal test runner under `server/world-api` for `evaluateGo` fixtures; optional TCK extension later  
-**Target Platform**: Combined server / local PoC (`pnpm run poc:server`)  
+**Target Platform**: Combined server / local PoC (`pnpm run server`)  
 **Project Type**: Monorepo package enhancement (`@aie-matrix/server-world-api`)  
 **Performance Goals**: Adjacent `go` remains interactive; rulesets are small (dozens to hundreds of edges); target consistent with [spec.md](./spec.md) SC-004  
 **Constraints**: No edits inside `server/colyseus` core for `GO` (per RFC); Effect `R` wiring must satisfy new services in `ManagedRuntime` when integrated  

@@ -51,8 +51,8 @@ ghost-cli whoami > /dev/null
 case $? in
   0) echo "Ghost is online" ;;
   1) echo "Configuration error — check GHOST_TOKEN and WORLD_API_URL" ;;
-  2) echo "Server not running — start with pnpm run poc:server" ;;
-  3) echo "Authentication failure — re-adopt with pnpm run poc:ghost" ;;
+  2) echo "Server not running — start with pnpm run server" ;;
+  3) echo "Authentication failure — re-adopt with pnpm run ghost:register" ;;
 esac
 ```
 

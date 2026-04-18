@@ -6,9 +6,11 @@ import { runPreflight } from "../preflight/index.js";
 import type { PreFlightError } from "../preflight/errors.js";
 import {
   GhostClientService,
+  NetworkError,
   type GhostClientError,
   type GhostToolName,
 } from "../services/GhostClientService.js";
+import { parseExitList, parseTileView } from "../repl/mcp-result.js";
 
 const FACES = new Set(["n", "s", "ne", "nw", "se", "sw"]);
 
@@ -40,11 +42,43 @@ function formatWhereami(raw: unknown): string {
 }
 
 function formatLook(raw: unknown): string {
+  if (raw === null || raw === undefined) {
+    return "(nothing to see)";
+  }
+  if (typeof raw === "string") {
+    return raw;
+  }
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item, i) => {
+        const block = formatLook(item);
+        return raw.length > 1 ? `— neighbour ${i + 1} —\n${block}` : block;
+      })
+      .join("\n\n");
+  }
+  if (typeof raw === "object") {
+    const tv = parseTileView(raw);
+    if (tv) {
+      return tv.prose;
+    }
+  }
   return JSON.stringify(raw, null, 2);
 }
 
 function formatExits(raw: unknown): string {
-  return JSON.stringify(raw, null, 2);
+  const parsed = parseExitList(raw);
+  if (parsed === null || !parsed.exits.length) {
+    return "No traversable exits from here.";
+  }
+  return ["Exits:", ...parsed.exits.map((e) => `  ${e.toward} → ${e.tileId}`)].join("\n");
+}
+
+export function isGoStructuredFailure(raw: unknown): boolean {
+  if (!raw || typeof raw !== "object") {
+    return false;
+  }
+  const o = raw as Record<string, unknown>;
+  return "ok" in o && o.ok === false;
 }
 
 function formatGo(raw: unknown): string {
@@ -88,17 +122,43 @@ export const runOneshotTool = (input: {
     const cfg = input.config;
     const svc = yield* GhostClientService;
 
+    const callOnce = () =>
+      svc.callTool(input.tool, input.args ?? {}).pipe(
+        Effect.tapErrorCause((c) =>
+          cfg.debug ? Console.error(`[ghost-cli debug] cause:\n${Cause.pretty(c)}`) : Effect.void,
+        ),
+      );
+
     const raw = yield* runPreflight(cfg).pipe(
       Effect.flatMap(() =>
-        svc.callTool(input.tool, input.args ?? {}).pipe(
-          Effect.tapErrorCause((c) =>
-            cfg.debug ? Console.error(`[ghost-cli debug] cause:\n${Cause.pretty(c)}`) : Effect.void,
-          ),
-        ),
+        Effect.gen(function* () {
+          const first = yield* callOnce().pipe(Effect.either);
+          if (first._tag === "Right") {
+            return first.right;
+          }
+          if (first.left instanceof NetworkError) {
+            const second = yield* callOnce().pipe(Effect.either);
+            if (second._tag === "Right") {
+              return second.right;
+            }
+            return yield* Effect.fail(second.left);
+          }
+          return yield* Effect.fail(first.left);
+        }),
       ),
     );
 
     yield* emitDebug(cfg, "raw tool result", raw);
+
+    if (input.tool === "go" && isGoStructuredFailure(raw)) {
+      if (cfg.json) {
+        yield* Console.log(JSON.stringify(raw));
+      } else {
+        yield* Console.log(formatProse(input.tool, raw));
+      }
+      yield* Effect.sync(() => process.exit(1));
+      return;
+    }
 
     if (cfg.json) {
       yield* Console.log(JSON.stringify(raw));

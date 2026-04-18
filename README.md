@@ -47,7 +47,7 @@ Goal: combined server + Phaser spectator + reference ghost moving on the sample 
 2.  **`pnpm run demo --ghosts 5`** 
 3. open the Vite **Local** URL from the log (often **http://localhost:5174/** or **http://127.0.0.1:5174/**). 
 
-One terminal; **Ctrl+C** stops server, client, and 5 ghosts. Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run poc:server`**, **`pnpm run poc:client`**, and **`pnpm run poc:ghost`** shells instead.
+One terminal; **Ctrl+C** stops server, spectator, and 5 ghosts. Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run server`**, **`pnpm run spectator`**, and **`pnpm run ghost:house`** shells instead.
 
 ### Human prerequisites (read before debugging code)
 
@@ -64,15 +64,17 @@ One terminal; **Ctrl+C** stops server, client, and 5 ghosts. Orchestration lives
 | Command | Purpose |
 |---------|---------|
 | `pnpm install` | Install all workspace dependencies |
-| `pnpm dev` | **Watch-mode combined server** (same as `pnpm run poc:server:dev`): runs `tsx watch` on `server/src/index.ts` after workspace prebuilds; HTTP + Colyseus on **http://127.0.0.1:8787** |
-| `pnpm run demo` | **All-in-one PoC**: `poc:server` → wait for `/spectator/room` → `poc:client` + `poc:ghost` in parallel (single terminal; Ctrl+C stops children) |
+| `pnpm dev` | **Watch-mode combined server** (same as `pnpm run server:dev`): runs `tsx watch` on `server/src/index.ts` after workspace prebuilds; HTTP + Colyseus on **http://127.0.0.1:8787** |
+| `pnpm run demo` | **All-in-one**: `server` → wait for `/spectator/room` → `spectator` + `ghost:house` in parallel (single terminal; Ctrl+C stops children) |
 | `pnpm run build` | Build every workspace package (first time or after large pulls) |
-| `pnpm run poc:server` | Combined server: HTTP + Colyseus on **http://127.0.0.1:8787** (runs `prestart` builds, then `node dist/index.js`) |
-| `pnpm run poc:server:dev` | Same as **`pnpm dev`**: combined server under `tsx watch` while editing server code |
-| `pnpm run poc:client` | Phaser spectator (Vite); default **http://127.0.0.1:5174** (see terminal for exact URL) |
-| `pnpm run poc:ghost` | `tsc` + `node` for `ghosts/random-house` (registers house, adopts, walks via MCP) |
-| `pnpm run poc:ports` | List processes **listening** on **8787** / **5174** / **5179** (`lsof`; safe, port-scoped) |
-| `pnpm run poc:kill-ports` | **SIGTERM** those listeners (orphaned `poc:*`, Playwright `webServer`, or crashed demos). For **SIGKILL**, run `node scripts/kill-poc-ports.mjs --kill --force`. Override ports: `PORTS=8787,9090 pnpm run poc:ports` |
+| `pnpm run server` | Combined server: HTTP + Colyseus on **http://127.0.0.1:8787** (runs `prestart` builds, then `node dist/index.js`) |
+| `pnpm run server:dev` | Same as **`pnpm dev`**: combined server under `tsx watch` while editing server code |
+| `pnpm run spectator` | Phaser spectator (Vite); default **http://127.0.0.1:5174** (see terminal for exact URL) |
+| `pnpm run ghost:house` | `tsc` + `node` for `ghosts/random-house` (registers house, adopts, walks via MCP) |
+| `pnpm run ghost:register` | One-shot: adopt a ghost and write `GHOST_TOKEN` to `.env` (run once before `ghost:cli`) |
+| `pnpm run ghost:cli` | Interactive ghost CLI (Ink REPL) or one-shot subcommand, e.g. `ghost:cli -- whoami` |
+| `pnpm run ports` | List processes **listening** on **8787** / **5174** / **5179** (`lsof`; safe, port-scoped) |
+| `pnpm run ports:kill` | **SIGTERM** those listeners (orphaned server/spectator/ghost processes, Playwright `webServer`, or crashed demos). For **SIGKILL**, run `node scripts/kill-poc-ports.mjs --kill --force`. Override ports: `PORTS=8787,9090 pnpm run ports` |
 | `pnpm run test:e2e` | Playwright smoke (starts server + Vite preview + one ghost); `pnpm run test:e2e:autostart` is the same; set `CI=1` in automation. E2E scripts run **`pnpm run install:browsers`** first because Playwright’s **Chromium binary is not installed by `pnpm install`** (it is cached on disk); see [`e2e/README.md`](e2e/README.md). |
 | `pnpm run test:tck` | Minimal IC-006 smoke (**server must already be running**): registry + MCP `whereami` |
 

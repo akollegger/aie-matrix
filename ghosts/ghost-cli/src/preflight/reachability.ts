@@ -28,8 +28,11 @@ export const runReachability = (mcpUrl: string): Effect.Effect<void, PreFlightEr
       const { host, port } = hostPortFromUrl(mcpUrl);
       const origin = new URL(mcpUrl).origin;
 
+      let originStatus: number | undefined;
+
       try {
-        await fetch(origin + "/", { method: "GET", signal: AbortSignal.timeout(3_000) });
+        const healthRes = await fetch(origin + "/", { method: "GET", signal: AbortSignal.timeout(3_000) });
+        originStatus = healthRes.status;
       } catch (e) {
         const code = errnoFromUnknown(e);
         if (code === "ENOTFOUND") {
@@ -44,7 +47,7 @@ export const runReachability = (mcpUrl: string): Effect.Effect<void, PreFlightEr
       try {
         const mcpRes = await fetch(mcpUrl, { method: "GET", signal: AbortSignal.timeout(3_000) });
         if (mcpRes.status === 404) {
-          throw new McpEndpointNotFound({ url: mcpUrl });
+          throw new McpEndpointNotFound({ url: mcpUrl, originStatus });
         }
       } catch (e) {
         if (e instanceof McpEndpointNotFound) {
@@ -54,7 +57,7 @@ export const runReachability = (mcpUrl: string): Effect.Effect<void, PreFlightEr
         if (code === "ENOTFOUND") {
           throw new HostNotFound({ host });
         }
-        if (code === "ECONNREFUSED" || code === "EAI_AGAIN") {
+        if (code === "ECONNREFUSED" || code === "EAI_AGAIN" || code === "ECONNRESET") {
           throw new ServerUnreachable({ host, port, errno: code });
         }
         throw new UnknownNetworkError({ url: mcpUrl, detail: String(e) });

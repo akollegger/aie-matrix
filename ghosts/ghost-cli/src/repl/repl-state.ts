@@ -1,4 +1,53 @@
+import { Effect, Ref } from "effect";
+
+/** Hex face tokens (IC-003 local frame). */
 export type Face = "n" | "s" | "ne" | "nw" | "se" | "sw";
+
+const FACES = new Set<string>(["n", "s", "ne", "nw", "se", "sw"]);
+
+export function isFace(s: string): s is Face {
+  return FACES.has(s);
+}
+
+/** Drives the status strip (data-model.md). */
+export type ConnectionState =
+  | { readonly _tag: "Connected"; readonly ghostId: string; readonly tileId: string; readonly serverAddr: string }
+  | {
+      readonly _tag: "Reconnecting";
+      readonly attempt: number;
+      readonly maxAttempts: number;
+      readonly retryInMs: number;
+    }
+  | { readonly _tag: "Disconnected"; readonly reason?: string }
+  | { readonly _tag: "TokenExpired" };
+
+export interface GhostIdentity {
+  readonly ghostId: string;
+  readonly displayName?: string;
+}
+
+export interface GhostPosition {
+  readonly tileId: string;
+  readonly col: number;
+  readonly row: number;
+}
+
+export interface TileView {
+  readonly tileId: string;
+  readonly tileClass: string;
+  readonly occupants: string[];
+  readonly prose: string;
+}
+
+export interface ExitList {
+  readonly exits: ReadonlyArray<{ readonly toward: string; readonly tileId: string }>;
+}
+
+export type LogEntry = {
+  readonly timestamp: Date;
+  readonly kind: "command" | "movement" | "connection" | "diagnostic";
+  readonly message: string;
+};
 
 export type ReplCommand =
   | { readonly _tag: "whoami" }
@@ -10,58 +59,90 @@ export type ReplCommand =
   | { readonly _tag: "exit" }
   | { readonly _tag: "unknown"; readonly raw: string };
 
-const FACES = new Set<string>(["n", "s", "ne", "nw", "se", "sw"]);
-
-function isFace(s: string): s is Face {
-  return FACES.has(s);
+export interface ReplRefs {
+  readonly connectionStateRef: Ref.Ref<ConnectionState>;
+  readonly identityRef: Ref.Ref<GhostIdentity | null>;
+  readonly positionRef: Ref.Ref<GhostPosition | null>;
+  readonly tileViewRef: Ref.Ref<TileView | null>;
+  readonly exitsRef: Ref.Ref<ExitList | null>;
+  readonly logRef: Ref.Ref<readonly LogEntry[]>;
 }
 
-/** Pure REPL line parser (data-model.md). */
-export function parseReplCommand(input: string): ReplCommand {
+export const parseReplCommand = (input: string): ReplCommand => {
   const trimmed = input.trim();
-  if (trimmed === "") {
+  if (trimmed.length === 0) {
     return { _tag: "unknown", raw: "" };
   }
   const lower = trimmed.toLowerCase();
   const parts = lower.split(/\s+/).filter((p) => p.length > 0);
 
-  if (parts[0] === "exit" || parts[0] === "quit") {
-    return { _tag: "exit" };
-  }
-  if (parts[0] === "help" || parts[0] === "?") {
-    return { _tag: "help" };
-  }
-  if (parts[0] === "whoami") {
-    return { _tag: "whoami" };
-  }
-  if (parts[0] === "whereami") {
-    return { _tag: "whereami" };
-  }
-  if (parts[0] === "exits") {
-    return { _tag: "exits" };
+  const head = parts[0];
+  if (!head) {
+    return { _tag: "unknown", raw: "" };
   }
 
-  if (parts[0] === "look") {
-    const rest = parts[1];
-    if (!rest || rest === "here") {
+  if (head === "whoami" && parts.length === 1) {
+    return { _tag: "whoami" };
+  }
+  if (head === "whereami" && parts.length === 1) {
+    return { _tag: "whereami" };
+  }
+  if (head === "exits" && parts.length === 1) {
+    return { _tag: "exits" };
+  }
+  if (head === "help" && parts.length === 1) {
+    return { _tag: "help" };
+  }
+  if ((head === "exit" || head === "quit") && parts.length === 1) {
+    return { _tag: "exit" };
+  }
+
+  if (head === "look") {
+    if (parts.length === 1) {
       return { _tag: "look", at: "here" };
     }
-    if (rest === "around") {
+    const at = parts[1]!;
+    if (at === "here") {
+      return { _tag: "look", at: "here" };
+    }
+    if (at === "around") {
       return { _tag: "look", at: "around" };
     }
-    if (isFace(rest)) {
-      return { _tag: "look", at: rest };
+    if (isFace(at)) {
+      return { _tag: "look", at };
     }
     return { _tag: "unknown", raw: trimmed };
   }
 
-  if (parts[0] === "go") {
-    const rest = parts[1];
-    if (rest && isFace(rest)) {
-      return { _tag: "go", toward: rest };
+  if (head === "go") {
+    if (parts.length < 2) {
+      return { _tag: "unknown", raw: trimmed };
+    }
+    const toward = parts[1]!;
+    if (isFace(toward)) {
+      return { _tag: "go", toward };
     }
     return { _tag: "unknown", raw: trimmed };
   }
 
   return { _tag: "unknown", raw: trimmed };
-}
+};
+
+/** Creates all REPL panel refs with initial empty / disconnected state. */
+export const createReplRefs: Effect.Effect<ReplRefs, never, never> = Effect.gen(function* () {
+  const connectionStateRef = yield* Ref.make<ConnectionState>({ _tag: "Disconnected" });
+  const identityRef = yield* Ref.make<GhostIdentity | null>(null);
+  const positionRef = yield* Ref.make<GhostPosition | null>(null);
+  const tileViewRef = yield* Ref.make<TileView | null>(null);
+  const exitsRef = yield* Ref.make<ExitList | null>(null);
+  const logRef = yield* Ref.make<readonly LogEntry[]>([]);
+
+  return {
+    connectionStateRef,
+    identityRef,
+    positionRef,
+    tileViewRef,
+    exitsRef,
+    logRef,
+  };
+});

@@ -7,7 +7,7 @@
 1. Combined server listening on the registry HTTP port (default **8787**), e.g.:
 
    ```bash
-   pnpm run poc:server
+   pnpm run server
    ```
 
    or a full **`pnpm run demo`** (then the TCK reuses the same server; you do not need a second ghost running).
@@ -43,4 +43,4 @@ Optional `.env` at repo root is loaded via `@aie-matrix/root-env` (same as serve
 - Multi-house discovery, spectator auth, or user-initiated adoption flows  
 - CLI flags to point at alternate GhostHouse binaries (revisit when multiple houses exist)
 
-Use **Playwright** (`pnpm run test:e2e:autostart`), **`pnpm run poc:ghost`**, and [quickstart §1](../../specs/001-minimal-poc/quickstart.md) for richer regression.
+Use **Playwright** (`pnpm run test:e2e:autostart`), **`pnpm run ghost:house`**, and [quickstart §1](../../specs/001-minimal-poc/quickstart.md) for richer regression.

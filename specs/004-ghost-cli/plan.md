@@ -30,7 +30,7 @@ Add `ghosts/ghost-cli/` (`@aie-matrix/ghost-cli`) — a TypeScript pnpm workspac
   - [IC-005](./contracts/ic-005-cli-exit-codes.md): exit code contract for shell script consumers
   - IC-003 (existing ghost MCP tool schemas) is consumed unchanged.
 - **Verifiable increments** PASS — Four user stories map to independently demonstrable slices (see phased delivery below). Each has a concrete smoke test in the quickstart.
-- **Documentation impact** PASS — `ghosts/README.md`, `docs/project-overview.md`, `specs/001-minimal-poc/quickstart.md`, root `package.json` (`poc:cli` alias — resolves RFC-0003 Q5).
+- **Documentation impact** PASS — `ghosts/README.md`, `docs/project-overview.md`, `specs/001-minimal-poc/quickstart.md`, root `package.json` (`ghost:cli` — resolves RFC-0003 Q5).
 
 **Post-Phase 1 re-check**: Confirm `GhostClientService` interface in contracts/ matches implemented TypeScript signature before Phase C.
 
@@ -128,7 +128,7 @@ Covers FR-005 to FR-007 in full. Delivers User Story 2 (pre-flight self-rescue).
 ```bash
 # Server stopped:
 pnpm --filter @aie-matrix/ghost-cli start -- whoami
-# Expected: "The world server isn't running … Start it with pnpm run poc:server."
+# Expected: "The world server isn't running … Start it with pnpm run server."
 
 # Wrong URL:
 WORLD_API_URL=http://127.0.0.1:8787 pnpm --filter @aie-matrix/ghost-cli start -- whoami
@@ -162,7 +162,7 @@ Resolves all documentation impact items from the spec and RFC-0003 Open Question
 
 **Deliverables**:
 - `ghosts/README.md` — add `ghost-cli` row to packages table
-- Root `package.json` — add `poc:cli` alias (recommended: yes)
+- Root `package.json` — add `ghost:cli` entry
 - `docs/project-overview.md` — add `ghost-cli` mention
 - `specs/001-minimal-poc/quickstart.md` — add CLI verification step
 
@@ -172,11 +172,11 @@ Resolves all documentation impact items from the spec and RFC-0003 Open Question
 
 | RFC-0003 Question | Resolution |
 |-------------------|-----------|
-| Q1 — Token capture | Pre-flight instructs `pnpm run poc:ghost`; token capture improvement deferred |
+| Q1 — Token capture | Pre-flight instructs `pnpm run ghost:register`; token capture improvement deferred |
 | Q2 — Auto-refresh cadence | Command-driven only (simpler, sufficient for PoC) |
-| Q3 — `look around` rendering | Replaces Exits panel with neighbour detail; revisit if too verbose |
+| Q3 — `look around` rendering | World View shows `look` payload (including `around`); Exits panel stays exits-only — revisit split-screen if neighbour detail crowds the layout |
 | Q4 — Non-TTY fallback | Handled in Phase A via `process.stdout.isTTY` check |
-| Q5 — `poc:cli` alias | Yes — added in Phase D |
+| Q5 — `ghost:cli` script | Yes — `pnpm run ghost:cli` in root `package.json` |
 
 ## Complexity Tracking
 

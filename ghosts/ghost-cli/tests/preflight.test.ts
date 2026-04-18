@@ -21,6 +21,24 @@ describe("runEnvScan (phase 1)", () => {
     expect(Either.isLeft(e)).toBe(true);
     if (Either.isLeft(e)) {
       expect(e.left).toBeInstanceOf(EnvMissingToken);
+      if (e.left instanceof EnvMissingToken) {
+        expect(e.left.inRepoRoot).toBe(true);
+        expect(e.left.workspaceRoot).toBeUndefined();
+      }
+    }
+  });
+
+  it("fails when token is absent from a package subfolder and records workspaceRoot", async () => {
+    const subdir = join(repoRoot, "ghosts/ghost-cli");
+    const e = await Effect.runPromise(
+      Effect.either(runEnvScan({ token: "", url: "http://127.0.0.1:8787/mcp" }, subdir)),
+    );
+    expect(Either.isLeft(e)).toBe(true);
+    if (Either.isLeft(e) && e.left instanceof EnvMissingToken) {
+      expect(e.left.inRepoRoot).toBe(false);
+      expect(e.left.workspaceRoot).toBe(repoRoot);
+    } else {
+      throw new Error("expected EnvMissingToken");
     }
   });
 

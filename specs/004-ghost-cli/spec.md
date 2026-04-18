@@ -15,7 +15,7 @@
 
 ### User Story 1 — First-Time Contributor One-Shot Inspection (Priority: P1)
 
-A new contributor has just completed the quickstart, has the combined server running, and has a ghost token from `pnpm run poc:ghost`. They want to confirm the ghost is alive and see where it is.
+A new contributor has just completed the quickstart, has the combined server running, and has a ghost token from `pnpm run ghost:register` (or the `random-house` walkthrough). They want to confirm the ghost is alive and see where it is.
 
 **Why this priority**: This is the first contact a contributor has with the ghost MCP surface. It must work immediately and be self-explanatory. Failure to work here blocks all further exploration.
 
@@ -25,7 +25,7 @@ A new contributor has just completed the quickstart, has the combined server run
 
 1. **Given** `GHOST_TOKEN` and `WORLD_API_URL` are set, **When** the contributor runs `ghost-cli whoami`, **Then** the ghost's identity is printed in plain prose and the process exits 0.
 2. **Given** `GHOST_TOKEN` and `WORLD_API_URL` are set, **When** the contributor runs `ghost-cli whereami --json`, **Then** the raw MCP tool result is emitted as JSON and the process exits 0.
-3. **Given** `GHOST_TOKEN` is absent, **When** the contributor runs `ghost-cli whoami`, **Then** a human-readable message explains how to obtain a token (`pnpm run poc:ghost`) and the process exits non-zero — no stack trace appears.
+3. **Given** `GHOST_TOKEN` is absent, **When** the contributor runs `ghost-cli whoami`, **Then** a human-readable message explains how to obtain a token (`pnpm run ghost:register`) and the process exits non-zero — no stack trace appears.
 
 ---
 
@@ -35,12 +35,12 @@ A contributor forgets to start the world server, or has a stale token after a se
 
 **Why this priority**: Without actionable diagnostics, contributors become stuck and may abandon the project. The diagnostic layer is a core feature of the RFC, not an add-on.
 
-**Independent Test**: Run `ghost-cli whoami` with server stopped — observe clear "server not running" message with `pnpm run poc:server` remedy. Run with expired token — observe "token rejected" message with `pnpm run poc:ghost` remedy. Neither scenario shows a raw error.
+**Independent Test**: Run `ghost-cli whoami` with server stopped — observe clear "server not running" message with a `pnpm run server` remedy. Run with expired token — observe "token rejected" message with a `pnpm run ghost:register` remedy. Neither scenario shows a raw error.
 
 **Acceptance Scenarios**:
 
-1. **Given** the world server is not running, **When** the contributor runs any one-shot command, **Then** the CLI prints "The world server isn't running at `<addr>`. Start it with `pnpm run poc:server`" and exits non-zero.
-2. **Given** the ghost token has expired (server restarted), **When** the contributor runs any one-shot command, **Then** the CLI prints a message explaining the token is stale and instructs `pnpm run poc:ghost` to get a fresh one.
+1. **Given** the world server is not running, **When** the contributor runs any one-shot command, **Then** the CLI prints a message that the world server is not running and instructs `pnpm run server` and exits non-zero.
+2. **Given** the ghost token has expired (server restarted), **When** the contributor runs any one-shot command, **Then** the CLI prints a message explaining the token is stale and instructs `pnpm run ghost:register` to get a fresh one.
 3. **Given** `WORLD_API_URL` is set to the server base URL without `/mcp`, **When** the contributor runs any one-shot command, **Then** the CLI suggests appending `/mcp` to the URL.
 
 ---
@@ -80,8 +80,8 @@ A contributor is debugging a movement ruleset change and wants to drive specific
 
 ### Edge Cases
 
-- What happens when stdout is not a TTY (piped to another command or CI)? The CLI detects non-TTY context at startup and falls back to one-shot / plain-text mode rather than crashing or rendering corrupted UI.
-- What happens when the ghost is evicted after a server restart? Phase 3 pre-flight catches the 404 and reports "ghost not found — re-adopt with `pnpm run poc:ghost`."
+- What happens when stdout is not a TTY (piped to another command or CI)? Launching **`ghost-cli` with no subcommand** runs a **`whoami` one-shot** (plain text) instead of Ink; **`--interactive` without a TTY exits with an error** telling you to use an explicit subcommand instead.
+- What happens when the ghost is evicted after a server restart? Phase 3 pre-flight catches the 404 and reports "ghost not found — re-adopt with `pnpm run ghost:register`."
 - What happens when `WORLD_API_URL` is missing entirely but `.env` is present? Phase 1 pre-flight instructs adding `WORLD_API_URL=http://127.0.0.1:8787/mcp` to the `.env` file.
 - What happens when an unknown command is typed in the REPL? An inline error with the `help` vocabulary is displayed and the connection stays open.
 - What happens when the contributor types `exit` or presses Ctrl-C in the REPL? The CLI disconnects gracefully and exits 0.
@@ -99,13 +99,13 @@ A contributor is debugging a movement ruleset change and wants to drive specific
 - **FR-007**: The CLI MUST distinguish three failure stances: self-healing (retry silently), guided resolution (one concrete fix step), and informative blocking (state what was observed and where to look).
 - **FR-008**: One-shot commands MUST print human-readable prose by default; `--json` MUST emit the raw MCP tool result as valid JSON to stdout.
 - **FR-009**: A `--debug` flag MUST enable verbose logging including raw MCP payloads and full error details on stderr only, leaving stdout clean.
-- **FR-010**: The CLI MUST enter interactive REPL mode when launched with no subcommand or with `--interactive`.
+- **FR-010**: The CLI MUST enter interactive REPL mode when launched with no subcommand on an interactive terminal, or when **`--interactive` / `-i`** is passed (TTY); **`--interactive` without a TTY MUST fail fast** with guidance to use an explicit subcommand.
 - **FR-011**: Interactive mode MUST render a multi-panel terminal UI with: status strip (connection state, ghost identity, tile, server address), World View (last `look here` result), Ghost panel (identity and position), Exits panel, scrolling Log strip, and readline input.
 - **FR-012**: The status strip MUST reflect live connection state with distinct visual states for connected, reconnecting, disconnected, and token-expired conditions.
 - **FR-013**: In interactive mode, the CLI MUST retry the MCP connection automatically with exponential backoff on transient disconnects, displaying reconnect state in the status strip without requiring user action.
 - **FR-014**: The REPL MUST support the command vocabulary: `whoami`, `whereami`, `look [here|around|<face>]`, `exits`, `go <face>`, `help`, `exit`/`quit`/Ctrl-C.
 - **FR-015**: Movement failures (`RULESET_DENY`, `NO_NEIGHBOR`, `UNKNOWN_CELL`) MUST appear in the log as game-style feedback, not as errors.
-- **FR-016**: The CLI MUST detect non-TTY stdout at startup and fall back to one-shot / plain-text mode rather than rendering interactive UI.
+- **FR-016**: The CLI MUST detect non-TTY stdout at startup and avoid rendering Ink — when **`ghost-cli` is invoked with no subcommand**, it MUST run a **`whoami` one-shot** (plain text).
 - **FR-017**: One-shot mode MUST attempt a single retry on transient failures before exiting non-zero.
 - **FR-018**: The CLI MUST provide `--help` output listing all commands, flags, and environment variables.
 - **FR-019**: The CLI MUST exit non-zero on any pre-flight or MCP failure in one-shot mode.
@@ -142,11 +142,11 @@ A contributor is debugging a movement ruleset change and wants to drive specific
 - The world server is reachable at `127.0.0.1:8787` by default during local development.
 - Terminal width is sufficient to render the multi-panel Ink layout (minimum 80 columns); narrower terminals receive a degraded but functional single-column layout.
 - The ghost represented by the token is already adopted and registered in the world; the CLI does not handle ghost creation.
-- `pnpm run poc:ghost` (defined elsewhere in the project) is the authoritative command for adopting a ghost and obtaining a token; pre-flight diagnostics reference this command.
+- `pnpm run ghost:register` is the authoritative command for adopting a ghost and writing a token to `.env`; pre-flight diagnostics reference this command (alongside `pnpm run server` for the combined server).
 
 ## Documentation Impact *(mandatory)*
 
 - `ghosts/README.md` — add `ghost-cli` entry alongside other ghost packages
 - `docs/project-overview.md` — mention `ghost-cli` as the recommended interactive debugging tool
 - Quickstart section of `specs/001-minimal-poc/quickstart.md` — add `ghost-cli` to the "verify your setup" step
-- RFC-0003 open question 5: decide whether to add `poc:cli` alias to root `package.json`
+- RFC-0003 open question 5: **resolved** — root `package.json` exposes `pnpm run ghost:cli`
