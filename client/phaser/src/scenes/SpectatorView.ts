@@ -12,6 +12,7 @@ const ghostPalette = [
  */
 export class SpectatorView {
   private readonly ghostSprites = new Map<string, Phaser.GameObjects.Arc>();
+  private stateSyncCount = 0;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -33,7 +34,18 @@ export class SpectatorView {
     this.ghostSprites.clear();
   }
 
+  /** Phaser ghost markers currently drawn (arcs with a resolved tile coord). */
+  getMarkerCount(): number {
+    return this.ghostSprites.size;
+  }
+
+  /** How many times `syncFromState` ran (initial + each Colyseus `onStateChange`). */
+  getStateSyncCount(): number {
+    return this.stateSyncCount;
+  }
+
   private syncFromState(): void {
+    this.stateSyncCount += 1;
     const active = new Set<string>();
     this.room.state.ghostTiles.forEach((tileId, ghostId) => {
       active.add(ghostId);
