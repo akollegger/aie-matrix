@@ -22,7 +22,7 @@ const classifyHandshakeError =
     if (lower.includes("econnrefused") || lower.includes("enotfound") || lower.includes("network")) {
       return new UnknownNetworkError({ url: mcpUrl, detail: text });
     }
-    return new TokenRejected();
+    return new UnknownNetworkError({ url: mcpUrl, detail: text });
   };
 
 /** Phase 3 — MCP session + whoami (validates token and ghost placement). */

@@ -11,6 +11,7 @@ import {
   type GhostToolName,
 } from "../services/GhostClientService.js";
 import { parseExitList, parseTileView } from "../repl/mcp-result.js";
+import { CliSilentExit, CliUsageError, type OneshotCliError } from "./errors.js";
 
 const FACES = new Set(["n", "s", "ne", "nw", "se", "sw"]);
 
@@ -117,9 +118,16 @@ export const runOneshotTool = (input: {
   readonly config: GhostConfig;
   readonly tool: GhostToolName;
   readonly args?: Record<string, unknown>;
-}): Effect.Effect<void, PreFlightError | GhostClientError, GhostConfigLive | GhostClientService> =>
+}): Effect.Effect<
+  void,
+  PreFlightError | GhostClientError | OneshotCliError,
+  GhostConfigLive | GhostClientService
+> =>
   Effect.gen(function* () {
     const cfg = input.config;
+
+    yield* runPreflight({ token: cfg.token, url: cfg.url });
+
     const svc = yield* GhostClientService;
 
     const callOnce = () =>
@@ -129,24 +137,20 @@ export const runOneshotTool = (input: {
         ),
       );
 
-    const raw = yield* runPreflight(cfg).pipe(
-      Effect.flatMap(() =>
-        Effect.gen(function* () {
-          const first = yield* callOnce().pipe(Effect.either);
-          if (first._tag === "Right") {
-            return first.right;
-          }
-          if (first.left instanceof NetworkError) {
-            const second = yield* callOnce().pipe(Effect.either);
-            if (second._tag === "Right") {
-              return second.right;
-            }
-            return yield* Effect.fail(second.left);
-          }
-          return yield* Effect.fail(first.left);
-        }),
-      ),
-    );
+    const raw = yield* Effect.gen(function* () {
+      const first = yield* callOnce().pipe(Effect.either);
+      if (first._tag === "Right") {
+        return first.right;
+      }
+      if (first.left instanceof NetworkError) {
+        const second = yield* callOnce().pipe(Effect.either);
+        if (second._tag === "Right") {
+          return second.right;
+        }
+        return yield* Effect.fail(second.left);
+      }
+      return yield* Effect.fail(first.left);
+    });
 
     yield* emitDebug(cfg, "raw tool result", raw);
 
@@ -156,8 +160,7 @@ export const runOneshotTool = (input: {
       } else {
         yield* Console.log(formatProse(input.tool, raw));
       }
-      yield* Effect.sync(() => process.exit(1));
-      return;
+      return yield* Effect.fail(new CliSilentExit({ exitCode: 1 }));
     }
 
     if (cfg.json) {
@@ -174,13 +177,18 @@ export const runWhereami = (config: GhostConfig) => runOneshotTool({ config, too
 export const runLook = (
   config: GhostConfig,
   at: string,
-): Effect.Effect<void, PreFlightError | GhostClientError, GhostConfigLive | GhostClientService> => {
+): Effect.Effect<
+  void,
+  PreFlightError | GhostClientError | OneshotCliError,
+  GhostConfigLive | GhostClientService
+> => {
   const normalized = at.trim().toLowerCase();
   if (normalized !== "here" && normalized !== "around" && !isFace(normalized)) {
-    return Effect.gen(function* () {
-      yield* Console.error(`Invalid look target "${at}". Use here, around, or a face (n, s, ne, nw, se, sw).`);
-      yield* Effect.sync(() => process.exit(1));
-    });
+    return Effect.fail(
+      new CliUsageError({
+        message: `Invalid look target "${at}". Use here, around, or a face (n, s, ne, nw, se, sw).`,
+      }),
+    );
   }
   return runOneshotTool({
     config,
@@ -194,13 +202,18 @@ export const runExits = (config: GhostConfig) => runOneshotTool({ config, tool: 
 export const runGo = (
   config: GhostConfig,
   toward: string,
-): Effect.Effect<void, PreFlightError | GhostClientError, GhostConfigLive | GhostClientService> => {
+): Effect.Effect<
+  void,
+  PreFlightError | GhostClientError | OneshotCliError,
+  GhostConfigLive | GhostClientService
+> => {
   const t = toward.trim().toLowerCase();
   if (!isFace(t)) {
-    return Effect.gen(function* () {
-      yield* Console.error(`Invalid direction "${toward}". Use one of: n, s, ne, nw, se, sw.`);
-      yield* Effect.sync(() => process.exit(1));
-    });
+    return Effect.fail(
+      new CliUsageError({
+        message: `Invalid direction "${toward}". Use one of: n, s, ne, nw, se, sw.`,
+      }),
+    );
   }
   return runOneshotTool({ config, tool: "go", args: { toward: t } });
 };

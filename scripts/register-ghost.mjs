@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
  * One-shot ghost registration: creates a ghost house + caretaker, adopts a ghost,
- * and writes GHOST_TOKEN (and WORLD_API_URL if unset) to .env at the repo root.
+ * and writes GHOST_TOKEN to `.env` at the repo root. `WORLD_API_URL` is written only when
+ * it is not already set in the environment or in the existing `.env` file.
  *
  * Usage: pnpm run ghost:register
  * Requires: combined server running (pnpm run server)
@@ -89,15 +90,25 @@ async function main() {
     ? credential.worldApiBaseUrl
     : `${credential.worldApiBaseUrl}/mcp`;
 
+  const hadWorldUrl =
+    Boolean(String(process.env.WORLD_API_URL ?? "").trim()) ||
+    Boolean(String(fileEnv.WORLD_API_URL ?? "").trim());
+
   let content = existsSync(envPath) ? readFileSync(envPath, "utf8") : "";
   if (content.length > 0 && !content.endsWith("\n")) content += "\n";
   content = upsertEnvLine(content, "GHOST_TOKEN", credential.token);
-  content = upsertEnvLine(content, "WORLD_API_URL", worldApiUrl);
+  if (!hadWorldUrl) {
+    content = upsertEnvLine(content, "WORLD_API_URL", worldApiUrl);
+  }
   writeFileSync(envPath, content, "utf8");
 
   console.log(`✓ Ghost adopted: ${ghostId}`);
   console.log(`✓ GHOST_TOKEN written to .env`);
-  console.log(`✓ WORLD_API_URL=${worldApiUrl} written to .env`);
+  if (!hadWorldUrl) {
+    console.log(`✓ WORLD_API_URL=${worldApiUrl} written to .env`);
+  } else {
+    console.log(`✓ WORLD_API_URL left unchanged (already set in env or .env)`);
+  }
   console.log(`\nNext: pnpm run ghost:cli           # interactive REPL`);
   console.log(`      pnpm run ghost:cli -- whoami   # one-shot`);
 }

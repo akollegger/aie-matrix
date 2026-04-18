@@ -15,6 +15,7 @@ import {
 } from "./config.js";
 import { formatDiagnostic, toExitCode } from "./diagnostics.js";
 import { runExits, runGo, runLook, runWhereami, runWhoami } from "./oneshot/commands.js";
+import { CliSilentExit, CliUsageError } from "./oneshot/errors.js";
 import type { PreFlightError } from "./preflight/errors.js";
 import {
   GhostClientLayer,
@@ -52,6 +53,10 @@ function isGhostClientErr(e: unknown): e is NetworkError | ProtocolError | ToolE
   return e instanceof NetworkError || e instanceof ProtocolError || e instanceof ToolError;
 }
 
+function isOneshotCliErr(e: unknown): e is CliUsageError | CliSilentExit {
+  return e instanceof CliUsageError || e instanceof CliSilentExit;
+}
+
 const reportPreFlight = (e: PreFlightError) =>
   Effect.gen(function* () {
     const d = formatDiagnostic(e);
@@ -68,11 +73,19 @@ const reportGhostClient = (e: NetworkError | ProtocolError | ToolError) =>
     yield* Effect.sync(() => process.exit(1));
   });
 
+const reportOneshotCli = (e: CliUsageError | CliSilentExit) =>
+  Effect.gen(function* () {
+    if (e instanceof CliUsageError) {
+      yield* Console.error(e.message);
+    }
+    yield* Effect.sync(() => process.exit(e instanceof CliSilentExit ? e.exitCode : 1));
+  });
+
 const wrapOneshot = (
   p: { token: string; url: string; debug: boolean; json: boolean },
   run: (c: GhostConfig) => Effect.Effect<
     void,
-    PreFlightError | NetworkError | ProtocolError | ToolError,
+    PreFlightError | NetworkError | ProtocolError | ToolError | CliUsageError | CliSilentExit,
     GhostConfigLive | GhostClientService
   >,
 ) => {
@@ -85,6 +98,7 @@ const wrapOneshot = (
           run(cfg),
           Effect.catchIf(isPreFlightError, reportPreFlight),
           Effect.catchIf(isGhostClientErr, reportGhostClient),
+          Effect.catchIf(isOneshotCliErr, reportOneshotCli),
         );
       }).pipe(Effect.provide(layers)),
     ),
