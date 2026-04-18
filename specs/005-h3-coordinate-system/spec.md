@@ -24,7 +24,7 @@ A ghost agent connects to the ghost world and navigates using the MCP compass in
 **Acceptance Scenarios**:
 
 1. **Given** a map with a valid `h3_anchor` property, **When** the server loads the map, **Then** every navigable cell has a non-null, valid H3 res-15 index assigned.
-2. **Given** a ghost at a cell with a known H3 index, **When** the ghost issues a `go { direction: "n" }` command, **Then** the ghost's new position is the H3 neighbor in the north bearing from the previous cell.
+2. **Given** a ghost at a cell with a known H3 index, **When** the ghost issues a `go { toward: "n" }` command, **Then** the ghost's new position is the H3 neighbor in the north bearing from the previous cell.
 3. **Given** a ghost at any cell, **When** it calls `exits`, **Then** the response lists only compass directions that correspond to navigable neighboring cells (up to 6, or 5 at a pentagon).
 
 ---
@@ -33,7 +33,7 @@ A ghost agent connects to the ghost world and navigates using the MCP compass in
 
 A map author opens a `.tmj` file in Tiled, adds two custom map-level properties — `h3_anchor` (H3 res-15 index string) and `h3_resolution` (integer, always 15) — and saves. When the server loads the map it derives every cell's H3 index automatically from the anchor without requiring the author to manually assign indices.
 
-**Why this priority**: Without anchor-based derivation, H3 indices cannot be assigned to existing maps, blocking the entire feature.
+**Why this priority**: Anchor-based derivation is foundational infrastructure (implemented in Phase 2). US2 delivers the authoring experience layer on top: validation that gives map authors actionable error messages when the anchor is missing or wrong, and documentation of the workflow for setting the anchor. Without these, the infrastructure exists but is unusable in practice.
 
 **Independent Test**: Load an existing `.tmj` map with a synthetic `h3_anchor`, verify that the derived H3 index for the cell at (col=0, row=0) matches the anchor, and that adjacent cells have H3 indices that are valid neighbors of the anchor.
 
@@ -57,7 +57,7 @@ A conference attendee opens a browser-based spectator view and sees ghost positi
 
 1. **Given** a ghost at a known H3 index, **When** the spectator overlay client receives that position, **Then** the ghost marker is rendered at the correct lat/lng centroid of that H3 cell on the map.
 2. **Given** a ghost that moves from one cell to an adjacent cell, **When** the move is broadcast by the server, **Then** the spectator overlay updates the ghost marker within 2 seconds.
-3. **Given** a spectator on a mobile device, **When** they open the overlay client, **Then** the map renders and ghost positions are visible without requiring any installation.
+3. **Given** a spectator on a mobile device with a modern browser, **When** they open the overlay client URL, **Then** the map renders and ghost positions are visible without requiring any app installation. *Note: responsive layout is best-effort for this feature; pixel-perfect mobile design is out of scope.*
 
 ---
 
@@ -96,7 +96,7 @@ A ghost arrives at a cell that has a named non-adjacent exit (elevator, portal).
 - **FR-006**: The ghost MCP MUST expose a `traverse` tool that moves a ghost through a named non-adjacent exit and returns an error if the named exit does not exist at the current cell.
 - **FR-007**: The spectator overlay client MUST convert ghost H3 indices to lat/lng using `h3.cellToLatLng` and render ghost markers on a real-world map.
 - **FR-008**: The spectator overlay client MUST update ghost marker positions within 2 seconds of receiving a position broadcast from the server.
-- **FR-009**: The system MUST treat the 12 H3 pentagonal cells as permanent global portals, exposing them as named non-adjacent exits when a ghost occupies one of them.
+- **FR-009**: The system MUST treat the 12 H3 pentagonal cells as permanent global portals, exposing portal exits in the `exits` response whenever a ghost is located at a pentagon cell.
 - **FR-010**: The `exits` and movement validation MUST handle pentagon cells (5 neighbors) without error or undefined behavior.
 
 ### Key Entities
@@ -111,7 +111,7 @@ A ghost arrives at a cell that has a named non-adjacent exit (elevator, portal).
 - **IC-005**: `CellRecord` schema — `h3Index` field added as a required string; `neighbors` values changed from col/row strings to H3 index strings.
 - **IC-006**: Ghost MCP `exits` response schema — must include both compass exits (keyed by direction label) and named non-adjacent exits (keyed by exit name).
 - **IC-007**: Ghost MCP `traverse` tool schema — input `{ via: string }`, response mirrors `go` response on success, typed error on invalid exit name.
-- **IC-008**: Colyseus state broadcast for ghost position — `position` field changed from `"col,row"` string to H3 index string; spectator overlay client depends on this contract.
+- **IC-008**: Colyseus state broadcast for ghost position — `ghostTiles` map values changed from `"col,row"` string to H3 index string; spectator overlay client depends on this contract.
 - **IC-009**: `.tmj` map file schema extension — custom map-level properties `h3_anchor: string` and `h3_resolution: integer` defined and documented.
 
 ## Success Criteria *(mandatory)*
@@ -119,9 +119,9 @@ A ghost arrives at a cell that has a named non-adjacent exit (elevator, portal).
 ### Measurable Outcomes
 
 - **SC-001**: Every cell in a loaded map has a valid, unique H3 res-15 index; zero cells have a null or duplicate `h3Index` after map load.
-- **SC-002**: A ghost can complete a 40-step navigation sequence across a venue-scale map (1,500–2,000 cells) using only compass commands, with no navigation errors caused by the coordinate system change.
-- **SC-003**: The spectator overlay renders ghost positions within 200m of the correct physical location for a venue-scale map (acceptable drift for anchor projection at res-15).
-- **SC-004**: Ghost marker positions in the spectator overlay update within 2 seconds of a ghost move event 95% of the time under normal venue network conditions.
+- **SC-002**: A ghost can complete a 40-step navigation sequence across a venue-scale map (1,500–2,000 cells) using only compass commands, with no navigation errors caused by the coordinate system change. *Verification: add a TCK scenario that issues 40 sequential `go` commands and asserts each response is a valid H3 index.*
+- **SC-003**: The spectator overlay renders ghost positions within 200m of the correct physical location for a venue-scale map (acceptable drift for anchor projection at res-15). *Verification: manual measurement at conference setup — compare ghost marker position on overlay to physical location using a GPS reference point.*
+- **SC-004**: Ghost marker positions in the spectator overlay update within 2 seconds of a ghost move event 95% of the time under normal venue network conditions. *Verification: manual observation during conference; automated latency testing requires venue network environment and is out of scope for this feature.*
 - **SC-005**: A ghost at a pentagon cell sees exactly 5 compass exits (not 6) and at least 1 named portal exit, with no runtime errors.
 - **SC-006**: All existing ghost contract tests (TCK) continue to pass after the coordinate system change.
 

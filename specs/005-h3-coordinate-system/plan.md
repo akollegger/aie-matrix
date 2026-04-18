@@ -56,7 +56,7 @@ specs/005-h3-coordinate-system/
 server/colyseus/src/
 ├── mapTypes.ts          # CellId, CellRecord, LoadedMap — modified
 ├── mapLoader.ts         # H3 anchor parsing, localIjToCell, bearing-compass — modified
-├── hexCompass.ts        # neighborOddq replaced with H3 bearing-based assignment — modified
+├── hexCompass.ts        # H3 bearing-based compass assignment added alongside neighborOddq (retained) — modified
 └── room-schema.ts       # ghostTiles values: "col,row" → h3Index; tileCoords retained — modified
 
 server/world-api/src/

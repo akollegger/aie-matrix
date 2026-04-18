@@ -4,7 +4,7 @@
 **Branch**: `005-h3-coordinate-system`  
 **Prerequisites**: plan.md ✓, spec.md ✓, research.md ✓, data-model.md ✓, contracts/ ✓, quickstart.md ✓
 
-**Tests**: TCK contract tests are updated in US1 (they verify the H3 index format across all tools).  
+**Tests**: TCK contract tests are updated in US1 (T015, T015b) and US4 (T028). `client/map-overlay` has a Node.js smoke test (T023b) per constitution §III.  
 **Organization**: Tasks grouped by user story to enable independent implementation and testing.
 
 ## Format: `[ID] [P?] [Story] Description`
@@ -55,8 +55,9 @@
 - [ ] T013 Update `server/world-api/src/mcp-server.ts` `exits` tool handler and `look` tool handler: cell lookups must use `h3Index` as the key into the `LoadedMap.cells` map (was `"col,row"` string)
 - [ ] T014 Update `server/world-api/src/movement.ts` `evaluateGo` function: `fromCell` lookup and neighbor resolution use `h3Index` string keys; success result `tileId` field becomes the neighbor's H3 index string; `GoSuccess.tileId` field rename to `h3Index` (or keep as `tileId` for backward compat — keep as `tileId` to minimize ghost agent changes)
 - [ ] T015 Update ghost TCK contract tests in `ghosts/tck/` to expect H3 index string format in: (a) position values returned by `whereami`; (b) neighbor values returned by `exits`; (c) new position in `go` success response — update all scenario fixtures that contain `"col,row"` formatted strings
+- [ ] T015b [US1] Add a TCK scenario that issues 40 sequential `go` commands across the loaded map and asserts each response contains a valid H3 res-15 index string — satisfies SC-002 (40-step navigation sequence)
 
-**Checkpoint**: `pnpm test:tck` passes. Ghost CLI `whereami` returns H3 index. Ghost CLI `go` cycles work end-to-end.
+**Checkpoint**: `pnpm test:tck` passes including the 40-step sequence. Ghost CLI `whereami` returns H3 index. Ghost CLI `go` cycles work end-to-end.
 
 ---
 
@@ -71,7 +72,10 @@
 - [ ] T016 Verify the `MapLoadError` thrown in `server/colyseus/src/mapLoader.ts` (added in T007) includes: (a) the map file name; (b) the specific validation that failed (missing, invalid H3 string, wrong resolution); (c) guidance on how to fix it — add a validation test for each failure mode using the existing unit test suite
 - [ ] T017 Create `maps/sandbox/README.md` documenting: how to add `h3_anchor` to a `.tmj` file in Tiled, how to generate an H3 index from a lat/lng using the one-liner from `quickstart.md`, and what `h3_resolution` means
 
-**Checkpoint**: Server rejects maps without a valid anchor with actionable error messages. `maps/sandbox/README.md` explains the anchor property.
+- [ ] T017b [US2] Audit all Cypher queries in `server/world-api/src/` for any pattern-matching on the old `"col,row"` tileId string format (e.g., `MATCH (c:Cell {tileId: ...})`) and update them to use `h3Index` — prevents silent graph query failures post-migration
+- [ ] T017c [US2] Create or update the Neo4j `cell_h3_unique` uniqueness constraint: `CREATE CONSTRAINT cell_h3_unique IF NOT EXISTS FOR (c:Cell) REQUIRE c.h3Index IS UNIQUE` — add to the graph initialization code in `server/world-api/src/` or `server/colyseus/src/`; satisfies FR-004
+
+**Checkpoint**: Server rejects maps without a valid anchor with actionable error messages. `maps/sandbox/README.md` explains the anchor property. Neo4j uniqueness constraint exists and Cypher queries use `h3Index`.
 
 ---
 
@@ -86,11 +90,12 @@
 - [ ] T018 Scaffold `client/map-overlay/` package: create `package.json` (name: `@aie-matrix/client-map-overlay`, `"type": "module"`), `tsconfig.json` (browser target), `index.html`, `src/main.ts`, `src/overlay.ts`, `src/map.ts`; add to pnpm workspace in root `pnpm-workspace.yaml`
 - [ ] T019 [P] Add `h3-js` and `colyseus.js` dependencies to `client/map-overlay/package.json`; add MapLibre GL JS (use `maplibre-gl`) as the map renderer (per research decision 7 — MapLibre is the default; can be swapped later)
 - [ ] T020 Implement Colyseus connection and `ghostTiles` patch subscription in `client/map-overlay/src/main.ts`: connect to the MatrixRoom, listen for `ghostTiles` changes, call `overlay.updateGhost(ghostId, h3Index)` on each patch
-- [ ] T021 Implement ghost marker rendering in `client/map-overlay/src/overlay.ts`: `updateGhost(ghostId, h3Index)` calls `cellToLatLng(h3Index)` from `h3-js` to get lat/lng; adds or moves a MapLibre marker for the ghost; handles ghost departure (removes marker when ghost disconnects)
+- [ ] T021 Implement ghost marker rendering in `client/map-overlay/src/overlay.ts`: `updateGhost(ghostId, h3Index)` calls `cellToLatLng(h3Index)` from `h3-js` to get lat/lng; adds or moves a MapLibre marker for the ghost; handles ghost departure (removes marker when ghost disconnects); wraps `cellToLatLng` in a try/catch — on failure, skips the marker update and logs a warning (e.g., `console.warn("overlay: invalid h3Index for ghost", ghostId, h3Index)`) rather than crashing
 - [ ] T022 Initialize MapLibre GL JS map in `client/map-overlay/src/map.ts`: center on the venue lat/lng derived from the map anchor; zoom level appropriate for a conference floor (~18); use a free tile source (OpenStreetMap via MapLibre's default style or a public style)
 - [ ] T023 Update `specs/005-h3-coordinate-system/quickstart.md` Step 5 with the actual `pnpm --filter @aie-matrix/client-map-overlay dev` command and browser URL once the package is scaffolded
+- [ ] T023b [US3] Add a Node.js smoke test (using vitest or the workspace's existing test runner) to `client/map-overlay/` that: (a) imports `cellToLatLng` from `h3-js` and verifies it returns a `[number, number]` pair for a known res-15 H3 index; (b) verifies `updateGhost` with a corrupt H3 index logs a warning and does not throw — satisfies constitution §III requirement for runnable packages; add `test` script to `client/map-overlay/package.json`
 
-**Checkpoint**: `pnpm --filter @aie-matrix/client-map-overlay dev` starts without error. Opening the browser shows the map centered on the venue. Ghost markers appear and move in real time.
+**Checkpoint**: `pnpm --filter @aie-matrix/client-map-overlay test` passes. `pnpm --filter @aie-matrix/client-map-overlay dev` starts without error. Opening the browser shows the map centered on the venue. Ghost markers appear and move in real time.
 
 ---
 
@@ -118,7 +123,7 @@
 
 - [ ] T029 [P] Update `docs/architecture.md`: describe H3 res-15 as the canonical cell coordinate system, reference RFC-0004, document `CellRecord.h3Index` as the node identity property in Neo4j
 - [ ] T030 [P] Update RFC-0004 status from `draft` to `accepted` in `proposals/rfc/0004-h3-geospatial-coordinate-system.md`
-- [ ] T031 [P] Document the ghost MCP `traverse` tool and updated `exits` response format in the ghost MCP interface docs (wherever `go` is currently documented — check `docs/` or `server/world-api/README.md`)
+- [ ] T031 [P] Document the ghost MCP `traverse` tool and updated `exits` response format in `server/world-api/README.md`: add a section describing the `traverse { via: string }` input, success/failure response shapes (from IC-007), and the new `[elevator]`/`[portal]` entries in `exits` output (from IC-006)
 - [ ] T032 Run the full `quickstart.md` smoke test sequence end-to-end: anchor a map, start server, verify `whereami` H3 format, run `go` sequence, run `pnpm test:tck`, open overlay client
 - [ ] T033 Run `pnpm typecheck` across the workspace and resolve any TypeScript errors introduced by the `CellId` and `CellRecord` changes
 - [ ] T034 Run `pnpm run lint` and fix any linting issues in modified files
@@ -156,7 +161,9 @@
 - T001 and T002: Run in parallel (different packages)
 - T005 and T006 and T008: Run in parallel (different files in Foundation phase)
 - T009, T010, T011: Run in parallel (different files in US1)
+- T017b and T017c: Run in parallel (different targets — Cypher queries vs. constraint setup)
 - T018 and T019: Run in parallel (scaffold structure + package deps)
+- T023b: Runs after T021 (needs `updateGhost` to exist for the corrupt-state test)
 - T029, T030, T031: Run in parallel (different doc files in Polish phase)
 
 ---
