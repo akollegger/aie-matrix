@@ -18,6 +18,7 @@ The reference house is **`random-house/`** (not `random-house-house/`) — histo
 |------|----------------|--------|
 | [`ts-client/`](./ts-client/) | `@aie-matrix/ghost-ts-client` | Streamable HTTP MCP client used by houses and TCK. |
 | [`random-house/`](./random-house/) | `@aie-matrix/ghost-random-house` | Registers, adopts, random-walks via MCP. |
+| [`ghost-cli/`](./ghost-cli/) | `@aie-matrix/ghost-cli` | Interactive REPL and one-shot CLI for human-operated ghost debugging. |
 | [`tck/`](./tck/) | `@aie-matrix/ghost-tck` | `pnpm run test` — server must already be listening. |
 | [`python-client/`](./python-client/) | *(none — Python only)* | Stub / future SDK; see `pyproject.toml`. |
 

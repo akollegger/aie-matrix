@@ -27,7 +27,7 @@ unset AIE_MATRIX_RULES
 export AIE_MATRIX_RULES=server/world-api/src/rules/fixtures/demo-asymmetric.rules.gram
 ```
 
-Then start the combined server (`pnpm run poc:server` or `pnpm dev`). **Invalid Gram in authored mode** exits the process during startup.
+Then start the combined server (`pnpm run server` or `pnpm dev`). **Invalid Gram in authored mode** exits the process during startup.
 
 ## 3. Manual MCP check (optional)
 

@@ -57,7 +57,7 @@ async function stepReachability(): Promise<void> {
   } catch (e) {
     fail(
       "reachability",
-      `GET ${url} — start the combined server first (e.g. pnpm run poc:server or pnpm run demo).`,
+      `GET ${url} — start the combined server first (e.g. pnpm run server or pnpm run demo).`,
       e,
     );
   }

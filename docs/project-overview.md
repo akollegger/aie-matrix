@@ -249,6 +249,14 @@ The following maps AIEWF 2026 sponsors and session tracks to contribution areas.
 
 ---
 
+## Local development and debugging
+
+Contributors can drive the ghost MCP surface directly without writing a house harness:
+
+- **`ghost-cli`** (`@aie-matrix/ghost-cli`, under `ghosts/ghost-cli/`) — one-shot subcommands (`whoami`, `whereami`, `look`, `exits`, `go`) for scripts and CI, and an interactive Ink REPL when invoked with no subcommand in a TTY. See `ghosts/README.md` and `specs/004-ghost-cli/quickstart.md`. From the repo root, `pnpm run ghost:cli` is a shortcut to the package entry point; `pnpm run ghost:register` provisions credentials on first use.
+
+---
+
 ## Open Questions for Collaborators
 
 - What does the memory module interface look like? What must every implementation provide, and what is left to the implementation?

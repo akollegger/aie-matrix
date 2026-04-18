@@ -29,7 +29,7 @@ The `effect` package is added to `server/package.json` as part of this feature. 
 ```bash
 pnpm dev
 # or
-pnpm poc:server:dev
+pnpm run server:dev
 ```
 
 The server starts on `http://localhost:8787` (or `AIE_MATRIX_HTTP_PORT`).

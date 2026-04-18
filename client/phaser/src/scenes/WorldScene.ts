@@ -96,9 +96,12 @@ export class WorldScene extends Phaser.Scene {
     this.spectator = new SpectatorView(this, this.room, tw, th, this.spectatorDebug);
 
     if (this.spectatorDebug && typeof window !== "undefined") {
+      const spectator = this.spectator;
       (window as unknown as { __aieSpectatorE2e: SpectatorE2eHook }).__aieSpectatorE2e = {
         ghostTilesSize: () => this.room.state.ghostTiles.size,
         tileCoordsSize: () => this.room.state.tileCoords.size,
+        ghostMarkerCount: () => spectator.getMarkerCount(),
+        stateSyncCount: () => spectator.getStateSyncCount(),
       };
     }
   }
@@ -118,4 +121,6 @@ export class WorldScene extends Phaser.Scene {
 interface SpectatorE2eHook {
   ghostTilesSize(): number;
   tileCoordsSize(): number;
+  ghostMarkerCount(): number;
+  stateSyncCount(): number;
 }

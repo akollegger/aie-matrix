@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "skills": {
+    "cmux": {
+      "source": "manaflow-ai/cmux",
+      "sourceType": "github",
+      "computedHash": "6448e0503ec75d4c1e3e23a5c5e89f94d4a1b961d64023d38f3cccd0a7343e65"
+    }
+  }
+}

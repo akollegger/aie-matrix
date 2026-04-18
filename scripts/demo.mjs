@@ -81,13 +81,13 @@ function waitFirstExit() {
 }
 
 try {
-  console.info("[demo] starting combined server (pnpm run poc:server)…");
-  start("server", "pnpm", ["run", "poc:server"]);
+  console.info("[demo] starting combined server (pnpm run server)…");
+  start("server", "pnpm", ["run", "server"]);
 
   await waitUntilReady(readyUrl, "HTTP + spectator meta");
 
-  console.info("[demo] starting Phaser client (pnpm run poc:client)…");
-  start("client", "pnpm", ["run", "poc:client"]);
+  console.info("[demo] starting Phaser spectator (pnpm run spectator)…");
+  start("spectator", "pnpm", ["run", "spectator"]);
 
   console.info("[demo] building + starting random-house…");
   execSync("pnpm --filter @aie-matrix/ghost-random-house build", {

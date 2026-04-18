@@ -9,5 +9,6 @@ packages:
   - shared/root-env
   - ghosts/ts-client
   - ghosts/random-house
+  - ghosts/ghost-cli
   - ghosts/tck
   - e2e

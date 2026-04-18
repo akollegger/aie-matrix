@@ -5,6 +5,14 @@ import { expect, test } from "@playwright/test";
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
+/** Mirrors `SpectatorE2eHook` in `client/phaser` (debug / `?debug=1` only). */
+type SpectatorE2eHook = {
+  ghostTilesSize(): number;
+  tileCoordsSize(): number;
+  ghostMarkerCount(): number;
+  stateSyncCount(): number;
+};
+
 test.describe.configure({ mode: "serial" });
 
 test.describe("Phaser spectator + Colyseus ghostTiles", () => {
@@ -30,36 +38,85 @@ test.describe("Phaser spectator + Colyseus ghostTiles", () => {
     }
   });
 
-  test("ghostTiles syncs after random-house adopts (regression: joinById root schema)", async ({ page }) => {
+  test.beforeEach(({ page }) => {
     page.on("console", (msg) => {
       if (msg.type() === "error") {
         process.stderr.write(`[page] ${msg.text()}\n`);
       }
     });
+  });
 
+  test("loads default URL without debug (canvas, no fatal bootstrap error)", async ({ page }) => {
+    await page.goto("/");
+    await expect(page.locator("#app canvas")).toBeVisible({ timeout: 60_000 });
+    await expect(page.locator("#app")).not.toContainText("Spectator failed to start");
+
+    const hookMissing = await page.evaluate(() => {
+      const w = window as unknown as { __aieSpectatorE2e?: SpectatorE2eHook };
+      return w.__aieSpectatorE2e === undefined;
+    });
+    expect(hookMissing).toBe(true);
+  });
+
+  test("Phaser ghost markers match synced ghostTiles (regression: joinById root schema)", async ({ page }) => {
     await page.goto("/?debug=1");
     await expect(page.locator("#app canvas")).toBeVisible({ timeout: 60_000 });
 
     await page.waitForFunction(
       () => {
-        const w = window as unknown as {
-          __aieSpectatorE2e?: { ghostTilesSize(): number; tileCoordsSize(): number };
-        };
-        return (w.__aieSpectatorE2e?.ghostTilesSize() ?? 0) >= 1 && (w.__aieSpectatorE2e?.tileCoordsSize() ?? 0) >= 1;
+        const w = window as unknown as { __aieSpectatorE2e?: SpectatorE2eHook };
+        const e = w.__aieSpectatorE2e;
+        return (
+          e !== undefined &&
+          e.ghostTilesSize() >= 1 &&
+          e.tileCoordsSize() >= 1 &&
+          e.ghostMarkerCount() >= 1 &&
+          e.ghostMarkerCount() === e.ghostTilesSize()
+        );
       },
       { timeout: 45_000 },
     );
 
-    const sizes = await page.evaluate(() => {
-      const w = window as unknown as {
-        __aieSpectatorE2e?: { ghostTilesSize(): number; tileCoordsSize(): number };
-      };
+    const snapshot = await page.evaluate(() => {
+      const w = window as unknown as { __aieSpectatorE2e?: SpectatorE2eHook };
+      const e = w.__aieSpectatorE2e;
       return {
-        ghosts: w.__aieSpectatorE2e?.ghostTilesSize() ?? -1,
-        tiles: w.__aieSpectatorE2e?.tileCoordsSize() ?? -1,
+        ghosts: e?.ghostTilesSize() ?? -1,
+        tiles: e?.tileCoordsSize() ?? -1,
+        markers: e?.ghostMarkerCount() ?? -1,
       };
     });
-    expect(sizes.ghosts).toBeGreaterThanOrEqual(1);
-    expect(sizes.tiles).toBeGreaterThanOrEqual(1);
+    expect(snapshot.ghosts).toBeGreaterThanOrEqual(1);
+    expect(snapshot.tiles).toBeGreaterThanOrEqual(1);
+    expect(snapshot.markers).toBe(snapshot.ghosts);
+  });
+
+  test("ghost walk produces multiple Colyseus state syncs (stateSyncCount)", async ({ page }) => {
+    await page.goto("/?debug=1");
+    await expect(page.locator("#app canvas")).toBeVisible({ timeout: 60_000 });
+
+    await page.waitForFunction(
+      () => {
+        const w = window as unknown as { __aieSpectatorE2e?: SpectatorE2eHook };
+        const e = w.__aieSpectatorE2e;
+        return e !== undefined && e.ghostTilesSize() >= 1 && e.tileCoordsSize() >= 1;
+      },
+      { timeout: 45_000 },
+    );
+
+    await page.waitForFunction(
+      () => {
+        const w = window as unknown as { __aieSpectatorE2e?: SpectatorE2eHook };
+        const e = w.__aieSpectatorE2e;
+        return e !== undefined && e.stateSyncCount() >= 5;
+      },
+      { timeout: 45_000 },
+    );
+
+    const syncCount = await page.evaluate(() => {
+      const w = window as unknown as { __aieSpectatorE2e?: SpectatorE2eHook };
+      return w.__aieSpectatorE2e?.stateSyncCount() ?? -1;
+    });
+    expect(syncCount).toBeGreaterThanOrEqual(5);
   });
 });
