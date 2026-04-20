@@ -1,5 +1,5 @@
 import type { CellId, LoadedMap } from "@aie-matrix/server-colyseus";
-import type { Compass, GoFailure, GoSuccess } from "@aie-matrix/shared-types";
+import type { Compass, GoFailure, GoSuccess, TraverseFailure, TraverseSuccess } from "@aie-matrix/shared-types";
 import { goStepPermittedByRules } from "./rules/match-go.js";
 import type { ParsedRuleset } from "./rules/movement-rules-service.js";
 import { tileLabelsFromClass } from "./rules/tile-labels.js";
@@ -57,3 +57,35 @@ export function evaluateGo(
   }
   return { ok: true, tileId: dest };
 }
+
+export type TraverseTargetLookup = (fromH3: string, via: string) => Promise<string | undefined>;
+
+/**
+ * Non-adjacent traversal (elevators / portals) backed by Neo4j `ELEVATOR` and `PORTAL` edges (IC-007).
+ */
+export async function evaluateTraverse(
+  map: LoadedMap,
+  fromH3: CellId,
+  via: string,
+  lookup: TraverseTargetLookup | undefined,
+): Promise<TraverseSuccess | TraverseFailure> {
+  const trimmedVia = via.trim();
+  if (trimmedVia === "") {
+    return { ok: false, code: "NO_EXIT", reason: "Exit name is empty" };
+  }
+  const fromCell = map.cells.get(fromH3);
+  if (!fromCell) {
+    return { ok: false, code: "UNKNOWN_CELL", reason: "Ghost is not on a known map cell" };
+  }
+  if (!lookup) {
+    return { ok: false, code: "NO_EXIT", reason: "Non-adjacent exits are not available (Neo4j not configured)" };
+  }
+  const to = await lookup(fromH3, trimmedVia);
+  if (!to) {
+    return { ok: false, code: "NO_EXIT", reason: `No non-adjacent exit named ${trimmedVia}` };
+  }
+  const dest = map.cells.get(to);
+  const tileClass = dest?.tileClass ?? "Portal";
+  return { ok: true, via: trimmedVia, from: fromH3, to, tileClass };
+}
+

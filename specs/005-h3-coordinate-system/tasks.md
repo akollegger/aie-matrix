@@ -18,10 +18,10 @@
 
 **Purpose**: Install the H3 library in every package that will use it. These tasks are independent and can run in parallel.
 
-- [ ] T001 [P] Add `h3-js` dependency to `server/colyseus/package.json`
-- [ ] T002 [P] Add `h3-js` dependency to `server/world-api/package.json`
-- [ ] T003 Run `pnpm install` at repo root to install new dependencies across the workspace
-- [ ] T004 Link RFC-0004 in `docs/architecture.md` under the coordinate system section (one-line reference; full update in polish phase)
+- [X] T001 [P] Add `h3-js` dependency to `server/colyseus/package.json`
+- [X] T002 [P] Add `h3-js` dependency to `server/world-api/package.json`
+- [X] T003 Run `pnpm install` at repo root to install new dependencies across the workspace
+- [X] T004 Link RFC-0004 in `docs/architecture.md` under the coordinate system section (one-line reference; full update in polish phase)
 
 ---
 
@@ -31,10 +31,10 @@
 
 **⚠️ CRITICAL**: Phases 3–6 are blocked until this phase is complete.
 
-- [ ] T005 Update `CellId` type and `CellRecord` interface in `server/colyseus/src/mapTypes.ts`: change `CellId` from template-literal to plain `string`; add `h3Index: string` field to `CellRecord`; update `neighbors` values from `CellId` to `string`; add `anchorH3: string` field to `LoadedMap` and change its `cells` map key type to `string`
-- [ ] T006 [P] Add bearing-to-compass utility function `assignCompassToNeighbors(cell: string): Partial<Record<Compass, string>>` to `server/colyseus/src/hexCompass.ts`: imports `cellToLatLng` and `gridDisk` from `h3-js`; computes bearing from cell centroid to each neighbor centroid using `atan2`; quantizes to nearest 60°-sector compass label; retain existing `neighborOddq` and `oddqOffsetToAxial` functions (do not remove)
-- [ ] T007 Update `server/colyseus/src/mapLoader.ts` to: (1) parse `h3_anchor` and `h3_resolution` from `tmj.properties` and throw a descriptive `MapLoadError` if `h3_anchor` is absent, not a valid H3 cell, or not at resolution 15; (2) call `localIjToCell(anchorH3, { i: col, j: row })` from `h3-js` for each cell to derive its `h3Index`; (3) use `assignCompassToNeighbors` from `hexCompass.ts` instead of `neighborOddq` to populate `cell.neighbors`; (4) key the returned `cells` map by `h3Index` and populate `anchorH3` on `LoadedMap`
-- [ ] T008 Add `h3_anchor` and `h3_resolution` custom map-level properties to `maps/sandbox/freeplay.tmj`: generate an anchor H3 index from a representative lat/lng (use `h3.latLngToCell(37.7894, -122.3995, 15)` as the synthetic anchor for the sandbox map — update to venue coordinates before the conference)
+- [X] T005 Update `CellId` type and `CellRecord` interface in `server/colyseus/src/mapTypes.ts`: change `CellId` from template-literal to plain `string`; add `h3Index: string` field to `CellRecord`; update `neighbors` values from `CellId` to `string`; add `anchorH3: string` field to `LoadedMap` and change its `cells` map key type to `string`
+- [X] T006 [P] Add bearing-to-compass utility function `assignCompassToNeighbors(cell: string): Partial<Record<Compass, string>>` to `server/colyseus/src/hexCompass.ts`: imports `cellToLatLng` and `gridDisk` from `h3-js`; computes bearing from cell centroid to each neighbor centroid using `atan2`; quantizes to nearest 60°-sector compass label; retain existing `neighborOddq` and `oddqOffsetToAxial` functions (do not remove)
+- [X] T007 Update `server/colyseus/src/mapLoader.ts` to: (1) parse `h3_anchor` and `h3_resolution` from `tmj.properties` and throw a descriptive `MapLoadError` if `h3_anchor` is absent, not a valid H3 cell, or not at resolution 15; (2) call `localIjToCell(anchorH3, { i: col, j: row })` from `h3-js` for each cell to derive its `h3Index`; (3) use `assignCompassToNeighbors` from `hexCompass.ts` instead of `neighborOddq` to populate `cell.neighbors`; (4) key the returned `cells` map by `h3Index` and populate `anchorH3` on `LoadedMap`
+- [X] T008 Add `h3_anchor` and `h3_resolution` custom map-level properties to `maps/sandbox/freeplay.tmj`: generate an anchor H3 index from a representative lat/lng (use `h3.latLngToCell(37.7894, -122.3995, 15)` as the synthetic anchor for the sandbox map — update to venue coordinates before the conference)
 
 **Checkpoint**: Run `pnpm dev` — server must load `freeplay.tmj` without error and log the anchor H3 index and cell count.
 
@@ -48,14 +48,14 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [P] Rename `tileId` field to `h3Index` in `GhostRecord` interface in `server/registry/src/store.ts`; update all reads and writes of `GhostRecord.tileId` to use `h3Index` throughout `server/registry/src/`
-- [ ] T010 [P] Update `server/colyseus/src/MatrixRoom.ts`: `ghostCellByGhostId` and `state.ghostTiles` values are now H3 index strings; `setGhostCell`, `getGhostCell`, and `listOccupantsOnCell` work with H3 strings (no logic change — just string format change); update `state.tileCoords` keys to h3Index (retain population from `CellRecord.col`/`row` for Phaser backward compat)
-- [ ] T011 Update `server/colyseus/src/room-schema.ts` code comments to document that `ghostTiles` values are now H3 index strings and `tileCoords`/`tileClasses` keys are now H3 index strings; no schema field renames (per IC-008 Phaser compat decision)
-- [ ] T012 Update `server/world-api/src/mcp-server.ts` `whereami` tool handler: return `h3Index` field (the ghost's current H3 index); retain `col` and `row` as supplemental fields read from `CellRecord`
-- [ ] T013 Update `server/world-api/src/mcp-server.ts` `exits` tool handler and `look` tool handler: cell lookups must use `h3Index` as the key into the `LoadedMap.cells` map (was `"col,row"` string)
-- [ ] T014 Update `server/world-api/src/movement.ts` `evaluateGo` function: `fromCell` lookup and neighbor resolution use `h3Index` string keys; success result `tileId` field becomes the neighbor's H3 index string; `GoSuccess.tileId` field rename to `h3Index` (or keep as `tileId` for backward compat — keep as `tileId` to minimize ghost agent changes)
-- [ ] T015 Update ghost TCK contract tests in `ghosts/tck/` to expect H3 index string format in: (a) position values returned by `whereami`; (b) neighbor values returned by `exits`; (c) new position in `go` success response — update all scenario fixtures that contain `"col,row"` formatted strings
-- [ ] T015b [US1] Add a TCK scenario that issues 40 sequential `go` commands across the loaded map and asserts each response contains a valid H3 res-15 index string — satisfies SC-002 (40-step navigation sequence)
+- [X] T009 [P] Rename `tileId` field to `h3Index` in `GhostRecord` interface in `server/registry/src/store.ts`; update all reads and writes of `GhostRecord.tileId` to use `h3Index` throughout `server/registry/src/`
+- [X] T010 [P] Update `server/colyseus/src/MatrixRoom.ts`: `ghostCellByGhostId` and `state.ghostTiles` values are now H3 index strings; `setGhostCell`, `getGhostCell`, and `listOccupantsOnCell` work with H3 strings (no logic change — just string format change); update `state.tileCoords` keys to h3Index (retain population from `CellRecord.col`/`row` for Phaser backward compat)
+- [X] T011 Update `server/colyseus/src/room-schema.ts` code comments to document that `ghostTiles` values are now H3 index strings and `tileCoords`/`tileClasses` keys are now H3 index strings; no schema field renames (per IC-008 Phaser compat decision)
+- [X] T012 Update `server/world-api/src/mcp-server.ts` `whereami` tool handler: return `h3Index` field (the ghost's current H3 index); retain `col` and `row` as supplemental fields read from `CellRecord`
+- [X] T013 Update `server/world-api/src/mcp-server.ts` `exits` tool handler and `look` tool handler: cell lookups must use `h3Index` as the key into the `LoadedMap.cells` map (was `"col,row"` string)
+- [X] T014 Update `server/world-api/src/movement.ts` `evaluateGo` function: `fromCell` lookup and neighbor resolution use `h3Index` string keys; success result `tileId` field becomes the neighbor's H3 index string; `GoSuccess.tileId` field rename to `h3Index` (or keep as `tileId` for backward compat — keep as `tileId` to minimize ghost agent changes)
+- [X] T015 Update ghost TCK contract tests in `ghosts/tck/` to expect H3 index string format in: (a) position values returned by `whereami`; (b) neighbor values returned by `exits`; (c) new position in `go` success response — update all scenario fixtures that contain `"col,row"` formatted strings
+- [X] T015b [US1] Add a TCK scenario that issues 40 sequential `go` commands across the loaded map and asserts each response contains a valid H3 res-15 index string — satisfies SC-002 (40-step navigation sequence)
 
 **Checkpoint**: `pnpm test:tck` passes including the 40-step sequence. Ghost CLI `whereami` returns H3 index. Ghost CLI `go` cycles work end-to-end.
 
@@ -69,11 +69,11 @@
 
 ### Implementation for User Story 2
 
-- [ ] T016 Verify the `MapLoadError` thrown in `server/colyseus/src/mapLoader.ts` (added in T007) includes: (a) the map file name; (b) the specific validation that failed (missing, invalid H3 string, wrong resolution); (c) guidance on how to fix it — add a validation test for each failure mode using the existing unit test suite
-- [ ] T017 Create `maps/sandbox/README.md` documenting: how to add `h3_anchor` to a `.tmj` file in Tiled, how to generate an H3 index from a lat/lng using the one-liner from `quickstart.md`, and what `h3_resolution` means
+- [X] T016 Verify the `MapLoadError` thrown in `server/colyseus/src/mapLoader.ts` (added in T007) includes: (a) the map file name; (b) the specific validation that failed (missing, invalid H3 string, wrong resolution); (c) guidance on how to fix it — add a validation test for each failure mode using the existing unit test suite
+- [X] T017 Create `maps/sandbox/README.md` documenting: how to add `h3_anchor` to a `.tmj` file in Tiled, how to generate an H3 index from a lat/lng using the one-liner from `quickstart.md`, and what `h3_resolution` means
 
-- [ ] T017b [US2] Audit all Cypher queries in `server/world-api/src/` for any pattern-matching on the old `"col,row"` tileId string format (e.g., `MATCH (c:Cell {tileId: ...})`) and update them to use `h3Index` — prevents silent graph query failures post-migration
-- [ ] T017c [US2] Create or update the Neo4j `cell_h3_unique` uniqueness constraint: `CREATE CONSTRAINT cell_h3_unique IF NOT EXISTS FOR (c:Cell) REQUIRE c.h3Index IS UNIQUE` — add to the graph initialization code in `server/world-api/src/` or `server/colyseus/src/`; satisfies FR-004
+- [X] T017b [US2] Audit all Cypher queries in `server/world-api/src/` for any pattern-matching on the old `"col,row"` tileId string format (e.g., `MATCH (c:Cell {tileId: ...})`) and update them to use `h3Index` — prevents silent graph query failures post-migration
+- [X] T017c [US2] Create or update the Neo4j `cell_h3_unique` uniqueness constraint: `CREATE CONSTRAINT cell_h3_unique IF NOT EXISTS FOR (c:Cell) REQUIRE c.h3Index IS UNIQUE` — add to the graph initialization code in `server/world-api/src/` or `server/colyseus/src/`; satisfies FR-004
 
 **Checkpoint**: Server rejects maps without a valid anchor with actionable error messages. `maps/sandbox/README.md` explains the anchor property. Neo4j uniqueness constraint exists and Cypher queries use `h3Index`.
 
@@ -87,13 +87,13 @@
 
 ### Implementation for User Story 3
 
-- [ ] T018 Scaffold `client/map-overlay/` package: create `package.json` (name: `@aie-matrix/client-map-overlay`, `"type": "module"`), `tsconfig.json` (browser target), `index.html`, `src/main.ts`, `src/overlay.ts`, `src/map.ts`; add to pnpm workspace in root `pnpm-workspace.yaml`
-- [ ] T019 [P] Add `h3-js` and `colyseus.js` dependencies to `client/map-overlay/package.json`; add MapLibre GL JS (use `maplibre-gl`) as the map renderer (per research decision 7 — MapLibre is the default; can be swapped later)
-- [ ] T020 Implement Colyseus connection and `ghostTiles` patch subscription in `client/map-overlay/src/main.ts`: connect to the MatrixRoom, listen for `ghostTiles` changes, call `overlay.updateGhost(ghostId, h3Index)` on each patch
-- [ ] T021 Implement ghost marker rendering in `client/map-overlay/src/overlay.ts`: `updateGhost(ghostId, h3Index)` calls `cellToLatLng(h3Index)` from `h3-js` to get lat/lng; adds or moves a MapLibre marker for the ghost; handles ghost departure (removes marker when ghost disconnects); wraps `cellToLatLng` in a try/catch — on failure, skips the marker update and logs a warning (e.g., `console.warn("overlay: invalid h3Index for ghost", ghostId, h3Index)`) rather than crashing
-- [ ] T022 Initialize MapLibre GL JS map in `client/map-overlay/src/map.ts`: center on the venue lat/lng derived from the map anchor; zoom level appropriate for a conference floor (~18); use a free tile source (OpenStreetMap via MapLibre's default style or a public style)
-- [ ] T023 Update `specs/005-h3-coordinate-system/quickstart.md` Step 5 with the actual `pnpm --filter @aie-matrix/client-map-overlay dev` command and browser URL once the package is scaffolded
-- [ ] T023b [US3] Add a Node.js smoke test (using vitest or the workspace's existing test runner) to `client/map-overlay/` that: (a) imports `cellToLatLng` from `h3-js` and verifies it returns a `[number, number]` pair for a known res-15 H3 index; (b) verifies `updateGhost` with a corrupt H3 index logs a warning and does not throw — satisfies constitution §III requirement for runnable packages; add `test` script to `client/map-overlay/package.json`
+- [X] T018 Scaffold `client/map-overlay/` package: create `package.json` (name: `@aie-matrix/client-map-overlay`, `"type": "module"`), `tsconfig.json` (browser target), `index.html`, `src/main.ts`, `src/overlay.ts`, `src/map.ts`; add to pnpm workspace in root `pnpm-workspace.yaml`
+- [X] T019 [P] Add `h3-js` and `colyseus.js` dependencies to `client/map-overlay/package.json`; add MapLibre GL JS (use `maplibre-gl`) as the map renderer (per research decision 7 — MapLibre is the default; can be swapped later)
+- [X] T020 Implement Colyseus connection and `ghostTiles` patch subscription in `client/map-overlay/src/main.ts`: connect to the MatrixRoom, listen for `ghostTiles` changes, call `overlay.updateGhost(ghostId, h3Index)` on each patch
+- [X] T021 Implement ghost marker rendering in `client/map-overlay/src/overlay.ts`: `updateGhost(ghostId, h3Index)` calls `cellToLatLng(h3Index)` from `h3-js` to get lat/lng; adds or moves a MapLibre marker for the ghost; handles ghost departure (removes marker when ghost disconnects); wraps `cellToLatLng` in a try/catch — on failure, skips the marker update and logs a warning (e.g., `console.warn("overlay: invalid h3Index for ghost", ghostId, h3Index)`) rather than crashing
+- [X] T022 Initialize MapLibre GL JS map in `client/map-overlay/src/map.ts`: center on the venue lat/lng derived from the map anchor; zoom level appropriate for a conference floor (~18); use a free tile source (OpenStreetMap via MapLibre's default style or a public style)
+- [X] T023 Update `specs/005-h3-coordinate-system/quickstart.md` Step 5 with the actual `pnpm --filter @aie-matrix/client-map-overlay dev` command and browser URL once the package is scaffolded
+- [X] T023b [US3] Add a Node.js smoke test (using vitest or the workspace's existing test runner) to `client/map-overlay/` that: (a) imports `cellToLatLng` from `h3-js` and verifies it returns a `[number, number]` pair for a known res-15 H3 index; (b) verifies `updateGhost` with a corrupt H3 index logs a warning and does not throw — satisfies constitution §III requirement for runnable packages; add `test` script to `client/map-overlay/package.json`
 
 **Checkpoint**: `pnpm --filter @aie-matrix/client-map-overlay test` passes. `pnpm --filter @aie-matrix/client-map-overlay dev` starts without error. Opening the browser shows the map centered on the venue. Ghost markers appear and move in real time.
 
@@ -107,11 +107,11 @@
 
 ### Implementation for User Story 4
 
-- [ ] T024 Add `evaluateTraverse(map, fromCell, via, neo4jService): TraverseSuccess | TraverseFailure` function to `server/world-api/src/movement.ts`: queries Neo4j for `PORTAL`/`ELEVATOR` relationships from `fromCell.h3Index` with `name = via`; returns success with destination H3 index or typed failure with `NO_EXIT` code
-- [ ] T025 Register `traverse` MCP tool in `server/world-api/src/mcp-server.ts` per IC-007: input schema `{ via: z.string() }`; calls `traverseEffect(via, extra)` which resolves ghost position, calls `evaluateTraverse`, updates ghost cell on success
-- [ ] T026 Update `exits` tool handler in `server/world-api/src/mcp-server.ts` to query Neo4j for non-adjacent relationships (`PORTAL`, `ELEVATOR`) from the current cell and append them to the exits response per IC-006; format as `[elevator] name → h3Index (tileClass)` and `[portal] name → h3Index (tileClass)`
-- [ ] T027 Add pentagon portal seeding to server startup in `server/world-api/src/` (or `server/colyseus/src/` initialization): call `h3.getPentagons(15)` to get 12 H3 indices; upsert `(:Cell {h3Index})` nodes for each; create fully-connected `PORTAL` relationships between all 12 with `name: "pentagon-N"` where N is 1–12
-- [ ] T028 Add TCK scenarios to `ghosts/tck/` for: (a) `exits` including a named non-adjacent exit when one exists; (b) `traverse` success; (c) `traverse` failure with `NO_EXIT` code — use synthetic test map with an `ELEVATOR` relationship
+- [X] T024 Add `evaluateTraverse(map, fromCell, via, neo4jService): TraverseSuccess | TraverseFailure` function to `server/world-api/src/movement.ts`: queries Neo4j for `PORTAL`/`ELEVATOR` relationships from `fromCell.h3Index` with `name = via`; returns success with destination H3 index or typed failure with `NO_EXIT` code
+- [X] T025 Register `traverse` MCP tool in `server/world-api/src/mcp-server.ts` per IC-007: input schema `{ via: z.string() }`; calls `traverseEffect(via, extra)` which resolves ghost position, calls `evaluateTraverse`, updates ghost cell on success
+- [X] T026 Update `exits` tool handler in `server/world-api/src/mcp-server.ts` to query Neo4j for non-adjacent relationships (`PORTAL`, `ELEVATOR`) from the current cell and append them to the exits response per IC-006; format as `[elevator] name → h3Index (tileClass)` and `[portal] name → h3Index (tileClass)`
+- [X] T027 Add pentagon portal seeding to server startup in `server/world-api/src/` (or `server/colyseus/src/` initialization): call `h3.getPentagons(15)` to get 12 H3 indices; upsert `(:Cell {h3Index})` nodes for each; create fully-connected `PORTAL` relationships between all 12 with `name: "pentagon-N"` where N is 1–12
+- [X] T028 Add TCK scenarios to `ghosts/tck/` for: (a) `exits` including a named non-adjacent exit when one exists; (b) `traverse` success; (c) `traverse` failure with `NO_EXIT` code — use synthetic test map with an `ELEVATOR` relationship
 
 **Checkpoint**: `pnpm test:tck` includes and passes traversal scenarios. `exits` shows named exits when a non-adjacent relationship exists on the current cell.
 
@@ -121,12 +121,12 @@
 
 **Purpose**: Documentation updates, verification, and cleanup across all user stories.
 
-- [ ] T029 [P] Update `docs/architecture.md`: describe H3 res-15 as the canonical cell coordinate system, reference RFC-0004, document `CellRecord.h3Index` as the node identity property in Neo4j
-- [ ] T030 [P] Update RFC-0004 status from `draft` to `accepted` in `proposals/rfc/0004-h3-geospatial-coordinate-system.md`
-- [ ] T031 [P] Document the ghost MCP `traverse` tool and updated `exits` response format in `server/world-api/README.md`: add a section describing the `traverse { via: string }` input, success/failure response shapes (from IC-007), and the new `[elevator]`/`[portal]` entries in `exits` output (from IC-006)
-- [ ] T032 Run the full `quickstart.md` smoke test sequence end-to-end: anchor a map, start server, verify `whereami` H3 format, run `go` sequence, run `pnpm test:tck`, open overlay client
-- [ ] T033 Run `pnpm typecheck` across the workspace and resolve any TypeScript errors introduced by the `CellId` and `CellRecord` changes
-- [ ] T034 Run `pnpm run lint` and fix any linting issues in modified files
+- [X] T029 [P] Update `docs/architecture.md`: describe H3 res-15 as the canonical cell coordinate system, reference RFC-0004, document `CellRecord.h3Index` as the node identity property in Neo4j
+- [X] T030 [P] Update RFC-0004 status from `draft` to `accepted` in `proposals/rfc/0004-h3-geospatial-coordinate-system.md`
+- [X] T031 [P] Document the ghost MCP `traverse` tool and updated `exits` response format in `server/world-api/README.md`: add a section describing the `traverse { via: string }` input, success/failure response shapes (from IC-007), and the new `[elevator]`/`[portal]` entries in `exits` output (from IC-006)
+- [X] T032 Run the full `quickstart.md` smoke test sequence end-to-end: anchor a map, start server, verify `whereami` H3 format, run `go` sequence, run `pnpm test:tck`, open overlay client
+- [X] T033 Run `pnpm typecheck` across the workspace and resolve any TypeScript errors introduced by the `CellId` and `CellRecord` changes
+- [X] T034 Run `pnpm run lint` and fix any linting issues in modified files
 
 ---
 

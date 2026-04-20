@@ -1,6 +1,6 @@
 # ghost-tck (`@aie-matrix/ghost-tck`)
 
-**Minimal** PoC compatibility smoke (IC-006 subset per [`specs/001-minimal-poc/contracts/tck-scenarios.md`](../../specs/001-minimal-poc/contracts/tck-scenarios.md)): **reachability** → **registry adopt** → **MCP `whereami`**.
+**Minimal** PoC compatibility smoke: **reachability** → **registry adopt** → **MCP `whereami`**, optional **`traverse`** (with Neo4j), then **40× `go`**. See [`specs/005-h3-coordinate-system/contracts/`](../../specs/005-h3-coordinate-system/contracts/).
 
 ## Prerequisites
 
@@ -33,6 +33,16 @@ Exit **0** only if all steps pass; otherwise **non-zero** with `[tck] <step> …
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `AIE_MATRIX_REGISTRY_BASE` | `http://127.0.0.1:8787` | HTTP root for `/spectator/room` and `/registry/*` |
+| _(server)_ `AIE_MATRIX_TCK_MODE` | _(unset)_ | When truthy, adoption spawns on the map **anchor** so `tck-elevator` is reachable |
+| _(server)_ `NEO4J_URI` | _(unset)_ | When set (with credentials), graph seeds add `tck-elevator` and pentagon portals so **`traverse`** scenarios run |
+
+Example full TCK with traversal:
+
+```bash
+NEO4J_URI=bolt://localhost:7687 NEO4J_PASSWORD=… AIE_MATRIX_TCK_MODE=1 pnpm dev
+# other terminal:
+pnpm test:tck
+```
 
 Optional `.env` at repo root is loaded via `@aie-matrix/root-env` (same as server / ghosts).
 

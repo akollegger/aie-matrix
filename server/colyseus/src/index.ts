@@ -1,4 +1,4 @@
-export { loadHexMap } from "./mapLoader.js";
+export { loadHexMap, MapLoadError } from "./mapLoader.js";
 export { MatrixRoom, type MatrixRoomOptions } from "./MatrixRoom.js";
 export {
   TileCoord,
@@ -7,6 +7,7 @@ export {
   type SpectatorStateSnapshot,
 } from "./room-schema.js";
 export {
+  assignCompassToNeighbors,
   oddqOffsetToAxial,
   axialToOddqOffset,
   neighborOddq,

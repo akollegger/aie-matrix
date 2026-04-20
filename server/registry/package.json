@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aie-matrix/root-env": "workspace:*",
     "@aie-matrix/server-auth": "workspace:*",
     "@aie-matrix/server-world-api": "workspace:*",
     "@aie-matrix/shared-types": "workspace:*",

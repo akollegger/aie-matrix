@@ -11,6 +11,7 @@ import {
   COMPASS_DIRECTIONS,
   type ExitInfo,
   type GoFailure,
+  type NonAdjacentExitInfo,
   type TileInspectResult,
   type WhereAmIResult,
   type WhoAmIResult,
@@ -22,6 +23,7 @@ import {
 import type { AuthError } from "./auth-errors.js";
 import { AuthMissingCredentials } from "./auth-errors.js";
 import { McpHandlerError } from "./mcp-handler-error.js";
+import { Neo4jGraphService } from "./Neo4jGraphService.js";
 import { RegistryStoreService } from "./RegistryStoreService.js";
 import { MovementRulesService } from "./rules/movement-rules-service.js";
 import { WorldBridgeService } from "./WorldBridgeService.js";
@@ -32,7 +34,7 @@ import {
   WorldApiUnknownCell,
   type WorldApiError,
 } from "./world-api-errors.js";
-import { evaluateGo } from "./movement.js";
+import { evaluateGo, evaluateTraverse } from "./movement.js";
 import { getRequestTraceId } from "./request-trace.js";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -41,7 +43,7 @@ const compassEnum = z.enum(["n", "s", "ne", "nw", "se", "sw"]);
 
 const lookAtSchema = z.union([z.literal("here"), z.literal("around"), compassEnum]);
 
-type ToolServices = WorldBridgeService | RegistryStoreService | MovementRulesService;
+type ToolServices = WorldBridgeService | RegistryStoreService | MovementRulesService | Neo4jGraphService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -131,7 +133,7 @@ function normalizeCellId(raw: string | undefined | null): CellId | undefined {
 
 /**
  * Colyseus `ghostTiles` is authoritative, but the in-memory registry still holds each
- * ghost’s last known `tileId` from adopt / moves. If the room map lost the entry (e.g.
+ * ghost’s last known cell id (`h3Index` in the registry) from adopt / moves. If the room map lost the entry (e.g.
  * process hiccup), re-seed from the registry so MCP tools keep working.
  */
 function authoritativeGhostTileEffect(
@@ -146,7 +148,7 @@ function authoritativeGhostTileEffect(
     if (fromRoom !== undefined) {
       return fromRoom;
     }
-    const regRaw = store.ghosts.get(ghostId)?.tileId;
+    const regRaw = store.ghosts.get(ghostId)?.h3Index;
     const fromReg = normalizeCellId(regRaw);
     if (fromReg !== undefined) {
       bridge.setGhostCell(ghostId, fromReg);
@@ -185,7 +187,7 @@ function whereamiEffect(extra: McpToolExtra): Effect.Effect<WhereAmIResult, Auth
     if (!cell) {
       return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(tileId) }));
     }
-    return { tileId, col: cell.col, row: cell.row };
+    return { h3Index: tileId, tileId, col: cell.col, row: cell.row };
   });
 }
 
@@ -249,11 +251,18 @@ function lookEffect(
   });
 }
 
-function exitsEffect(extra: McpToolExtra): Effect.Effect<{ exits: ExitInfo[] }, AuthError | WorldApiError, ToolServices> {
+function exitsEffect(
+  extra: McpToolExtra,
+): Effect.Effect<
+  { here: string; exits: ExitInfo[]; nonAdjacent: NonAdjacentExitInfo[] },
+  AuthError | WorldApiError,
+  ToolServices
+> {
   return Effect.gen(function* () {
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const bridge = yield* WorldBridgeService;
+    const neo = yield* Neo4jGraphService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
     const here = map.cells.get(hereId);
@@ -267,7 +276,13 @@ function exitsEffect(extra: McpToolExtra): Effect.Effect<{ exits: ExitInfo[] }, 
         exits.push({ toward: dir, tileId: nid });
       }
     }
-    return { exits };
+    const rows = yield* neo.listNonAdjacent(hereId);
+    const nonAdjacent: NonAdjacentExitInfo[] = rows.map((r) => {
+      const dest = map.cells.get(r.toH3Index);
+      const tileClass = dest?.tileClass ?? (r.kind === "PORTAL" ? "Portal" : "Unknown");
+      return { kind: r.kind, name: r.name, tileId: r.toH3Index, tileClass };
+    });
+    return { here: hereId, exits, nonAdjacent };
   });
 }
 
@@ -282,6 +297,34 @@ function goFailureToWorldApi(fromCell: CellId, failure: GoFailure): WorldApiErro
   return new WorldApiMovementBlocked({
     message: failure.reason,
     code: failure.code,
+  });
+}
+
+function traverseEffect(
+  via: string,
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const bridge = yield* WorldBridgeService;
+    const neo = yield* Neo4jGraphService;
+    const map = bridge.getLoadedMap();
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    const result = yield* Effect.promise(() =>
+      evaluateTraverse(map, hereId, via, async (f, v) => await Effect.runPromise(neo.findTraverseTarget(f, v))),
+    );
+    if (!result.ok) {
+      if (result.code === "UNKNOWN_CELL") {
+        return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(hereId) }));
+      }
+      return yield* Effect.fail(
+        new WorldApiMovementBlocked({ message: result.reason, code: result.code }),
+      );
+    }
+    bridge.setGhostCell(ghostId, result.to);
+    yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: result.to, reason: "traverse" });
+    return result;
   });
 }
 
@@ -399,9 +442,22 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "exits",
     {
-      description: "List exits from your current tile — compass direction and neighbor tile id only.",
+      description:
+        "List exits from your current tile — compass neighbors (H3 ids) plus named non-adjacent exits (elevators, portals) when configured.",
     },
     async (extra) => runTool("exits", {}, exitsEffect(extra)),
+  );
+
+  server.registerTool(
+    "traverse",
+    {
+      description:
+        "Step through a named non-adjacent exit (elevator, portal) from your current cell. Use exits to discover names.",
+      inputSchema: {
+        via: z.string().describe("Exit name as returned by exits (e.g. tck-elevator, pentagon-2)."),
+      },
+    },
+    async ({ via }, extra) => runTool("traverse", { via }, traverseEffect(via, extra)),
   );
 
   server.registerTool(
@@ -421,7 +477,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
 
 /**
  * Stateless Streamable HTTP MCP handler (one `McpServer` instance per request), per SDK guidance.
- * Requires `WorldBridgeService`, `RegistryStoreService`, and `MovementRulesService` in the Effect context (combined server `ManagedRuntime`).
+ * Requires `WorldBridgeService`, `RegistryStoreService`, `MovementRulesService`, and `Neo4jGraphService` in the Effect context (combined server `ManagedRuntime`).
  */
 export function handleGhostMcpEffect(
   req: IncomingMessage,
@@ -442,10 +498,12 @@ export function handleGhostMcpEffect(
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
     const rules = yield* MovementRulesService;
+    const neo = yield* Neo4jGraphService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
       Layer.succeed(MovementRulesService, rules),
+      Layer.succeed(Neo4jGraphService, neo),
     );
     yield* Effect.tryPromise({
       try: async () => {

@@ -38,8 +38,8 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
   /** Broadcast a lightweight patch envelope (optional for non-schema listeners). */
   emitGhostPatch(): void {
     const plain: Record<string, string> = {};
-    for (const [ghostId, tileId] of this.ghostCellByGhostId) {
-      plain[ghostId] = tileId;
+    for (const [ghostId, cellId] of this.ghostCellByGhostId) {
+      plain[ghostId] = cellId;
     }
     this.broadcast("ghost-patch", plain);
   }

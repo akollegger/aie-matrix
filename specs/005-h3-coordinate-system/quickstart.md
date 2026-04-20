@@ -100,7 +100,7 @@ All TCK scenarios must pass. Pay attention to:
 pnpm --filter @aie-matrix/client-map-overlay dev
 ```
 
-Open `http://localhost:5174` in a browser. Ghost positions appear as markers on the map. As ghosts move, markers update in real time.
+Open `http://localhost:5175` in a browser (MapLibre overlay dev server; Phaser spectator uses `5174`). Ghost positions appear as markers on the map. As ghosts move, markers update in real time.
 
 To verify correct lat/lng placement, cross-reference a ghost's `whereami` H3 index with:
 ```javascript

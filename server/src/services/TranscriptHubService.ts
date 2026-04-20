@@ -50,7 +50,7 @@ function notifyGhost(
         );
       });
     }
-  });
+  }) as Effect.Effect<void, never, WorldBridgeService>;
 }
 
 /** Scoped subscriber loop: one dequeue per adoption; ends when hub shuts down or scope closes. */

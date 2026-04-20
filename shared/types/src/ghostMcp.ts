@@ -6,6 +6,7 @@ export const GHOST_MCP_TOOLS = [
   "look",
   "exits",
   "go",
+  "traverse",
 ] as const;
 
 export type GhostMcpTool = (typeof GHOST_MCP_TOOLS)[number];
@@ -16,6 +17,9 @@ export interface WhoAmIResult {
 }
 
 export interface WhereAmIResult {
+  /** Canonical H3 res-15 cell id. */
+  h3Index: string;
+  /** Same as `h3Index` — retained for agents that still read `tileId`. */
   tileId: string;
   col: number;
   row: number;
@@ -37,6 +41,30 @@ export interface ExitInfo {
   toward: Compass;
   tileId: string;
 }
+
+/** Named non-adjacent exit from Neo4j (IC-006). */
+export interface NonAdjacentExitInfo {
+  kind: "ELEVATOR" | "PORTAL";
+  name: string;
+  /** Destination H3 res-15 index. */
+  tileId: string;
+  tileClass: string;
+}
+
+export interface TraverseSuccess {
+  ok: true;
+  via: string;
+  from: string;
+  to: string;
+  tileClass: string;
+}
+
+export type TraverseFailure =
+  | { ok: false; code: "NO_EXIT"; reason: string }
+  | { ok: false; code: "UNKNOWN_CELL"; reason: string }
+  | { ok: false; code: "RULESET_DENY"; reason: string };
+
+export type TraverseResult = TraverseSuccess | TraverseFailure;
 
 /** Machine-stable `code` values on {@link GoFailure} from the `go` tool (IC-003). */
 export const GO_MOVEMENT_FAILURE_CODES = [

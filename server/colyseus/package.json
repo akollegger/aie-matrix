@@ -17,7 +17,11 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
   },
   "dependencies": {
     "@aie-matrix/root-env": "workspace:*",
@@ -25,6 +29,7 @@
     "@colyseus/core": "0.15.57",
     "@colyseus/schema": "2.0.35",
     "@colyseus/ws-transport": "0.15.2",
-    "fast-xml-parser": "4.5.5"
+    "fast-xml-parser": "4.5.5",
+    "h3-js": "^4.1.0"
   }
 }

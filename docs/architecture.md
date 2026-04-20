@@ -64,6 +64,8 @@ Structured log lines emit JSON objects with a `kind`, `op`, `traceId`, and relev
 
 Adjacent ghost `go` steps are evaluated in **`server/world-api`** (not inside Colyseus room code). The **map** supplies hex geometry and per-cell **tile classes** (Tiled types). An optional **Gram ruleset** under `server/world-api/src/rules/fixtures/` (loaded via env; see `server/world-api/README.md`) supplies allow-list **policy** as `GO` edges between class labels. Leaving **`AIE_MATRIX_RULES`** unset preserves the original permissive “any adjacent step on the map graph” baseline; setting **`AIE_MATRIX_RULES`** to a `.gram` file path enables authored policy.
 
+Canonical cell identity for ghosts, Colyseus `ghostTiles`, and MCP tools is **H3 resolution 15** (see [RFC-0004](../proposals/rfc/0004-h3-geospatial-coordinate-system.md)). Tiled maps supply `h3_anchor` so every navigable cell gets a stable `h3Index`. In **Neo4j**, `(:Cell { h3Index })` is the node identity for the world graph (uniqueness constraint `cell_h3_unique`); non-adjacent exits use `ELEVATOR` and `PORTAL` relationship types with a `name` property matching MCP `exits` / `traverse`.
+
 ---
 
 ## Open Questions

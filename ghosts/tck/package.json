@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "@aie-matrix/ghost-ts-client": "workspace:*",
-    "@aie-matrix/root-env": "workspace:*"
+    "@aie-matrix/root-env": "workspace:*",
+    "h3-js": "^4.1.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.2"

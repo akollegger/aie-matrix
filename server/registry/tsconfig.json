@@ -6,6 +6,7 @@
     "composite": true
   },
   "references": [
+    { "path": "../../shared/root-env" },
     { "path": "../auth" },
     { "path": "../world-api" },
     { "path": "../../shared/types" }
