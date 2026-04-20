@@ -1,4 +1,4 @@
-# RFC-0003: H3 Geospatial Coordinate System
+# RFC-0004: H3 Geospatial Coordinate System
 
 **Status:** accepted  
 **Date:** 2026-04-18  

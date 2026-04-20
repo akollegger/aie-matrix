@@ -80,6 +80,27 @@ test("MapLoadError when h3_anchor is missing names map file and points to author
   });
 });
 
+test("MapLoadError when h3_anchor has wrong Tiled property type (IC-009)", async () => {
+  const body = tmjWith([
+    { name: "h3_anchor", type: "int", value: 12345 },
+    { name: "h3_resolution", type: "int", value: 15 },
+  ]);
+  await withTempMap(body, async (tmjPath) => {
+    await assert.rejects(
+      () => loadHexMap(tmjPath),
+      (e: unknown) => {
+        assert.ok(e instanceof MapLoadError);
+        const msg = (e as Error).message;
+        assert.match(msg, /case\.tmj/);
+        assert.match(msg, /h3_anchor/);
+        assert.match(msg, /string/);
+        assert.match(msg, /int/);
+        return true;
+      },
+    );
+  });
+});
+
 test("MapLoadError when h3_anchor is not a valid H3 index", async () => {
   const body = tmjWith([
     { name: "h3_anchor", type: "string", value: "not-a-valid-h3-cell" },

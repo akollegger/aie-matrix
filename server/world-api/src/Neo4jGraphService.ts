@@ -10,6 +10,8 @@ export interface NonAdjacentRow {
 }
 
 export interface Neo4jGraphOps {
+  /** When false, non-adjacent graph features are unavailable (no Neo4j driver). */
+  readonly configured: boolean;
   readonly listNonAdjacent: (fromH3Index: string) => Effect.Effect<readonly NonAdjacentRow[], never>;
   readonly findTraverseTarget: (fromH3Index: string, via: string) => Effect.Effect<string | undefined, never>;
 }
@@ -20,6 +22,7 @@ export class Neo4jGraphService extends Context.Tag("aie-matrix/Neo4jGraphService
 >() {}
 
 export const makeNoOpNeo4jGraphLayer: Layer.Layer<Neo4jGraphService> = Layer.succeed(Neo4jGraphService, {
+  configured: false,
   listNonAdjacent: () => Effect.succeed([]),
   findTraverseTarget: () => Effect.succeed(undefined),
 });
@@ -30,6 +33,7 @@ function relToKind(relType: string): NonAdjacentKind {
 
 export const makeLiveNeo4jGraphLayer = (driver: Driver): Layer.Layer<Neo4jGraphService> =>
   Layer.succeed(Neo4jGraphService, {
+    configured: true,
     listNonAdjacent: (fromH3Index): Effect.Effect<readonly NonAdjacentRow[], never> =>
       Effect.promise(async () => {
         const session = driver.session({ defaultAccessMode: neo4j.session.READ });

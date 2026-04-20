@@ -50,13 +50,9 @@ export class WorldSpectatorState extends Schema {
 
 ## Phaser Client Compatibility
 
-The Phaser client (`client/phaser`) reads `ghostTiles` to get ghost positions, then looks up `tileCoords[tileId]` for col/row rendering coordinates. After this change:
+The Phaser spectator (`client/phaser/src/scenes/SpectatorView.ts`) already iterates `ghostTiles` and uses each value as the key into `tileCoords` (`tileCoords.get(tileId)` where `tileId` comes from the `ghostTiles` entry). After this change, those values are H3 res-15 strings instead of `"col,row"`, and the server keys `tileCoords` / `tileClasses` by the same H3 strings — so **no Phaser code change is required** for marker placement.
 
-1. `ghostTiles[ghostId]` now yields an H3 index string.
-2. The Phaser client must use that H3 index string as the key into `tileCoords` to get `{ col, row }`.
-3. The `tileCoords` map is still populated by the server from `CellRecord.col` and `CellRecord.row`, so the Phaser rendering pipeline continues to work without a Phaser client update.
-
-**Required Phaser client change**: Update the key lookup from `state.tileCoords.get(tileId)` to `state.tileCoords.get(ghostTiles.get(ghostId))` — a one-line change if the Phaser client was using the tileId directly.
+Debug helpers (e.g. `spectatorDebug.ts`) that log or assume `"col,row"`-shaped ids may warrant a wording-only update so logs read clearly; behavior remains correct as long as they use the same id for `ghostTiles` and `tileCoords` lookups.
 
 ---
 

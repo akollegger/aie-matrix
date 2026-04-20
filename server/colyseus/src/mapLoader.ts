@@ -66,6 +66,21 @@ function getPropertyInt(props: TmjProperty[] | undefined, name: string): number 
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** When `type` is set on a Tiled custom property, it must match IC-009 (string vs int). */
+function assertTiledPropertyType(
+  props: TmjProperty[] | undefined,
+  name: string,
+  expectedType: string,
+  mapLabel: string,
+): void {
+  const p = props?.find((x) => x.name === name);
+  if (p && p.type !== undefined && p.type !== expectedType) {
+    throw new MapLoadError(
+      `${mapLabel}: property "${name}" must be Tiled type "${expectedType}" (got "${p.type}")`,
+    );
+  }
+}
+
 /**
  * Load a Tiled `.tmj` hex map + external `.tsx` tileset and derive a compass-labeled graph
  * keyed by H3 res-15 indices.
@@ -87,6 +102,9 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
   if (layer.width !== tmj.width || layer.height !== tmj.height) {
     throw new MapLoadError(`${mapLabel}: layer width/height mismatch with map dimensions`);
   }
+
+  assertTiledPropertyType(tmj.properties, "h3_anchor", "string", mapLabel);
+  assertTiledPropertyType(tmj.properties, "h3_resolution", "int", mapLabel);
 
   const anchorRaw = getPropertyString(tmj.properties, "h3_anchor");
   if (anchorRaw === undefined || anchorRaw.length === 0) {
@@ -117,7 +135,7 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
 
   const tilesetRef = tmj.tilesets?.[0];
   if (!tilesetRef?.source || tilesetRef.firstgid === undefined) {
-    throw new Error(`${mapLabel} missing tileset reference`);
+    throw new MapLoadError(`${mapLabel} missing tileset reference`);
   }
   const tsxPath = join(dirname(tmAbsolutePath), tilesetRef.source);
   const tsxXml = await readFile(tsxPath, "utf8");
@@ -142,7 +160,7 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
       const localId = localIdFromGid(gid, tilesetRef.firstgid);
       const tile = tiles.get(localId);
       if (!tile?.tileClass) {
-        throw new Error(
+        throw new MapLoadError(
           `${mapLabel}: missing tile class for gid ${gid} (local ${localId}) at col=${col} row=${row} — tileset ${tsxPath}`,
         );
       }

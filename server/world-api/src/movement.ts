@@ -85,7 +85,13 @@ export async function evaluateTraverse(
     return { ok: false, code: "NO_EXIT", reason: `No non-adjacent exit named ${trimmedVia}` };
   }
   const dest = map.cells.get(to);
-  const tileClass = dest?.tileClass ?? "Portal";
-  return { ok: true, via: trimmedVia, from: fromH3, to, tileClass };
+  if (!dest) {
+    return {
+      ok: false,
+      code: "MAP_INTEGRITY",
+      reason: `Non-adjacent exit "${trimmedVia}" targets cell not present in the loaded map`,
+    };
+  }
+  return { ok: true, via: trimmedVia, from: fromH3, to, tileClass: dest.tileClass };
 }
 

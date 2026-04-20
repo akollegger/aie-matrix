@@ -62,7 +62,7 @@ export interface TraverseSuccess {
 export type TraverseFailure =
   | { ok: false; code: "NO_EXIT"; reason: string }
   | { ok: false; code: "UNKNOWN_CELL"; reason: string }
-  | { ok: false; code: "RULESET_DENY"; reason: string };
+  | { ok: false; code: "MAP_INTEGRITY"; reason: string };
 
 export type TraverseResult = TraverseSuccess | TraverseFailure;
 

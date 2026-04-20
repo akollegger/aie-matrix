@@ -63,14 +63,14 @@ Traversed elevator-b to 8f283082a992d25 (Lobby).
 type TraverseFailure =
   | { ok: false; code: "NO_EXIT";      reason: string }  // named exit not found at current cell
   | { ok: false; code: "UNKNOWN_CELL"; reason: string }  // ghost not on a known cell
-  | { ok: false; code: "RULESET_DENY"; reason: string }  // movement rule blocks traversal
+  | { ok: false; code: "MAP_INTEGRITY"; reason: string }  // exit target not on the loaded map graph
 ```
 
 | Code | Condition |
 |---|---|
-| `NO_EXIT` | The named exit does not exist as a non-adjacent relationship from the current cell |
+| `NO_EXIT` | The named exit does not exist as a non-adjacent relationship from the current cell, Neo4j is not configured, or the exit name is empty |
 | `UNKNOWN_CELL` | Ghost position cannot be resolved (should not happen in normal operation) |
-| `RULESET_DENY` | A movement rule explicitly denies this traversal |
+| `MAP_INTEGRITY` | Neo4j names an exit whose destination H3 index is not a cell in the currently loaded map |
 
 ---
 

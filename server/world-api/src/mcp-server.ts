@@ -311,12 +311,16 @@ function traverseEffect(
     const neo = yield* Neo4jGraphService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
-    const result = yield* Effect.promise(() =>
-      evaluateTraverse(map, hereId, via, async (f, v) => await Effect.runPromise(neo.findTraverseTarget(f, v))),
-    );
+    const lookup = neo.configured
+      ? async (f: string, v: string) => await Effect.runPromise(neo.findTraverseTarget(f, v))
+      : undefined;
+    const result = yield* Effect.promise(() => evaluateTraverse(map, hereId, via, lookup));
     if (!result.ok) {
       if (result.code === "UNKNOWN_CELL") {
         return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(hereId) }));
+      }
+      if (result.code === "MAP_INTEGRITY") {
+        return yield* Effect.fail(new WorldApiMapIntegrity({ message: result.reason }));
       }
       return yield* Effect.fail(
         new WorldApiMovementBlocked({ message: result.reason, code: result.code }),
