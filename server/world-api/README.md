@@ -29,6 +29,17 @@ Multi-label nodes like `(from:Hallway:VIP)` require the tile to carry **all** li
 
 **Tests:** from repo root, `pnpm --filter @aie-matrix/server-world-api test`.
 
+## Non-adjacent exits (`exits` + `traverse`, IC-006 / IC-007)
+
+When **`NEO4J_URI`** is set, the combined server keeps a long-lived Neo4j driver, ensures the `cell_h3_unique` constraint, and seeds **pentagon** `PORTAL` mesh plus a **`tck-elevator`** `ELEVATOR` edge from the map anchor to one neighbor (for contract tests).
+
+| Tool | Input | Success | Failure (MCP `isError`) |
+|------|--------|---------|-------------------------|
+| `exits` | _(none)_ | JSON `{ here, exits, nonAdjacent }` — `exits` are compass neighbors; `nonAdjacent` lists `{ kind, name, tileId, tileClass }` for `ELEVATOR` / `PORTAL` | Same auth / cell errors as other tools |
+| `traverse` | `{ via: string }` | `{ ok: true, via, from, to, tileClass }` | `WorldApiError.MovementBlocked` with `code: "NO_EXIT"` when the name is absent at the current cell |
+
+Destination `tileClass` comes from the loaded map when the H3 exists there; synthetic graph targets (e.g. pentagon cells) use `Portal` / `Unknown` as a fallback.
+
 ## Ghost hex compass (flat-top, `staggeraxis: x`, `staggerindex: odd`)
 
 Ghosts use **local** compass tokens `n`, `s`, `ne`, `nw`, `se`, `sw` — never arbitrary map tile ids.

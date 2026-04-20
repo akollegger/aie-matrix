@@ -1,5 +1,6 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { AdoptGhostRequest, AdoptGhostResponse } from "@aie-matrix/shared-types";
+import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Effect } from "effect";
 import { getRequestTraceId } from "@aie-matrix/server-world-api";
 import { mintGhostToken } from "@aie-matrix/server-auth";
@@ -56,14 +57,16 @@ export function handleAdoptGhostEffect(
         new WorldBridgeNoNavigableCells({ message: "Map has no navigable cells" }),
       );
     }
-    const spawnCell = cellIds[Math.floor(Math.random() * cellIds.length)];
+    const spawnCell = isEnvTruthy(process.env.AIE_MATRIX_TCK_MODE)
+      ? map.anchorH3
+      : cellIds[Math.floor(Math.random() * cellIds.length)];
     const ghostId = createGhostId();
     bridge.setGhostCell(ghostId, spawnCell);
     store.ghosts.set(ghostId, {
       id: ghostId,
       ghostHouseId: parsed.ghostHouseId,
       caretakerId: parsed.caretakerId,
-      tileId: spawnCell,
+      h3Index: spawnCell,
       status: "active",
     });
     store.activeByCaretaker.set(parsed.caretakerId, ghostId);

@@ -10,22 +10,32 @@ import { MatrixRoom } from "@aie-matrix/server-colyseus";
 import { createRegistryRequestListener, createRegistryStore } from "@aie-matrix/server-registry";
 import {
   createColyseusBridge,
+  createNeo4jDriverFromEnv,
+  ensureCellH3UniqueConstraint,
   getRequestTraceId,
   handleGhostMcpEffect,
   loadMovementRulesFromEnv,
+  makeLiveNeo4jGraphLayer,
   makeMovementRulesLayer,
+  makeNoOpNeo4jGraphLayer,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
+  Neo4jGraphService,
   runWithRequestTrace,
+  seedNeo4jGraphArtifacts,
+  type MovementRulesService,
+  type RegistryStoreService,
+  type WorldBridgeService,
 } from "@aie-matrix/server-world-api";
 import { Effect, Exit, Layer, ManagedRuntime, pipe, Scope } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
 import { patchMatchmakeCorsForCredentials } from "./colyseus-cors-patch.js";
 import { errorToResponse, type HttpMappingError } from "./errors.js";
-import { makeServerConfigLayer } from "./services/ServerConfigService.js";
+import { makeServerConfigLayer, type ServerConfigService } from "./services/ServerConfigService.js";
 import {
   publishTranscript,
   subscribeGhostToHub,
+  TranscriptHub,
   TranscriptHubLayer,
 } from "./services/TranscriptHubService.js";
 
@@ -184,11 +194,28 @@ async function main(): Promise<void> {
       ghostAuthority.set(gid, cid);
       const ghost = store.ghosts.get(gid);
       if (ghost) {
-        ghost.tileId = cid;
+        ghost.h3Index = cid;
       }
     },
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
   };
+
+  let neoDriver = createNeo4jDriverFromEnv() ?? null;
+  if (neoDriver) {
+    try {
+      await ensureCellH3UniqueConstraint(neoDriver);
+      await seedNeo4jGraphArtifacts(neoDriver, colyseusBridge.getLoadedMap());
+      console.info("[aie-matrix] Neo4j: constraint + graph seeds applied");
+    } catch (e) {
+      console.error("[aie-matrix] Neo4j setup failed:", e);
+      await neoDriver.close();
+      neoDriver = null;
+      process.exit(1);
+    }
+  }
+  const neo4jGraphLayer: Layer.Layer<Neo4jGraphService> = neoDriver
+    ? makeLiveNeo4jGraphLayer(neoDriver)
+    : makeNoOpNeo4jGraphLayer;
 
   const ghostSubscriberScope = await Effect.runPromise(Scope.make());
 
@@ -200,15 +227,24 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const runtime = ManagedRuntime.make(
-    Layer.mergeAll(
-      makeWorldBridgeLayer(bridge),
-      makeRegistryStoreLayer(store),
-      makeMovementRulesLayer(movementRules),
-      makeServerConfigLayer(process.env),
-      TranscriptHubLayer,
-    ),
-  );
+  type MatrixRuntimeServices =
+    | WorldBridgeService
+    | RegistryStoreService
+    | MovementRulesService
+    | ServerConfigService
+    | TranscriptHub
+    | Neo4jGraphService;
+
+  const runtimeLayer = Layer.mergeAll(
+    makeWorldBridgeLayer(bridge),
+    makeRegistryStoreLayer(store),
+    makeMovementRulesLayer(movementRules),
+    makeServerConfigLayer(process.env),
+    TranscriptHubLayer,
+    neo4jGraphLayer,
+  ) as Layer.Layer<MatrixRuntimeServices>;
+
+  const runtime = ManagedRuntime.make(runtimeLayer);
 
   process.on("SIGTERM", () => {
     void Effect.runPromise(
@@ -216,7 +252,9 @@ async function main(): Promise<void> {
         yield* Scope.close(ghostSubscriberScope, Exit.void);
         yield* Effect.promise(() => runtime.dispose());
       }),
-    ).finally(() => process.exit(0));
+    ).finally(() => {
+      void (neoDriver?.close() ?? Promise.resolve()).finally(() => process.exit(0));
+    });
   });
 
   const registryListener = createRegistryRequestListener({

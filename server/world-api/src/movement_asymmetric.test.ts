@@ -18,13 +18,15 @@ function asymmetricMap(): LoadedMap {
   return {
     width: 3,
     height: 1,
+    anchorH3: "test-anchor",
     cells: new Map([
-      [r, { col: 0, row: 0, tileClass: "Red", neighbors: { ne: b1 } }],
+      [r, { col: 0, row: 0, h3Index: r, tileClass: "Red", neighbors: { ne: b1 } }],
       [
         b1,
         {
           col: 1,
           row: 0,
+          h3Index: b1,
           tileClass: "Blue",
           neighbors: { sw: r, ne: b2 },
         },
@@ -34,6 +36,7 @@ function asymmetricMap(): LoadedMap {
         {
           col: 2,
           row: 0,
+          h3Index: b2,
           tileClass: "Blue",
           neighbors: { sw: b1, nw: r },
         },

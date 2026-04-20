@@ -9,7 +9,6 @@ import type {
   WorldApiError,
   WorldBridgeError,
 } from "@aie-matrix/server-world-api";
-import { Match, pipe } from "effect";
 
 export {
   AuthExpiredToken,
@@ -57,64 +56,74 @@ function authErrorBody(error: AuthError): string {
   });
 }
 
+function assertNever(x: never): never {
+  throw new Error(`Unhandled HttpMappingError tag: ${JSON.stringify(x)}`);
+}
+
 /**
  * Maps typed domain errors to HTTP status + JSON body (IC-001).
- * Uses `Match.tag` branches with `Match.exhaustive` so new error `_tag`s fail compilation.
+ * Uses `_tag` switching with `assertNever` so new {@link HttpMappingError} variants fail compilation.
  */
 export function errorToResponse(error: HttpMappingError): { status: number; body: string } {
-  return pipe(
-    Match.type<HttpMappingError>(),
-    Match.tag(
-      "AuthError.MissingCredentials",
-      "AuthError.InvalidToken",
-      "AuthError.MalformedClaims",
-      "AuthError.ExpiredToken",
-      (e) => ({ status: 401, body: authErrorBody(e) }),
-    ),
-    Match.tag(
-      "RegistryError.UNKNOWN_CARETAKER",
-      "RegistryError.UNKNOWN_GHOST_HOUSE",
-      "RegistryError.CARETAKER_ALREADY_HAS_GHOST",
-      (e) => ({
-        status: e.httpStatus,
-        body: JSON.stringify({ error: e.code, message: e.message }),
-      }),
-    ),
-    Match.tag("WorldApiError.NoPosition", (e) => ({
-      status: 404,
-      body: JSON.stringify({ error: "NO_POSITION", ghostId: e.ghostId }),
-    })),
-    Match.tag("WorldApiError.UnknownCell", (e) => ({
-      status: 404,
-      body: JSON.stringify({ error: "UNKNOWN_CELL", cellId: e.cellId }),
-    })),
-    Match.tag("WorldApiError.MovementBlocked", (e) => ({
-      status: 422,
-      body: JSON.stringify({
-        error: "MOVEMENT_BLOCKED",
-        message: e.message,
-        ...(e.code !== undefined ? { code: e.code } : {}),
-      }),
-    })),
-    Match.tag("WorldApiError.MapIntegrity", (e) => ({
-      status: 500,
-      body: JSON.stringify({ error: "MAP_INTEGRITY", message: e.message }),
-    })),
-    Match.tag("WorldBridgeError.NotReady", () => ({
-      status: 503,
-      body: JSON.stringify({
-        error: "STARTING",
-        message: "World is still initializing",
-      }),
-    })),
-    Match.tag("WorldBridgeError.NoNavigableCells", (e) => ({
-      status: 503,
-      body: JSON.stringify({ error: "NO_NAVIGABLE_CELLS", message: e.message }),
-    })),
-    Match.tag("McpHandlerError", (e) => ({
-      status: 500,
-      body: JSON.stringify({ error: "MCP_HANDLER", message: e.message }),
-    })),
-    Match.exhaustive,
-  )(error);
+  switch (error._tag) {
+    case "AuthError.MissingCredentials":
+    case "AuthError.InvalidToken":
+    case "AuthError.MalformedClaims":
+    case "AuthError.ExpiredToken":
+      return { status: 401, body: authErrorBody(error) };
+    case "RegistryError.UNKNOWN_CARETAKER":
+    case "RegistryError.UNKNOWN_GHOST_HOUSE":
+    case "RegistryError.CARETAKER_ALREADY_HAS_GHOST":
+      return {
+        status: error.httpStatus,
+        body: JSON.stringify({ error: error.code, message: error.message }),
+      };
+    case "WorldApiError.NoPosition":
+      return {
+        status: 404,
+        body: JSON.stringify({ error: "NO_POSITION", ghostId: error.ghostId }),
+      };
+    case "WorldApiError.UnknownCell":
+      return {
+        status: 404,
+        body: JSON.stringify({ error: "UNKNOWN_CELL", cellId: error.cellId }),
+      };
+    case "WorldApiError.MovementBlocked":
+      return {
+        status: 422,
+        body: JSON.stringify({
+          error: "MOVEMENT_BLOCKED",
+          message: error.message,
+          ...(error.code !== undefined ? { code: error.code } : {}),
+        }),
+      };
+    case "WorldApiError.MapIntegrity":
+      return {
+        status: 500,
+        body: JSON.stringify({ error: "MAP_INTEGRITY", message: error.message }),
+      };
+    case "WorldBridgeError.NotReady":
+      return {
+        status: 503,
+        body: JSON.stringify({
+          error: "STARTING",
+          message: "World is still initializing",
+        }),
+      };
+    case "WorldBridgeError.NoNavigableCells":
+      return {
+        status: 503,
+        body: JSON.stringify({ error: "NO_NAVIGABLE_CELLS", message: error.message }),
+      };
+    case "McpHandlerError":
+      return {
+        status: 500,
+        body: JSON.stringify({ error: "MCP_HANDLER", message: error.message }),
+      };
+    default: {
+      // `HttpMappingError` spans multiple workspace packages; `switch (error._tag)` can leave the
+      // default branch typed as `any` in composite builds, which breaks `assertNever` inference.
+      return assertNever(error as never);
+    }
+  }
 }

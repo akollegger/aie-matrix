@@ -11,11 +11,10 @@ export function handleRegisterGhostHouseEffect(
   res: ServerResponse,
   corsHeaders: Record<string, string>,
 ): Effect.Effect<void, RegistryBadJson, RegistryStoreService> {
+  if (req.method !== "POST") {
+    return sendJson(res, corsHeaders, 405, { error: "METHOD_NOT_ALLOWED", message: "POST only" });
+  }
   return Effect.gen(function* () {
-    if (req.method !== "POST") {
-      yield* sendJson(res, corsHeaders, 405, { error: "METHOD_NOT_ALLOWED", message: "POST only" });
-      return;
-    }
     const body = yield* readJsonBody(req);
     const parsed = body as Partial<RegisterGhostHouseRequest>;
     if (!parsed.displayName || typeof parsed.displayName !== "string") {
@@ -34,5 +33,5 @@ export function handleRegisterGhostHouseEffect(
     store.houses.set(id, rec);
     const out: RegisterGhostHouseResponse = { ghostHouseId: id, registeredAt };
     yield* sendJson(res, corsHeaders, 201, out);
-  });
+  }) as Effect.Effect<void, RegistryBadJson, RegistryStoreService>;
 }

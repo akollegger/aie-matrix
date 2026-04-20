@@ -1,6 +1,6 @@
-# RFC-0003: H3 Geospatial Coordinate System
+# RFC-0004: H3 Geospatial Coordinate System
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-04-18  
 **Authors:** @aie-matrix  
 **Related:** [RFC-0001](0001-minimal-poc.md), [RFC-0002](0002-rule-based-movement.md), [ADR-0001](../adr/0001-mcp-ghost-wire-protocol.md)

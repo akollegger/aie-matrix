@@ -17,8 +17,9 @@ export function parseGhostPosition(raw: unknown): GhostPosition | null {
   if (!raw || typeof raw !== "object") {
     return null;
   }
-  const o = raw as { tileId?: unknown; col?: unknown; row?: unknown };
-  const tileId = typeof o.tileId === "string" ? o.tileId : null;
+  const o = raw as { tileId?: unknown; h3Index?: unknown; col?: unknown; row?: unknown };
+  const tileId =
+    typeof o.h3Index === "string" ? o.h3Index : typeof o.tileId === "string" ? o.tileId : null;
   if (!tileId) {
     return null;
   }

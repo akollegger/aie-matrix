@@ -5,6 +5,7 @@ packages:
   - server/registry
   - server/auth
   - client/phaser
+  - client/map-overlay
   - shared/types
   - shared/root-env
   - ghosts/ts-client

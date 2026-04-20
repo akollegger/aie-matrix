@@ -1,8 +1,12 @@
 import type { Compass } from "@aie-matrix/shared-types";
 
-/** Stable cell id for APIs (`col,row` in map space). */
-export type CellId = `${number},${number}`;
+/**
+ * Canonical cell id for APIs: H3 res-15 index from the map loader.
+ * Plain `string` so test maps may use simpler keys.
+ */
+export type CellId = string;
 
+/** @deprecated Legacy helper for unit tests — production maps use H3 indices as keys. */
 export function makeCellId(col: number, row: number): CellId {
   return `${col},${row}`;
 }
@@ -10,14 +14,18 @@ export function makeCellId(col: number, row: number): CellId {
 export interface CellRecord {
   col: number;
   row: number;
+  /** H3 res-15 index — canonical identity; matches the key in {@link LoadedMap.cells}. */
+  h3Index: string;
   tileClass: string;
-  /** Neighbor cell id reachable via each compass face (omitted = void / off-map). */
+  /** Neighbor cell ids (H3 index strings) reachable via each compass face. */
   neighbors: Partial<Record<Compass, CellId>>;
 }
 
 export interface LoadedMap {
   width: number;
   height: number;
-  /** Populated navigable cells only (gid != 0). */
+  /** H3 index of Tiled cell (col=0, row=0); used to derive all cell indices. */
+  anchorH3: string;
+  /** Populated navigable cells only (gid != 0), keyed by `h3Index`. */
   cells: Map<CellId, CellRecord>;
 }

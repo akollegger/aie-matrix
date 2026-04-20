@@ -1,7 +1,7 @@
 import { MapSchema, Schema, type } from "@colyseus/schema";
 
 /**
- * IC-004 — Offset grid coordinates for a navigable cell id (`col,row` string).
+ * IC-004 — Offset grid coordinates for a navigable cell (keys are H3 res-15 index strings).
  * Populated once from the loaded map; ghosts only mutate `ghostTiles`.
  */
 export class TileCoord extends Schema {
@@ -22,15 +22,15 @@ export class TileCoord extends Schema {
  * IC-004 — Optional per-tile class string (Tiled `type`) for spectator styling.
  */
 export class WorldSpectatorState extends Schema {
-  /** ghostId → tile id (`col,row`). Authoritative ghost positions (patched on move). */
+  /** ghostId → H3 res-15 cell index string. Authoritative ghost positions (patched on move). */
   @type({ map: "string" })
   declare ghostTiles: MapSchema<string>;
 
-  /** tileId → grid coordinates (static after room creation). */
+  /** h3Index → grid coordinates (static after room creation; Phaser still uses col/row). */
   @type({ map: TileCoord })
   declare tileCoords: MapSchema<TileCoord>;
 
-  /** tileId → Tiled tile class string (static after room creation). */
+  /** h3Index → Tiled tile class string (static after room creation). */
   @type({ map: "string" })
   declare tileClasses: MapSchema<string>;
 

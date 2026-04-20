@@ -16,7 +16,7 @@ export interface GhostRecord {
   id: string;
   ghostHouseId: string;
   caretakerId: string;
-  tileId: string;
+  h3Index: string;
   status: "active" | "stopped";
 }
 

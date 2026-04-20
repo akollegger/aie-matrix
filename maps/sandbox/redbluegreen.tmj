@@ -2,6 +2,17 @@
  "height":15,
  "hexsidelength":14,
  "infinite":false,
+  "properties":[
+        {
+         "name":"h3_anchor",
+         "type":"string",
+         "value":"8f2830828052d25"
+        },
+        {
+         "name":"h3_resolution",
+         "type":"int",
+         "value":15
+        }],
  "layers":[
         {
          "data":[5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 1, 1, 1, 1, 1, 1, 1, 1, 1,

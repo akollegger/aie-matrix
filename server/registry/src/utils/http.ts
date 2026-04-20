@@ -2,7 +2,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect } from "effect";
 import { RegistryBadJson } from "../registry-errors.js";
 
-export function readJsonBody(req: IncomingMessage): Effect.Effect<unknown, RegistryBadJson> {
+export function readJsonBody(req: IncomingMessage): Effect.Effect<unknown, RegistryBadJson, never> {
   return Effect.tryPromise({
     try: () =>
       new Promise<unknown>((resolve, reject) => {
@@ -30,7 +30,7 @@ export function sendJson(
   corsHeaders: Record<string, string>,
   status: number,
   body: unknown,
-): Effect.Effect<void> {
+): Effect.Effect<void, never, never> {
   return Effect.sync(() => {
     res.writeHead(status, {
       "Content-Type": "application/json",
@@ -45,7 +45,7 @@ export function sendRawJsonBody(
   corsHeaders: Record<string, string>,
   status: number,
   body: string,
-): Effect.Effect<void> {
+): Effect.Effect<void, never, never> {
   return Effect.sync(() => {
     res.writeHead(status, {
       "Content-Type": "application/json",

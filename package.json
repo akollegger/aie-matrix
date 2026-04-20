@@ -12,8 +12,10 @@
     }
   },
   "scripts": {
+    "clean": "node scripts/clean.mjs",
     "build": "pnpm -r run build",
     "typecheck": "pnpm -r run typecheck",
+    "lint": "pnpm run -r --if-present lint",
     "dev": "pnpm --filter @aie-matrix/server dev",
     "server": "pnpm --filter @aie-matrix/server start",
     "server:dev": "pnpm --filter @aie-matrix/server dev",

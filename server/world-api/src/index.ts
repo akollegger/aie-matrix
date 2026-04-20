@@ -2,7 +2,13 @@ export {
   createColyseusBridge,
   type ColyseusWorldBridge,
 } from "./colyseus-bridge.js";
-export { evaluateGo, resolveNeighbor, type GhostMoveContext } from "./movement.js";
+export {
+  evaluateGo,
+  evaluateTraverse,
+  resolveNeighbor,
+  type GhostMoveContext,
+  type TraverseTargetLookup,
+} from "./movement.js";
 export {
   MovementRulesService,
   makeMovementRulesLayer,
@@ -69,3 +75,16 @@ export {
   runWithRequestTrace,
   type RequestTrace,
 } from "./request-trace.js";
+export {
+  CELL_H3_UNIQUE_CONSTRAINT_CYPHER,
+  createNeo4jDriverFromEnv,
+  ensureCellH3UniqueConstraint,
+} from "./neo4j-graph-init.js";
+export { seedNeo4jGraphArtifacts } from "./neo4j-graph-seed.js";
+export {
+  Neo4jGraphService,
+  makeLiveNeo4jGraphLayer,
+  makeNoOpNeo4jGraphLayer,
+  type Neo4jGraphOps,
+  type NonAdjacentRow,
+} from "./Neo4jGraphService.js";
