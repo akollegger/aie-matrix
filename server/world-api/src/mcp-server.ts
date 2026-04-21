@@ -16,6 +16,7 @@ import {
   type WhereAmIResult,
   type WhoAmIResult,
 } from "@aie-matrix/shared-types";
+import { ConversationService } from "@aie-matrix/server-conversation";
 import {
   authenticateGhostRequestEffect,
   ghostIdsFromAuthEffect,
@@ -43,7 +44,12 @@ const compassEnum = z.enum(["n", "s", "ne", "nw", "se", "sw"]);
 
 const lookAtSchema = z.union([z.literal("here"), z.literal("around"), compassEnum]);
 
-type ToolServices = WorldBridgeService | RegistryStoreService | MovementRulesService | Neo4jGraphService;
+type ToolServices =
+  | WorldBridgeService
+  | RegistryStoreService
+  | MovementRulesService
+  | Neo4jGraphService
+  | ConversationService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -308,6 +314,15 @@ function traverseEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const bridge = yield* WorldBridgeService;
+    if (bridge.getGhostMode(ghostId) === "conversational") {
+      return yield* Effect.fail(
+        new WorldApiMovementBlocked({
+          message:
+            "Ghost is in conversational mode. Issue 'bye' to end the conversation before moving.",
+          code: "IN_CONVERSATION",
+        }),
+      );
+    }
     const neo = yield* Neo4jGraphService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
@@ -340,6 +355,15 @@ function goEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const bridge = yield* WorldBridgeService;
+    if (bridge.getGhostMode(ghostId) === "conversational") {
+      return yield* Effect.fail(
+        new WorldApiMovementBlocked({
+          message:
+            "Ghost is in conversational mode. Issue 'bye' to end the conversation before moving.",
+          code: "IN_CONVERSATION",
+        }),
+      );
+    }
     const rules = yield* MovementRulesService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
@@ -350,6 +374,46 @@ function goEffect(
     bridge.setGhostCell(ghostId, result.tileId);
     yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: result.tileId, reason: "go" });
     return result;
+  });
+}
+
+function sayEffect(
+  content: string,
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const conversation = yield* ConversationService;
+    const result = yield* (conversation.say(ghostId, content).pipe(
+      Effect.mapError(
+        (e) =>
+          new WorldApiMovementBlocked({ message: e.message, code: "STORE_UNAVAILABLE" }) as WorldApiError,
+      ),
+    ) as Effect.Effect<unknown, WorldApiError, never>);
+    return result;
+  });
+}
+
+function byeEffect(
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const conversation = yield* ConversationService;
+    return yield* conversation.bye(ghostId) as Effect.Effect<unknown, never, never>;
+  });
+}
+
+function inboxEffect(
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const conversation = yield* ConversationService;
+    return yield* conversation.inbox(ghostId) as Effect.Effect<unknown, never, never>;
   });
 }
 
@@ -476,6 +540,40 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     async ({ toward }, extra) => runTool("go", { toward }, goEffect(toward, extra)),
   );
 
+  server.registerTool(
+    "say",
+    {
+      description:
+        "Broadcast a message to all ghosts in your 7-cell H3 cluster. Enters conversational mode. Movement is blocked until you issue 'bye'.",
+      inputSchema: {
+        content: z
+          .string()
+          .min(1)
+          .max(2000)
+          .describe("The message text to broadcast."),
+      },
+    },
+    async ({ content }, extra) => runTool("say", { content }, sayEffect(content, extra)),
+  );
+
+  server.registerTool(
+    "bye",
+    {
+      description:
+        "End the conversation and return to normal mode, re-enabling movement. No-op if already in normal mode.",
+    },
+    async (extra) => runTool("bye", {}, byeEffect(extra)),
+  );
+
+  server.registerTool(
+    "inbox",
+    {
+      description:
+        "Return and drain all pending message.new notifications for this ghost. Call periodically to discover messages sent by nearby ghosts.",
+    },
+    async (extra) => runTool("inbox", {}, inboxEffect(extra)),
+  );
+
   return server;
 }
 
@@ -503,11 +601,13 @@ export function handleGhostMcpEffect(
     const store = yield* RegistryStoreService;
     const rules = yield* MovementRulesService;
     const neo = yield* Neo4jGraphService;
+    const conversation = yield* ConversationService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
       Layer.succeed(MovementRulesService, rules),
       Layer.succeed(Neo4jGraphService, neo),
+      Layer.succeed(ConversationService, conversation),
     );
     yield* Effect.tryPromise({
       try: async () => {

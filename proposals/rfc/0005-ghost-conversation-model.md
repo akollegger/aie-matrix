@@ -1,6 +1,6 @@
 # RFC-0005: Ghost Conversation Model
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-04-20  
 **Authors:** @aie-matrix  
 **Related:** [RFC-0001](0001-minimal-poc.md), [RFC-0002](0002-rule-based-movement.md), [ADR-0001](../adr/0001-mcp-ghost-wire-protocol.md), [ADR-0003](../adr/0003-conversation-server.md)

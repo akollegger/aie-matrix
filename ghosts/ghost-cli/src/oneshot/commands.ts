@@ -94,6 +94,44 @@ function formatGo(raw: unknown): string {
   return JSON.stringify(raw, null, 2);
 }
 
+function formatSay(raw: unknown): string {
+  if (raw && typeof raw === "object" && "message_id" in raw) {
+    const o = raw as { message_id: string; mx_listeners?: unknown };
+    const listeners = Array.isArray(o.mx_listeners)
+      ? o.mx_listeners.filter((x): x is string => typeof x === "string")
+      : [];
+    return [`message_id: ${o.message_id}`, `mx_listeners: ${listeners.join(", ") || "(none)"}`].join("\n");
+  }
+  return JSON.stringify(raw, null, 2);
+}
+
+function formatBye(raw: unknown): string {
+  if (raw && typeof raw === "object" && "previous_mode" in raw) {
+    const o = raw as { previous_mode: string };
+    return `previous_mode: ${o.previous_mode}`;
+  }
+  return JSON.stringify(raw, null, 2);
+}
+
+function formatInbox(raw: unknown): string {
+  if (raw && typeof raw === "object" && "notifications" in raw) {
+    const o = raw as { notifications: unknown };
+    if (!Array.isArray(o.notifications) || o.notifications.length === 0) {
+      return "(no pending notifications)";
+    }
+    return o.notifications
+      .map((n) => {
+        if (n && typeof n === "object" && "thread_id" in n && "message_id" in n) {
+          const r = n as { thread_id: unknown; message_id: unknown };
+          return `message.new thread_id=${String(r.thread_id)} message_id=${String(r.message_id)}`;
+        }
+        return JSON.stringify(n);
+      })
+      .join("\n");
+  }
+  return JSON.stringify(raw, null, 2);
+}
+
 function formatProse(tool: GhostToolName, raw: unknown): string {
   switch (tool) {
     case "whoami":
@@ -106,6 +144,12 @@ function formatProse(tool: GhostToolName, raw: unknown): string {
       return formatExits(raw);
     case "go":
       return formatGo(raw);
+    case "say":
+      return formatSay(raw);
+    case "bye":
+      return formatBye(raw);
+    case "inbox":
+      return formatInbox(raw);
   }
 }
 
@@ -217,3 +261,24 @@ export const runGo = (
   }
   return runOneshotTool({ config, tool: "go", args: { toward: t } });
 };
+
+export const runSay = (
+  config: GhostConfig,
+  words: readonly string[],
+): Effect.Effect<
+  void,
+  PreFlightError | GhostClientError | OneshotCliError,
+  GhostConfigLive | GhostClientService
+> => {
+  const content = words.join(" ").trim();
+  if (!content) {
+    return Effect.fail(
+      new CliUsageError({
+        message: 'say requires message text. Example: ghost-cli say "hello from the fair"',
+      }),
+    );
+  }
+  return runOneshotTool({ config, tool: "say", args: { content } });
+};
+
+export const runBye = (config: GhostConfig) => runOneshotTool({ config, tool: "bye" });

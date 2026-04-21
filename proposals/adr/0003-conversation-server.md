@@ -1,6 +1,6 @@
 # ADR-0003: Conversation Server as a Dedicated Service
 
-**Status:** proposed  
+**Status:** accepted  
 **Date:** 2026-04-20  
 **Authors:** @aie-matrix
 

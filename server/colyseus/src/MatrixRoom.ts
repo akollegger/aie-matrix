@@ -78,4 +78,15 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     }
     return ids;
   }
+
+  setGhostMode(ghostId: string, mode: "normal" | "conversational"): void {
+    const gid = String(ghostId).trim();
+    this.state.ghostModes.set(gid, mode);
+  }
+
+  getGhostMode(ghostId: string): "normal" | "conversational" {
+    const gid = String(ghostId).trim();
+    const mode = this.state.ghostModes.get(gid);
+    return mode === "conversational" ? "conversational" : "normal";
+  }
 }

@@ -19,6 +19,7 @@
   "dependencies": {
     "@aie-matrix/server-auth": "workspace:*",
     "@aie-matrix/server-colyseus": "workspace:*",
+    "@aie-matrix/server-conversation": "workspace:*",
     "@aie-matrix/shared-types": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@relateby/pattern": "^0.4.0",

@@ -45,7 +45,7 @@ export interface ExitList {
 
 export type LogEntry = {
   readonly timestamp: Date;
-  readonly kind: "command" | "movement" | "connection" | "diagnostic";
+  readonly kind: "command" | "movement" | "connection" | "diagnostic" | "conversation";
   readonly message: string;
 };
 
@@ -55,9 +55,13 @@ export type ReplCommand =
   | { readonly _tag: "look"; readonly at: "here" | "around" | Face }
   | { readonly _tag: "exits" }
   | { readonly _tag: "go"; readonly toward: Face }
+  | { readonly _tag: "say"; readonly content: string }
+  | { readonly _tag: "bye" }
   | { readonly _tag: "help" }
   | { readonly _tag: "exit" }
   | { readonly _tag: "unknown"; readonly raw: string };
+
+export type GhostConversationMode = "normal" | "conversational";
 
 export interface ReplRefs {
   readonly connectionStateRef: Ref.Ref<ConnectionState>;
@@ -66,6 +70,8 @@ export interface ReplRefs {
   readonly tileViewRef: Ref.Ref<TileView | null>;
   readonly exitsRef: Ref.Ref<ExitList | null>;
   readonly logRef: Ref.Ref<readonly LogEntry[]>;
+  /** Mirrors server conversational state for UI (say/bye + inbox). */
+  readonly ghostModeRef: Ref.Ref<GhostConversationMode>;
 }
 
 export const parseReplCommand = (input: string): ReplCommand => {
@@ -89,6 +95,16 @@ export const parseReplCommand = (input: string): ReplCommand => {
   }
   if (head === "exits" && parts.length === 1) {
     return { _tag: "exits" };
+  }
+  if (head === "bye" && parts.length === 1) {
+    return { _tag: "bye" };
+  }
+  if (head === "say") {
+    const m = trimmed.match(/^say\s+(.*)$/i);
+    if (m) {
+      return { _tag: "say", content: m[1] ?? "" };
+    }
+    return { _tag: "unknown", raw: trimmed };
   }
   if (head === "help" && parts.length === 1) {
     return { _tag: "help" };
@@ -136,6 +152,7 @@ export const createReplRefs: Effect.Effect<ReplRefs, never, never> = Effect.gen(
   const tileViewRef = yield* Ref.make<TileView | null>(null);
   const exitsRef = yield* Ref.make<ExitList | null>(null);
   const logRef = yield* Ref.make<readonly LogEntry[]>([]);
+  const ghostModeRef = yield* Ref.make<GhostConversationMode>("normal");
 
   return {
     connectionStateRef,
@@ -144,5 +161,6 @@ export const createReplRefs: Effect.Effect<ReplRefs, never, never> = Effect.gen(
     tileViewRef,
     exitsRef,
     logRef,
+    ghostModeRef,
   };
 });

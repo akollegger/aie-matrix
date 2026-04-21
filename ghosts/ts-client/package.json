@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@aie-matrix/shared-types": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

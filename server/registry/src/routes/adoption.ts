@@ -74,6 +74,7 @@ export function handleAdoptGhostEffect(
       sub: ghostId,
       ghostId,
       caretakerId: parsed.caretakerId,
+      ghostHouseId: parsed.ghostHouseId,
     });
     const out: AdoptGhostResponse = {
       ghostId,

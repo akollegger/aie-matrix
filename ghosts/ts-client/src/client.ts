@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import type { SayResult, ByeResult, InboxResult } from "@aie-matrix/shared-types";
 
 export interface GhostMcpClientOptions {
   /** Streamable HTTP MCP endpoint (e.g. `http://127.0.0.1:8787/mcp`). */
@@ -46,6 +47,18 @@ export class GhostMcpClient {
     }
     this.transport = null;
     this.client = null;
+  }
+
+  async say(content: string): Promise<SayResult> {
+    return (await this.callTool("say", { content })) as SayResult;
+  }
+
+  async bye(): Promise<ByeResult> {
+    return (await this.callTool("bye")) as ByeResult;
+  }
+
+  async inbox(): Promise<InboxResult> {
+    return (await this.callTool("inbox")) as InboxResult;
   }
 
   async callTool(name: string, arguments_: Record<string, unknown> = {}): Promise<unknown> {

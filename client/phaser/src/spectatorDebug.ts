@@ -1,6 +1,14 @@
 import type { Room } from "colyseus.js";
 import type Phaser from "phaser";
 import type { WorldSpectatorState } from "@aie-matrix/server-colyseus/room-schema";
+import { SpectatorDebugHtmlOverlay } from "./spectatorDebugHtmlOverlay.js";
+/** Colyseus `ghostModes` subscriptions (`onChange` / `onAdd`) live in {@link attachSpectatorDebugRoomEvents}. */
+import { attachSpectatorDebugRoomEvents } from "./spectatorDebugRoomEvents.js";
+import {
+  SpectatorDebugLogRing,
+  installSpectatorDebugConsoleForward,
+  runSpectatorDebugEffectProbe,
+} from "./spectatorDebugTelemetry.js";
 
 /** `?debug=1` in the URL, or `VITE_SPECTATOR_DEBUG=true` in env. */
 export function spectatorDebugEnabled(): boolean {
@@ -24,27 +32,35 @@ function ghostsAtTile(room: Room<WorldSpectatorState>, tileId: string): string[]
   return ids;
 }
 
-function formatStateSnapshot(room: Room<WorldSpectatorState>): string {
+export function formatStateSnapshot(room: Room<WorldSpectatorState>): string {
   const lines: string[] = [];
   lines.push(`ghostTiles.size = ${room.state.ghostTiles.size}`);
   lines.push(`tileCoords.size = ${room.state.tileCoords.size}`);
   lines.push(`tileClasses.size = ${room.state.tileClasses.size}`);
+  lines.push(`ghostModes.size = ${room.state.ghostModes.size}`);
   room.state.ghostTiles.forEach((tileId, ghostId) => {
     const c = room.state.tileCoords.get(tileId);
     const cls = room.state.tileClasses.get(tileId);
+    const mode = room.state.ghostModes.get(ghostId) ?? "normal";
     lines.push(
-      `  ${ghostId} → tile "${tileId}"  coord=${c ? `${c.col},${c.row}` : "MISSING"}  class=${cls ?? "?"}`,
+      `  ${ghostId} → tile "${tileId}"  coord=${c ? `${c.col},${c.row}` : "MISSING"}  class=${cls ?? "?"}  mode=${mode}`,
     );
   });
   return lines.join("\n");
 }
 
 /**
- * Fixed overlay + per-tile hover (when tiles are made interactive).
+ * HTML overlay (State / Log tabs) + Phaser hover tooltip.
  * Enable with `?debug=1` or `VITE_SPECTATOR_DEBUG=true`.
+ *
+ * Log tab: last 100 lines from `console.*` (after install) plus Effect logs routed through
+ * {@link spectatorDebugZippedLoggerLayer} (see `spectatorDebugTelemetry.ts`).
  */
 export class SpectatorDebugHud {
-  private readonly panel: Phaser.GameObjects.Text;
+  private readonly logRing: SpectatorDebugLogRing;
+  private readonly overlay: SpectatorDebugHtmlOverlay;
+  private readonly restoreConsole: () => void;
+  private readonly detachRoomEvents: () => void;
   private readonly tip: Phaser.GameObjects.Text;
   private readonly onState: () => void;
   private readonly onMove: (p: Phaser.Input.Pointer) => void;
@@ -53,32 +69,37 @@ export class SpectatorDebugHud {
     private readonly scene: Phaser.Scene,
     private readonly room: Room<WorldSpectatorState>,
   ) {
+    this.logRing = new SpectatorDebugLogRing();
+    this.overlay = new SpectatorDebugHtmlOverlay(
+      this.logRing,
+      () => `[spectator debug]\n${formatStateSnapshot(this.room)}`,
+      {
+        serverBase: (import.meta.env.VITE_SERVER_HTTP as string | undefined) ?? "http://localhost:8787",
+        token: ((__SPECTATOR_DEBUG_TOKEN__ as string) || undefined),
+        getGhostIds: () => [...this.room.state.ghostTiles.keys()],
+      },
+    );
+
+    runSpectatorDebugEffectProbe(this.logRing);
+    this.detachRoomEvents = attachSpectatorDebugRoomEvents(this.room, (line) => this.logRing.append(line));
+    this.restoreConsole = installSpectatorDebugConsoleForward(this.logRing);
+
     const panelStyle: Phaser.Types.GameObjects.Text.TextStyle = {
       fontFamily: "ui-monospace, Menlo, Monaco, monospace",
-      fontSize: "11px",
-      color: "#d7ecff",
-      backgroundColor: "rgba(0,12,28,0.82)",
-      padding: { x: 8, y: 6 },
-    };
-    const h = scene.scale.height;
-    this.panel = scene.add.text(8, h - 140, "", panelStyle);
-    this.panel.setScrollFactor(0);
-    this.panel.setDepth(10_000);
-    this.panel.setOrigin(0, 0);
-
-    this.tip = scene.add.text(0, 0, "", {
-      ...panelStyle,
       fontSize: "12px",
       color: "#fff",
       backgroundColor: "rgba(20,30,50,0.92)",
-    });
+      padding: { x: 8, y: 6 },
+    };
+
+    this.tip = scene.add.text(0, 0, "", panelStyle);
     this.tip.setScrollFactor(0);
     this.tip.setDepth(10_001);
     this.tip.setVisible(false);
 
-    this.onState = () => this.refreshPanel();
+    this.onState = () => this.overlay.onRoomStateChanged();
     this.room.onStateChange(this.onState);
-    this.refreshPanel();
+    this.overlay.onRoomStateChanged();
 
     this.onMove = (p: Phaser.Input.Pointer) => {
       if (this.tip.visible) {
@@ -121,16 +142,14 @@ export class SpectatorDebugHud {
     }
   }
 
-  private refreshPanel(): void {
-    const w = this.scene.scale.width;
-    this.panel.setWordWrapWidth(Math.max(200, w - 16));
-    this.panel.setText(`[spectator debug]\n${formatStateSnapshot(this.room)}`);
-  }
-
   destroy(): void {
+    this.detachRoomEvents();
     this.room.onStateChange.remove(this.onState);
     this.scene.input.off("pointermove", this.onMove);
-    this.panel.destroy();
+    this.restoreConsole();
+    this.overlay.destroy();
     this.tip.destroy();
   }
 }
+
+export { spectatorDebugZippedLoggerLayer } from "./spectatorDebugTelemetry.js";

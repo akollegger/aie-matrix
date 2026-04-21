@@ -26,6 +26,7 @@ export const App = ({ refs, commandQueue, finished }: AppProps) => {
   const tileView = usePollRef(refs.tileViewRef);
   const exits = usePollRef(refs.exitsRef);
   const logEntries = usePollRef(refs.logRef);
+  const ghostMode = usePollRef(refs.ghostModeRef);
 
   useEffect(() => {
     const id = setInterval(() => {
@@ -40,9 +41,11 @@ export const App = ({ refs, commandQueue, finished }: AppProps) => {
 
   const inputState = inputBarState(connection);
 
+  const conversationalStrip = connection._tag === "Connected" && ghostMode === "conversational";
+
   return (
     <Box flexDirection="column" padding={1} gap={1}>
-      <StatusStrip state={connection} />
+      <StatusStrip state={connection} conversational={conversationalStrip} />
       <Box flexDirection="row" gap={1} alignItems="stretch">
         <Box width="55%">
           <WorldView tileView={tileView} />

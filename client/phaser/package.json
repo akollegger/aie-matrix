@@ -17,6 +17,7 @@
     "@aie-matrix/server-colyseus": "workspace:*",
     "@colyseus/schema": "2.0.35",
     "colyseus.js": "0.15.28",
+    "effect": "^3.21.0",
     "phaser": "^3.88.2"
   },
   "devDependencies": {

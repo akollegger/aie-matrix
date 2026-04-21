@@ -77,12 +77,105 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return data as T;
 }
 
+const CANNED_LINES = [
+  "hey there",
+  "hello!",
+  "oh— hi",
+  "anyone around?",
+  "nice spot",
+  "didn't expect company",
+];
+
+function takeCanned(): string {
+  return CANNED_LINES[Math.floor(Math.random() * CANNED_LINES.length)]!;
+}
+
+function parseOccupantsFromLook(raw: unknown): string[] {
+  if (!raw || typeof raw !== "object") {
+    return [];
+  }
+  const occ = (raw as { occupants?: unknown }).occupants;
+  if (!Array.isArray(occ)) {
+    return [];
+  }
+  return occ.filter((x): x is string => typeof x === "string");
+}
+
+function goFailureCode(msg: string): string | undefined {
+  try {
+    return (JSON.parse(msg) as { code?: string }).code;
+  } catch {
+    return undefined;
+  }
+}
+
 async function runWalker(
   mcp: GhostMcpClient,
   ghostLabel: string,
   getRunning: () => boolean,
 ): Promise<void> {
+  let mode: "normal" | "conversational" = "normal";
+
+  // Bye after this many idle ticks (no new messages), regardless of random roll.
+  const IDLE_TICKS_BEFORE_BYE = 2;
+  // Bye unconditionally after this many total conversational ticks, even mid-conversation.
+  const MAX_CONVERSATION_TICKS = 6;
+  let idleTicks = 0;
+  let conversationTicks = 0;
+
   while (getRunning()) {
+    if (mode === "conversational") {
+      try {
+        const inboxRes = await mcp.inbox();
+        conversationTicks++;
+        const mustLeave =
+          conversationTicks >= MAX_CONVERSATION_TICKS ||
+          idleTicks >= IDLE_TICKS_BEFORE_BYE;
+
+        if (inboxRes.notifications.length > 0 && !mustLeave) {
+          idleTicks = 0;
+          const reply = takeCanned();
+          await mcp.say(reply);
+          console.log(`[${ghostLabel}] say (reply)`, reply);
+        } else {
+          if (inboxRes.notifications.length === 0) idleTicks++;
+          // 50% chance to leave each idle tick; forced out at the caps above.
+          if (mustLeave || Math.random() < 0.5) {
+            await mcp.bye();
+            mode = "normal";
+            idleTicks = 0;
+            conversationTicks = 0;
+            console.log(`[${ghostLabel}] bye`);
+          }
+        }
+      } catch (e) {
+        console.warn(`[${ghostLabel}] conversation tick failed`, e);
+        // Defensively exit conversational mode so the ghost doesn't stay stuck.
+        mode = "normal";
+        idleTicks = 0;
+        conversationTicks = 0;
+      }
+      await delay(walkIntervalMs);
+      continue;
+    }
+
+    const lookRaw = await mcp.callTool("look", { at: "here" });
+    const occupants = parseOccupantsFromLook(lookRaw);
+    if (occupants.length > 0 && Math.random() < 0.2) {
+      try {
+        const msg = takeCanned();
+        await mcp.say(msg);
+        mode = "conversational";
+        idleTicks = 0;
+        conversationTicks = 0;
+        console.log(`[${ghostLabel}] say (opening)`, msg, `occupants=${occupants.length}`);
+      } catch (e) {
+        console.warn(`[${ghostLabel}] say failed`, e);
+      }
+      await delay(walkIntervalMs);
+      continue;
+    }
+
     const exits = (await mcp.callTool("exits", {})) as {
       exits: { toward: string; tileId: string }[];
     };
@@ -96,10 +189,15 @@ async function runWalker(
       console.log(`[${ghostLabel}] go`, pick.toward, moved);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      let code: string | undefined;
-      try { code = (JSON.parse(msg) as { code?: string }).code; } catch { /* not JSON */ }
+      const code = goFailureCode(msg);
       if (code === "RULESET_DENY" || code === "NO_NEIGHBOR" || code === "MAP_INTEGRITY") {
         console.log(`[${ghostLabel}] go`, pick.toward, "denied", code);
+      } else if (code === "IN_CONVERSATION") {
+        // Server says we're conversational — local state was wrong; correct it.
+        mode = "conversational";
+        idleTicks = 0;
+        conversationTicks = 0;
+        console.log(`[${ghostLabel}] go`, pick.toward, "denied", code, "— syncing local mode");
       } else {
         console.warn(`[${ghostLabel}] go failed`, pick.toward, e);
       }

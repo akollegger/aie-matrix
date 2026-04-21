@@ -9,12 +9,12 @@
 
 **Purpose**: Accept proposals, scaffold new package, add shared types.
 
-- [ ] T001 Accept RFC-0005: update **Status** from `draft` to `accepted` in `proposals/rfc/0005-ghost-conversation-model.md`
-- [ ] T002 Accept ADR-0003: update **Status** from `proposed` to `accepted` in `proposals/adr/0003-conversation-server.md`
-- [ ] T003 Create `server/conversation/` package scaffolding: `package.json` (workspace name `@aie-matrix/conversation`, ESM, Node 24), `tsconfig.json` (extends root), `src/` directory
-- [ ] T004 Add `ulid` dependency to `server/conversation/package.json`
-- [ ] T005 [P] Create `shared/types/src/conversation.ts`: export `MessageRecord`, `ConversationStore`, and `PendingNotification` interfaces per `data-model.md`
-- [ ] T006 [P] Add `SayArgs`, `SayResult`, `ByeArgs`, `ByeResult`, `InboxResult` to `shared/types/src/ghostMcp.ts` per `contracts/mcp-tools.md`
+- [X] T001 Accept RFC-0005: update **Status** from `draft` to `accepted` in `proposals/rfc/0005-ghost-conversation-model.md`
+- [X] T002 Accept ADR-0003: update **Status** from `proposed` to `accepted` in `proposals/adr/0003-conversation-server.md`
+- [X] T003 Create `server/conversation/` package scaffolding: `package.json` (workspace name `@aie-matrix/conversation`, ESM, Node 24), `tsconfig.json` (extends root), `src/` directory
+- [X] T004 Add `ulid` dependency to `server/conversation/package.json`
+- [X] T005 [P] Create `shared/types/src/conversation.ts`: export `MessageRecord`, `ConversationStore`, and `PendingNotification` interfaces per `data-model.md`
+- [X] T006 [P] Add `SayArgs`, `SayResult`, `ByeArgs`, `ByeResult`, `InboxResult` to `shared/types/src/ghostMcp.ts` per `contracts/mcp-tools.md`
 
 ---
 
@@ -24,12 +24,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T007 Add `ghostModes: MapSchema<string>` field to `WorldSpectatorState` in `server/colyseus/src/room-schema.ts`
-- [ ] T008 Add `setGhostMode(ghostId, mode)` and `getGhostMode(ghostId)` methods to `MatrixRoom` in `server/colyseus/src/MatrixRoom.ts`; default absent key → `"normal"`
-- [ ] T009 [P] Implement `ConversationStore` interface and `JsonlStore` class in `server/conversation/src/store.ts`: `append()`, `get()`, `list()` with ULID cursor pagination; JSONL files at `CONVERSATION_DATA_DIR/{ghost_id}.jsonl`
-- [ ] T010 Implement `ConversationService` Effect service in `server/conversation/src/ConversationService.ts`: ghost state map, `say()` (cluster compute via `h3.gridDisk` + `MatrixRoom.listOccupantsOnCell`, store append, notification enqueue, mode transition), `bye()` (mode transition), `inbox()` (drain queue); depends on T007–T009
-- [ ] T011 Export public API from `server/conversation/src/index.ts`: re-export `ConversationService`, `ConversationStore`, `MessageRecord`, `JsonlStore`
-- [ ] T012 Wire `ConversationService` Layer into `server/src/index.ts`; remove `TranscriptHubService` stub and its `PubSub` wiring
+- [X] T007 Add `ghostModes: MapSchema<string>` field to `WorldSpectatorState` in `server/colyseus/src/room-schema.ts`
+- [X] T008 Add `setGhostMode(ghostId, mode)` and `getGhostMode(ghostId)` methods to `MatrixRoom` in `server/colyseus/src/MatrixRoom.ts`; default absent key → `"normal"`
+- [X] T009 [P] Implement `ConversationStore` interface and `JsonlStore` class in `server/conversation/src/store.ts`: `append()`, `get()`, `list()` with ULID cursor pagination; JSONL files at `CONVERSATION_DATA_DIR/{ghost_id}.jsonl`
+- [X] T010 Implement `ConversationService` Effect service in `server/conversation/src/ConversationService.ts`: ghost state map, `say()` (cluster compute via `h3.gridDisk` + `MatrixRoom.listOccupantsOnCell`, store append, notification enqueue, mode transition), `bye()` (mode transition), `inbox()` (drain queue); depends on T007–T009
+- [X] T011 Export public API from `server/conversation/src/index.ts`: re-export `ConversationService`, `ConversationStore`, `MessageRecord`, `JsonlStore`
+- [X] T012 Wire `ConversationService` Layer into `server/src/index.ts`; remove `TranscriptHubService` stub and its `PubSub` wiring
 
 **Checkpoint**: `pnpm typecheck` passes; server starts; `ConversationService` layer resolves.
 
@@ -41,11 +41,11 @@
 
 **Independent Test**: Ghost issues `say "hello"` via ghost-cli one-shot; record appears in `CONVERSATION_DATA_DIR/{ghost_id}.jsonl`; subsequent `go` is rejected with `IN_CONVERSATION`.
 
-- [ ] T013 [US1] Add `say` MCP tool to `server/world-api/src/mcp-server.ts`: validate content, call `ConversationService.say()`, return `SayResult`; wire `ConversationService` into `ToolServices` layer
-- [ ] T014 [US1] Add `IN_CONVERSATION` guard at the top of the `go` tool handler in `server/world-api/src/mcp-server.ts`
-- [ ] T015 [US1] Add `IN_CONVERSATION` guard at the top of the `traverse` tool handler in `server/world-api/src/mcp-server.ts` (sequential with T014 — same file)
-- [ ] T016 [P] [US1] Add `say(content: string)` method wrapper to `ghosts/ts-client/src/client.ts`
-- [ ] T017 [US1] Verify smoke test 1 (partial): `ghost-cli --token <tok> say "hello"` persists record and `go` is rejected; document result in `quickstart.md`
+- [X] T013 [US1] Add `say` MCP tool to `server/world-api/src/mcp-server.ts`: validate content, call `ConversationService.say()`, return `SayResult`; wire `ConversationService` into `ToolServices` layer
+- [X] T014 [US1] Add `IN_CONVERSATION` guard at the top of the `go` tool handler in `server/world-api/src/mcp-server.ts`
+- [X] T015 [US1] Add `IN_CONVERSATION` guard at the top of the `traverse` tool handler in `server/world-api/src/mcp-server.ts` (sequential with T014 — same file)
+- [X] T016 [P] [US1] Add `say(content: string)` method wrapper to `ghosts/ts-client/src/client.ts`
+- [X] T017 [US1] Verify smoke test 1 (partial): `ghost-cli --token <tok> say "hello"` persists record and `go` is rejected; document result in `quickstart.md`
 
 **Checkpoint**: US1 independently functional — say works, movement blocked, record on disk.
 
@@ -57,9 +57,9 @@
 
 **Independent Test**: Ghost in conversational mode issues `bye`; subsequent `go` succeeds. Ghost in normal state issues `bye`; no error, state unchanged.
 
-- [ ] T018 [US2] Add `bye` MCP tool to `server/world-api/src/mcp-server.ts`: call `ConversationService.bye()`, return `ByeResult` with `previous_mode`
-- [ ] T019 [US2] Add `bye()` method wrapper to `ghosts/ts-client/src/client.ts`
-- [ ] T020 [US2] Verify smoke test 1 (complete): `say` → `go` rejected → `bye` → `go` succeeds; document result in `quickstart.md`
+- [X] T018 [US2] Add `bye` MCP tool to `server/world-api/src/mcp-server.ts`: call `ConversationService.bye()`, return `ByeResult` with `previous_mode`
+- [X] T019 [US2] Add `bye()` method wrapper to `ghosts/ts-client/src/client.ts`
+- [X] T020 [US2] Verify smoke test 1 (complete): `say` → `go` rejected → `bye` → `go` succeeds; document result in `quickstart.md`
 
 **Checkpoint**: US1 + US2 fully functional — full say/bye round-trip works end-to-end.
 
@@ -71,10 +71,10 @@
 
 **Independent Test**: After ghost has sent messages, `curl -H "Authorization: Bearer <key>" /threads/<ghost_id>` returns records with correct fields; pagination via `?after=<ulid>` works.
 
-- [ ] T021 [US3] Verify `GhostClaims` in `server/auth/src/jwt.ts` includes `ghostHouseId`; add it if absent and update token issuance in `server/registry/`
-- [ ] T022 [US3] Implement `ConversationRouter` in `server/conversation/src/router.ts`: `GET /threads/:ghostId` (list + pagination) and `GET /threads/:ghostId/:messageId` (single); auth checks ghost belongs to calling ghost house via `RegistryStoreService`
-- [ ] T023 [US3] Mount `ConversationRouter` at `/threads` in `server/src/index.ts`
-- [ ] T024 [US3] Verify smoke test 3: list, paginate with `after` cursor, fetch single message; document result in `quickstart.md`
+- [X] T021 [US3] Verify `GhostClaims` in `server/auth/src/jwt.ts` includes `ghostHouseId`; add it if absent and update token issuance in `server/registry/`
+- [X] T022 [US3] Implement `ConversationRouter` in `server/conversation/src/router.ts`: `GET /threads/:ghostId` (list + pagination) and `GET /threads/:ghostId/:messageId` (single); auth checks ghost belongs to calling ghost house via `RegistryStoreService`
+- [X] T023 [US3] Mount `ConversationRouter` at `/threads` in `server/src/index.ts`
+- [X] T024 [US3] Verify smoke test 3: list, paginate with `after` cursor, fetch single message; document result in `quickstart.md`
 
 **Checkpoint**: US3 independently functional — ghost house can read full thread history over HTTP.
 
@@ -86,17 +86,17 @@
 
 **Independent Test**: ghost-cli REPL shows `[conversational]` in status after `say`, clears on `bye`, logs inbox notifications; random-house with 3 ghosts shows conversational state transitions in debug panel within 30s.
 
-- [ ] T025 [P] [US4] Add `inbox` MCP tool to `server/world-api/src/mcp-server.ts`: call `ConversationService.inbox()`, return `InboxResult`
-- [ ] T026 [P] [US4] Add `inbox()` method wrapper to `ghosts/ts-client/src/client.ts`
-- [ ] T027 [US4] Add `Say`, `Bye` variants to `ReplCommand` discriminated union and extend `parseReplCommand` in `ghosts/ghost-cli/src/repl/repl-state.ts`; `say <rest of line>` captures full content, `bye` takes no args
-- [ ] T028 [US4] Add `say`/`bye` dispatch and inbox polling loop (every 3s) to `ghosts/ghost-cli/src/repl/session.ts`; store ghost mode in session state
-- [ ] T029 [US4] Add `[conversational]` mode token to `StatusStrip` in `ghosts/ghost-cli/src/repl/StatusStrip.tsx`; shown when mode is conversational, hidden otherwise
-- [ ] T030 [P] [US4] Append `message.new` log entries to `LogPanel` in `ghosts/ghost-cli/src/repl/LogPanel.tsx` when inbox returns notifications
-- [ ] T031 [P] [US4] Add `say <content>` and `bye` one-shot handlers to `ghosts/ghost-cli/src/oneshot/commands.ts`
-- [ ] T032 [US4] Register `say` and `bye` as subcommands in `ghosts/ghost-cli/src/cli.ts`
-- [ ] T033 [US4] Subscribe to `room.state.ghostModes.onChange` in `client/phaser/src/spectatorDebug.ts`; add `mode` column to per-ghost debug entry line
-- [ ] T034 [US4] Add conversation behavior loop to `ghosts/random-house/src/index.ts`: after `look` shows occupants → 20% chance to `say`; after `inbox` returns notifications → always `say` a response; while conversational → 15% chance per poll tick to `bye`; skip walk step while conversational
-- [ ] T035 [US4] Verify smoke tests 1 (ghost-cli full round-trip), 2 (random-house + debug panel), and 4 (debug panel mode column); document results in `quickstart.md`
+- [X] T025 [P] [US4] Add `inbox` MCP tool to `server/world-api/src/mcp-server.ts`: call `ConversationService.inbox()`, return `InboxResult`
+- [X] T026 [P] [US4] Add `inbox()` method wrapper to `ghosts/ts-client/src/client.ts`
+- [X] T027 [US4] Add `Say`, `Bye` variants to `ReplCommand` discriminated union and extend `parseReplCommand` in `ghosts/ghost-cli/src/repl/repl-state.ts`; `say <rest of line>` captures full content, `bye` takes no args
+- [X] T028 [US4] Add `say`/`bye` dispatch and inbox polling loop (every 3s) to `ghosts/ghost-cli/src/repl/session.ts`; store ghost mode in session state
+- [X] T029 [US4] Add `[conversational]` mode token to `StatusStrip` in `ghosts/ghost-cli/src/repl/StatusStrip.tsx`; shown when mode is conversational, hidden otherwise
+- [X] T030 [P] [US4] Append `message.new` log entries to `LogPanel` in `ghosts/ghost-cli/src/repl/LogPanel.tsx` when inbox returns notifications
+- [X] T031 [P] [US4] Add `say <content>` and `bye` one-shot handlers to `ghosts/ghost-cli/src/oneshot/commands.ts`
+- [X] T032 [US4] Register `say` and `bye` as subcommands in `ghosts/ghost-cli/src/cli.ts`
+- [X] T033 [US4] Subscribe to `room.state.ghostModes.onChange` in `client/phaser/src/spectatorDebug.ts`; add `mode` column to per-ghost debug entry line
+- [X] T034 [US4] Add conversation behavior loop to `ghosts/random-house/src/index.ts`: after `look` shows occupants → 20% chance to `say`; after `inbox` returns notifications → always `say` a response; while conversational → 15% chance per poll tick to `bye`; skip walk step while conversational
+- [X] T035 [US4] Verify smoke tests 1 (ghost-cli full round-trip), 2 (random-house + debug panel), and 4 (debug panel mode column); document results in `quickstart.md`
 
 **Checkpoint**: Developer can fully exercise conversation in ghost-cli; random-house ghosts converse autonomously; debug panel reflects live state.
 
@@ -108,7 +108,7 @@
 
 **Independent Test**: Two ghost-cli sessions — Ghost B outside cluster; Ghost A says (B not in listeners); Ghost B moves into cluster; Ghost A says again (B now in listeners and gets inbox notification).
 
-- [ ] T036 [US5] Verify cluster membership integration: run two ghost-cli sessions, move Ghost B in/out of Ghost A's cluster between `say` calls; confirm `mx_listeners` and inbox results match spatial position; document test sequence in `quickstart.md`
+- [X] T036 [US5] Verify cluster membership integration: run two ghost-cli sessions, move Ghost B in/out of Ghost A's cluster between `say` calls; confirm `mx_listeners` and inbox results match spatial position; document test sequence in `quickstart.md`
 
 **Checkpoint**: Cluster computation confirmed correct under movement.
 

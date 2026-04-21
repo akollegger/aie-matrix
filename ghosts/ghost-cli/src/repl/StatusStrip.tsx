@@ -3,16 +3,23 @@ import type { ConnectionState } from "./repl-state.js";
 
 export interface StatusStripProps {
   readonly state: ConnectionState;
+  /** When true, ghost is in conversational mode (MCP `say` active until `bye`). */
+  readonly conversational?: boolean;
 }
 
-export const StatusStrip = ({ state }: StatusStripProps) => {
+export const StatusStrip = ({ state, conversational }: StatusStripProps) => {
   switch (state._tag) {
     case "Connected": {
       return (
-        <Box flexDirection="row" gap={2}>
+        <Box flexDirection="row" gap={2} flexWrap="wrap">
           <Text color="green" bold>
             ● CONNECTED
           </Text>
+          {conversational ? (
+            <Text color="magenta" bold>
+              [conversational]
+            </Text>
+          ) : null}
           <Text>
             ghost: {state.ghostId} tile: {state.tileId} server: {state.serverAddr}
           </Text>

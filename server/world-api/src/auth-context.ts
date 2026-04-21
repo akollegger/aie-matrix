@@ -58,7 +58,11 @@ export function authenticateGhostRequestEffect(
       token,
       clientId: claims.ghostId,
       scopes: [] as string[],
-      extra: { ghostId: claims.ghostId, caretakerId: claims.caretakerId },
+      extra: {
+        ghostId: claims.ghostId,
+        caretakerId: claims.caretakerId,
+        ghostHouseId: claims.ghostHouseId,
+      },
     })),
   );
 }
