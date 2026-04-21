@@ -16,7 +16,7 @@ import {
   type WhereAmIResult,
   type WhoAmIResult,
 } from "@aie-matrix/shared-types";
-import { ConversationService } from "@aie-matrix/server-conversation";
+import { ConversationGhostNoPosition, ConversationService } from "@aie-matrix/server-conversation";
 import {
   authenticateGhostRequestEffect,
   ghostIdsFromAuthEffect,
@@ -386,10 +386,12 @@ function sayEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const conversation = yield* ConversationService;
     const result = yield* (conversation.say(ghostId, content).pipe(
-      Effect.mapError(
-        (e) =>
-          new WorldApiMovementBlocked({ message: e.message, code: "STORE_UNAVAILABLE" }) as WorldApiError,
-      ),
+      Effect.mapError((e) => {
+        if (e instanceof ConversationGhostNoPosition) {
+          return new WorldApiNoPosition({ ghostId: e.ghostId }) as WorldApiError;
+        }
+        return new WorldApiMovementBlocked({ message: e.message, code: "STORE_UNAVAILABLE" }) as WorldApiError;
+      }),
     ) as Effect.Effect<unknown, WorldApiError, never>);
     return result;
   });

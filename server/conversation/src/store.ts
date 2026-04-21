@@ -18,7 +18,7 @@ export class JsonlStore implements ConversationStore {
   }
 
   async get(thread_id: string, message_id: string): Promise<MessageRecord | null> {
-    const records = await this.list(thread_id);
+    const records = await this.list(thread_id, { limit: Infinity });
     return records.find((r) => r.message_id === message_id) ?? null;
   }
 

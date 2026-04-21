@@ -1,5 +1,6 @@
 export {
   ConversationService,
+  ConversationGhostNoPosition,
   ConversationStoreUnavailable,
   makeConversationLayer,
   type ConversationBridge,

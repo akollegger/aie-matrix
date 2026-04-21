@@ -3,7 +3,7 @@ const POLL_INTERVAL_MS = 5_000;
 export interface StoragePanelOptions {
   /** Base URL of the game server (e.g. http://localhost:8787). */
   serverBase: string;
-  /** Bearer token — ghost-house API key. Sourced from VITE_DEBUG_TOKEN. */
+  /** Bearer token — ghost-house API key. Sourced from SPECTATOR_DEBUG_TOKEN. */
   token: string | undefined;
   /** Returns current ghost IDs in the room for the dropdown. */
   getGhostIds: () => string[];
@@ -132,7 +132,7 @@ export function buildStoragePanel(opts: StoragePanelOptions): StoragePanelHandle
       return;
     }
     if (!token) {
-      resultPre.textContent = "No token — set VITE_DEBUG_TOKEN in your .env.";
+      resultPre.textContent = "No token — set SPECTATOR_DEBUG_TOKEN in your .env.";
       return;
     }
 
