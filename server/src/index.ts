@@ -27,17 +27,17 @@ import {
   type RegistryStoreService,
   type WorldBridgeService,
 } from "@aie-matrix/server-world-api";
-import { Effect, Exit, Layer, ManagedRuntime, pipe, Scope } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
+import {
+  ConversationService,
+  JsonlStore,
+  createConversationRouter,
+  makeConversationLayer,
+} from "@aie-matrix/server-conversation";
 import { patchMatchmakeCorsForCredentials } from "./colyseus-cors-patch.js";
 import { errorToResponse, type HttpMappingError } from "./errors.js";
 import { makeServerConfigLayer, type ServerConfigService } from "./services/ServerConfigService.js";
-import {
-  publishTranscript,
-  subscribeGhostToHub,
-  TranscriptHub,
-  TranscriptHubLayer,
-} from "./services/TranscriptHubService.js";
 
 loadRootEnv();
 if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
@@ -53,6 +53,8 @@ const mapPath = mapPathRaw
   ? (isAbsolute(mapPathRaw) ? mapPathRaw : join(repoRoot, mapPathRaw))
   : join(repoRoot, "maps/sandbox/freeplay.tmj");
 const mapsRoot = normalize(join(repoRoot, "maps"));
+const conversationDataDir =
+  process.env.CONVERSATION_DATA_DIR ?? join(process.cwd(), "data/conversations");
 
 /** PoC-wide CORS for browser clients (Phaser on Vite, etc.). */
 const corsHeaders: Record<string, string> = {
@@ -198,6 +200,9 @@ async function main(): Promise<void> {
       }
     },
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
+    setGhostMode: (ghostId: string, mode: "normal" | "conversational") =>
+      colyseusBridge.setGhostMode(ghostId, mode),
+    getGhostMode: (ghostId: string) => colyseusBridge.getGhostMode(ghostId),
   };
 
   let neoDriver = createNeo4jDriverFromEnv() ?? null;
@@ -217,8 +222,6 @@ async function main(): Promise<void> {
     ? makeLiveNeo4jGraphLayer(neoDriver)
     : makeNoOpNeo4jGraphLayer;
 
-  const ghostSubscriberScope = await Effect.runPromise(Scope.make());
-
   let movementRules;
   try {
     movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
@@ -227,12 +230,21 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  const conversationStore = new JsonlStore(conversationDataDir);
+  const conversationLayer = makeConversationLayer(bridge, conversationStore);
+  const handleConversationThreads = createConversationRouter({
+    store: conversationStore,
+    registry: store,
+    corsHeaders,
+    spectatorToken: process.env.SPECTATOR_DEBUG_TOKEN,
+  });
+
   type MatrixRuntimeServices =
     | WorldBridgeService
     | RegistryStoreService
     | MovementRulesService
     | ServerConfigService
-    | TranscriptHub
+    | ConversationService
     | Neo4jGraphService;
 
   const runtimeLayer = Layer.mergeAll(
@@ -240,7 +252,7 @@ async function main(): Promise<void> {
     makeRegistryStoreLayer(store),
     makeMovementRulesLayer(movementRules),
     makeServerConfigLayer(process.env),
-    TranscriptHubLayer,
+    conversationLayer,
     neo4jGraphLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
@@ -248,10 +260,7 @@ async function main(): Promise<void> {
 
   process.on("SIGTERM", () => {
     void Effect.runPromise(
-      Effect.gen(function* () {
-        yield* Scope.close(ghostSubscriberScope, Exit.void);
-        yield* Effect.promise(() => runtime.dispose());
-      }),
+      Effect.promise(() => runtime.dispose()),
     ).finally(() => {
       void (neoDriver?.close() ?? Promise.resolve()).finally(() => process.exit(0));
     });
@@ -260,24 +269,6 @@ async function main(): Promise<void> {
   const registryListener = createRegistryRequestListener({
     adoption: {
       worldApiBaseUrl,
-      forkTranscriptSubscriber: (ghostId: string) => {
-        runtime.runFork(
-          pipe(
-            Effect.forkScoped(
-              subscribeGhostToHub(ghostId).pipe(
-                Effect.tapDefect((cause) =>
-                  Effect.sync(() =>
-                    console.error(
-                      JSON.stringify({ kind: "transcript-hub", op: "defect", ghostId, cause: String(cause) }),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            Effect.provideService(Scope.Scope, ghostSubscriberScope),
-          ),
-        );
-      },
     },
     runtime,
     mapHttpError: (e: unknown) => errorToResponse(e as HttpMappingError),
@@ -309,8 +300,8 @@ async function main(): Promise<void> {
           p === "/spectator/room" ||
           p.startsWith("/maps/") ||
           p.startsWith("/registry") ||
-          p === "/mcp" ||
-          p === "/transcripts"
+          p.startsWith("/threads") ||
+          p === "/mcp"
         ) {
           res.writeHead(204, corsHeaders);
           res.end();
@@ -337,63 +328,14 @@ async function main(): Promise<void> {
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
         return;
       }
+      if (url.pathname.startsWith("/threads")) {
+        const handled = await handleConversationThreads(req, res, url);
+        if (handled) {
+          return;
+        }
+      }
       if (url.pathname.startsWith("/registry")) {
         await registryListener(req, res);
-        return;
-      }
-      if (url.pathname === "/transcripts") {
-        if (req.method === "OPTIONS") {
-          res.writeHead(204, corsHeaders);
-          res.end();
-          return;
-        }
-        if (req.method !== "POST") {
-          res.writeHead(405, { "Content-Type": "application/json", ...corsHeaders });
-          res.end(JSON.stringify({ error: "METHOD_NOT_ALLOWED", message: "POST only" }));
-          return;
-        }
-        const buf = await readRequestBody(req);
-        let parsed: unknown;
-        try {
-          parsed = buf.length ? JSON.parse(buf.toString("utf8")) : undefined;
-        } catch {
-          res.writeHead(400, {
-            "Content-Type": "application/json",
-            ...corsHeaders,
-          });
-          res.end(JSON.stringify({ error: "BAD_JSON", message: "Body must be JSON" }));
-          return;
-        }
-        const body = parsed as { source?: unknown; text?: unknown };
-        const source = typeof body.source === "string" ? body.source.trim() : "";
-        const text = typeof body.text === "string" ? body.text.trim() : "";
-        if (!source || !text || text.length > 2048) {
-          res.writeHead(400, {
-            "Content-Type": "application/json",
-            ...corsHeaders,
-          });
-          res.end(
-            JSON.stringify({
-              error: "VALIDATION",
-              message: "source and text are required; text max 2048 characters (IC-002)",
-            }),
-          );
-          return;
-        }
-        const published = await runtime.runPromise(
-          publishTranscript({ source, text, timestamp: Date.now() }),
-        );
-        res.writeHead(published ? 200 : 207, {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        });
-        res.end(
-          JSON.stringify(
-            published
-              ? { ok: true }
-              : { ok: false, note: "hub dropped the message (capacity); partial delivery" },
-          ),
-        );
         return;
       }
       if (url.pathname === "/mcp") {
@@ -468,8 +410,8 @@ async function main(): Promise<void> {
   console.log(`  MCP world-api (Streamable HTTP): POST ${worldApiBaseUrl}`);
   console.log(`  Colyseus WebSocket: ws://127.0.0.1:${httpPort} (matchmake routes on same port)`);
   console.log(`  Spectator room id: GET http://127.0.0.1:${httpPort}/spectator/room`);
+  console.log(`  Conversation threads: GET http://127.0.0.1:${httpPort}/threads/:ghostId`);
   console.log(`  Map assets (dev): GET http://127.0.0.1:${httpPort}/maps/...`);
-  console.log(`  Transcripts (stub): POST http://127.0.0.1:${httpPort}/transcripts`);
 }
 
 void main().catch((err) => {

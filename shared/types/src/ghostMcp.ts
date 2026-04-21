@@ -1,4 +1,5 @@
 import type { Compass, LookAt } from "./compass.js";
+import type { PendingNotification } from "./conversation.js";
 
 export const GHOST_MCP_TOOLS = [
   "whoami",
@@ -7,6 +8,9 @@ export const GHOST_MCP_TOOLS = [
   "exits",
   "go",
   "traverse",
+  "say",
+  "bye",
+  "inbox",
 ] as const;
 
 export type GhostMcpTool = (typeof GHOST_MCP_TOOLS)[number];
@@ -93,3 +97,24 @@ export interface GoFailure {
 }
 
 export type GoResult = GoSuccess | GoFailure;
+
+export interface SayArgs {
+  content: string;
+}
+
+export interface SayResult {
+  message_id: string;
+  mx_listeners: string[];
+}
+
+export interface ByeArgs {}
+
+export interface ByeResult {
+  previous_mode: "normal" | "conversational";
+}
+
+export interface InboxArgs {}
+
+export interface InboxResult {
+  notifications: PendingNotification[];
+}

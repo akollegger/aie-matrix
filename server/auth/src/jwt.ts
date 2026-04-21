@@ -13,11 +13,16 @@ export interface GhostClaims {
   sub: string;
   ghostId: string;
   caretakerId: string;
+  ghostHouseId: string;
 }
 
 export function mintGhostToken(claims: GhostClaims, ttlSeconds = 60 * 60 * 8): string {
   return jwt.sign(
-    { ghostId: claims.ghostId, caretakerId: claims.caretakerId },
+    {
+      ghostId: claims.ghostId,
+      caretakerId: claims.caretakerId,
+      ghostHouseId: claims.ghostHouseId,
+    },
     getJwtSecret(),
     {
       subject: claims.sub,
@@ -38,15 +43,22 @@ export function verifyGhostToken(token: string): Effect.Effect<GhostClaims, JwtE
     if (typeof decoded.sub !== "string") {
       return yield* Effect.fail(new JwtMissingSub({ message: "JWT missing sub" }));
     }
-    if (typeof decoded.ghostId !== "string" || typeof decoded.caretakerId !== "string") {
+    if (
+      typeof decoded.ghostId !== "string" ||
+      typeof decoded.caretakerId !== "string" ||
+      typeof decoded.ghostHouseId !== "string"
+    ) {
       return yield* Effect.fail(
-        new JwtMissingGhostClaims({ message: "JWT missing ghostId/caretakerId claims" }),
+        new JwtMissingGhostClaims({
+          message: "JWT missing ghostId/caretakerId/ghostHouseId claims",
+        }),
       );
     }
     return {
       sub: decoded.sub,
       ghostId: decoded.ghostId,
       caretakerId: decoded.caretakerId,
+      ghostHouseId: decoded.ghostHouseId,
     };
   });
 }

@@ -3,7 +3,15 @@ import { Context, Data, Effect, Layer, Scope } from "effect";
 
 import type { GhostConfig } from "../config.js";
 
-export type GhostToolName = "whoami" | "whereami" | "look" | "exits" | "go";
+export type GhostToolName =
+  | "whoami"
+  | "whereami"
+  | "look"
+  | "exits"
+  | "go"
+  | "say"
+  | "bye"
+  | "inbox";
 
 export class NetworkError extends Data.TaggedError("GhostClient.NetworkError")<{
   readonly message: string;

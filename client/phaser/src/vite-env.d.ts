@@ -16,3 +16,9 @@ interface ImportMeta {
 
 /** Injected at build time by vite.config.ts from AIE_MATRIX_MAP (strips leading `maps/`). */
 declare const __AIE_MAP_PATH__: string;
+
+/**
+ * Injected at build time from SPECTATOR_DEBUG_TOKEN (repo-root .env).
+ * Empty string when not set — the server reads the same env var, keeping both sides in sync.
+ */
+declare const __SPECTATOR_DEBUG_TOKEN__: string;

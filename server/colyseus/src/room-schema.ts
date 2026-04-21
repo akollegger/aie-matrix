@@ -34,6 +34,10 @@ export class WorldSpectatorState extends Schema {
   @type({ map: "string" })
   declare tileClasses: MapSchema<string>;
 
+  /** ghostId → "normal" | "conversational". Absent key defaults to "normal". */
+  @type({ map: "string" })
+  declare ghostModes: MapSchema<string>;
+
   constructor() {
     super();
     // Must assign after `super()` so @type accessors run (`$changes.setParent` / root `allChanges`).
@@ -42,6 +46,7 @@ export class WorldSpectatorState extends Schema {
     this.ghostTiles = new MapSchema<string>();
     this.tileCoords = new MapSchema<TileCoord>();
     this.tileClasses = new MapSchema<string>();
+    this.ghostModes = new MapSchema<string>();
   }
 }
 

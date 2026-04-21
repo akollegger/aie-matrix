@@ -23,7 +23,38 @@ import type { ReplCommand, ReplRefs } from "./repl-state.js";
 import { parseReplCommand } from "./repl-state.js";
 
 const HELP_TEXT =
-  "Commands: whoami | whereami | look [here|around|n|s|ne|nw|se|sw] | exits | go <face> | help | exit";
+  "Commands: whoami | whereami | look [here|around|n|s|ne|nw|se|sw] | exits | go <face> | say <message> | bye | help | exit";
+
+function formatSayLogLine(raw: unknown): string {
+  if (raw && typeof raw === "object" && "message_id" in raw) {
+    const o = raw as { message_id: string; mx_listeners?: unknown };
+    const listeners = Array.isArray(o.mx_listeners)
+      ? o.mx_listeners.filter((x): x is string => typeof x === "string").join(", ")
+      : "";
+    return `say ok — id ${o.message_id}; listeners: ${listeners || "(none)"}`;
+  }
+  return `say: ${JSON.stringify(raw)}`;
+}
+
+function notificationsFromInbox(raw: unknown): ReadonlyArray<{ thread_id: string; message_id: string }> {
+  if (!raw || typeof raw !== "object" || !("notifications" in raw)) {
+    return [];
+  }
+  const n = (raw as { notifications: unknown }).notifications;
+  if (!Array.isArray(n)) {
+    return [];
+  }
+  const out: Array<{ thread_id: string; message_id: string }> = [];
+  for (const item of n) {
+    if (item && typeof item === "object" && "thread_id" in item && "message_id" in item) {
+      const t = item as { thread_id: unknown; message_id: unknown };
+      if (typeof t.thread_id === "string" && typeof t.message_id === "string") {
+        out.push({ thread_id: t.thread_id, message_id: t.message_id });
+      }
+    }
+  }
+  return out;
+}
 
 function serverAddrFromUrl(urlStr: string): string {
   try {
@@ -38,7 +69,11 @@ function serverAddrFromUrl(urlStr: string): string {
   }
 }
 
-const appendLogLine = (refs: ReplRefs, kind: "command" | "movement" | "connection" | "diagnostic", message: string) =>
+const appendLogLine = (
+  refs: ReplRefs,
+  kind: "command" | "movement" | "connection" | "diagnostic" | "conversation",
+  message: string,
+) =>
   Ref.update(refs.logRef, (entries) => {
     const next = { timestamp: new Date(), kind, message } as const;
     return [...entries, next].slice(-300);
@@ -151,6 +186,36 @@ const dispatchCommand = (
         const ex = parseExitList(exRaw);
         if (ex) {
           yield* Ref.set(refs.exitsRef, ex);
+        }
+        return;
+      }
+      case "say": {
+        if (!cmd.content.trim()) {
+          yield* appendLogLine(refs, "diagnostic", "say requires non-empty message text.");
+          return;
+        }
+        yield* appendLogLine(refs, "command", `> say ${cmd.content}`);
+        const said = yield* svc.callTool("say", { content: cmd.content }).pipe(Effect.either);
+        if (said._tag === "Right") {
+          yield* Ref.set(refs.ghostModeRef, "conversational");
+          yield* appendLogLine(refs, "command", formatSayLogLine(said.right));
+        } else {
+          yield* appendLogLine(refs, "diagnostic", said.left.message);
+        }
+        return;
+      }
+      case "bye": {
+        yield* appendLogLine(refs, "command", "> bye");
+        const ended = yield* svc.callTool("bye", {}).pipe(Effect.either);
+        if (ended._tag === "Right") {
+          yield* Ref.set(refs.ghostModeRef, "normal");
+          const prev =
+            ended.right && typeof ended.right === "object" && "previous_mode" in ended.right
+              ? String((ended.right as { previous_mode: unknown }).previous_mode)
+              : "?";
+          yield* appendLogLine(refs, "command", `bye ok — previous_mode: ${prev}`);
+        } else {
+          yield* appendLogLine(refs, "diagnostic", ended.left.message);
         }
         return;
       }
@@ -268,6 +333,24 @@ export const runReplDriver = (input: {
           }
 
           yield* appendLogLine(refs, "connection", `connected as ${identity.ghostId}`);
+
+          yield* Effect.forkScoped(
+            Effect.gen(function* () {
+              while (!(yield* Deferred.isDone(finished))) {
+                yield* Effect.sleep(Duration.seconds(3));
+                if (yield* Deferred.isDone(finished)) break;
+                const res = yield* svc.callTool("inbox", {}).pipe(Effect.either);
+                if (res._tag === "Left") continue;
+                for (const n of notificationsFromInbox(res.right)) {
+                  yield* appendLogLine(
+                    refs,
+                    "conversation",
+                    `message.new thread_id=${n.thread_id} message_id=${n.message_id}`,
+                  );
+                }
+              }
+            }),
+          );
 
           while (!(yield* Deferred.isDone(finished))) {
             const line = yield* Queue.take(commandQueue);

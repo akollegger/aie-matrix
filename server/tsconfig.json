@@ -8,6 +8,7 @@
     { "path": "../shared/root-env" },
     { "path": "./auth" },
     { "path": "./colyseus" },
+    { "path": "./conversation" },
     { "path": "./world-api" },
     { "path": "./registry" }
   ],

@@ -8,6 +8,7 @@
   "references": [
     { "path": "../auth" },
     { "path": "../colyseus" },
+    { "path": "../conversation" },
     { "path": "../../shared/types" }
   ],
   "include": ["src/**/*.ts", "src/**/*.test.ts"]

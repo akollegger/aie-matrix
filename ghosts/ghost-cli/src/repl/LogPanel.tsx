@@ -20,8 +20,9 @@ export const LogPanel = ({ entries }: LogPanelProps) => {
     <Box flexDirection="column" borderStyle="single" borderColor="gray" paddingX={1}>
       <Text bold>LOG</Text>
       {windowed.map((e, i) => (
-        <Text key={`${e.timestamp.getTime()}-${i}`}>
-          [{formatTime(e.timestamp)}] {e.message}
+        <Text key={`${e.timestamp.getTime()}-${i}`} color={e.kind === "conversation" ? "cyan" : undefined}>
+          [{formatTime(e.timestamp)}] {e.kind === "conversation" ? "[message.new] " : ""}
+          {e.message}
         </Text>
       ))}
     </Box>

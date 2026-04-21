@@ -1,0 +1,28 @@
+{
+  "name": "@aie-matrix/server-conversation",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@aie-matrix/server-colyseus": "workspace:*",
+    "@aie-matrix/shared-types": "workspace:*",
+    "effect": "^3.21.0",
+    "h3-js": "^4.1.0",
+    "ulid": "^2.3.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2"
+  }
+}

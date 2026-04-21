@@ -23,6 +23,11 @@ export default defineConfig(({ mode }) => {
     define: {
       /** Injected at build time from AIE_MATRIX_MAP — do not set VITE_MAP_PATH directly. */
       __AIE_MAP_PATH__: JSON.stringify(mapPath),
+      /**
+       * Spectator read-only debug token. Set SPECTATOR_DEBUG_TOKEN in the repo-root .env;
+       * the server reads the same var so both sides stay in sync without a VITE_ duplicate.
+       */
+      __SPECTATOR_DEBUG_TOKEN__: JSON.stringify(env.SPECTATOR_DEBUG_TOKEN ?? ""),
     },
     server: {
       port: 5174,

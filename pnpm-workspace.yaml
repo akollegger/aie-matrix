@@ -1,6 +1,7 @@
 packages:
   - server
   - server/colyseus
+  - server/conversation
   - server/world-api
   - server/registry
   - server/auth

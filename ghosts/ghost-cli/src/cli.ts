@@ -14,7 +14,15 @@ import {
   type GhostConfig,
 } from "./config.js";
 import { formatDiagnostic, toExitCode } from "./diagnostics.js";
-import { runExits, runGo, runLook, runWhereami, runWhoami } from "./oneshot/commands.js";
+import {
+  runBye,
+  runExits,
+  runGo,
+  runLook,
+  runSay,
+  runWhereami,
+  runWhoami,
+} from "./oneshot/commands.js";
 import { CliSilentExit, CliUsageError } from "./oneshot/errors.js";
 import type { PreFlightError } from "./preflight/errors.js";
 import {
@@ -118,6 +126,11 @@ const exitsCmd = Command.make("exits", { ...globals }, (p) => wrapOneshot(p, run
 const towardArg = Args.text({ name: "toward" });
 const goCmd = Command.make("go", { ...globals, toward: towardArg }, (p) => wrapOneshot(p, (c) => runGo(c, p.toward)));
 
+const sayWords = Args.repeated(Args.text({ name: "word" }));
+const sayCmd = Command.make("say", { ...globals, words: sayWords }, (p) => wrapOneshot(p, (c) => runSay(c, p.words)));
+
+const byeCmd = Command.make("bye", { ...globals }, (p) => wrapOneshot(p, runBye));
+
 const root = Command.make(
   "ghost-cli",
   rootOnly,
@@ -159,7 +172,7 @@ const root = Command.make(
           });
       });
     }),
-).pipe(Command.withSubcommands([whoamiCmd, whereamiCmd, lookCmd, exitsCmd, goCmd]));
+).pipe(Command.withSubcommands([whoamiCmd, whereamiCmd, lookCmd, exitsCmd, goCmd, sayCmd, byeCmd]));
 
 export const cli = Command.run(root, {
   name: "ghost-cli",
