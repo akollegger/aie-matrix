@@ -9,9 +9,14 @@ import { Cause, Effect, Exit, Layer, Option } from "effect";
 import { z } from "zod";
 import {
   COMPASS_DIRECTIONS,
+  type DropResult,
   type ExitInfo,
+  type InspectResult,
+  type InventoryResult,
   type GoFailure,
   type NonAdjacentExitInfo,
+  type TakeResult,
+  type TileItemSummary,
   type TileInspectResult,
   type WhereAmIResult,
   type WhoAmIResult,
@@ -36,7 +41,7 @@ import {
   type WorldApiError,
 } from "./world-api-errors.js";
 import { evaluateGo, evaluateTraverse } from "./movement.js";
-import { ItemService } from "./ItemService.js";
+import { ItemService, type ItemServiceOps } from "./ItemService.js";
 import { getRequestTraceId } from "./request-trace.js";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -101,9 +106,46 @@ function worldApiErrorToToolPayload(error: WorldApiError): Record<string, unknow
       };
     case "WorldApiError.MapIntegrity":
       return { error: "MAP_INTEGRITY", message: error.message };
+    case "WorldApiError.ItemNotHere":
+      return { ok: false, code: "NOT_HERE", reason: `Item "${error.itemRef}" is not on your current tile.` };
+    case "WorldApiError.ItemNotFound":
+      return { ok: false, code: "NOT_FOUND", reason: `Item "${error.itemRef}" does not exist.` };
+    case "WorldApiError.ItemNotCarriable":
+      return { ok: false, code: "NOT_CARRIABLE", reason: `Item "${error.itemRef}" cannot be picked up.` };
+    case "WorldApiError.ItemNotCarrying":
+      return { ok: false, code: "NOT_CARRYING", reason: `You are not carrying "${error.itemRef}".` };
+    case "WorldApiError.TileFull":
+      return { ok: false, code: "TILE_FULL", reason: `Tile ${error.h3Index} is at full capacity.` };
     default:
       return { error: "WORLD_API", message: String(error) };
   }
+}
+
+function tileItemsForAt(
+  itemService: ItemServiceOps,
+  h3Index: string,
+  at: TileItemSummary["at"],
+): TileItemSummary[] {
+  const sidecar = itemService.getSidecar();
+  return itemService.getItemsOnTile(h3Index).map((itemRef) => ({
+    id: itemRef,
+    name: sidecar.get(itemRef)?.name ?? itemRef,
+    at,
+  }));
+}
+
+function addObjectsField(
+  tile: TileInspectResult,
+  objects: TileItemSummary[],
+): TileInspectResult {
+  if (objects.length > 0) {
+    tile.objects = objects;
+  }
+  return tile;
+}
+
+function hasRulesetEdge(rules: { ruleGraph: { edgesFor(ruleType: string): ReadonlyArray<unknown> } }, ruleType: string): boolean {
+  return rules.ruleGraph.edgesFor(ruleType).length > 0;
 }
 
 /**
@@ -207,6 +249,7 @@ function lookEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const bridge = yield* WorldBridgeService;
+    const itemService = yield* ItemService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
     const here = map.cells.get(hereId);
@@ -216,11 +259,19 @@ function lookEffect(
     const target = at ?? "here";
     if (target === "here") {
       const occupants = bridge.listOccupantsOnCell(hereId);
-      const tile: TileInspectResult = {
+      const objects = tileItemsForAt(itemService, hereId, "here");
+      for (const dir of COMPASS_DIRECTIONS) {
+        const nid = here.neighbors[dir];
+        if (!nid) {
+          continue;
+        }
+        objects.push(...tileItemsForAt(itemService, nid, dir));
+      }
+      const tile = addObjectsField({
         tileId: hereId,
         tileClass: here.tileClass,
         occupants,
-      };
+      }, objects);
       return tile;
     }
     if (target === "around") {
@@ -234,11 +285,11 @@ function lookEffect(
         if (!ncell) {
           continue;
         }
-        tiles.push({
+        tiles.push(addObjectsField({
           tileId: nid,
           tileClass: ncell.tileClass,
           occupants: bridge.listOccupantsOnCell(nid),
-        });
+        }, tileItemsForAt(itemService, nid, "here")));
       }
       return { neighbors: tiles };
     }
@@ -250,11 +301,11 @@ function lookEffect(
     if (!ncell) {
       return { empty: true, toward: target };
     }
-    const tile: TileInspectResult = {
+    const tile = addObjectsField({
       tileId: nid,
       tileClass: ncell.tileClass,
       occupants: bridge.listOccupantsOnCell(nid),
-    };
+    }, tileItemsForAt(itemService, nid, "here"));
     return tile;
   });
 }
@@ -367,9 +418,15 @@ function goEffect(
       );
     }
     const rules = yield* MovementRulesService;
+    const itemService = yield* ItemService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
-    const result = evaluateGo(map, hereId, toward, rules, { ghostLabels: new Set() });
+    const destId = map.cells.get(hereId)?.neighbors[toward];
+    const destGhostCount = destId ? bridge.listOccupantsOnCell(destId).length : undefined;
+    const result = evaluateGo(map, hereId, toward, rules, { ghostLabels: new Set() }, {
+      destGhostCount,
+      itemService,
+    });
     if (!result.ok) {
       return yield* Effect.fail(goFailureToWorldApi(hereId, result));
     }
@@ -418,6 +475,144 @@ function inboxEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const conversation = yield* ConversationService;
     return yield* conversation.inbox(ghostId) as Effect.Effect<unknown, never, never>;
+  });
+}
+
+function inspectEffect(
+  itemRef: string,
+  extra: McpToolExtra,
+): Effect.Effect<InspectResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const itemService = yield* ItemService;
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    return yield* itemService.inspectItem(hereId, itemRef).pipe(
+      Effect.map((item) => ({ ok: true as const, ...item })),
+      Effect.catchTags({
+        "WorldApiError.ItemNotHere": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_HERE" as const,
+            reason: `Item "${itemRef}" is not on your current tile.`,
+          }),
+        "WorldApiError.ItemNotFound": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_FOUND" as const,
+            reason: `Item "${itemRef}" does not exist.`,
+          }),
+      }),
+    );
+  });
+}
+
+function takeEffect(
+  itemRef: string,
+  extra: McpToolExtra,
+): Effect.Effect<TakeResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const rules = yield* MovementRulesService;
+    if (hasRulesetEdge(rules, "PICK_UP")) {
+      return {
+        ok: false,
+        code: "RULESET_DENY",
+        reason: "Pick-up rules are loaded, but PICK_UP evaluation is not implemented yet.",
+      };
+    }
+    const itemService = yield* ItemService;
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    return yield* itemService.takeItem(ghostId, hereId, itemRef).pipe(
+      Effect.map((item) => ({ ok: true as const, ...item })),
+      Effect.catchTags({
+        "WorldApiError.ItemNotFound": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_FOUND" as const,
+            reason: `Item "${itemRef}" does not exist.`,
+          }),
+        "WorldApiError.ItemNotHere": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_HERE" as const,
+            reason: `Item "${itemRef}" is not on your current tile.`,
+          }),
+        "WorldApiError.ItemNotCarriable": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_CARRIABLE" as const,
+            reason: `Item "${itemRef}" cannot be picked up.`,
+          }),
+      }),
+    );
+  });
+}
+
+function dropEffect(
+  itemRef: string,
+  extra: McpToolExtra,
+): Effect.Effect<DropResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const bridge = yield* WorldBridgeService;
+    const rules = yield* MovementRulesService;
+    if (hasRulesetEdge(rules, "PUT_DOWN")) {
+      return {
+        ok: false,
+        code: "RULESET_DENY",
+        reason: "Drop rules are loaded, but PUT_DOWN evaluation is not implemented yet.",
+      };
+    }
+    const itemService = yield* ItemService;
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    const tile = bridge.getLoadedMap().cells.get(hereId);
+    if (!tile) {
+      return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(hereId) }));
+    }
+    return yield* itemService.dropItem(
+      ghostId,
+      hereId,
+      itemRef,
+      tile.capacity,
+      bridge.listOccupantsOnCell(hereId).length,
+    ).pipe(
+      Effect.as({ ok: true as const }),
+      Effect.catchTags({
+        "WorldApiError.ItemNotCarrying": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_CARRYING" as const,
+            reason: `You are not carrying "${itemRef}".`,
+          }),
+        "WorldApiError.TileFull": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "TILE_FULL" as const,
+            reason: `Tile ${hereId} is at full capacity.`,
+          }),
+      }),
+    );
+  });
+}
+
+function inventoryEffect(
+  extra: McpToolExtra,
+): Effect.Effect<InventoryResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const itemService = yield* ItemService;
+    const sidecar = itemService.getSidecar();
+    return {
+      ok: true,
+      objects: itemService.getGhostInventory(ghostId).map((itemRef) => ({
+        itemRef,
+        name: sidecar.get(itemRef)?.name ?? itemRef,
+      })),
+    };
   });
 }
 
@@ -576,6 +771,47 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         "Return and drain all pending message.new notifications for this ghost. Call periodically to discover messages sent by nearby ghosts.",
     },
     async (extra) => runTool("inbox", {}, inboxEffect(extra)),
+  );
+
+  server.registerTool(
+    "inspect",
+    {
+      description: "Inspect an item on your current tile and return its name plus optional description.",
+      inputSchema: {
+        itemRef: z.string().describe("The itemRef to inspect on your current tile."),
+      },
+    },
+    async ({ itemRef }, extra) => runTool("inspect", { itemRef }, inspectEffect(itemRef, extra)),
+  );
+
+  server.registerTool(
+    "take",
+    {
+      description: "Pick up a carriable item from your current tile into your inventory.",
+      inputSchema: {
+        itemRef: z.string().describe("The itemRef to take from your current tile."),
+      },
+    },
+    async ({ itemRef }, extra) => runTool("take", { itemRef }, takeEffect(itemRef, extra)),
+  );
+
+  server.registerTool(
+    "drop",
+    {
+      description: "Drop a carried item onto your current tile if the tile has capacity.",
+      inputSchema: {
+        itemRef: z.string().describe("The itemRef to drop from your inventory."),
+      },
+    },
+    async ({ itemRef }, extra) => runTool("drop", { itemRef }, dropEffect(itemRef, extra)),
+  );
+
+  server.registerTool(
+    "inventory",
+    {
+      description: "List the items you are currently carrying. Always succeeds, even when empty.",
+    },
+    async (extra) => runTool("inventory", {}, inventoryEffect(extra)),
   );
 
   return server;

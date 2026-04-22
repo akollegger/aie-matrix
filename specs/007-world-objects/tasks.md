@@ -78,9 +78,9 @@
 
 **Independent Test**: Smoke Test 3 from `quickstart.md` — inspect succeeds on current tile; `NOT_HERE` returned from adjacent tile.
 
-- [ ] T026 [US2] Add `inspectEffect()` function to `server/world-api/src/mcp-server.ts`: calls `ItemService.inspectObject()`; returns `InspectResult`; maps `WorldApiItemNotHere` → `NOT_HERE`, `WorldApiItemNotFound` → `NOT_FOUND`
-- [ ] T027 [US2] Register `inspect` tool in `buildGhostMcpServer()` in `server/world-api/src/mcp-server.ts` with `inputSchema: { itemRef: z.string() }` and description per IC-011
-- [ ] T028 [US2] Implement `inspectObject()` in `ItemService`: verify itemRef exists in sidecar (else `NOT_FOUND`); verify itemRef present in `tileObjects[h3Index]` (else `NOT_HERE`); return name + optional description
+- [x] T026 [US2] Add `inspectEffect()` function to `server/world-api/src/mcp-server.ts`: calls `ItemService.inspectObject()`; returns `InspectResult`; maps `WorldApiItemNotHere` → `NOT_HERE`, `WorldApiItemNotFound` → `NOT_FOUND`
+- [x] T027 [US2] Register `inspect` tool in `buildGhostMcpServer()` in `server/world-api/src/mcp-server.ts` with `inputSchema: { itemRef: z.string() }` and description per IC-011
+- [x] T028 [US2] Implement `inspectObject()` in `ItemService`: verify itemRef exists in sidecar (else `NOT_FOUND`); verify itemRef present in `tileObjects[h3Index]` (else `NOT_HERE`); return name + optional description
 
 **Checkpoint**: Smoke Test 3 in `quickstart.md` passes
 
@@ -92,14 +92,14 @@
 
 **Independent Test**: Smoke Test 2 from `quickstart.md` — full `look → take → inventory → move → drop → look` round-trip.
 
-- [ ] T029 [US3] Implement `takeObject()` in `ItemService`: verify itemRef in sidecar (`NOT_FOUND`); verify on tile (`NOT_HERE`); verify carriable (`NOT_CARRIABLE`); verify ruleset permits (stub — pass when no `PICK_UP` rule loaded, `RULESET_DENY` otherwise); move first matching ref from `tileObjects` to `ghostInventory`; call `bridge.setTileObjects()` and `bridge.setGhostInventory()`
-- [ ] T030 [US3] Implement `dropObject()` in `ItemService`: verify ghost carrying ref (`NOT_CARRYING`); verify ruleset permits (stub — `RULESET_DENY` when `PUT_DOWN` rule loaded and denies); verify tile capacity not exceeded (`TILE_FULL`); move ref from `ghostInventory` to `tileObjects`; call `bridge.setTileObjects()` and `bridge.setGhostInventory()`
-- [ ] T031 [US3] Add `takeEffect()` to `server/world-api/src/mcp-server.ts`: calls `ItemService.takeObject(ghostId, h3Index, itemRef)`; returns `TakeResult`
-- [ ] T032 [US3] Register `take` tool in `buildGhostMcpServer()` with `inputSchema: { itemRef: z.string() }` and description per IC-011
-- [ ] T033 [US3] Add `dropEffect()` to `server/world-api/src/mcp-server.ts`: calls `ItemService.dropObject(ghostId, h3Index, itemRef)`; returns `DropResult`
-- [ ] T034 [US3] Register `drop` tool in `buildGhostMcpServer()` with `inputSchema: { itemRef: z.string() }` and description per IC-011
-- [ ] T035 [US4] Add `inventoryEffect()` to `server/world-api/src/mcp-server.ts`: calls `ItemService.getGhostInventory(ghostId)`; enriches each itemRef with `name` from sidecar; returns `InventoryResult` — never fails
-- [ ] T036 [US4] Register `inventory` tool in `buildGhostMcpServer()` (no inputSchema) with description per IC-011
+- [x] T029 [US3] Implement `takeObject()` in `ItemService`: verify itemRef in sidecar (`NOT_FOUND`); verify on tile (`NOT_HERE`); verify carriable (`NOT_CARRIABLE`); verify ruleset permits (stub — pass when no `PICK_UP` rule loaded, `RULESET_DENY` otherwise); move first matching ref from `tileObjects` to `ghostInventory`; call `bridge.setTileObjects()` and `bridge.setGhostInventory()`
+- [x] T030 [US3] Implement `dropObject()` in `ItemService`: verify ghost carrying ref (`NOT_CARRYING`); verify ruleset permits (stub — `RULESET_DENY` when `PUT_DOWN` rule loaded and denies); verify tile capacity not exceeded (`TILE_FULL`); move ref from `ghostInventory` to `tileObjects`; call `bridge.setTileObjects()` and `bridge.setGhostInventory()`
+- [x] T031 [US3] Add `takeEffect()` to `server/world-api/src/mcp-server.ts`: calls `ItemService.takeObject(ghostId, h3Index, itemRef)`; returns `TakeResult`
+- [x] T032 [US3] Register `take` tool in `buildGhostMcpServer()` with `inputSchema: { itemRef: z.string() }` and description per IC-011
+- [x] T033 [US3] Add `dropEffect()` to `server/world-api/src/mcp-server.ts`: calls `ItemService.dropObject(ghostId, h3Index, itemRef)`; returns `DropResult`
+- [x] T034 [US3] Register `drop` tool in `buildGhostMcpServer()` with `inputSchema: { itemRef: z.string() }` and description per IC-011
+- [x] T035 [US4] Add `inventoryEffect()` to `server/world-api/src/mcp-server.ts`: calls `ItemService.getGhostInventory(ghostId)`; enriches each itemRef with `name` from sidecar; returns `InventoryResult` — never fails
+- [x] T036 [US4] Register `inventory` tool in `buildGhostMcpServer()` (no inputSchema) with description per IC-011
 
 **Checkpoint**: Smoke Test 2 in `quickstart.md` passes (take → inventory → drop → look round-trip)
 
@@ -111,11 +111,11 @@
 
 **Independent Test**: Smoke Test 1 from `quickstart.md` — `look` response includes objects array with correct `at` values.
 
-- [ ] T037 [US1] Extend `lookEffect()` in `server/world-api/src/mcp-server.ts` for `look { at: "here" }`: call `ItemService.getObjectsOnTile(hereId)` for the current tile and each adjacent tile; build `TileItemSummary[]` with `at: "here"` for current tile objects, `at: <compass>` for adjacent; set `objects` field on `TileInspectResult` only when array is non-empty (omit field entirely when empty for backward compat)
-- [ ] T038 [US1] Extend `lookEffect()` for `look { at: "around" }`: each `TileInspectResult` in the `neighbors` array gains its own `objects` array containing only that tile's objects (all with `at: "here"` relative to that tile — agents already know the compass direction from the response structure)
-- [ ] T039 [US1] Extend `lookEffect()` for `look { at: <compass> }`: single-tile result gains `objects` array for that tile's objects (all `at: "here"`)
+- [x] T037 [US1] Extend `lookEffect()` in `server/world-api/src/mcp-server.ts` for `look { at: "here" }`: call `ItemService.getObjectsOnTile(hereId)` for the current tile and each adjacent tile; build `TileItemSummary[]` with `at: "here"` for current tile objects, `at: <compass>` for adjacent; set `objects` field on `TileInspectResult` only when array is non-empty (omit field entirely when empty for backward compat)
+- [x] T038 [US1] Extend `lookEffect()` for `look { at: "around" }`: each `TileInspectResult` in the `neighbors` array gains its own `objects` array containing only that tile's objects (all with `at: "here"` relative to that tile — agents already know the compass direction from the response structure)
+- [x] T039 [US1] Extend `lookEffect()` for `look { at: <compass> }`: single-tile result gains `objects` array for that tile's objects (all `at: "here"`)
 - [x] T040 [US1] Create `maps/sandbox/freeplay.items.json` with `sign-welcome` (Sign), `key-brass` (Key), `statue` (Obstacle, cost 1), `badge-sponsor` (Badge) — file exists at `maps/sandbox/freeplay.items.json`
-- [ ] T041 [US1] Add `items: "sign-welcome"` property to a tile class in `maps/sandbox/color-set.tsx`; add `items: "key-brass"` to another; add `items: "statue"` to a `capacity: 1` tile class
+- [x] T041 [US1] Add `items: "sign-welcome"` property to a tile class in `maps/sandbox/color-set.tsx`; add `items: "key-brass"` to another; add `items: "statue"` to a `capacity: 1` tile class
 
 **Checkpoint**: Smoke Test 1 in `quickstart.md` passes; items visible in `look` response
 
@@ -129,8 +129,8 @@
 
 *Note: Capacity accounting in `movement.ts` and `dropObject()` is implemented in T022 (Phase 3) and T030 (Phase 5). This phase verifies it end-to-end and adds the sandbox demonstration.*
 
-- [ ] T042 [US5] Verify `evaluateGo()` in `server/world-api/src/movement.ts` correctly sums `capacityCost` from `computeTileItemCost()` when deciding whether a ghost can enter; add or update unit test for ghost-blocked-by-object-on-tile scenario in `server/world-api/src/movement_go_rules.test.ts`
-- [ ] T043 [US5] Confirm Smoke Test 4 (`quickstart.md`) passes: one ghost + statue on `capacity: 1` tile blocks second ghost; `drop` of a cost-1 object on full tile returns `TILE_FULL`
+- [x] T042 [US5] Verify `evaluateGo()` in `server/world-api/src/movement.ts` correctly sums `capacityCost` from `computeTileItemCost()` when deciding whether a ghost can enter; add or update unit test for ghost-blocked-by-object-on-tile scenario in `server/world-api/src/movement_go_rules.test.ts`
+- [x] T043 [US5] Confirm Smoke Test 4 (`quickstart.md`) passes: one ghost + statue on `capacity: 1` tile blocks second ghost; `drop` of a cost-1 object on full tile returns `TILE_FULL`
 
 **Checkpoint**: Capacity enforcement correct for both `go` and `drop`
 
@@ -140,14 +140,14 @@
 
 **Purpose**: Documentation, RFC sync, typecheck gate, final verification.
 
-- [ ] T044 [P] Update `proposals/rfc/0006-world-objects.md` status from `draft` to `under review`; add note in Open Questions that Neo4j persistence is deferred to a follow-on RFC; note `AIE_MATRIX_ITEMS` env var added
-- [ ] T045 [P] Update `docs/architecture.md`: add object state (in-memory `ItemService`, `tileObjects`/`ghostInventory` maps) to the world model section; note `AIE_MATRIX_ITEMS` in the env var table
-- [ ] T046 [P] Update `server/world-api/README.md`: add `inspect`, `take`, `drop`, `inventory` to the MCP tool inventory; note `AIE_MATRIX_ITEMS` env var
-- [ ] T047 [P] Update `maps/sandbox/README.md` (or create if absent): document `*.items.json` sidecar format, `objects` tileset property convention, `item-placement` layer convention, and `AIE_MATRIX_ITEMS` env var
-- [ ] T048 [P] Update `shared/types/` package README: document new exports (`ItemDefinition`, `ItemSidecar`, `TileItemSummary`, `InspectResult`, `TakeResult`, `DropResult`, `InventoryResult`)
-- [ ] T049 Run `pnpm typecheck` across all packages — confirm zero errors (compile gate: Effect R channel satisfied, `Match.exhaustive` covers all new error tags)
-- [ ] T050 Run all four smoke tests from `quickstart.md` against a live dev server; confirm each passes
-- [ ] T051 Verify `proposals/rfc/0006-world-objects.md` remains in sync with the implemented behavior; note any divergences for discussion (do not resolve without approval)
+- [x] T044 [P] Update `proposals/rfc/0006-world-objects.md` status from `draft` to `under review`; add note in Open Questions that Neo4j persistence is deferred to a follow-on RFC; note `AIE_MATRIX_ITEMS` env var added
+- [x] T045 [P] Update `docs/architecture.md`: add object state (in-memory `ItemService`, `tileObjects`/`ghostInventory` maps) to the world model section; note `AIE_MATRIX_ITEMS` in the env var table
+- [x] T046 [P] Update `server/world-api/README.md`: add `inspect`, `take`, `drop`, `inventory` to the MCP tool inventory; note `AIE_MATRIX_ITEMS` env var
+- [x] T047 [P] Update `maps/sandbox/README.md` (or create if absent): document `*.items.json` sidecar format, `objects` tileset property convention, `item-placement` layer convention, and `AIE_MATRIX_ITEMS` env var
+- [x] T048 [P] Update `shared/types/` package README: document new exports (`ItemDefinition`, `ItemSidecar`, `TileItemSummary`, `InspectResult`, `TakeResult`, `DropResult`, `InventoryResult`)
+- [x] T049 Run `pnpm typecheck` across all packages — confirm zero errors (compile gate: Effect R channel satisfied, `Match.exhaustive` covers all new error tags)
+- [x] T050 Run all four smoke tests from `quickstart.md` against a live dev server; confirm each passes
+- [x] T051 Verify `proposals/rfc/0006-world-objects.md` remains in sync with the implemented behavior; note any divergences for discussion (do not resolve without approval)
 
 ---
 

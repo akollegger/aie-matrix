@@ -32,7 +32,7 @@ curl -s -X POST http://localhost:2567/mcp \
   | jq '.result.content[0].text | fromjson'
 ```
 
-**Expected**: Response contains `"objects"` array. At minimum, `[]` if the ghost started on a tile with no items. Move to a tile adjacent to a sign tile and re-call `look` — the sign should appear with a compass `at` value.
+**Expected**: Response contains an `"objects"` array when at least one item is visible on the current tile or an adjacent tile. When no items are visible, the field is omitted. Move to a tile adjacent to a sign tile and re-call `look` — the sign should appear with a compass `at` value.
 
 ---
 
@@ -173,7 +173,7 @@ curl -s -X POST http://localhost:2567/mcp \
 }
 ```
 
-2. Open `maps/sandbox/color-set.tsx` in Tiled. Add a custom property `objects` (string) to the `Green` tile and set it to `"sign-welcome"`. Add `objects: "key-brass"` to `Blue`. Add `objects: "statue"` to `Red` with `capacity: 1`.
+2. Open `maps/sandbox/color-set.tsx` in Tiled. Add a custom property `items` (string) to the `Green` tile and set it to `"sign-welcome"`. Add `items: "key-brass"` to `Blue`. Add `items: "statue"` to `Red` with `capacity: 1`.
 
 3. Restart the server. Confirm startup log shows no object loading errors.
 

@@ -27,3 +27,38 @@ Use coordinates for the real-world position that should align with tile (0, 0). 
 ### What `h3_resolution` means
 
 It documents the H3 resolution used for this map. Only **15** is supported: cell IDs in the runtime and registry are res-15 index strings.
+
+## World item authoring
+
+Sandbox maps can declare startup items with a sidecar plus tile metadata:
+
+### `*.items.json` sidecar
+
+`freeplay.items.json` is a JSON object keyed by `itemRef`:
+
+```json
+{
+  "sign-welcome": {
+    "name": "Welcome Board",
+    "itemClass": "Sign",
+    "carriable": false,
+    "capacityCost": 0
+  }
+}
+```
+
+The server loads this file automatically when it sits next to the active `.tmj` map, or from `AIE_MATRIX_ITEMS` when that env var is set.
+
+### Tile-class placement via `items`
+
+Add a string custom property named `items` to a tileset tile in `color-set.tsx`:
+
+```xml
+<property name="items" value="sign-welcome,key-brass"/>
+```
+
+Every map cell painted with that tile starts with those item refs.
+
+### Tile-specific placement via `item-placement`
+
+For one-off placements, add a second tile layer named `item-placement` to the `.tmj` map. Paint tiles whose `type` matches an `itemRef`; the map loader resolves those tiles onto the same H3 cells as the navigable layer and appends them to the tile's starting item list.

@@ -4,6 +4,7 @@
  <tile id="0" type="Blue">
   <properties>
    <property name="capacity" value="1"/>
+   <property name="items" value="key-brass"/>
   </properties>
  </tile>
  <tile id="1" type="Cyan">
@@ -14,6 +15,7 @@
  <tile id="2" type="Green">
   <properties>
    <property name="capacity" value="1"/>
+   <property name="items" value="sign-welcome"/>
   </properties>
  </tile>
  <tile id="3" type="Yellow">
@@ -24,6 +26,7 @@
  <tile id="4" type="Red">
   <properties>
    <property name="capacity" value="1"/>
+   <property name="items" value="statue"/>
   </properties>
  </tile>
  <tile id="5" type="Purple">
@@ -129,6 +132,7 @@
  <tile id="25" type="Blue">
   <properties>
    <property name="capacity" value="1"/>
+   <property name="items" value="key-brass"/>
   </properties>
  </tile>
  <tile id="26" type="Green4">
@@ -144,6 +148,7 @@
  <tile id="28" type="Red">
   <properties>
    <property name="capacity" value="1"/>
+   <property name="items" value="statue"/>
   </properties>
  </tile>
  <tile id="29" type="Purple4">

@@ -1,6 +1,6 @@
 # RFC-0006: World Items
 
-**Status:** draft  
+**Status:** under review  
 **Date:** 2026-04-22  
 **Authors:** @akollegger  
 **Related:** [RFC-0002](0002-rule-based-movement.md) (resolves Open Question 3: ghost inventory),
@@ -92,6 +92,8 @@ object ID. The ID is the key; it does not appear redundantly inside the record.
 
 A missing sidecar is not a startup error — it means the map has no items.
 
+The current PoC also supports `AIE_MATRIX_ITEMS` as an explicit sidecar override. When set, the value may be absolute or repo-relative; when unset, the server falls back to the co-located `*.items.json` file beside the active map.
+
 ### Tile placement via Tiled custom property
 
 Object placement at world-start is authored in Tiled by adding a custom
@@ -99,10 +101,10 @@ property to any tile definition in the `.tsx` tileset file:
 
 | Property name | Tiled type | Value |
 |---|---|---|
-| `objects` | string | Comma-separated list of object IDs (e.g. `"sign-welcome"` or `"key-brass,key-brass"`) |
+| `items` | string | Comma-separated list of item refs (e.g. `"sign-welcome"` or `"key-brass,key-brass"`) |
 
 This mirrors the existing `capacity` property convention on tile definitions.
-The `objects` property declares which objects appear on a tile of that class
+The `items` property declares which item refs appear on a tile of that class
 when the map is first loaded. It is an initial condition, not a permanent
 binding — once the world is running, the tile may gain or lose objects as
 ghosts act.
@@ -113,7 +115,7 @@ Example `.tsx` entry:
 <tile id="7" type="Hallway">
   <properties>
     <property name="capacity" value="4"/>
-    <property name="objects" value="sign-welcome"/>
+    <property name="items" value="sign-welcome"/>
   </properties>
 </tile>
 ```
@@ -133,7 +135,7 @@ grid-to-H3 logic as the navigable layer, treating each non-empty cell's
 `type` as an `itemRef` placement. Multiple tile layers are valid in the `.tmj`
 format and are already iterated by `mapLoader.ts`.
 
-The two placement mechanisms compose: a cell may receive objects from both its
+The two placement mechanisms compose: a cell may receive items from both its
 tile class property and from the `item-placement` layer.
 
 ### World state
@@ -154,6 +156,8 @@ When a ghost picks up an item:
 
 The tile's `HAS_OBJECT` relationship is removed. The item definition remains
 unchanged in the sidecar; only the world-state relationships mutate.
+
+For the current PoC implementation, these relationships are modeled in-memory by `ItemService` and mirrored to Colyseus. Neo4j persistence is intentionally deferred until a follow-on RFC covers durable object state.
 
 **Multiplicity** is handled naturally by this model. An `itemRef` is a
 reference to a stateless definition, not a unique instance identifier. If three
@@ -293,7 +297,7 @@ With the sandbox map running and a ghost adopted:
 
 1. Author `maps/sandbox/freeplay.items.json` with at least one `Sign` and one
    carriable `Key`.
-2. Add `objects` custom properties to two tile types in `color-set.tsx` placing
+2. Add `items` custom properties to two tile types in `color-set.tsx` placing
    the sign on one tile class and the key on another.
 3. Start the server. Confirm startup succeeds with no errors.
 4. Move a ghost to a tile adjacent to the sign tile. Call `look` and confirm
@@ -309,7 +313,7 @@ With the sandbox map running and a ghost adopted:
 
 ## Open Questions
 
-None.
+- Neo4j persistence for object placement is deferred to a follow-on RFC; the current PoC uses in-memory `ItemService` state plus Colyseus broadcast.
 
 ## Alternatives
 

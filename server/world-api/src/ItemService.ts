@@ -33,6 +33,7 @@ export interface ItemServiceOps {
     h3Index: string,
     itemRef: string,
     tileCapacity: number | undefined,
+    tileGhostCount: number,
   ): Effect.Effect<void, WorldApiItemNotCarrying | WorldApiTileFull>;
   getSidecar(): Map<string, ItemDefinition>;
 }
@@ -152,6 +153,7 @@ export class ItemServiceImpl implements ItemServiceOps {
     h3Index: string,
     itemRef: string,
     tileCapacity: number | undefined,
+    tileGhostCount: number,
   ): Effect.Effect<void, WorldApiItemNotCarrying | WorldApiTileFull> {
     return Effect.gen(this, function* () {
       const inv = this.ghostInventory.get(ghostId) ?? [];
@@ -168,8 +170,7 @@ export class ItemServiceImpl implements ItemServiceOps {
           return sum + (d?.capacityCost ?? 0);
         }, 0);
         const droppingCost = this.sidecar.get(itemRef)?.capacityCost ?? 0;
-        // 1 = the ghost itself already on the tile
-        if (1 + itemCost + droppingCost > tileCapacity) {
+        if (tileGhostCount + itemCost + droppingCost > tileCapacity) {
           yield* Effect.fail(new WorldApiTileFull({ h3Index }));
           return;
         }

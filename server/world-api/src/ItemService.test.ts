@@ -83,7 +83,7 @@ test("dropItem moves ref from ghost inventory to tile", async () => {
   );
   const svc = new ItemServiceImpl(map);
   await Effect.runPromise(svc.takeItem("ghost-1", "tile-A", "key-brass"));
-  await Effect.runPromise(svc.dropItem("ghost-1", "tile-B", "key-brass", undefined));
+  await Effect.runPromise(svc.dropItem("ghost-1", "tile-B", "key-brass", undefined, 1));
   assert.deepEqual(svc.getItemsOnTile("tile-B"), ["key-brass"]);
   assert.deepEqual(svc.getGhostInventory("ghost-1"), []);
 });
@@ -102,7 +102,24 @@ test("dropItem respects tile capacity (TILE_FULL)", async () => {
   await Effect.runPromise(svc.takeItem("ghost-1", "statue-src", "c-statue"));
   // tiny has capacity 1; ghost counts as 1; dropping c-statue (cost 1): 1+1 > 1 → TILE_FULL
   const err = await Effect.runPromise(
-    svc.dropItem("ghost-1", "tiny", "c-statue", 1).pipe(Effect.flip),
+    svc.dropItem("ghost-1", "tiny", "c-statue", 1, 1).pipe(Effect.flip),
+  );
+  assert.equal(err._tag, "WorldApiError.TileFull");
+});
+
+test("dropItem counts all ghosts already on the tile", async () => {
+  const carriableStatueDef: ItemDefinition = { ...STATUE_DEF, carriable: true };
+  const map = makeLoadedMap(
+    [
+      { h3Index: "statue-src", itemRefs: ["c-statue"] },
+      { h3Index: "crowded", capacity: 2 },
+    ],
+    { "c-statue": carriableStatueDef },
+  );
+  const svc = new ItemServiceImpl(map);
+  await Effect.runPromise(svc.takeItem("ghost-1", "statue-src", "c-statue"));
+  const err = await Effect.runPromise(
+    svc.dropItem("ghost-1", "crowded", "c-statue", 2, 2).pipe(Effect.flip),
   );
   assert.equal(err._tag, "WorldApiError.TileFull");
 });

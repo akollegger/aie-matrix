@@ -66,6 +66,22 @@ Adjacent ghost `go` steps are evaluated in **`server/world-api`** (not inside Co
 
 Canonical cell identity for ghosts, Colyseus `ghostTiles`, and MCP tools is **H3 resolution 15** (see [RFC-0004](../proposals/rfc/0004-h3-geospatial-coordinate-system.md)). Tiled maps supply `h3_anchor` so every navigable cell gets a stable `h3Index`. In **Neo4j**, `(:Cell { h3Index })` is the node identity for the world graph (uniqueness constraint `cell_h3_unique`); non-adjacent exits use `ELEVATOR` and `PORTAL` relationship types with a `name` property matching MCP `exits` / `traverse`.
 
+### World item state (PoC)
+
+World items are currently a PoC-layer extension around the existing map + MCP stack:
+
+- Item definitions load from a `*.items.json` sidecar at startup.
+- Runtime item placement and ghost inventory live in-memory in `server/world-api/src/ItemService.ts`.
+- Colyseus mirrors this state through `tileItemRefs` and `ghostItemRefs` so downstream spectators can subscribe without owning the item rules.
+- Neo4j persistence for item placement is explicitly deferred to a follow-on RFC.
+
+### Selected environment variables
+
+| Variable | Purpose |
+|---|---|
+| `AIE_MATRIX_RULES` | Optional path to a Gram movement rules file. Unset keeps adjacent movement permissive. |
+| `AIE_MATRIX_ITEMS` | Optional path to a `*.items.json` sidecar. Unset falls back to the co-located sidecar next to the active map. |
+
 ---
 
 ## Open Questions

@@ -52,8 +52,8 @@ export interface TileInspectResult {
   tileClass: string;
   occupants: string[];
   properties?: Record<string, string>;
-  /** Present when ≥1 item is visible; absent (not []) when none — for backward compat. */
-  items?: TileItemSummary[];
+  /** Present when ≥1 object is visible; absent (not []) when none — for backward compat. */
+  objects?: TileItemSummary[];
 }
 
 export interface InspectArgs {
@@ -82,7 +82,7 @@ export type DropResult =
 
 export interface InventoryResult {
   ok: true;
-  items: Array<{ itemRef: string; name: string }>;
+  objects: Array<{ itemRef: string; name: string }>;
 }
 
 export interface ExitInfo {
