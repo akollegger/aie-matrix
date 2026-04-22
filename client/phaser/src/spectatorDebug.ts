@@ -74,7 +74,9 @@ export class SpectatorDebugHud {
       this.logRing,
       () => `[spectator debug]\n${formatStateSnapshot(this.room)}`,
       {
-        serverBase: (import.meta.env.VITE_SERVER_HTTP as string | undefined) ?? "http://localhost:8787",
+        serverBase:
+          (import.meta.env.VITE_SERVER_HTTP as string | undefined)?.replace(/\/$/, "") ??
+          (import.meta.env.DEV ? "" : "http://127.0.0.1:8787"),
         token: ((__SPECTATOR_DEBUG_TOKEN__ as string) || undefined),
         getGhostIds: () => [...this.room.state.ghostTiles.keys()],
       },
