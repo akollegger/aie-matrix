@@ -1,4 +1,4 @@
-import type { Compass } from "@aie-matrix/shared-types";
+import type { Compass, ItemDefinition } from "@aie-matrix/shared-types";
 
 /**
  * Canonical cell id for APIs: H3 res-15 index from the map loader.
@@ -19,6 +19,10 @@ export interface CellRecord {
   tileClass: string;
   /** Neighbor cell ids (H3 index strings) reachable via each compass face. */
   neighbors: Partial<Record<Compass, CellId>>;
+  /** Tile capacity (from tileset `capacity` property). Absent = unbounded. */
+  capacity?: number;
+  /** itemRefs declared via tile-class `items` property + `item-placement` layer. */
+  initialItemRefs: string[];
 }
 
 export interface LoadedMap {
@@ -28,4 +32,6 @@ export interface LoadedMap {
   anchorH3: string;
   /** Populated navigable cells only (gid != 0), keyed by `h3Index`. */
   cells: Map<CellId, CellRecord>;
+  /** Item definitions keyed by itemRef. Empty map when no sidecar present. */
+  itemSidecar: Map<string, ItemDefinition>;
 }

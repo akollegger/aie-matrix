@@ -33,6 +33,11 @@ export {
   WorldApiMapIntegrity,
   WorldApiMovementBlocked,
   WorldApiNoPosition,
+  WorldApiItemNotCarriable,
+  WorldApiItemNotCarrying,
+  WorldApiItemNotFound,
+  WorldApiItemNotHere,
+  WorldApiTileFull,
   WorldApiUnknownCell,
   type WorldApiError,
 } from "@aie-matrix/server-world-api";
@@ -101,6 +106,31 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
       return {
         status: 500,
         body: JSON.stringify({ error: "MAP_INTEGRITY", message: error.message }),
+      };
+    case "WorldApiError.ItemNotHere":
+      return {
+        status: 200,
+        body: JSON.stringify({ ok: false, code: "NOT_HERE", reason: `Item "${error.itemRef}" is not on your current tile.` }),
+      };
+    case "WorldApiError.ItemNotFound":
+      return {
+        status: 200,
+        body: JSON.stringify({ ok: false, code: "NOT_FOUND", reason: `Item "${error.itemRef}" does not exist.` }),
+      };
+    case "WorldApiError.ItemNotCarriable":
+      return {
+        status: 200,
+        body: JSON.stringify({ ok: false, code: "NOT_CARRIABLE", reason: `Item "${error.itemRef}" cannot be picked up.` }),
+      };
+    case "WorldApiError.ItemNotCarrying":
+      return {
+        status: 200,
+        body: JSON.stringify({ ok: false, code: "NOT_CARRYING", reason: `You are not carrying "${error.itemRef}".` }),
+      };
+    case "WorldApiError.TileFull":
+      return {
+        status: 200,
+        body: JSON.stringify({ ok: false, code: "TILE_FULL", reason: `Tile ${error.h3Index} is at full capacity.` }),
       };
     case "WorldBridgeError.NotReady":
       return {

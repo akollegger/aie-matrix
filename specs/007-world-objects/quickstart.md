@@ -1,4 +1,4 @@
-# Quickstart: World Objects
+# Quickstart: World Items
 
 **Feature**: 007-world-objects  
 **Prerequisites**: Node.js 24, pnpm 10, a running dev server (`pnpm dev`)
@@ -32,7 +32,7 @@ curl -s -X POST http://localhost:2567/mcp \
   | jq '.result.content[0].text | fromjson'
 ```
 
-**Expected**: Response contains `"objects"` array. At minimum, `[]` if the ghost started on a tile with no objects. Move to a tile adjacent to a sign tile and re-call `look` — the sign should appear with a compass `at` value.
+**Expected**: Response contains `"objects"` array. At minimum, `[]` if the ghost started on a tile with no items. Move to a tile adjacent to a sign tile and re-call `look` — the sign should appear with a compass `at` value.
 
 ---
 
@@ -54,7 +54,7 @@ curl -s -X POST http://localhost:2567/mcp \
 curl -s -X POST http://localhost:2567/mcp \
   -H "Authorization: Bearer $GHOST_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"inspect","arguments":{"objectRef":"key-brass"}}}' \
+  -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"inspect","arguments":{"itemRef":"key-brass"}}}' \
   | jq '.result.content[0].text | fromjson'
 # Expected: { "ok": true, "name": "Brass Key", "description": "..." }
 
@@ -62,7 +62,7 @@ curl -s -X POST http://localhost:2567/mcp \
 curl -s -X POST http://localhost:2567/mcp \
   -H "Authorization: Bearer $GHOST_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"take","arguments":{"objectRef":"key-brass"}}}' \
+  -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"take","arguments":{"itemRef":"key-brass"}}}' \
   | jq '.result.content[0].text | fromjson'
 # Expected: { "ok": true, "name": "Brass Key" }
 
@@ -72,7 +72,7 @@ curl -s -X POST http://localhost:2567/mcp \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"inventory","arguments":{}}}' \
   | jq '.result.content[0].text | fromjson'
-# Expected: { "ok": true, "objects": [{ "objectRef": "key-brass", "name": "Brass Key" }] }
+# Expected: { "ok": true, "objects": [{ "itemRef": "key-brass", "name": "Brass Key" }] }
 
 # Move to a different tile
 curl -s -X POST http://localhost:2567/mcp \
@@ -85,7 +85,7 @@ curl -s -X POST http://localhost:2567/mcp \
 curl -s -X POST http://localhost:2567/mcp \
   -H "Authorization: Bearer $GHOST_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"drop","arguments":{"objectRef":"key-brass"}}}' \
+  -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"drop","arguments":{"itemRef":"key-brass"}}}' \
   | jq '.result.content[0].text | fromjson'
 # Expected: { "ok": true }
 
@@ -116,7 +116,7 @@ curl -s -X POST http://localhost:2567/mcp \
 curl -s -X POST http://localhost:2567/mcp \
   -H "Authorization: Bearer $GHOST_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"inspect","arguments":{"objectRef":"sign-welcome"}}}' \
+  -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"inspect","arguments":{"itemRef":"sign-welcome"}}}' \
   | jq '.result.content[0].text | fromjson'
 # Expected: { "ok": false, "code": "NOT_HERE", "reason": "..." }
 ```
@@ -145,27 +145,27 @@ curl -s -X POST http://localhost:2567/mcp \
 
 ## Authoring Objects for the Sandbox Map
 
-1. Create `maps/sandbox/freeplay.objects.json`:
+1. Create `maps/sandbox/freeplay.items.json`:
 
 ```json
 {
   "sign-welcome": {
     "name": "Welcome Board",
-    "objectClass": "Sign",
+    "itemClass": "Sign",
     "carriable": false,
     "capacityCost": 0,
     "description": "A large board listing the day's sessions and booth locations."
   },
   "key-brass": {
     "name": "Brass Key",
-    "objectClass": "Key:Brass",
+    "itemClass": "Key:Brass",
     "carriable": true,
     "capacityCost": 0,
     "description": "A small brass key stamped with the letter N."
   },
   "statue": {
     "name": "Marble Statue",
-    "objectClass": "Obstacle",
+    "itemClass": "Obstacle",
     "carriable": false,
     "capacityCost": 1,
     "description": "A marble sculpture of a classical figure. It is not going anywhere."

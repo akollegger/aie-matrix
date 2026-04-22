@@ -18,9 +18,10 @@ function redBlueMap(): LoadedMap {
     height: 1,
     anchorH3: "test-anchor",
     cells: new Map([
-      [r, { col: 0, row: 0, h3Index: r, tileClass: "Red", neighbors: { ne: b } }],
-      [b, { col: 1, row: 0, h3Index: b, tileClass: "Blue", neighbors: { sw: r } }],
+      [r, { col: 0, row: 0, h3Index: r, tileClass: "Red", initialItemRefs: [], neighbors: { ne: b } }],
+      [b, { col: 1, row: 0, h3Index: b, tileClass: "Blue", initialItemRefs: [], neighbors: { sw: r } }],
     ]),
+    itemSidecar: new Map(),
   };
 }
 

@@ -36,6 +36,7 @@ import {
   type WorldApiError,
 } from "./world-api-errors.js";
 import { evaluateGo, evaluateTraverse } from "./movement.js";
+import { ItemService } from "./ItemService.js";
 import { getRequestTraceId } from "./request-trace.js";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -49,7 +50,8 @@ type ToolServices =
   | RegistryStoreService
   | MovementRulesService
   | Neo4jGraphService
-  | ConversationService;
+  | ConversationService
+  | ItemService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -604,13 +606,15 @@ export function handleGhostMcpEffect(
     const rules = yield* MovementRulesService;
     const neo = yield* Neo4jGraphService;
     const conversation = yield* ConversationService;
+    const itemService = yield* ItemService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
       Layer.succeed(MovementRulesService, rules),
       Layer.succeed(Neo4jGraphService, neo),
       Layer.succeed(ConversationService, conversation),
-    );
+      Layer.succeed(ItemService, itemService),
+    ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
         const mcp = buildGhostMcpServer(servicesLayer);

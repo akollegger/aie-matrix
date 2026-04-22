@@ -14,9 +14,9 @@ No new input arguments. All existing call patterns unchanged.
 **Response extension** — `TileInspectResult` gains an optional `objects` field:
 
 ```typescript
-interface TileObjectSummary {
-  id: string;     // objectRef (sidecar key)
-  name: string;   // ObjectDefinition.name
+interface TileItemSummary {
+  id: string;     // itemRef (sidecar key)
+  name: string;   // ItemDefinition.name
   at: "here" | "n" | "s" | "ne" | "nw" | "se" | "sw";
 }
 
@@ -24,11 +24,11 @@ interface TileInspectResult {
   tileId: string;
   tileClass: string;
   occupants: string[];
-  objects?: TileObjectSummary[];  // present when ≥1 object visible; absent when none
+  objects?: TileItemSummary[];  // present when ≥1 object visible; absent when none
 }
 ```
 
-The `at` field is `"here"` when the object is on the ghost's current tile. For `look { at: "around" }`, each neighbor's objects carry the compass face that tile is at. For `look { at: "<face>" }`, objects on that tile carry `"here"` (the tile is the focal tile).
+The `at` field is `"here"` when the object is on the ghost's current tile. For `look { at: "around" }`, each neighbor's objects carry the compass face that tile is at. For `look { at: "<face>" }`, items on that tile carry `"here"` (the tile is the focal tile).
 
 **Example** — `look { at: "here" }` when ghost is on a tile with a sign, and the northeast tile has a key:
 ```json
@@ -50,7 +50,7 @@ The `at` field is `"here"` when the object is on the ghost's current tile. For `
 ```typescript
 // Input
 interface InspectArgs {
-  objectRef: string;  // sidecar key
+  itemRef: string;  // sidecar key
 }
 
 // Success
@@ -73,7 +73,7 @@ type InspectResult = InspectSuccess | InspectFailure;
 **Precondition**: The ghost must be on the same tile as the object.  
 **Failure codes**:
 - `NOT_HERE` — object exists in the sidecar but is not on the ghost's current tile
-- `NOT_FOUND` — objectRef does not exist in the sidecar
+- `NOT_FOUND` — itemRef does not exist in the sidecar
 
 ---
 
@@ -82,13 +82,13 @@ type InspectResult = InspectSuccess | InspectFailure;
 ```typescript
 // Input
 interface TakeArgs {
-  objectRef: string;
+  itemRef: string;
 }
 
 // Success
 interface TakeSuccess {
   ok: true;
-  name: string;  // ObjectDefinition.name for confirmation
+  name: string;  // ItemDefinition.name for confirmation
 }
 
 // Failure
@@ -104,8 +104,8 @@ type TakeResult = TakeSuccess | TakeFailure;
 **Preconditions**: Object on ghost's current tile; `carriable: true`; ruleset permits (when loaded).  
 **Failure codes**:
 - `NOT_CARRIABLE` — object exists on tile but `carriable: false`
-- `NOT_HERE` — objectRef in sidecar but not on this tile
-- `NOT_FOUND` — objectRef not in sidecar
+- `NOT_HERE` — itemRef in sidecar but not on this tile
+- `NOT_FOUND` — itemRef not in sidecar
 - `RULESET_DENY` — RFC-0002 PICK_UP rule denied the action (stub in PoC; always passes when no ruleset loaded)
 
 ---
@@ -115,7 +115,7 @@ type TakeResult = TakeSuccess | TakeFailure;
 ```typescript
 // Input
 interface DropArgs {
-  objectRef: string;
+  itemRef: string;
 }
 
 // Success
@@ -135,7 +135,7 @@ type DropResult = DropSuccess | DropFailure;
 
 **Preconditions**: Ghost is carrying the object; dropping it will not exceed tile's effective capacity.  
 **Failure codes**:
-- `NOT_CARRYING` — ghost is not carrying an object with this objectRef
+- `NOT_CARRYING` — ghost is not carrying an item with this itemRef
 - `TILE_FULL` — `capacityCost` of object would push tile's `ghostCount + objectCosts` above `tile.capacity`
 - `RULESET_DENY` — RFC-0002 PUT_DOWN rule denied (stub; always passes when no ruleset loaded)
 
@@ -150,7 +150,7 @@ type DropResult = DropSuccess | DropFailure;
 interface InventoryResult {
   ok: true;
   objects: Array<{
-    objectRef: string;
+    itemRef: string;
     name: string;
   }>;
 }

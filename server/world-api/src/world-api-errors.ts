@@ -18,8 +18,33 @@ export class WorldApiMovementBlocked extends Data.TaggedError("WorldApiError.Mov
   readonly code?: string;
 }> {}
 
+export class WorldApiItemNotHere extends Data.TaggedError("WorldApiError.ItemNotHere")<{
+  readonly itemRef: string;
+}> {}
+
+export class WorldApiItemNotFound extends Data.TaggedError("WorldApiError.ItemNotFound")<{
+  readonly itemRef: string;
+}> {}
+
+export class WorldApiItemNotCarriable extends Data.TaggedError("WorldApiError.ItemNotCarriable")<{
+  readonly itemRef: string;
+}> {}
+
+export class WorldApiItemNotCarrying extends Data.TaggedError("WorldApiError.ItemNotCarrying")<{
+  readonly itemRef: string;
+}> {}
+
+export class WorldApiTileFull extends Data.TaggedError("WorldApiError.TileFull")<{
+  readonly h3Index: string;
+}> {}
+
 export type WorldApiError =
   | WorldApiNoPosition
   | WorldApiUnknownCell
   | WorldApiMapIntegrity
-  | WorldApiMovementBlocked;
+  | WorldApiMovementBlocked
+  | WorldApiItemNotHere
+  | WorldApiItemNotFound
+  | WorldApiItemNotCarriable
+  | WorldApiItemNotCarrying
+  | WorldApiTileFull;

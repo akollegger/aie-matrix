@@ -11,6 +11,10 @@ export const GHOST_MCP_TOOLS = [
   "say",
   "bye",
   "inbox",
+  "inspect",
+  "take",
+  "drop",
+  "inventory",
 ] as const;
 
 export type GhostMcpTool = (typeof GHOST_MCP_TOOLS)[number];
@@ -34,11 +38,51 @@ export interface LookArgs {
   at?: LookAt;
 }
 
+export interface TileItemSummary {
+  /** itemRef (sidecar key) */
+  id: string;
+  /** ItemDefinition.name */
+  name: string;
+  /** "here" when on the ghost's tile; compass face for adjacent tiles */
+  at: "here" | "n" | "s" | "ne" | "nw" | "se" | "sw";
+}
+
 export interface TileInspectResult {
   tileId: string;
   tileClass: string;
   occupants: string[];
   properties?: Record<string, string>;
+  /** Present when ≥1 item is visible; absent (not []) when none — for backward compat. */
+  items?: TileItemSummary[];
+}
+
+export interface InspectArgs {
+  itemRef: string;
+}
+
+export type InspectResult =
+  | { ok: true; name: string; description?: string }
+  | { ok: false; code: "NOT_HERE" | "NOT_FOUND"; reason: string };
+
+export interface TakeArgs {
+  itemRef: string;
+}
+
+export type TakeResult =
+  | { ok: true; name: string }
+  | { ok: false; code: "NOT_CARRIABLE" | "NOT_HERE" | "NOT_FOUND" | "RULESET_DENY"; reason: string };
+
+export interface DropArgs {
+  itemRef: string;
+}
+
+export type DropResult =
+  | { ok: true }
+  | { ok: false; code: "NOT_CARRYING" | "TILE_FULL" | "RULESET_DENY"; reason: string };
+
+export interface InventoryResult {
+  ok: true;
+  items: Array<{ itemRef: string; name: string }>;
 }
 
 export interface ExitInfo {

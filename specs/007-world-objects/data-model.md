@@ -1,36 +1,37 @@
-# Data Model: World Objects
+# Data Model: World Items
 
 **Feature**: specs/007-world-objects  
 **Date**: 2026-04-22
 
-## Object Definition
+## Item Definition
 
-Defined in `shared/types/src/objects.ts` (new file). Loaded from `*.objects.json` at server startup.
+Defined in `shared/types/src/objects.ts` (new file). Loaded from `*.items.json` at server startup.
 
 ```
-ObjectDefinition {
-  name:         string        // display name; returned by look and inspect
-  objectClass:  string        // ruleset label; colon-separated multi-label (e.g. "Key:Brass")
-  carriable:    boolean       // whether take is permitted
-  capacityCost: integer ≥ 0   // capacity units consumed on the host tile (0 = no impact)
-  description?: string        // full text returned by inspect (omit → name only)
+ItemDefinition {
+  name:         string                        // display name; returned by look and inspect
+  itemClass:  string                        // ruleset label; colon-separated multi-label (e.g. "Key")
+  carriable:    boolean                       // whether take is permitted
+  capacityCost: integer ≥ 0                   // capacity units consumed on the host tile (0 = no impact)
+  description?: string                        // full text returned by inspect (omit → name only)
+  attrs?:       Record<string, string|number> // open-ended authoring data; Neo4j maps as attr_* properties
 }
 ```
 
-Keyed in the sidecar by `objectRef` (string). The `objectRef` is the key; it does not appear inside the record.
+Keyed in the sidecar by `itemRef` (string). The `itemRef` is the key; it does not appear inside the record.
 
 ## Object Sidecar File
 
-`maps/<scene>/<mapname>.objects.json`  
+`maps/<scene>/<mapname>.items.json`  
 A plain JSON object:
 ```json
 {
-  "<objectRef>": { <ObjectDefinition> },
+  "<itemRef>": { <ItemDefinition> },
   ...
 }
 ```
 
-Missing file → no objects. Malformed JSON → startup error (throws from `loadHexMap()`).
+Missing file → no items. Malformed JSON → startup error (throws from `loadHexMap()`).
 
 ## Extended Map Types
 
@@ -40,26 +41,26 @@ Missing file → no objects. Malformed JSON → startup error (throws from `load
 CellRecord {
   ... (existing fields)
   capacity?:         number      // from tileset "capacity" property (existing but not yet typed)
-  initialObjectRefs: string[]    // objectRefs declared via tile-class property + object-placement layer
+  initialItemRefs: string[]    // itemRefs declared via tile-class property + item-placement layer
 }
 
 LoadedMap {
   ... (existing fields)
-  objectSidecar: Map<objectRef, ObjectDefinition>  // empty map if no sidecar
+  itemSidecar: Map<itemRef, ItemDefinition>  // empty map if no sidecar
 }
 ```
 
-`initialObjectRefs` is populated by `loadHexMap()` at load time. After server startup, `ObjectService` consumes this field to seed its in-memory state and then ignores it — runtime mutations go through `ObjectService` only.
+`initialItemRefs` is populated by `loadHexMap()` at load time. After server startup, `ItemService` consumes this field to seed its in-memory state and then ignores it — runtime mutations go through `ItemService` only.
 
-## In-Memory Object State (ObjectService)
+## In-Memory Object State (ItemService)
 
-`server/world-api/src/ObjectService.ts`
+`server/world-api/src/ItemService.ts`
 
 ```
-ObjectService state {
-  tileObjects:  Map<h3Index, objectRef[]>   // objects currently on each tile (ordered; duplicates allowed)
-  ghostInventory: Map<ghostId, objectRef[]> // objects currently carried by each ghost (ordered)
-  sidecar: Map<objectRef, ObjectDefinition> // read-only reference to loaded definitions
+ItemService state {
+  tileObjects:  Map<h3Index, itemRef[]>   // objects currently on each tile (ordered; duplicates allowed)
+  ghostInventory: Map<ghostId, itemRef[]> // objects currently carried by each ghost (ordered)
+  sidecar: Map<itemRef, ItemDefinition> // read-only reference to loaded definitions
 }
 ```
 
@@ -67,18 +68,18 @@ State transitions:
 
 | Action | Pre-condition | State change |
 |--------|--------------|--------------|
-| `take(ghostId, h3Index, objectRef)` | objectRef present in `tileObjects[h3Index]`, definition.carriable = true | Remove first matching objectRef from `tileObjects[h3Index]`; append to `ghostInventory[ghostId]` |
-| `drop(ghostId, h3Index, objectRef)` | objectRef present in `ghostInventory[ghostId]`; effective tile capacity not exceeded | Remove first matching objectRef from `ghostInventory[ghostId]`; append to `tileObjects[h3Index]` |
-| Server restart | — | State fully re-seeded from `LoadedMap.initialObjectRefs` (objects return to declared positions) |
+| `take(ghostId, h3Index, itemRef)` | itemRef present in `tileObjects[h3Index]`, definition.carriable = true | Remove first matching itemRef from `tileObjects[h3Index]`; append to `ghostInventory[ghostId]` |
+| `drop(ghostId, h3Index, itemRef)` | itemRef present in `ghostInventory[ghostId]`; effective tile capacity not exceeded | Remove first matching itemRef from `ghostInventory[ghostId]`; append to `tileObjects[h3Index]` |
+| Server restart | — | State fully re-seeded from `LoadedMap.initialItemRefs` (objects return to declared positions) |
 
 ## Colyseus Schema Extensions
 
 `server/colyseus/src/room-schema.ts` gains two new `MapSchema<string>` fields on `WorldSpectatorState`:
 
 ```
-tileObjectRefs:  MapSchema<string>   // h3Index → comma-separated objectRef list
+tileItemRefs:  MapSchema<string>   // h3Index → comma-separated itemRef list
                                      // e.g. "key-brass,key-brass,statue"
-ghostObjectRefs: MapSchema<string>   // ghostId → comma-separated objectRef list
+ghostItemRefs: MapSchema<string>   // ghostId → comma-separated itemRef list
 ```
 
 Updated by `WorldBridgeService.setTileObjects(h3Index, refs[])` and `WorldBridgeService.setGhostInventory(ghostId, refs[])` after every `take` and `drop`.
@@ -88,40 +89,40 @@ Updated by `WorldBridgeService.setTileObjects(h3Index, refs[])` and `WorldBridge
 `shared/types/src/ghostMcp.ts` gains:
 
 ```
-TileObjectSummary {
-  id:   string           // objectRef
-  name: string           // ObjectDefinition.name
+TileItemSummary {
+  id:   string           // itemRef
+  name: string           // ItemDefinition.name
   at:   "here" | Compass // "here" when on the ghost's tile; compass face for adjacent
 }
 
 TileInspectResult {
   ... (existing fields)
-  objects?: TileObjectSummary[]  // present when objects visible; omitted for empty (backward compat)
+  objects?: TileItemSummary[]  // present when items visible; omitted for empty (backward compat)
 }
 
-InspectArgs  { objectRef: string }
+InspectArgs  { itemRef: string }
 InspectResult = InspectSuccess | InspectFailure
   InspectSuccess { ok: true; name: string; description?: string }
   InspectFailure { ok: false; code: "NOT_HERE" | "NOT_FOUND"; reason: string }
 
-TakeArgs     { objectRef: string }
+TakeArgs     { itemRef: string }
 TakeResult   = TakeSuccess | TakeFailure
   TakeSuccess { ok: true; name: string }
   TakeFailure { ok: false; code: "NOT_CARRIABLE" | "NOT_HERE" | "NOT_FOUND" | "RULESET_DENY"; reason: string }
 
-DropArgs     { objectRef: string }
+DropArgs     { itemRef: string }
 DropResult   = DropSuccess | DropFailure
   DropSuccess { ok: true }
   DropFailure { ok: false; code: "NOT_CARRYING" | "TILE_FULL" | "RULESET_DENY"; reason: string }
 
-InventoryResult { ok: true; objects: Array<{ objectRef: string; name: string }> }
+InventoryResult { ok: true; objects: Array<{ itemRef: string; name: string }> }
 ```
 
 ## Capacity Formula
 
 At any tile with `h3Index`:
 ```
-effectiveCapacity = Σ(capacityCost of all objectRefs in tileObjects[h3Index])
+effectiveCapacity = Σ(capacityCost of all itemRefs in tileObjects[h3Index])
 available = tile.capacity - ghostCount - effectiveCapacity
 ```
 
@@ -136,10 +137,10 @@ available = tile.capacity - ghostCount - effectiveCapacity
 `server/world-api/src/world-api-errors.ts` gains `WorldApiObjectError` variants:
 
 ```
-WorldApiObjectNotHere   { objectRef: string }   → "WorldApiError.ObjectNotHere"
-WorldApiObjectNotFound  { objectRef: string }   → "WorldApiError.ObjectNotFound"
-WorldApiObjectNotCarriable { objectRef: string } → "WorldApiError.ObjectNotCarriable"
-WorldApiObjectNotCarrying  { objectRef: string } → "WorldApiError.ObjectNotCarrying"
+WorldApiItemNotHere   { itemRef: string }   → "WorldApiError.ObjectNotHere"
+WorldApiItemNotFound  { itemRef: string }   → "WorldApiError.ObjectNotFound"
+WorldApiItemNotCarriable { itemRef: string } → "WorldApiError.ObjectNotCarriable"
+WorldApiItemNotCarrying  { itemRef: string } → "WorldApiError.ObjectNotCarrying"
 WorldApiTileFull        { h3Index: string }      → "WorldApiError.TileFull"
 ```
 
@@ -149,18 +150,18 @@ All covered in `server/src/errors.ts:errorToResponse()` under `Match.exhaustive`
 
 | Var | Default | Behaviour |
 |-----|---------|-----------|
-| `AIE_MATRIX_OBJECTS` | unset | Path to the `*.objects.json` sidecar. Absolute or relative to repo root. When unset, loader falls back to `<map-dir>/<map-basename>.objects.json`. An explicit path that does not exist is a startup error; a missing co-located fallback is silently treated as an empty sidecar. |
+| `AIE_MATRIX_ITEMS` | unset | Path to the `*.items.json` sidecar. Absolute or relative to repo root. When unset, loader falls back to `<map-dir>/<map-basename>.items.json`. An explicit path that does not exist is a startup error; a missing co-located fallback is silently treated as an empty sidecar. |
 
 Follows the same resolution pattern as `AIE_MATRIX_MAP` (`.tmj` path) and `AIE_MATRIX_RULES` (`.gram` path). The three env vars are independent — any combination is valid.
 
 `ServerConfig` (in `server/src/services/ServerConfigService.ts`) gains:
 ```
-objectsPath: string | undefined   // undefined = use co-location fallback
+itemsPath: string | undefined   // undefined = use co-location fallback
 ```
 
 ## State at Server Startup
 
-1. `parseServerConfigFromEnv()` resolves `AIE_MATRIX_OBJECTS` → `ServerConfig.objectsPath`.
-2. `loadHexMap(mapPath, { objectsPath })` parses `.tmj` + `.tsx` + sidecar → `LoadedMap` (with `objectSidecar` and per-cell `initialObjectRefs`).
-2. `ObjectService` is constructed from `LoadedMap`. It seeds `tileObjects` from `initialObjectRefs`. `ghostInventory` starts empty.
+1. `parseServerConfigFromEnv()` resolves `AIE_MATRIX_ITEMS` → `ServerConfig.itemsPath`.
+2. `loadHexMap(mapPath, { itemsPath })` parses `.tmj` + `.tsx` + sidecar → `LoadedMap` (with `itemSidecar` and per-cell `initialItemRefs`).
+2. `ItemService` is constructed from `LoadedMap`. It seeds `tileObjects` from `initialItemRefs`. `ghostInventory` starts empty.
 3. `WorldBridgeService` broadcasts initial tile object state to Colyseus via `setTileObjects()` for every non-empty cell.

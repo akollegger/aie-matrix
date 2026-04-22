@@ -5,11 +5,25 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { latLngToCell } from "h3-js";
 import { loadHexMap, MapLoadError } from "./mapLoader.js";
+import type { ItemSidecar } from "@aie-matrix/shared-types";
 
 const MIN_TSX = `<?xml version="1.0" encoding="UTF-8"?>
 <tileset version="1.10" tiledversion="1.12.1" name="T" tilewidth="32" tileheight="28" tilecount="1" columns="1">
  <image source="x.png" width="32" height="28"/>
  <tile id="0" type="Blue"/>
+</tileset>
+`;
+
+/** Tileset with `items` and `capacity` properties on the Blue tile */
+const TSX_WITH_ITEMS = `<?xml version="1.0" encoding="UTF-8"?>
+<tileset version="1.10" tiledversion="1.12.1" name="T" tilewidth="32" tileheight="28" tilecount="1" columns="1">
+ <image source="x.png" width="32" height="28"/>
+ <tile id="0" type="Blue">
+  <properties>
+   <property name="items" value="key-brass"/>
+   <property name="capacity" value="2"/>
+  </properties>
+ </tile>
 </tileset>
 `;
 
@@ -58,6 +72,26 @@ async function withTempMap(
     const tmjPath = join(dir, "case.tmj");
     await writeFile(tmjPath, tmjBody, "utf8");
     await fn(tmjPath);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function withTempMapAndSidecar(
+  tmjBody: string,
+  tsxContent: string,
+  sidecar: ItemSidecar | null,
+  fn: (tmjPath: string, dir: string) => Promise<void>,
+): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), "maploader-items-test-"));
+  try {
+    await writeFile(join(dir, "t.tsx"), tsxContent, "utf8");
+    const tmjPath = join(dir, "case.tmj");
+    await writeFile(tmjPath, tmjBody, "utf8");
+    if (sidecar !== null) {
+      await writeFile(join(dir, "case.items.json"), JSON.stringify(sidecar), "utf8");
+    }
+    await fn(tmjPath, dir);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -173,5 +207,126 @@ test("loadHexMap succeeds with valid res-15 anchor", async () => {
     const map = await loadHexMap(tmjPath);
     assert.equal(map.anchorH3, anchor);
     assert.ok(map.cells.size >= 1);
+  });
+});
+
+// ── Object sidecar tests ──────────────────────────────────────────────────────
+
+const VALID_ANCHOR_PROPS = (anchor: string) => [
+  { name: "h3_anchor", type: "string", value: anchor },
+  { name: "h3_resolution", type: "int", value: 15 },
+];
+
+test("map without sidecar has empty itemSidecar (no error)", async () => {
+  const anchor = latLngToCell(37.7749, -122.4194, 15);
+  const body = tmjWith(VALID_ANCHOR_PROPS(anchor));
+  await withTempMap(body, async (tmjPath) => {
+    const map = await loadHexMap(tmjPath);
+    assert.ok(map.itemSidecar instanceof Map);
+    assert.equal(map.itemSidecar.size, 0);
+  });
+});
+
+test("map with sidecar loads item definitions into itemSidecar", async () => {
+  const anchor = latLngToCell(37.7749, -122.4194, 15);
+  const body = tmjWith(VALID_ANCHOR_PROPS(anchor));
+  const sidecar: ItemSidecar = {
+    "key-brass": {
+      name: "Brass Key",
+      itemClass: "Key",
+      carriable: true,
+      capacityCost: 0,
+    },
+  };
+  await withTempMapAndSidecar(body, MIN_TSX, sidecar, async (tmjPath) => {
+    const map = await loadHexMap(tmjPath);
+    assert.equal(map.itemSidecar.size, 1);
+    assert.equal(map.itemSidecar.get("key-brass")?.name, "Brass Key");
+  });
+});
+
+test("tile class items property populates initialItemRefs on all matching cells", async () => {
+  const anchor = latLngToCell(37.7749, -122.4194, 15);
+  const body = tmjWith(VALID_ANCHOR_PROPS(anchor));
+  const sidecar: ItemSidecar = {
+    "key-brass": { name: "Brass Key", itemClass: "Key", carriable: true, capacityCost: 0 },
+  };
+  await withTempMapAndSidecar(body, TSX_WITH_ITEMS, sidecar, async (tmjPath) => {
+    const map = await loadHexMap(tmjPath);
+    const cell = map.cells.values().next().value;
+    assert.ok(cell, "expected at least one cell");
+    assert.deepEqual(cell.initialItemRefs, ["key-brass"]);
+  });
+});
+
+test("tile class capacity property is captured on CellRecord", async () => {
+  const anchor = latLngToCell(37.7749, -122.4194, 15);
+  const body = tmjWith(VALID_ANCHOR_PROPS(anchor));
+  const sidecar: ItemSidecar = {
+    "key-brass": { name: "Brass Key", itemClass: "Key", carriable: true, capacityCost: 0 },
+  };
+  await withTempMapAndSidecar(body, TSX_WITH_ITEMS, sidecar, async (tmjPath) => {
+    const map = await loadHexMap(tmjPath);
+    const cell = map.cells.values().next().value;
+    assert.ok(cell, "expected at least one cell");
+    assert.equal(cell.capacity, 2);
+  });
+});
+
+test("unknown itemRef in tile class property is skipped with a warning (no startup error)", async () => {
+  const anchor = latLngToCell(37.7749, -122.4194, 15);
+  const body = tmjWith(VALID_ANCHOR_PROPS(anchor));
+  // sidecar does NOT contain key-brass
+  const sidecar: ItemSidecar = {};
+  const warnings: string[] = [];
+  const origWarn = console.warn.bind(console);
+  console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(" ")); };
+  try {
+    await withTempMapAndSidecar(body, TSX_WITH_ITEMS, sidecar, async (tmjPath) => {
+      const map = await loadHexMap(tmjPath);
+      const cell = map.cells.values().next().value;
+      assert.ok(cell, "expected at least one cell");
+      assert.deepEqual(cell.initialItemRefs, []);
+    });
+  } finally {
+    console.warn = origWarn;
+  }
+  assert.ok(warnings.some((w) => w.includes("key-brass")), "expected warning about unknown itemRef");
+});
+
+test("malformed sidecar JSON throws MapLoadError", async () => {
+  const anchor = latLngToCell(37.7749, -122.4194, 15);
+  const body = tmjWith(VALID_ANCHOR_PROPS(anchor));
+  const dir = await mkdtemp(join(tmpdir(), "maploader-malformed-"));
+  try {
+    await writeFile(join(dir, "t.tsx"), MIN_TSX, "utf8");
+    const tmjPath = join(dir, "case.tmj");
+    await writeFile(tmjPath, body, "utf8");
+    await writeFile(join(dir, "case.items.json"), "{ not valid json", "utf8");
+    await assert.rejects(
+      () => loadHexMap(tmjPath),
+      (e: unknown) => {
+        assert.ok(e instanceof MapLoadError);
+        assert.match((e as Error).message, /invalid JSON/i);
+        return true;
+      },
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("explicit itemsPath that does not exist throws MapLoadError", async () => {
+  const anchor = latLngToCell(37.7749, -122.4194, 15);
+  const body = tmjWith(VALID_ANCHOR_PROPS(anchor));
+  await withTempMap(body, async (tmjPath) => {
+    await assert.rejects(
+      () => loadHexMap(tmjPath, { itemsPath: "/nonexistent/path/items.json" }),
+      (e: unknown) => {
+        assert.ok(e instanceof MapLoadError);
+        assert.match((e as Error).message, /AIE_MATRIX_ITEMS/);
+        return true;
+      },
+    );
   });
 });

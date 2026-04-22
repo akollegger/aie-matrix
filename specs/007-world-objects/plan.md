@@ -1,17 +1,17 @@
-# Implementation Plan: World Objects
+# Implementation Plan: World Items
 
 **Branch**: `007-world-objects` | **Date**: 2026-04-22 | **Spec**: [spec.md](spec.md)  
 **Input**: Feature specification from `specs/007-world-objects/spec.md`
 
 ## Summary
 
-Implement RFC-0006 World Objects: extend the map loader to read a `*.objects.json` sidecar and an optional `object-placement` tile layer, seed in-memory object state in a new `ObjectService` Effect service, add `inspect`/`take`/`drop`/`inventory` MCP tools plus an extended `look` response, enforce updated capacity accounting, and broadcast object state to Colyseus for downstream spectator use. No Neo4j writes in the PoC — object state lives in-memory and re-seeds from the sidecar on restart.
+Implement RFC-0006 World Items: extend the map loader to read a `*.items.json` sidecar and an optional `item-placement` tile layer, seed in-memory object state in a new `ItemService` Effect service, add `inspect`/`take`/`drop`/`inventory` MCP tools plus an extended `look` response, enforce updated capacity accounting, and broadcast object state to Colyseus for downstream spectator use. No Neo4j writes in the PoC — object state lives in-memory and re-seeds from the sidecar on restart.
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`)  
 **Primary Dependencies**: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `fast-xml-parser` (existing — tileset parsing)  
-**Storage**: In-memory `Map` structures in `ObjectService`; Colyseus `MapSchema<string>` for spectator broadcast; sidecar JSON files on disk (read-only at startup, path resolved via `AIE_MATRIX_OBJECTS` or co-location fallback)  
+**Storage**: In-memory `Map` structures in `ItemService`; Colyseus `MapSchema<string>` for spectator broadcast; sidecar JSON files on disk (read-only at startup, path resolved via `AIE_MATRIX_ITEMS` or co-location fallback)  
 **Testing**: `pnpm test` (unit); `pnpm typecheck` (compile gate); smoke tests in `quickstart.md`  
 **Target Platform**: Linux server (Node.js 24, monorepo combined process)  
 **Project Type**: Monorepo — extends existing packages; no new packages  
@@ -22,7 +22,7 @@ Implement RFC-0006 World Objects: extend the map loader to read a `*.objects.jso
 ## Constitution Check
 
 - **Proposal linkage**: RFC-0006 (`proposals/rfc/0006-world-objects.md`, status: draft → must advance to `under review` when this spec is approved). Spec and plan both trace to the RFC.
-- **Boundary-preserving**: `ObjectService` lives in `server/world-api/` (same package as existing tool handlers). No conversation logic or object logic crosses into `server/colyseus/` internals. Colyseus is updated only via `WorldBridgeService` bridge methods. `mapLoader.ts` extended additively — existing map loading behavior is unchanged for maps without sidecars or `object-placement` layers.
+- **Boundary-preserving**: `ItemService` lives in `server/world-api/` (same package as existing tool handlers). No conversation logic or object logic crosses into `server/colyseus/` internals. Colyseus is updated only via `WorldBridgeService` bridge methods. `mapLoader.ts` extended additively — existing map loading behavior is unchanged for maps without sidecars or `item-placement` layers.
 - **Interface contracts**: `contracts/ic-010-object-definition-schema.md`, `contracts/ic-011-mcp-object-tools.md`, `contracts/ic-012-colyseus-object-broadcast.md`. All new shared types defined in `shared/types/` before use in tool handlers.
 - **Verification**: Four smoke tests in `quickstart.md` covering discovery, pick-up/drop round-trip, inspect denial, and capacity blocking. `pnpm typecheck` as compile gate for error coverage.
 - **Documentation impact**: RFC-0006 status update; `shared/types/` README; `server/world-api/README.md`; `docs/architecture.md`; map authoring docs.
@@ -49,54 +49,54 @@ specs/007-world-objects/
 
 ```text
 shared/types/src/
-├── objects.ts            NEW: ObjectDefinition, ObjectSidecar, TileObjectSummary
+├── objects.ts            NEW: ItemDefinition, ItemSidecar, TileItemSummary
 ├── ghostMcp.ts           MODIFY: TileInspectResult + objects?; add InspectResult,
 │                                 TakeResult, DropResult, InventoryResult types;
 │                                 update GHOST_MCP_TOOLS constant
 └── index.ts              MODIFY: re-export new types
 
 server/colyseus/src/
-├── mapTypes.ts           MODIFY: CellRecord + initialObjectRefs, capacity?;
-│                                 LoadedMap + objectSidecar
+├── mapTypes.ts           MODIFY: CellRecord + initialItemRefs, capacity?;
+│                                 LoadedMap + itemSidecar
 ├── mapLoader.ts          MODIFY: read objects property from tileset tiles;
-│                                 read object-placement layer (TmjLayer + name?);
-│                                 load *.objects.json sidecar;
-│                                 populate initialObjectRefs per cell
+│                                 read item-placement layer (TmjLayer + name?);
+│                                 load *.items.json sidecar;
+│                                 populate initialItemRefs per cell
 ├── tilesetParser.ts      NO CHANGE (properties already captured generically)
-├── room-schema.ts        MODIFY: WorldSpectatorState + tileObjectRefs,
-│                                 ghostObjectRefs MapSchema<string>
+├── room-schema.ts        MODIFY: WorldSpectatorState + tileItemRefs,
+│                                 ghostItemRefs MapSchema<string>
 └── MatrixRoom.ts         NO CHANGE (object state flows through WorldBridgeService)
 
 server/world-api/src/
-├── ObjectService.ts      NEW: Effect Context.Tag; seeded from LoadedMap;
+├── ItemService.ts      NEW: Effect Context.Tag; seeded from LoadedMap;
 │                              getObjectsOnTile(), getGhostInventory(),
 │                              takeObject(), dropObject(), inspectObject()
 ├── mcp-server.ts         MODIFY: extend lookEffect() with objects;
 │                                 add inspectEffect(), takeEffect(),
 │                                 dropEffect(), inventoryEffect();
 │                                 register 4 new tools + extend look;
-│                                 add ObjectService to ToolServices union
-├── world-api-errors.ts   MODIFY: add WorldApiObjectNotHere, WorldApiObjectNotFound,
-│                                 WorldApiObjectNotCarriable, WorldApiObjectNotCarrying,
+│                                 add ItemService to ToolServices union
+├── world-api-errors.ts   MODIFY: add WorldApiItemNotHere, WorldApiItemNotFound,
+│                                 WorldApiItemNotCarriable, WorldApiItemNotCarrying,
 │                                 WorldApiTileFull; add to WorldApiError union
 ├── movement.ts           MODIFY: computeTileEffectiveCapacity() helper called
 │                                 by evaluateGo() + used by dropEffect()
 ├── colyseus-bridge.ts    MODIFY: add setTileObjects(), setGhostInventory()
 │                                 to ColyseusWorldBridge interface + MatrixRoomBridge impl
-└── index.ts              MODIFY: export ObjectService
+└── index.ts              MODIFY: export ItemService
 
 server/src/
-├── index.ts              MODIFY: add ObjectService Layer wiring to ManagedRuntime
+├── index.ts              MODIFY: add ItemService Layer wiring to ManagedRuntime
 │                                 (seeded from LoadedMap obtained from WorldBridgeService)
 └── errors.ts             MODIFY: add Match.tag branches for all WorldApiObjectError variants
 
 server/src/services/
-└── ServerConfigService.ts MODIFY: add objectsPath?: string field;
-                                   read AIE_MATRIX_OBJECTS from env;
+└── ServerConfigService.ts MODIFY: add itemsPath?: string field;
+                                   read AIE_MATRIX_ITEMS from env;
                                    resolve relative paths from repo root
 
 maps/sandbox/
-└── freeplay.objects.json NEW: sandbox sidecar with sign-welcome, key-brass, statue
+└── freeplay.items.json NEW: sandbox sidecar with sign-welcome, key-brass, statue
 
 docs/
 └── architecture.md       MODIFY: note object state in world model section
@@ -105,7 +105,7 @@ proposals/rfc/
 └── 0006-world-objects.md MODIFY: status draft → under review when spec approved
 ```
 
-**Structure Decision**: No new packages, no new top-level directories. `ObjectService` is added to `server/world-api/` alongside `WorldBridgeService`, `MovementRulesService`, and `Neo4jGraphService`. The monorepo pattern is preserved.
+**Structure Decision**: No new packages, no new top-level directories. `ItemService` is added to `server/world-api/` alongside `WorldBridgeService`, `MovementRulesService`, and `Neo4jGraphService`. The monorepo pattern is preserved.
 
 ## Implementation Slices
 
@@ -115,30 +115,30 @@ Each slice is independently demonstrable and maps to spec user stories.
 
 **Covers**: FR-001, FR-002, FR-003, FR-004, data-model `LoadedMap` extension
 
-**What**: Extend `mapLoader.ts` to parse `objects` properties from tileset tiles, read an `object-placement` layer (by name), load the `*.objects.json` sidecar, and return `objectSidecar` and `initialObjectRefs` on each cell. Extend `mapTypes.ts` types. No runtime behavior change — objects are loaded but not yet surfaced to ghosts.
+**What**: Extend `mapLoader.ts` to parse `objects` properties from tileset tiles, read an `item-placement` layer (by name), load the `*.items.json` sidecar, and return `itemSidecar` and `initialItemRefs` on each cell. Extend `mapTypes.ts` types. No runtime behavior change — items are loaded but not yet surfaced to ghosts.
 
-**Verify**: `mapLoader.test.ts` new cases — map with sidecar, map without sidecar, map with placement layer, map with both, unknown objectRef warning. `pnpm test` passes.
+**Verify**: `mapLoader.test.ts` new cases — map with sidecar, map without sidecar, map with placement layer, map with both, unknown itemRef warning. `pnpm test` passes.
 
 **Key decisions**:
 - `TmjLayer` gains optional `name?: string` field.
-- `object-placement` layer identified by `layer.name === "object-placement"` (case-sensitive).
-- `loadHexMap()` gains an optional `objectsPath?: string` parameter. When provided, the sidecar is loaded from that path (startup error if not found). When absent, falls back to `<map-dir>/<map-basename>.objects.json` (missing = empty sidecar, not an error).
-- `ServerConfigService` gains `objectsPath?: string`. `parseServerConfigFromEnv()` reads `AIE_MATRIX_OBJECTS`, resolves relative paths from repo root (same as `AIE_MATRIX_RULES`), and passes the resolved path to `loadHexMap()`.
+- `item-placement` layer identified by `layer.name === "item-placement"` (case-sensitive).
+- `loadHexMap()` gains an optional `itemsPath?: string` parameter. When provided, the sidecar is loaded from that path (startup error if not found). When absent, falls back to `<map-dir>/<map-basename>.items.json` (missing = empty sidecar, not an error).
+- `ServerConfigService` gains `itemsPath?: string`. `parseServerConfigFromEnv()` reads `AIE_MATRIX_ITEMS`, resolves relative paths from repo root (same as `AIE_MATRIX_RULES`), and passes the resolved path to `loadHexMap()`.
 - Malformed sidecar JSON: throw `MapLoadError`.
-- Unknown objectRef (in tile property or placement layer but not in sidecar): `console.warn` and skip — not a startup error.
+- Unknown itemRef (in tile property or placement layer but not in sidecar): `console.warn` and skip — not a startup error.
 
-### Slice B — ObjectService + Colyseus Broadcast (US-5 capacity, US-6 state)
+### Slice B — ItemService + Colyseus Broadcast (US-5 capacity, US-6 state)
 
-**Covers**: FR-010 (capacity accounting), IC-012, data-model `ObjectService`
+**Covers**: FR-010 (capacity accounting), IC-012, data-model `ItemService`
 
-**What**: `ObjectService` Effect service seeded from `LoadedMap`. In-memory `tileObjects` and `ghostInventory`. `WorldBridgeService` bridge gains `setTileObjects`/`setGhostInventory`. `WorldSpectatorState` gains `tileObjectRefs` and `ghostObjectRefs`. Server wiring in `server/src/index.ts`. Capacity accounting in `movement.ts` updated to include object costs from `ObjectService`.
+**What**: `ItemService` Effect service seeded from `LoadedMap`. In-memory `tileObjects` and `ghostInventory`. `WorldBridgeService` bridge gains `setTileObjects`/`setGhostInventory`. `WorldSpectatorState` gains `tileItemRefs` and `ghostItemRefs`. Server wiring in `server/src/index.ts`. Capacity accounting in `movement.ts` updated to include object costs from `ItemService`.
 
-**Verify**: `pnpm typecheck` — `ObjectService` R channel satisfied. `pnpm dev` — server starts. `go` to a full tile (1 ghost + 1 statue on capacity-1 tile) is blocked.
+**Verify**: `pnpm typecheck` — `ItemService` R channel satisfied. `pnpm dev` — server starts. `go` to a full tile (1 ghost + 1 statue on capacity-1 tile) is blocked.
 
 **Key decisions**:
-- `ObjectService` is constructed once in `server/src/index.ts` with `Layer.effect(ObjectService, Effect.sync(() => new ObjectServiceImpl(loadedMap)))`.
+- `ItemService` is constructed once in `server/src/index.ts` with `Layer.effect(ItemService, Effect.sync(() => new ObjectServiceImpl(loadedMap)))`.
 - `setTileObjects`/`setGhostInventory` called synchronously in `takeObject()`/`dropObject()` — no async.
-- Capacity helper signature: `tileEffectiveCost(h3Index: string, objectService: ObjectService): number` — pure function called in `evaluateGo()`.
+- Capacity helper signature: `tileEffectiveCost(h3Index: string, objectService: ItemService): number` — pure function called in `evaluateGo()`.
 
 ### Slice C — `inspect`, `take`, `drop`, `inventory` Tools (US-2, US-3, US-4)
 
@@ -150,20 +150,20 @@ Each slice is independently demonstrable and maps to spec user stories.
 
 **Key decisions**:
 - `RULESET_DENY` is returned only when a loaded ruleset explicitly denies the action. When no ruleset is loaded (`MovementRulesService` has no PICK_UP/PUT_DOWN rules), `take` and `drop` pass through.
-- `inspect` requires the object to be on the ghost's current tile (not just in the sidecar). `NOT_FOUND` is for unknown objectRef; `NOT_HERE` is for known but not present.
+- `inspect` requires the object to be on the ghost's current tile (not just in the sidecar). `NOT_FOUND` is for unknown itemRef; `NOT_HERE` is for known but not present.
 - `inventory` never fails — always returns `{ ok: true, objects: [...] }`.
 
 ### Slice D — Extended `look` Response (US-1)
 
 **Covers**: FR-005, IC-011 `look` extension, SC-001
 
-**What**: `lookEffect()` extended to include `objects` in `TileInspectResult`. For `look here`, includes objects on the current tile (`at: "here"`) plus objects on all adjacent tiles (with compass `at`). For `look around`, each neighbor tile result includes that tile's objects. For `look <face>`, the single result includes objects on that tile.
+**What**: `lookEffect()` extended to include `objects` in `TileInspectResult`. For `look here`, includes items on the current tile (`at: "here"`) plus items on all adjacent tiles (with compass `at`). For `look around`, each neighbor tile result includes that tile's objects. For `look <face>`, the single result includes items on that tile.
 
-**Verify**: Smoke Test 1 from `quickstart.md`. `TileInspectResult.objects` is absent (not `[]`) when no objects are visible.
+**Verify**: Smoke Test 1 from `quickstart.md`. `TileInspectResult.objects` is absent (not `[]`) when no items are visible.
 
 **Key decisions**:
-- `objects` field is `TileObjectSummary[] | undefined`. The field is omitted (not `[]`) when empty — backward compatibility for existing consumers that check only the defined fields.
-- The `at` field on each `TileObjectSummary` is set by the `lookEffect` caller, not by `ObjectService` — `ObjectService.getObjectsOnTile()` returns plain `objectRef[]` and the handler enriches with `name` and `at`.
+- `objects` field is `TileItemSummary[] | undefined`. The field is omitted (not `[]`) when empty — backward compatibility for existing consumers that check only the defined fields.
+- The `at` field on each `TileItemSummary` is set by the `lookEffect` caller, not by `ItemService` — `ItemService.getObjectsOnTile()` returns plain `itemRef[]` and the handler enriches with `name` and `at`.
 
 ## Complexity Tracking
 

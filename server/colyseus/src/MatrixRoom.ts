@@ -7,6 +7,7 @@ import { TileCoord, WorldSpectatorState } from "./room-schema.js";
 
 export interface MatrixRoomOptions {
   mapPath?: string;
+  itemsPath?: string;
 }
 
 export class MatrixRoom extends Room<WorldSpectatorState> {
@@ -26,7 +27,8 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
       options.mapPath ??
       process.env.AIE_MATRIX_MAP ??
       join(process.cwd(), "maps/sandbox/freeplay.tmj");
-    this.loadedMap = await loadHexMap(mapPath);
+    const itemsPath = options.itemsPath ?? process.env.AIE_MATRIX_ITEMS;
+    this.loadedMap = await loadHexMap(mapPath, { itemsPath });
     this.setState(new WorldSpectatorState());
     for (const [cellId, rec] of this.loadedMap.cells) {
       const tc = new TileCoord(rec.col, rec.row);
@@ -88,5 +90,22 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     const gid = String(ghostId).trim();
     const mode = this.state.ghostModes.get(gid);
     return mode === "conversational" ? "conversational" : "normal";
+  }
+
+  setTileItems(h3Index: string, itemRefs: string[]): void {
+    if (itemRefs.length === 0) {
+      this.state.tileItemRefs.delete(h3Index);
+    } else {
+      this.state.tileItemRefs.set(h3Index, itemRefs.join(","));
+    }
+  }
+
+  setGhostInventory(ghostId: string, itemRefs: string[]): void {
+    const gid = String(ghostId).trim();
+    if (itemRefs.length === 0) {
+      this.state.ghostItemRefs.delete(gid);
+    } else {
+      this.state.ghostItemRefs.set(gid, itemRefs.join(","));
+    }
   }
 }

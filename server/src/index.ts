@@ -9,6 +9,7 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { MatrixRoom } from "@aie-matrix/server-colyseus";
 import { createRegistryRequestListener, createRegistryStore } from "@aie-matrix/server-registry";
 import {
+  broadcastInitialItemState,
   createColyseusBridge,
   createNeo4jDriverFromEnv,
   ensureCellH3UniqueConstraint,
@@ -18,9 +19,12 @@ import {
   makeLiveNeo4jGraphLayer,
   makeMovementRulesLayer,
   makeNoOpNeo4jGraphLayer,
+  makeItemServiceLayer,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
   Neo4jGraphService,
+  ItemService,
+  ItemServiceImpl,
   runWithRequestTrace,
   seedNeo4jGraphArtifacts,
   type MovementRulesService,
@@ -134,7 +138,11 @@ async function main(): Promise<void> {
 
   gameServer.define("matrix", MatrixRoom);
   await gameServer.listen(httpPort);
-  const listing = await matchMaker.createRoom("matrix", { mapPath });
+  const rawItemsPath = process.env.AIE_MATRIX_ITEMS?.trim();
+  const itemsPath = rawItemsPath
+    ? (isAbsolute(rawItemsPath) ? rawItemsPath : join(repoRoot, rawItemsPath))
+    : undefined;
+  const listing = await matchMaker.createRoom("matrix", { mapPath, itemsPath });
   const room = matchMaker.getRoomById(listing.roomId);
   if (!(room instanceof MatrixRoom)) {
     throw new Error("Expected MatrixRoom instance from matchmaker");
@@ -203,6 +211,10 @@ async function main(): Promise<void> {
     setGhostMode: (ghostId: string, mode: "normal" | "conversational") =>
       colyseusBridge.setGhostMode(ghostId, mode),
     getGhostMode: (ghostId: string) => colyseusBridge.getGhostMode(ghostId),
+    setTileItems: (h3Index: string, itemRefs: string[]) =>
+      colyseusBridge.setTileItems(h3Index, itemRefs),
+    setGhostInventory: (ghostId: string, itemRefs: string[]) =>
+      colyseusBridge.setGhostInventory(ghostId, itemRefs),
   };
 
   let neoDriver = createNeo4jDriverFromEnv() ?? null;
@@ -239,13 +251,19 @@ async function main(): Promise<void> {
     spectatorToken: process.env.SPECTATOR_DEBUG_TOKEN,
   });
 
+  const loadedMap = colyseusBridge.getLoadedMap();
+  const itemServiceImpl = new ItemServiceImpl(loadedMap);
+  itemServiceImpl.setBridge(bridge);
+  broadcastInitialItemState(itemServiceImpl, bridge);
+
   type MatrixRuntimeServices =
     | WorldBridgeService
     | RegistryStoreService
     | MovementRulesService
     | ServerConfigService
     | ConversationService
-    | Neo4jGraphService;
+    | Neo4jGraphService
+    | ItemService;
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -254,6 +272,7 @@ async function main(): Promise<void> {
     makeServerConfigLayer(process.env),
     conversationLayer,
     neo4jGraphLayer,
+    makeItemServiceLayer(loadedMap, bridge),
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);

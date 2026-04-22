@@ -38,6 +38,20 @@ export class WorldSpectatorState extends Schema {
   @type({ map: "string" })
   declare ghostModes: MapSchema<string>;
 
+  /**
+   * h3Index → comma-separated itemRef list (IC-012).
+   * e.g. "key-brass,statue". Delete key when tile has no items.
+   */
+  @type({ map: "string" })
+  declare tileItemRefs: MapSchema<string>;
+
+  /**
+   * ghostId → comma-separated itemRef list (IC-012).
+   * Delete key when ghost carries nothing.
+   */
+  @type({ map: "string" })
+  declare ghostItemRefs: MapSchema<string>;
+
   constructor() {
     super();
     // Must assign after `super()` so @type accessors run (`$changes.setParent` / root `allChanges`).
@@ -47,6 +61,8 @@ export class WorldSpectatorState extends Schema {
     this.tileCoords = new MapSchema<TileCoord>();
     this.tileClasses = new MapSchema<string>();
     this.ghostModes = new MapSchema<string>();
+    this.tileItemRefs = new MapSchema<string>();
+    this.ghostItemRefs = new MapSchema<string>();
   }
 }
 

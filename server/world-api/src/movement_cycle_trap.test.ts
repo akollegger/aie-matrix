@@ -28,11 +28,12 @@ function cycleWithTrapMap(): LoadedMap {
     height: 1,
     anchorH3: "test-anchor",
     cells: new Map([
-      [g,   { col: 0, row: 0, h3Index: g, tileClass: "Green", neighbors: { ne: r } }],
-      [r,   { col: 1, row: 0, h3Index: r, tileClass: "Red",   neighbors: { sw: g, ne: b } }],
-      [b,   { col: 2, row: 0, h3Index: b, tileClass: "Blue",  neighbors: { sw: r, nw: g, ne: end } }],
-      [end, { col: 3, row: 0, h3Index: end, tileClass: "End",   neighbors: { sw: b } }],
+      [g,   { col: 0, row: 0, h3Index: g, tileClass: "Green", initialItemRefs: [], neighbors: { ne: r } }],
+      [r,   { col: 1, row: 0, h3Index: r, tileClass: "Red",   initialItemRefs: [], neighbors: { sw: g, ne: b } }],
+      [b,   { col: 2, row: 0, h3Index: b, tileClass: "Blue",  initialItemRefs: [], neighbors: { sw: r, nw: g, ne: end } }],
+      [end, { col: 3, row: 0, h3Index: end, tileClass: "End",  initialItemRefs: [], neighbors: { sw: b } }],
     ]),
+    itemSidecar: new Map(),
   };
 }
 

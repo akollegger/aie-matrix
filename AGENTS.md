@@ -94,4 +94,4 @@ When you make an architectural decision, record it as an ADR. When you remove a 
 
 ## Active Technologies
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `fast-xml-parser` (existing — tileset parsing) (007-world-objects)
-- In-memory `Map` structures in `ObjectService`; Colyseus `MapSchema<string>` for spectator broadcast; sidecar JSON files on disk (read-only at startup) (007-world-objects)
+- In-memory `Map` structures in `ItemService`; Colyseus `MapSchema<string>` for spectator broadcast; sidecar JSON files on disk (read-only at startup) (007-world-objects)

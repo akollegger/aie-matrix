@@ -9,13 +9,13 @@
 Two new `MapSchema<string>` fields are added alongside the existing `ghostTiles`, `ghostModes`, `tileCoords`, and `tileClasses`:
 
 ```typescript
-/** h3Index → comma-separated objectRef list. Empty string = no objects on tile. */
+/** h3Index → comma-separated itemRef list. Empty string = no items on tile. */
 @type({ map: "string" })
-declare tileObjectRefs: MapSchema<string>;
+declare tileItemRefs: MapSchema<string>;
 
-/** ghostId → comma-separated objectRef list. Entry absent = ghost carries nothing. */
+/** ghostId → comma-separated itemRef list. Entry absent = ghost carries nothing. */
 @type({ map: "string" })
-declare ghostObjectRefs: MapSchema<string>;
+declare ghostItemRefs: MapSchema<string>;
 ```
 
 Comma-separated list format: `"sign-welcome"` or `"key-brass,key-brass,statue"`.  
@@ -28,16 +28,16 @@ Empty ghost inventory: entry removed from the map.
 
 ```typescript
 /** Replace the object list on a tile. Pass empty array to clear. */
-setTileObjects(h3Index: string, objectRefs: string[]): void;
+setTileObjects(h3Index: string, itemRefs: string[]): void;
 
-/** Replace the carried object list for a ghost. Pass empty array to clear. */
-setGhostInventory(ghostId: string, objectRefs: string[]): void;
+/** Replace the carried item list for a ghost. Pass empty array to clear. */
+setGhostInventory(ghostId: string, itemRefs: string[]): void;
 ```
 
-`ObjectService` calls both after every `take` and `drop`. At server startup, `ObjectService` calls `setTileObjects` for each tile with initial objects.
+`ItemService` calls both after every `take` and `drop`. At server startup, `ItemService` calls `setTileObjects` for each tile with initial objects.
 
 ## Downstream Contract
 
-Phaser spectators that subscribe to `room.state.tileObjectRefs.onChange` and `room.state.ghostObjectRefs.onChange` will receive real-time updates. The format (comma-separated string) was chosen for simplicity at the data-pipeline stage; the Phaser client RFC may introduce a richer schema.
+Phaser spectators that subscribe to `room.state.tileItemRefs.onChange` and `room.state.ghostItemRefs.onChange` will receive real-time updates. The format (comma-separated string) was chosen for simplicity at the data-pipeline stage; the Phaser client RFC may introduce a richer schema.
 
 This contract is stable for the Phaser client RFC to build on without further server changes.

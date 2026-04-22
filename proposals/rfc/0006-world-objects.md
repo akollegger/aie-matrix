@@ -1,4 +1,4 @@
-# RFC-0006: World Objects
+# RFC-0006: World Items
 
 **Status:** draft  
 **Date:** 2026-04-22  
@@ -10,9 +10,9 @@
 
 Introduce world objects: named, stateless definitions that can be placed on hex
 tiles, noticed by nearby ghosts, inspected up close, and — when carriable —
-picked up into a ghost's inventory. Objects are defined in a per-map sidecar
-file (`*.objects.json`) and placed on tiles via a custom Tiled property. The
-world owns all positional state; an object definition knows nothing about where
+picked up into a ghost's inventory. Items are defined in a per-map sidecar
+file (`*.items.json`) and placed on tiles via a custom Tiled property. The
+world owns all positional state; an item definition knows nothing about where
 it is.
 
 ## Motivation
@@ -27,7 +27,7 @@ unlock the next layer of world richness:
   creating space constraints ghosts must navigate around.
 - **Quest mechanics** — carriable items (keys, badges, tokens) that gates
   unlock via item-dependent rules in the RFC-0002 ruleset graph.
-- **Proximity incentives** — objects visible from adjacent tiles reward ghosts
+- **Proximity incentives** — items visible from adjacent tiles reward ghosts
   that explore rather than idle.
 
 RFC-0002 explicitly deferred ghost inventory (Open Question 3) pending a
@@ -37,13 +37,13 @@ follow-up RFC. This is that RFC.
 
 ### Object definition
 
-An object definition is a JSON record in a `*.objects.json` sidecar file. The
-definition describes what an object *is*; it carries no location.
+An item definition is a JSON record in a `*.items.json` sidecar file. The
+definition describes what an item *is*; it carries no location.
 
 ```json
 "sign-welcome": {
   "name": "Welcome Board",
-  "objectClass": "Sign",
+  "itemClass": "Sign",
   "carriable": false,
   "capacityCost": 0,
   "description": "A large board listing the day's sessions and booth locations."
@@ -53,7 +53,7 @@ definition describes what an object *is*; it carries no location.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `name` | string | yes | Short display name surfaced by `look`. |
-| `objectClass` | string | yes | Label used by the ruleset graph for `PICK_UP`, `PUT_DOWN`, and item-constraint matching. Colon-separated multi-label follows the tile convention (e.g. `Key:Brass`). |
+| `itemClass` | string | yes | Label used by the ruleset graph for `PICK_UP`, `PUT_DOWN`, and item-constraint matching. Colon-separated multi-label follows the tile convention (e.g. `Key:Brass`). |
 | `carriable` | boolean | yes | Whether a ghost may take this object into inventory. |
 | `capacityCost` | integer | yes | How much of the host tile's `capacity` this object consumes. `0` for signs and small items that do not block movement. |
 | `description` | string | no | Text returned by `inspect`. Omitting it means `inspect` returns only the `name`. |
@@ -61,28 +61,28 @@ definition describes what an object *is*; it carries no location.
 ### Sidecar file convention
 
 Each map file `maps/<scene>/foo.tmj` MAY be accompanied by
-`maps/<scene>/foo.objects.json`. The sidecar is a plain JSON object keyed by
+`maps/<scene>/foo.items.json`. The sidecar is a plain JSON object keyed by
 object ID. The ID is the key; it does not appear redundantly inside the record.
 
 ```json
 {
   "sign-welcome": {
     "name": "Welcome Board",
-    "objectClass": "Sign",
+    "itemClass": "Sign",
     "carriable": false,
     "capacityCost": 0,
     "description": "A large board listing the day's sessions and booth locations."
   },
   "key-brass": {
     "name": "Brass Key",
-    "objectClass": "Key:Brass",
+    "itemClass": "Key:Brass",
     "carriable": true,
     "capacityCost": 0,
     "description": "A small brass key stamped with the letter N."
   },
   "statue": {
     "name": "Marble Statue",
-    "objectClass": "Obstacle",
+    "itemClass": "Obstacle",
     "carriable": false,
     "capacityCost": 1,
     "description": "A marble sculpture of a classical figure. It is not going anywhere."
@@ -90,7 +90,7 @@ object ID. The ID is the key; it does not appear redundantly inside the record.
 }
 ```
 
-A missing sidecar is not a startup error — it means the map has no objects.
+A missing sidecar is not a startup error — it means the map has no items.
 
 ### Tile placement via Tiled custom property
 
@@ -124,40 +124,40 @@ suited for furniture, obstacles, and ambient signs that belong everywhere a
 given tile class appears.
 
 For tile-specific placement — one particular tile gets the key, not every tile
-of that class — a second Tiled tile layer named `object-placement` is used
+of that class — a second Tiled tile layer named `item-placement` is used
 alongside the navigable tile layer. The author creates a tileset whose tile
-`type` values are `objectRef` strings (e.g. `key-brass`, `sign-welcome`) and
-paints those tiles onto the `object-placement` layer at exactly the cells that
+`type` values are `itemRef` strings (e.g. `key-brass`, `sign-welcome`) and
+paints those tiles onto the `item-placement` layer at exactly the cells that
 should start with those objects. The map loader reads this layer using the same
 grid-to-H3 logic as the navigable layer, treating each non-empty cell's
-`type` as an `objectRef` placement. Multiple tile layers are valid in the `.tmj`
+`type` as an `itemRef` placement. Multiple tile layers are valid in the `.tmj`
 format and are already iterated by `mapLoader.ts`.
 
 The two placement mechanisms compose: a cell may receive objects from both its
-tile class property and from the `object-placement` layer.
+tile class property and from the `item-placement` layer.
 
 ### World state
 
 The server loads both the `.tmj` and the sidecar on startup. For each tile
-that declares objects, and for each object ID listed, it creates a world-state
+that declares objects, and for each item ID listed, it creates a world-state
 relationship:
 
 ```
-(tile:H3Cell)-[:HAS_OBJECT {objectRef: "key-brass"}]->(:ObjectInstance)
+(tile:H3Cell)-[:HAS_OBJECT {itemRef: "key-brass"}]->(:ObjectInstance)
 ```
 
-When a ghost picks up an object:
+When a ghost picks up an item:
 
 ```
-(ghost:Ghost)-[:CARRIES {objectRef: "key-brass"}]->(:ObjectInstance)
+(ghost:Ghost)-[:CARRIES {itemRef: "key-brass"}]->(:ObjectInstance)
 ```
 
-The tile's `HAS_OBJECT` relationship is removed. The object definition remains
+The tile's `HAS_OBJECT` relationship is removed. The item definition remains
 unchanged in the sidecar; only the world-state relationships mutate.
 
-**Multiplicity** is handled naturally by this model. An `objectRef` is a
+**Multiplicity** is handled naturally by this model. An `itemRef` is a
 reference to a stateless definition, not a unique instance identifier. If three
-tiles each have a `HAS_OBJECT` relationship with `objectRef: "chair"`, the
+tiles each have a `HAS_OBJECT` relationship with `itemRef: "chair"`, the
 world simply has three chair relationships. When a ghost takes one, that
 specific relationship moves to `CARRIES` on the ghost; the other two remain on
 their tiles. Ghosts interact with the ref; the world tracks the relationships.
@@ -174,7 +174,7 @@ four new tools are added: `inspect`, `take`, `drop`, and `inventory`.
 
 `look { at: "here" }` and `look { at: "around" }` already return tile detail.
 Their responses gain an `objects` field: a list of `{ id, name, at }` summaries
-for each object visible from the ghost's current position — on the current tile
+for each item visible from the ghost's current position — on the current tile
 or on any face-adjacent tile. The `at` field uses the same local-frame tokens
 as the rest of the ghost interface: `"here"` when the object is on the ghost's
 current tile, or a compass face (`n`, `s`, `ne`, `nw`, `se`, `sw`) when it is
@@ -195,13 +195,13 @@ on an adjacent tile. A ghost can act on this directly — `"at": "ne"` means
 
 #### `inspect`
 
-Inspect an object by ID. The ghost must be on the same tile as the object.
+Inspect an item by ID. The ghost must be on the same tile as the object.
 Returns the object's full `description` (or `name` if no description is
-defined). Attempting to inspect an object on a non-current tile returns a
+defined). Attempting to inspect an item on a non-current tile returns a
 structured denial.
 
 ```
-inspect { objectRef: "sign-welcome" }
+inspect { itemRef: "sign-welcome" }
 ```
 
 ```json
@@ -219,7 +219,7 @@ The object must be on the same tile and be `carriable: true`. Subject to
 which ghost classes may take which object classes.
 
 ```
-take { objectRef: "key-brass" }
+take { itemRef: "key-brass" }
 ```
 
 ```json
@@ -231,13 +231,13 @@ Failure codes: `NOT_CARRIABLE`, `NOT_HERE`, `NOT_FOUND`, `RULESET_DENY`.
 
 #### `drop`
 
-Place a carried object from the ghost's inventory onto the current tile.
+Place a carried item from the ghost's inventory onto the current tile.
 Subject to `PUT_DOWN` ruleset evaluation. Fails if the tile's effective
 capacity (ghosts + existing object costs + this object's cost) would be
 exceeded.
 
 ```
-drop { objectRef: "key-brass" }
+drop { itemRef: "key-brass" }
 ```
 
 ```json
@@ -249,7 +249,7 @@ Failure codes: `NOT_CARRYING`, `TILE_FULL`, `RULESET_DENY`.
 
 ### Inventory
 
-Ghost state gains an `inventory` field: an ordered list of carried object refs.
+Ghost state gains an `inventory` field: an ordered list of carried item refs.
 A dedicated `inventory` tool lists what the ghost is currently carrying.
 
 ```
@@ -257,7 +257,7 @@ inventory
 ```
 
 ```json
-{ "ok": true, "objects": [ { "objectRef": "key-brass", "name": "Brass Key" } ] }
+{ "ok": true, "objects": [ { "itemRef": "key-brass", "name": "Brass Key" } ] }
 ```
 
 Returns an empty `objects` array when the ghost carries nothing. The ghost
@@ -266,12 +266,12 @@ client SDK (`@aie-matrix/ghost-ts-client`) gains corresponding result types in
 
 ### Relationship to RFC-0002 rules
 
-This RFC establishes the `objectClass` vocabulary that RFC-0002's ruleset graph
+This RFC establishes the `itemClass` vocabulary that RFC-0002's ruleset graph
 references in `PICK_UP`, `PUT_DOWN`, and inventory-conditional `GO` rules. The
 Gram syntax for item-gated rules — for example, requiring a ghost to carry a
 `Key:Brass` object to enter a locked tile — is deferred to RFC-0002, which
 already names these as unresolved (Open Question 3 in that RFC). RFC-0006
-delivers the objects and refs that those rules will operate on; RFC-0002
+delivers the items and refs that those rules will operate on; RFC-0002
 delivers the syntax for expressing the conditions.
 
 ### Package ownership
@@ -282,8 +282,8 @@ delivers the syntax for expressing the conditions.
   object loader; capacity accounting update; `PICK_UP`/`PUT_DOWN` ruleset
   evaluation.
 - `server/colyseus/` — object world state broadcast to Phaser spectators
-  (objects visible on tiles).
-- `maps/<scene>/` — new `*.objects.json` sidecar files per map.
+  (items visible on tiles).
+- `maps/<scene>/` — new `*.items.json` sidecar files per map.
 - `client/phaser/` — rendering of object presence on tiles is deferred to a
   follow-up client RFC.
 
@@ -291,18 +291,18 @@ delivers the syntax for expressing the conditions.
 
 With the sandbox map running and a ghost adopted:
 
-1. Author `maps/sandbox/freeplay.objects.json` with at least one `Sign` and one
+1. Author `maps/sandbox/freeplay.items.json` with at least one `Sign` and one
    carriable `Key`.
 2. Add `objects` custom properties to two tile types in `color-set.tsx` placing
    the sign on one tile class and the key on another.
 3. Start the server. Confirm startup succeeds with no errors.
 4. Move a ghost to a tile adjacent to the sign tile. Call `look` and confirm
    the sign appears in the `objects` list of the neighboring tile summary.
-5. Move the ghost onto the sign tile. Call `inspect { objectRef: "..." }` and
+5. Move the ghost onto the sign tile. Call `inspect { itemRef: "..." }` and
    confirm the description is returned.
-6. Move the ghost to the key tile. Call `take { objectRef: "..." }` and confirm
+6. Move the ghost to the key tile. Call `take { itemRef: "..." }` and confirm
    success. Call `look here` and confirm the key no longer appears on the tile.
-7. Move to a different tile. Call `drop { objectRef: "..." }` and confirm
+7. Move to a different tile. Call `drop { itemRef: "..." }` and confirm
    success. Call `look here` and confirm the key now appears on that tile.
 8. Attempt `inspect` from an adjacent tile (not the object's tile). Confirm
    structured denial.
@@ -317,7 +317,7 @@ None.
 objects with custom properties. Rejected because object layer snapping does not
 work reliably on hex maps — objects snap to cell corners or cell intersections
 rather than cell centers, making pixel-to-H3 resolution ambiguous and the
-authoring experience fragile. A dedicated `object-placement` tile layer avoids
+authoring experience fragile. A dedicated `item-placement` tile layer avoids
 this entirely by using the same grid-native coordinate system as the navigable
 layer.
 
