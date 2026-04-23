@@ -204,13 +204,10 @@ function tileItemsForAt(
 }
 
 function addObjectsField(
-  tile: TileInspectResult,
+  tile: Omit<TileInspectResult, "objects">,
   objects: TileItemSummary[],
 ): TileInspectResult {
-  if (objects.length > 0) {
-    tile.objects = objects;
-  }
-  return tile;
+  return { ...tile, objects };
 }
 
 function hasRulesetEdge(rules: { ruleGraph: { edgesFor(ruleType: string): ReadonlyArray<unknown> } }, ruleType: string): boolean {

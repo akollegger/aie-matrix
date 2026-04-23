@@ -52,8 +52,8 @@ export interface TileInspectResult {
   tileClass: string;
   occupants: string[];
   properties?: Record<string, string>;
-  /** Present when ≥1 object is visible; absent (not []) when none — for backward compat. */
-  objects?: TileItemSummary[];
+  /** Item summaries on this tile slice of the `look` response; empty when none. */
+  objects: TileItemSummary[];
 }
 
 export interface InspectArgs {

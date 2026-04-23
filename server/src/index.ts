@@ -274,7 +274,7 @@ async function main(): Promise<void> {
     makeServerConfigLayer(process.env),
     conversationLayer,
     neo4jGraphLayer,
-    makeItemServiceLayer(loadedMap, bridge),
+    makeItemServiceLayer(itemServiceImpl),
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);

@@ -11,8 +11,8 @@ import {
 } from "./world-api-errors.js";
 
 export interface ItemServiceOps {
-  getItemsOnTile(h3Index: string): string[];
-  getGhostInventory(ghostId: string): string[];
+  getItemsOnTile(h3Index: string): readonly string[];
+  getGhostInventory(ghostId: string): readonly string[];
   inspectItem(
     h3Index: string,
     itemRef: string,
@@ -74,12 +74,12 @@ export class ItemServiceImpl implements ItemServiceOps {
     return this.sidecar;
   }
 
-  getItemsOnTile(h3Index: string): string[] {
-    return this.tileItems.get(h3Index) ?? [];
+  getItemsOnTile(h3Index: string): readonly string[] {
+    return [...(this.tileItems.get(h3Index) ?? [])];
   }
 
-  getGhostInventory(ghostId: string): string[] {
-    return this.ghostInventory.get(ghostId) ?? [];
+  getGhostInventory(ghostId: string): readonly string[] {
+    return [...(this.ghostInventory.get(ghostId) ?? [])];
   }
 
   inspectItem(
@@ -192,15 +192,8 @@ export class ItemServiceImpl implements ItemServiceOps {
   }
 }
 
-export const makeItemServiceLayer = (
-  loadedMap: LoadedMap,
-  bridge: ColyseusWorldBridge,
-): Layer.Layer<ItemService> =>
-  Layer.succeed(ItemService, (() => {
-    const impl = new ItemServiceImpl(loadedMap);
-    impl.setBridge(bridge);
-    return impl;
-  })());
+export const makeItemServiceLayer = (impl: ItemServiceImpl): Layer.Layer<ItemService> =>
+  Layer.succeed(ItemService, impl);
 
 /** Broadcast initial tile item state to Colyseus after ItemService is seeded. */
 export function broadcastInitialItemState(

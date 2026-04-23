@@ -14,4 +14,4 @@ The world-items feature adds these shared exports:
 - `DropArgs`, `DropResult`
 - `InventoryResult`
 
-`TileInspectResult` now includes an optional `objects` field when item summaries are visible in `look` responses.
+`TileInspectResult` always includes an `objects` field (`TileItemSummary[]`, possibly empty) in `look` responses.

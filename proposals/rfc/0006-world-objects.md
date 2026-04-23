@@ -94,49 +94,24 @@ A missing sidecar is not a startup error — it means the map has no items.
 
 The current PoC also supports `AIE_MATRIX_ITEMS` as an explicit sidecar override. When set, the value may be absolute or repo-relative; when unset, the server falls back to the co-located `*.items.json` file beside the active map.
 
-### Tile placement via Tiled custom property
+### Tile placement via `item-placement` layers (PoC)
 
-Object placement at world-start is authored in Tiled by adding a custom
-property to any tile definition in the `.tsx` tileset file:
+Object placement at world-start is authored with one or more **tile layers**
+whose Tiled **layer class** is `item-placement` (the layer name is free-form).
+This keeps editing predictable on hex maps and allows multiple layers when
+authors want to group items (furniture vs. pickups, etc.).
 
-| Property name | Tiled type | Value |
-|---|---|---|
-| `items` | string | Comma-separated list of item refs (e.g. `"sign-welcome"` or `"key-brass,key-brass"`) |
+The author uses a tileset whose tile **`type`** values are `itemRef` strings
+from the sidecar (e.g. `key-brass`, `sign-welcome`) and paints those tiles onto
+each `item-placement` layer at the cells that should start with those items.
+`mapLoader.ts` discovers every tile layer with class `item-placement`, in file
+order, and applies the same grid→H3 mapping as the navigable `layout` layer.
+Multiple refs on one cell stack in layer order.
 
-This mirrors the existing `capacity` property convention on tile definitions.
-The `items` property declares which item refs appear on a tile of that class
-when the map is first loaded. It is an initial condition, not a permanent
-binding — once the world is running, the tile may gain or lose objects as
-ghosts act.
-
-Example `.tsx` entry:
-
-```xml
-<tile id="7" type="Hallway">
-  <properties>
-    <property name="capacity" value="4"/>
-    <property name="items" value="sign-welcome"/>
-  </properties>
-</tile>
-```
-
-If the same tile class appears multiple times on a map (as it typically does),
-each instance of that class starts with the declared objects. This is well
-suited for furniture, obstacles, and ambient signs that belong everywhere a
-given tile class appears.
-
-For tile-specific placement — one particular tile gets the key, not every tile
-of that class — a second Tiled tile layer named `item-placement` is used
-alongside the navigable tile layer. The author creates a tileset whose tile
-`type` values are `itemRef` strings (e.g. `key-brass`, `sign-welcome`) and
-paints those tiles onto the `item-placement` layer at exactly the cells that
-should start with those objects. The map loader reads this layer using the same
-grid-to-H3 logic as the navigable layer, treating each non-empty cell's
-`type` as an `itemRef` placement. Multiple tile layers are valid in the `.tmj`
-format and are already iterated by `mapLoader.ts`.
-
-The two placement mechanisms compose: a cell may receive items from both its
-tile class property and from the `item-placement` layer.
+A **future** extension (not in the current loader) is a tileset-level `items`
+custom property on terrain tile definitions, mirroring `capacity`, so every
+instance of a tile class could start with the same refs. That path is omitted
+from the PoC in favor of explicit `item-placement` layers only.
 
 ### World state
 
@@ -183,7 +158,8 @@ or on any face-adjacent tile. The `at` field uses the same local-frame tokens
 as the rest of the ghost interface: `"here"` when the object is on the ghost's
 current tile, or a compass face (`n`, `s`, `ne`, `nw`, `se`, `sw`) when it is
 on an adjacent tile. A ghost can act on this directly — `"at": "ne"` means
-`go { toward: "ne" }` is the next step to reach that object.
+`go { toward: "ne" }` is the next step to reach that object. When nothing is in
+range, `objects` is still present as an empty array.
 
 ```json
 {

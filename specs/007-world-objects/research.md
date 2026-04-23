@@ -107,19 +107,16 @@ itemsPath: string | undefined   // undefined = use co-location fallback
 
 ## Decision 9: `look` Response Extension — Scope
 
-**Decision**: Extend `look { at: "here" }` and `look { at: "around" }` to include objects. `look { at: <compass> }` targeting a single adjacent tile also includes items on that tile. The `TileInspectResult` interface in `shared/types/` gains `objects?: TileItemSummary[]` where `TileItemSummary = { id: string; name: string; at: "here" | Compass }`. `at` is always `"here"` in single-tile results; it carries the compass direction only in `around` aggregated results.
+**Decision**: Extend `look { at: "here" }` and `look { at: "around" }` to include objects. `look { at: <compass> }` targeting a single adjacent tile also includes items on that tile. The `TileInspectResult` interface in `shared/types/` gains `objects: TileItemSummary[]` where `TileItemSummary = { id: string; name: string; at: "here" | Compass }`. `at` is always `"here"` in single-tile results; it carries the compass direction only in the aggregated `look { at: "here" }` view that merges the current tile and neighbors.
 
-**Rationale**: RFC-0006 specifies that `look here` and `look around` both gain an `objects` field. Including single-compass-face results is consistent — a ghost looking `ne` gets the same tile detail it would see in `around`. Making the field optional (`objects?`) preserves backward compatibility for existing `TileInspectResult` consumers that don't need objects.
+**Rationale**: RFC-0006 specifies that `look here` and `look around` both gain an `objects` field. Including single-compass-face results is consistent — a ghost looking `ne` gets the same tile detail it would see in `around`. The field is always present (empty array when there are no items) so agents can rely on a single response shape.
 
 ---
 
-## Decision 10: `NEEDS CLARIFICATION` — `mapLoader.ts` Multi-Layer Support
+## Decision 10: `mapLoader.ts` — `item-placement` layers
 
-**Status**: Resolved via codebase inspection.
+**Status**: Resolved in implementation.
 
-The current `loadHexMap()` reads `tmj.layers?.[0]` by array index and the `TmjLayer` interface has no `name` field. The `.tmj` format supports a `name` property on layers. The extension to support an optional `item-placement` layer requires:
-1. Adding `name?: string` to `TmjLayer`.
-2. After reading layer index 0 as the navigable layer, scanning `tmj.layers` for a layer with `name === "item-placement"`.
-3. If found, reading its `data` array with the same grid-to-H3 logic, looking up each cell's tile type from the same tileset, treating that type as an `itemRef`.
+`loadHexMap()` requires exactly one navigable tile layer with Tiled **class** `"layout"`. Zero or more additional tile layers with **class** `"item-placement"` are merged in file order; each painted tile's **`type`** (from the item tileset) is an `itemRef` appended to that cell's `initialItemRefs`. Multiple `item-placement` layers are supported.
 
-This is additive: maps without the layer load unchanged.
+This is additive: maps without such layers load unchanged.

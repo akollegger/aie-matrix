@@ -5,7 +5,7 @@
 
 ## Item Definition
 
-Defined in `shared/types/src/objects.ts` (new file). Loaded from `*.items.json` at server startup.
+Defined in `shared/types/src/items.ts`. Loaded from `*.items.json` at server startup.
 
 ```
 ItemDefinition {
@@ -97,7 +97,7 @@ TileItemSummary {
 
 TileInspectResult {
   ... (existing fields)
-  objects?: TileItemSummary[]  // present when items visible; omitted for empty (backward compat)
+  objects: TileItemSummary[]   // always present; [] when no items on that tile slice
 }
 
 InspectArgs  { itemRef: string }

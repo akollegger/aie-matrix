@@ -79,4 +79,4 @@ World item definitions load from a `*.items.json` sidecar at startup and live in
 | `drop` | `{ itemRef }` | `{ ok: true }` | `{ ok: false, code: "NOT_CARRYING" \| "TILE_FULL" \| "RULESET_DENY", reason }` |
 | `inventory` | _(none)_ | `{ ok: true, objects: [{ itemRef, name }] }` | Never fails |
 
-`look` is also extended: `TileInspectResult` now includes `objects?: TileItemSummary[]` when items are visible on the focal tile or adjacent tiles.
+`look` is also extended: `TileInspectResult` always includes `objects: TileItemSummary[]` for the focal tile slice (empty when no items on that slice).

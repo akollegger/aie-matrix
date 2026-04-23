@@ -32,7 +32,7 @@ curl -s -X POST http://localhost:2567/mcp \
   | jq '.result.content[0].text | fromjson'
 ```
 
-**Expected**: Response contains an `"objects"` array when at least one item is visible on the current tile or an adjacent tile. When no items are visible, the field is omitted. Move to a tile adjacent to a sign tile and re-call `look` — the sign should appear with a compass `at` value.
+**Expected**: Response always includes an `"objects"` array (possibly empty). When at least one item is visible on the current tile or an adjacent tile, entries include `id`, `name`, and `at`. Move to a tile adjacent to a sign tile and re-call `look` — the sign should appear with a compass `at` value.
 
 ---
 

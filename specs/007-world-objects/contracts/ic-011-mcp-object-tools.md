@@ -2,7 +2,7 @@
 
 **Feature**: 007-world-objects  
 **Owner**: `server/world-api/src/mcp-server.ts`  
-**Type definitions**: `shared/types/src/ghostMcp.ts`, `shared/types/src/objects.ts`  
+**Type definitions**: `shared/types/src/ghostMcp.ts`, `shared/types/src/items.ts`  
 **Consumers**: Ghost agents (LLM-driven or scripted), ghost-cli, random-house, ghost-ts-client
 
 ---
@@ -11,7 +11,7 @@
 
 No new input arguments. All existing call patterns unchanged.
 
-**Response extension** — `TileInspectResult` gains an optional `objects` field:
+**Response extension** — `TileInspectResult` gains a required `objects` field (may be empty):
 
 ```typescript
 interface TileItemSummary {
@@ -24,7 +24,7 @@ interface TileInspectResult {
   tileId: string;
   tileClass: string;
   occupants: string[];
-  objects?: TileItemSummary[];  // present when ≥1 object visible; absent when none
+  objects: TileItemSummary[];  // always present; [] when no items on that tile slice
 }
 ```
 

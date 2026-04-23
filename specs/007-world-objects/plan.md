@@ -49,8 +49,8 @@ specs/007-world-objects/
 
 ```text
 shared/types/src/
-├── objects.ts            NEW: ItemDefinition, ItemSidecar, TileItemSummary
-├── ghostMcp.ts           MODIFY: TileInspectResult + objects?; add InspectResult,
+├── items.ts              NEW: ItemDefinition, ItemSidecar, TileItemSummary
+├── ghostMcp.ts           MODIFY: TileInspectResult + required `objects` array; add InspectResult,
 │                                 TakeResult, DropResult, InventoryResult types;
 │                                 update GHOST_MCP_TOOLS constant
 └── index.ts              MODIFY: re-export new types
@@ -58,19 +58,18 @@ shared/types/src/
 server/colyseus/src/
 ├── mapTypes.ts           MODIFY: CellRecord + initialItemRefs, capacity?;
 │                                 LoadedMap + itemSidecar
-├── mapLoader.ts          MODIFY: read objects property from tileset tiles;
-│                                 read item-placement layer (TmjLayer + name?);
-│                                 load *.items.json sidecar;
+├── mapLoader.ts          MODIFY: all tile layers with Tiled class `item-placement`
+│                                 (in map order); load *.items.json sidecar;
 │                                 populate initialItemRefs per cell
 ├── tilesetParser.ts      NO CHANGE (properties already captured generically)
 ├── room-schema.ts        MODIFY: WorldSpectatorState + tileItemRefs,
 │                                 ghostItemRefs MapSchema<string>
-└── MatrixRoom.ts         NO CHANGE (object state flows through WorldBridgeService)
+└── MatrixRoom.ts         MODIFY: seed item glyphs; bridge setters for item maps
 
 server/world-api/src/
-├── ItemService.ts      NEW: Effect Context.Tag; seeded from LoadedMap;
-│                              getObjectsOnTile(), getGhostInventory(),
-│                              takeObject(), dropObject(), inspectObject()
+├── ItemService.ts        NEW: Effect Context.Tag; seeded from LoadedMap;
+│                               getItemsOnTile(), getGhostInventory(),
+│                               takeItem(), dropItem(), inspectItem(); computeTileItemCost()
 ├── mcp-server.ts         MODIFY: extend lookEffect() with objects;
 │                                 add inspectEffect(), takeEffect(),
 │                                 dropEffect(), inventoryEffect();
@@ -79,11 +78,11 @@ server/world-api/src/
 ├── world-api-errors.ts   MODIFY: add WorldApiItemNotHere, WorldApiItemNotFound,
 │                                 WorldApiItemNotCarriable, WorldApiItemNotCarrying,
 │                                 WorldApiTileFull; add to WorldApiError union
-├── movement.ts           MODIFY: computeTileEffectiveCapacity() helper called
-│                                 by evaluateGo() + used by dropEffect()
-├── colyseus-bridge.ts    MODIFY: add setTileObjects(), setGhostInventory()
+├── movement.ts           MODIFY: call shared computeTileItemCost() from ItemService
+│                                 inside evaluateGo() for destination capacity
+├── colyseus-bridge.ts    MODIFY: add setTileItems(), setGhostInventory()
 │                                 to ColyseusWorldBridge interface + MatrixRoomBridge impl
-└── index.ts              MODIFY: export ItemService
+└── index.ts              MODIFY: export ItemService, computeTileItemCost, …
 
 server/src/
 ├── index.ts              MODIFY: add ItemService Layer wiring to ManagedRuntime
@@ -159,10 +158,10 @@ Each slice is independently demonstrable and maps to spec user stories.
 
 **What**: `lookEffect()` extended to include `objects` in `TileInspectResult`. For `look here`, includes items on the current tile (`at: "here"`) plus items on all adjacent tiles (with compass `at`). For `look around`, each neighbor tile result includes that tile's objects. For `look <face>`, the single result includes items on that tile.
 
-**Verify**: Smoke Test 1 from `quickstart.md`. `TileInspectResult.objects` is absent (not `[]`) when no items are visible.
+**Verify**: Smoke Test 1 from `quickstart.md`. `TileInspectResult.objects` is always present and is `[]` when no items are visible on that tile slice.
 
 **Key decisions**:
-- `objects` field is `TileItemSummary[] | undefined`. The field is omitted (not `[]`) when empty — backward compatibility for existing consumers that check only the defined fields.
+- `objects` field is always `TileItemSummary[]` (use `[]` when empty).
 - The `at` field on each `TileItemSummary` is set by the `lookEffect` caller, not by `ItemService` — `ItemService.getObjectsOnTile()` returns plain `itemRef[]` and the handler enriches with `name` and `at`.
 
 ## Complexity Tracking

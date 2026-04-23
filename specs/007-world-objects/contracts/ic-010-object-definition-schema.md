@@ -1,7 +1,7 @@
 # IC-010: Item Definition Schema
 
 **Feature**: 007-world-objects  
-**Owner**: `shared/types/src/objects.ts`  
+**Owner**: `shared/types/src/items.ts`  
 **Consumers**: `server/colyseus/src/mapLoader.ts` (sidecar parsing), `server/world-api/src/ItemService.ts` (runtime lookups), `server/world-api/src/mcp-server.ts` (inspect/take/drop response construction)
 
 ## Schema

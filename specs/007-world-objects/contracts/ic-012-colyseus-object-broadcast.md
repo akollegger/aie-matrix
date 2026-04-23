@@ -27,14 +27,14 @@ Empty ghost inventory: entry removed from the map.
 `server/world-api/src/colyseus-bridge.ts`:
 
 ```typescript
-/** Replace the object list on a tile. Pass empty array to clear. */
-setTileObjects(h3Index: string, itemRefs: string[]): void;
+/** Replace the item ref list on a tile. Pass empty array to clear. */
+setTileItems(h3Index: string, itemRefs: string[]): void;
 
 /** Replace the carried item list for a ghost. Pass empty array to clear. */
 setGhostInventory(ghostId: string, itemRefs: string[]): void;
 ```
 
-`ItemService` calls both after every `take` and `drop`. At server startup, `ItemService` calls `setTileObjects` for each tile with initial objects.
+`ItemService` calls both after every `take` and `drop`. At server startup, `ItemService` calls `setTileItems` for each tile with initial items.
 
 ## Downstream Contract
 

@@ -3,7 +3,7 @@ import type { Compass, GoFailure, GoSuccess, TraverseFailure, TraverseSuccess } 
 import { goStepPermittedByRules } from "./rules/match-go.js";
 import type { ParsedRuleset } from "./rules/movement-rules-service.js";
 import { tileLabelsFromClass } from "./rules/tile-labels.js";
-import type { ItemServiceOps } from "./ItemService.js";
+import { computeTileItemCost, type ItemServiceOps } from "./ItemService.js";
 
 export interface GhostMoveContext {
   /** Labels or roles used by `ghostClass` constraints on `GO` edges; may be empty. */
@@ -71,15 +71,6 @@ export function evaluateGo(
     };
   }
   return { ok: true, tileId: dest };
-}
-
-export function computeTileItemCost(h3Index: string, itemService: ItemServiceOps): number {
-  const refs = itemService.getItemsOnTile(h3Index);
-  const sidecar = itemService.getSidecar();
-  return refs.reduce((sum, ref) => {
-    const def = sidecar.get(ref);
-    return sum + (def?.capacityCost ?? 0);
-  }, 0);
 }
 
 export type TraverseTargetLookup = (fromH3: string, via: string) => Promise<string | undefined>;

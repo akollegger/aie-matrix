@@ -8,8 +8,8 @@
 ## Proposal Context *(mandatory)*
 
 - **Related Proposal**: [`proposals/rfc/0006-world-objects.md`](../../proposals/rfc/0006-world-objects.md) (authoritative design)
-- **Scope Boundary**: Object definition sidecar files (`*.items.json`), tile placement via Tiled custom properties and a dedicated `item-placement` tile layer, world-state tracking of object positions in Neo4j, and the four MCP tools ghosts use to interact with objects: extended `look`, `inspect`, `take`, `drop`, and `inventory`. Capacity accounting update to include object costs. Effect `Layer` wiring for the new `ItemService` in `server/world-api/`.
-- **Out of Scope**: Phaser spectator rendering of items on tiles (deferred to a follow-up client RFC), item-gated movement rules (the Gram syntax for `PICK_UP`/`PUT_DOWN`/inventory-conditional `GO` rules is RFC-0002's concern), persistence of object positions across server restarts (object positions are re-initialised from sidecars on every startup), and object multiplicity distinguishing specific instances of identical objects beyond their tile associations.
+- **Scope Boundary**: Object definition sidecar files (`*.items.json`), tile placement via one or more Tiled tile layers with class `item-placement` (tile `type` = `itemRef`), in-memory world-state tracking of object positions in `ItemService` (seeded at startup, mirrored to Colyseus), and the MCP tools ghosts use to interact with objects: extended `look`, `inspect`, `take`, `drop`, and `inventory`. Capacity accounting update to include object costs. Effect `Layer` wiring for the new `ItemService` in `server/world-api/`.
+- **Out of Scope**: Neo4j persistence or graph writes for live item positions (PoC uses in-memory state only), Phaser spectator rendering of items on tiles (deferred to a follow-up client RFC), item-gated movement rules (the Gram syntax for `PICK_UP`/`PUT_DOWN`/inventory-conditional `GO` rules is RFC-0002's concern), persistence of object positions across server restarts (object positions are re-initialised from sidecars on every startup), and object multiplicity distinguishing specific instances of identical objects beyond their tile associations.
 
 > **Tight coupling notice**: This specification is intentionally synchronized with RFC-0006. Any deviation between this document and that proposal is a defect and must be discussed before implementation proceeds. The RFC is the authoritative source of truth; this document translates it into testable requirements. Implementation approaches may differ from RFC details, but those differences must be surfaced and approved — not silently resolved.
 
@@ -28,7 +28,7 @@ A ghost agent issues `look` and sees a summary of items on its current tile and 
 1. **Given** a ghost at tile T with a sign object present and a key object on the tile to the northeast, **When** the ghost calls `look { at: "here" }`, **Then** the response includes an `objects` array containing `{ id: "sign-welcome", name: "Welcome Board", at: "here" }` and `{ id: "key-brass", name: "Brass Key", at: "ne" }`.
 2. **Given** a ghost at tile T with no items on T or any adjacent tile, **When** the ghost calls `look`, **Then** the `objects` array is present but empty.
 3. **Given** a ghost at tile T with items on three different adjacent tiles, **When** the ghost calls `look { at: "around" }`, **Then** all three objects appear with their correct compass `at` values.
-4. **Given** a tile class that appears multiple times on the map and declares `objects: "chair"` as a Tiled property, **When** the server loads the map, **Then** each tile instance of that class begins with its own independent chair object.
+4. **Given** two distinct `item-placement` layers each painting a `chair` itemRef on different cells, **When** the server loads the map, **Then** each of those cells begins with its own `chair` ref in `ItemService` state (independent placements).
 
 ---
 
