@@ -46,6 +46,13 @@ export class WorldSpectatorState extends Schema {
   declare tileItemRefs: MapSchema<string>;
 
   /**
+   * itemRef → short spectator glyph string (from `ItemDefinition.glyph` at map load; clipped server-side).
+   * Absent key means clients should fall back to showing the `itemRef` string.
+   */
+  @type({ map: "string" })
+  declare itemGlyphs: MapSchema<string>;
+
+  /**
    * ghostId → comma-separated itemRef list (IC-012).
    * Delete key when ghost carries nothing.
    */
@@ -66,6 +73,7 @@ export class WorldSpectatorState extends Schema {
     this.tileClasses = new MapSchema<string>();
     this.ghostModes = new MapSchema<string>();
     this.tileItemRefs = new MapSchema<string>();
+    this.itemGlyphs = new MapSchema<string>();
     this.ghostItemRefs = new MapSchema<string>();
     this.ghostLastActions = new MapSchema<string>();
   }

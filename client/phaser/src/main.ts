@@ -1,3 +1,4 @@
+import "@fontsource/noto-color-emoji";
 import Phaser from "phaser";
 import { Client, MatchMakeError, type Room } from "colyseus.js";
 import { WorldSpectatorState } from "@aie-matrix/server-colyseus/room-schema";

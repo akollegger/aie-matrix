@@ -8,6 +8,9 @@ const DEFAULT_WALK_INTERVAL_MS = 1500;
 const DEFAULT_ITEM_DROP_PROB = 0.3;
 const DEFAULT_GHOST_COUNT = 1;
 
+/** Per ghost session: chance to `inspect` one on-tile item (`at: "here"`) before take/drop. */
+const INSPECT_HERE_PROB = 0.88;
+
 export interface RandomHouseCli {
   readonly registryBase: string;
   readonly walkIntervalMs: number;
@@ -243,6 +246,17 @@ function isTakeSuccess(raw: unknown): raw is { ok: true; name: string } {
   );
 }
 
+function isInspectSuccess(raw: unknown): raw is { ok: true; name: string; description?: string } {
+  return (
+    typeof raw === "object" &&
+    raw !== null &&
+    "ok" in raw &&
+    (raw as { ok: unknown }).ok === true &&
+    "name" in raw &&
+    typeof (raw as { name: unknown }).name === "string"
+  );
+}
+
 function inventoryCarriedItems(raw: unknown): { itemRef: string; name: string }[] {
   if (!raw || typeof raw !== "object" || (raw as { ok?: unknown }).ok !== true) {
     return [];
@@ -263,6 +277,44 @@ function inventoryCarriedItems(raw: unknown): { itemRef: string; name: string }[
     }
   }
   return out;
+}
+
+/**
+ * With high probability, `inspect` one on-tile item not yet attempted this session.
+ * Each `itemRef` is tried at most once so failed or boring inspects are not retried every tick.
+ */
+async function maybeInspectOnceHere(
+  mcp: GhostMcpClient,
+  ghostLabel: string,
+  lookRaw: unknown,
+  inspectedItemRefs: Set<string>,
+  inspectProb: number,
+): Promise<void> {
+  if (Math.random() >= inspectProb) {
+    return;
+  }
+  const here = objectRefsOnHereFromLook(lookRaw);
+  const candidates = here.filter((r) => !inspectedItemRefs.has(r));
+  if (candidates.length === 0) {
+    return;
+  }
+  const itemRef = candidates[Math.floor(Math.random() * candidates.length)]!;
+  try {
+    const res = await mcp.callTool("inspect", { itemRef });
+    inspectedItemRefs.add(itemRef);
+    if (isInspectSuccess(res)) {
+      const desc =
+        typeof res.description === "string" && res.description.length > 0
+          ? res.description
+          : "(no description)";
+      const clip = desc.length > 160 ? `${desc.slice(0, 157)}…` : desc;
+      console.log(`[${ghostLabel}] inspect`, itemRef, `"${res.name}"`, "—", clip);
+    } else {
+      console.log(`[${ghostLabel}] inspect`, itemRef, JSON.stringify(res));
+    }
+  } catch (e) {
+    console.warn(`[${ghostLabel}] inspect`, itemRef, e);
+  }
 }
 
 /**
@@ -321,14 +373,20 @@ async function maybeRandomDrop(
   }
 }
 
-/** `look` at here, take carriable items, maybe drop — used after every `go` and once before the first `go` each tick. */
+/**
+ * `look` at here (or reuse `seedLook`), maybe `inspect` one on-tile item, take carriable items, maybe drop.
+ * Used after every `go` and once before the first `go` each tick.
+ */
 async function lookTakeMaybeDrop(
   mcp: GhostMcpClient,
   ghostLabel: string,
   itemDropProb: number,
+  inspectedItemRefs: Set<string>,
   seedLook?: unknown,
 ): Promise<void> {
-  await takeAllCarriableOnTile(mcp, ghostLabel, seedLook);
+  const lookRaw = seedLook !== undefined ? seedLook : await mcp.callTool("look", { at: "here" });
+  await maybeInspectOnceHere(mcp, ghostLabel, lookRaw, inspectedItemRefs, INSPECT_HERE_PROB);
+  await takeAllCarriableOnTile(mcp, ghostLabel, lookRaw);
   await maybeRandomDrop(mcp, ghostLabel, itemDropProb);
 }
 
@@ -348,6 +406,7 @@ async function runWalker(
   itemDropProb: number,
 ): Promise<void> {
   let mode: "normal" | "conversational" = "normal";
+  const inspectedItemRefs = new Set<string>();
 
   // Bye after this many idle ticks (no new messages), regardless of random roll.
   const IDLE_TICKS_BEFORE_BYE = 2;
@@ -410,7 +469,7 @@ async function runWalker(
     }
 
     try {
-      await lookTakeMaybeDrop(mcp, ghostLabel, itemDropProb, lookRaw);
+      await lookTakeMaybeDrop(mcp, ghostLabel, itemDropProb, inspectedItemRefs, lookRaw);
     } catch (e) {
       console.warn(`[${ghostLabel}] look/take/drop (before go) failed`, e);
     }
@@ -445,7 +504,7 @@ async function runWalker(
     }
 
     try {
-      await lookTakeMaybeDrop(mcp, ghostLabel, itemDropProb);
+      await lookTakeMaybeDrop(mcp, ghostLabel, itemDropProb, inspectedItemRefs);
     } catch (e) {
       console.warn(`[${ghostLabel}] look/take/drop (after go) failed`, e);
     }

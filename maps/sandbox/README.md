@@ -30,7 +30,7 @@ It documents the H3 resolution used for this map. Only **15** is supported: cell
 
 ## World item authoring
 
-Sandbox maps can declare startup items with a sidecar plus tile metadata:
+Startup items come from an `*.items.json` **sidecar** plus optional tile layer(s) whose Tiled **class** is **`item-placement`**. The live server can still hold **multiple** items per H3 cell (e.g. after `take`/`drop`); the map authors **one item per painted cell** per layer (multiple layers stack in file order).
 
 ### `*.items.json` sidecar
 
@@ -49,16 +49,17 @@ Sandbox maps can declare startup items with a sidecar plus tile metadata:
 
 The server loads this file automatically when it sits next to the active `.tmj` map, or from `AIE_MATRIX_ITEMS` when that env var is set.
 
-### Tile-class placement via `items`
+### Layer classes (Tiled): `layout` and `item-placement`
 
-Add a string custom property named `items` to a tileset tile in `color-set.tsx`:
+Layers are picked by **Tiled layer class**, not layer order or free-form names:
 
-```xml
-<property name="items" value="sign-welcome,key-brass"/>
-```
+1. **Exactly one** tile layer must have class **`layout`** — the navigable hex grid (`color-set.tsx` tiles, `capacity`, etc.).
+2. **Zero or more** tile layers may have class **`item-placement`**. If you use several, they are read **in `.tmj` layer array order** (first layer’s items appended before the next); each non-empty cell appends that tile’s `itemRef` to the cell’s startup list.
 
-Every map cell painted with that tile starts with those item refs.
+For map-defined items:
 
-### Tile-specific placement via `item-placement`
+1. Add a **second external tileset** (e.g. `common-item-set.tsx`) whose tiles exist only to represent items: each tile’s **type** in the tileset must **equal** the `itemRef` string in the sidecar (`key-brass`, `info-sign`, …). See `maps/sandbox/common-item-set.tsx` and the companion `common.items.json` when you want one shared definition set for several maps (override with `AIE_MATRIX_ITEMS` or a co-located `<map-name>.items.json`).
+2. Reference both tilesets in the `.tmj` (`color-set` for terrain, item tileset with the next `firstgid`, typically `33` when the first tileset has `tilecount` `32`).
+3. Give each item layer class **`item-placement`**, same width and height as the map. Paint one **item** tile per cell that should start with that item. Empty cells use tile `0` / eraser.
 
-For one-off placements, add a second tile layer named `item-placement` to the `.tmj` map. Paint tiles whose `type` matches an `itemRef`; the map loader resolves those tiles onto the same H3 cells as the navigable layer and appends them to the tile's starting item list.
+Terrain tiles (`color-set.tsx`) carry only gameplay fields such as **`capacity`**; item refs live on the item tileset used in `item-placement` layers.

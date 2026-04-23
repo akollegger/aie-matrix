@@ -173,7 +173,7 @@ curl -s -X POST http://localhost:2567/mcp \
 }
 ```
 
-2. Open `maps/sandbox/color-set.tsx` in Tiled. Add a custom property `items` (string) to the `Green` tile and set it to `"sign-welcome"`. Add `items: "key-brass"` to `Blue`. Add `items: "statue"` to `Red` with `capacity: 1`.
+2. In Tiled, set the navigable hex layer’s **class** to **`layout`**, and each item layer’s **class** to **`item-placement`** (names are free-form). Use a dedicated item tileset (`item-set.tsx`): each item tile’s **type** must match an `itemRef` in the sidecar. See `maps/sandbox/README.md`.
 
 3. Restart the server. Confirm startup log shows no object loading errors.
 

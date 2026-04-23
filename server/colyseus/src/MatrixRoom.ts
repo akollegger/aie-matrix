@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Room } from "@colyseus/core";
+import type { ItemDefinition } from "@aie-matrix/shared-types";
 import type { LoadedMap } from "./mapTypes.js";
 import { loadHexMap } from "./mapLoader.js";
 import { TileCoord, WorldSpectatorState } from "./room-schema.js";
@@ -8,6 +9,34 @@ import { TileCoord, WorldSpectatorState } from "./room-schema.js";
 export interface MatrixRoomOptions {
   mapPath?: string;
   itemsPath?: string;
+}
+
+/** Max UTF-16 code units stored per `ItemDefinition.glyph` in `WorldSpectatorState.itemGlyphs`. */
+const MAX_ITEM_GLYPH_UTF16 = 8;
+
+function clipGlyphForSpectator(raw: string): string {
+  const t = raw.trim();
+  if (t.length <= MAX_ITEM_GLYPH_UTF16) {
+    return t;
+  }
+  return t.slice(0, MAX_ITEM_GLYPH_UTF16);
+}
+
+function seedItemGlyphsFromSidecar(
+  sidecar: Map<string, ItemDefinition>,
+  emit: (itemRef: string, glyph: string) => void,
+): void {
+  for (const [ref, def] of sidecar) {
+    const g = def.glyph;
+    if (typeof g !== "string") {
+      continue;
+    }
+    const clipped = clipGlyphForSpectator(g);
+    if (clipped.length === 0) {
+      continue;
+    }
+    emit(ref, clipped);
+  }
 }
 
 export class MatrixRoom extends Room<WorldSpectatorState> {
@@ -35,6 +64,9 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
       this.state.tileCoords.set(cellId, tc);
       this.state.tileClasses.set(cellId, rec.tileClass);
     }
+    seedItemGlyphsFromSidecar(this.loadedMap.itemSidecar, (ref, glyph) => {
+      this.state.itemGlyphs.set(ref, glyph);
+    });
   }
 
   /** Broadcast a lightweight patch envelope (optional for non-schema listeners). */

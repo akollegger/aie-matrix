@@ -18,6 +18,12 @@ export interface ItemDefinition {
   /** Full text returned by inspect. Omitting means inspect returns name only. */
   description?: string;
   /**
+   * Optional short label for spectator UI (e.g. Phaser canvas text with Noto Color Emoji).
+   * Prefer a single user-visible grapheme; implementations may clip to 8 UTF-16 code units.
+   * Not used for identity or MCP — omit to fall back to `itemRef` in clients.
+   */
+  glyph?: string;
+  /**
    * Open-ended authoring attributes. Omit when empty.
    * Neo4j loader maps each key as `attr_<key>` on the ItemInstance node.
    */

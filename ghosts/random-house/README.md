@@ -62,8 +62,9 @@ With **pnpm**, prefer passing flags directly after `start` as above. The form `p
 2. For each ghost (default 1, up to 32): `POST /registry/caretakers`, then `POST /registry/adopt` with the same `ghostHouseId` — obtain `ghostId` + JWT + MCP base URL per ghost (IC-002: one active ghost per caretaker).
 3. MCP per ghost: `whoami`, `whereami`, then a loop until SIGINT/SIGTERM:
    - `look` at the current tile; sometimes `say` when other ghosts are present (enters conversational mode).
+   - With high probability (~88%), `inspect` one object on the **current** tile (`at: "here"` in the look payload) that has not been inspected yet this run (each `itemRef` is attempted at most once).
    - `take` every carriable item on the current tile (retries `look` after each successful take).
    - `inventory` + random `drop` of one carried item (configurable via `--drop-prob`).
-   - `exits` + random `go`, then `look` / `take` / optional `drop` again on the new tile.
+   - `exits` + random `go`, then `look` / `inspect?` / `take` / optional `drop` again on the new tile.
 
 Alternatively, run two separate `pnpm --filter @aie-matrix/ghost-random-house start` commands in two shells: each run registers its own house and one ghost (fine for quick checks; one process with `start --ghosts 2` avoids duplicate house rows).

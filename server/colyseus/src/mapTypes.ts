@@ -21,7 +21,7 @@ export interface CellRecord {
   neighbors: Partial<Record<Compass, CellId>>;
   /** Tile capacity (from tileset `capacity` property). Absent = unbounded. */
   capacity?: number;
-  /** itemRefs declared via tile-class `items` property + `item-placement` layer. */
+  /** itemRefs from tile layer(s) with Tiled class `item-placement` (tile `type` = itemRef); runtime may hold multiple. */
   initialItemRefs: string[];
 }
 

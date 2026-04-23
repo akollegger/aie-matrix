@@ -1,6 +1,9 @@
 import type { Room } from "colyseus.js";
 import type Phaser from "phaser";
 import type { WorldSpectatorState } from "@aie-matrix/server-colyseus/room-schema";
+import { buildGridKeyToCellId, parseItemRefs } from "./cellLookup.js";
+import { spectatorLabelForItemRef } from "./itemSpectatorLabel.js";
+import { SPECTATOR_UI_FONT_FAMILY } from "./spectatorFonts.js";
 import { SpectatorDebugHtmlOverlay } from "./spectatorDebugHtmlOverlay.js";
 /** Colyseus `ghostModes` subscriptions (`onChange` / `onAdd`) live in {@link attachSpectatorDebugRoomEvents}. */
 import { attachSpectatorDebugRoomEvents } from "./spectatorDebugRoomEvents.js";
@@ -61,6 +64,7 @@ export function formatWorldSnapshot(room: Room<WorldSpectatorState>): string {
   lines.push(`tileClasses.size = ${room.state.tileClasses.size}`);
   lines.push(`tileItemRefs.entries = ${room.state.tileItemRefs.size}`);
   lines.push(`tileItemRefs.itemCount = ${commaListItemCount(room.state.tileItemRefs)}`);
+  lines.push(`itemGlyphs.size = ${room.state.itemGlyphs.size}`);
   lines.push(`ghostItemRefs.entries = ${room.state.ghostItemRefs.size}`);
   lines.push(`ghostItemRefs.itemCount = ${commaListItemCount(room.state.ghostItemRefs)}`);
   return lines.join("\n");
@@ -123,7 +127,7 @@ export class SpectatorDebugHud {
     this.restoreConsole = installSpectatorDebugConsoleForward(this.logRing);
 
     const panelStyle: Phaser.Types.GameObjects.Text.TextStyle = {
-      fontFamily: "ui-monospace, Menlo, Monaco, monospace",
+      fontFamily: SPECTATOR_UI_FONT_FAMILY,
       fontSize: "12px",
       color: "#fff",
       backgroundColor: "rgba(20,30,50,0.92)",
@@ -153,21 +157,38 @@ export class SpectatorDebugHud {
   attachTileHovers(
     tiles: readonly { img: Phaser.GameObjects.Image; col: number; row: number }[],
   ): void {
-    const tileId = (col: number, row: number) => `${col},${row}`;
+    const gridKey = (col: number, row: number) => `${col},${row}`;
     for (const { img, col, row } of tiles) {
-      const id = tileId(col, row);
+      const gk = gridKey(col, row);
       img.setInteractive({ useHandCursor: true });
       img.on("pointerover", () => {
-        const tc = this.room.state.tileCoords.get(id);
-        const cls = this.room.state.tileClasses.get(id);
-        const ghosts = ghostsAtTile(this.room, id);
+        const cellId = buildGridKeyToCellId(this.room).get(gk);
+        const tc = cellId !== undefined ? this.room.state.tileCoords.get(cellId) : undefined;
+        const cls = cellId !== undefined ? this.room.state.tileClasses.get(cellId) : undefined;
+        const itemsRaw = cellId !== undefined ? this.room.state.tileItemRefs.get(cellId) : undefined;
+        const itemRefs = parseItemRefs(itemsRaw);
+        const itemDisplay = itemRefs.map((r) => spectatorLabelForItemRef(this.room, r)).join(", ");
+        const ghosts = cellId !== undefined ? ghostsAtTile(this.room, cellId) : [];
+        const h3Label =
+          cellId === undefined ? "?" : cellId.length > 24 ? `${cellId.slice(0, 22)}…` : cellId;
+        const ghostSummary = ghosts.length
+          ? ghosts
+              .map((gid) => {
+                const mode =
+                  this.room.state.ghostModes.get(gid) === "conversational" ? "conversational" : "normal";
+                return `${gid} (${mode})`;
+              })
+              .join(", ")
+          : "(none)";
         this.tip.setText(
           [
-            `tileId ${id}`,
             `grid (${col},${row})`,
-            `tileCoords: ${tc ? `${tc.col},${tc.row}` : "MISSING"}`,
-            `tileClass: ${cls ?? "?"}`,
-            `ghosts here: ${ghosts.length ? ghosts.join(", ") : "(none)"}`,
+            `cell (H3): ${h3Label}`,
+            `terrain: ${cls ?? "?"}`,
+            `items: ${itemRefs.length ? itemDisplay : "(none)"}`,
+            `itemRefs: ${itemRefs.length ? itemRefs.join(", ") : "(none)"}`,
+            `ghosts: ${ghostSummary}`,
+            tc ? `tileCoords ok: ${tc.col},${tc.row}` : "tileCoords: MISSING",
           ].join("\n"),
         );
         this.tip.setVisible(true);
