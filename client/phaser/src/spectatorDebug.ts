@@ -1,6 +1,9 @@
 import type { Room } from "colyseus.js";
 import type Phaser from "phaser";
 import type { WorldSpectatorState } from "@aie-matrix/server-colyseus/room-schema";
+import { buildGridKeyToCellId, parseItemRefs } from "./cellLookup.js";
+import { spectatorLabelForItemRef } from "./itemSpectatorLabel.js";
+import { SPECTATOR_UI_FONT_FAMILY } from "./spectatorFonts.js";
 import { SpectatorDebugHtmlOverlay } from "./spectatorDebugHtmlOverlay.js";
 /** Colyseus `ghostModes` subscriptions (`onChange` / `onAdd`) live in {@link attachSpectatorDebugRoomEvents}. */
 import { attachSpectatorDebugRoomEvents } from "./spectatorDebugRoomEvents.js";
@@ -32,25 +35,61 @@ function ghostsAtTile(room: Room<WorldSpectatorState>, tileId: string): string[]
   return ids;
 }
 
-export function formatStateSnapshot(room: Room<WorldSpectatorState>): string {
+/** Count itemRef tokens stored as comma-separated lists in a Colyseus string map. */
+function commaListItemCount(map: { forEach: (cb: (v: string) => void) => void; readonly size: number }): number {
+  let n = 0;
+  map.forEach((csv) => {
+    n += csv.split(",").map((s) => s.trim()).filter(Boolean).length;
+  });
+  return n;
+}
+
+function ghostInventoryLine(room: Room<WorldSpectatorState>, ghostId: string): string {
+  const raw = room.state.ghostItemRefs.get(ghostId);
+  if (!raw) {
+    return "(empty)";
+  }
+  const refs = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return refs.length ? refs.join(", ") : "(empty)";
+}
+
+function ghostLastActionLine(room: Room<WorldSpectatorState>, ghostId: string): string {
+  return room.state.ghostLastActions.get(ghostId) ?? "—";
+}
+
+export function formatWorldSnapshot(room: Room<WorldSpectatorState>): string {
   const lines: string[] = [];
   lines.push(`ghostTiles.size = ${room.state.ghostTiles.size}`);
   lines.push(`tileCoords.size = ${room.state.tileCoords.size}`);
   lines.push(`tileClasses.size = ${room.state.tileClasses.size}`);
+  lines.push(`tileItemRefs.entries = ${room.state.tileItemRefs.size}`);
+  lines.push(`tileItemRefs.itemCount = ${commaListItemCount(room.state.tileItemRefs)}`);
+  lines.push(`itemGlyphs.size = ${room.state.itemGlyphs.size}`);
+  lines.push(`ghostItemRefs.entries = ${room.state.ghostItemRefs.size}`);
+  lines.push(`ghostItemRefs.itemCount = ${commaListItemCount(room.state.ghostItemRefs)}`);
+  return lines.join("\n");
+}
+
+export function formatStateSnapshot(room: Room<WorldSpectatorState>): string {
+  const lines: string[] = [];
   lines.push(`ghostModes.size = ${room.state.ghostModes.size}`);
   room.state.ghostTiles.forEach((tileId, ghostId) => {
     const c = room.state.tileCoords.get(tileId);
     const cls = room.state.tileClasses.get(tileId);
     const mode = room.state.ghostModes.get(ghostId) ?? "normal";
+    const inv = ghostInventoryLine(room, ghostId);
+    const last = ghostLastActionLine(room, ghostId);
     lines.push(
       `  ${ghostId} → tile "${tileId}"  coord=${c ? `${c.col},${c.row}` : "MISSING"}  class=${cls ?? "?"}  mode=${mode}`,
     );
+    lines.push(`    inventory: ${inv}`);
+    lines.push(`    last action: ${last}`);
   });
   return lines.join("\n");
 }
 
 /**
- * HTML overlay (State / Log tabs) + Phaser hover tooltip.
+ * HTML overlay (State / World / Log / Conversations) + Phaser hover tooltip.
  * Enable with `?debug=1` or `VITE_SPECTATOR_DEBUG=true`.
  *
  * Log tab: last 100 lines from `console.*` (after install) plus Effect logs routed through
@@ -72,9 +111,12 @@ export class SpectatorDebugHud {
     this.logRing = new SpectatorDebugLogRing();
     this.overlay = new SpectatorDebugHtmlOverlay(
       this.logRing,
-      () => `[spectator debug]\n${formatStateSnapshot(this.room)}`,
+      () => formatStateSnapshot(this.room),
+      () => formatWorldSnapshot(this.room),
       {
-        serverBase: (import.meta.env.VITE_SERVER_HTTP as string | undefined) ?? "http://localhost:8787",
+        serverBase:
+          (import.meta.env.VITE_SERVER_HTTP as string | undefined)?.replace(/\/$/, "") ??
+          (import.meta.env.DEV ? "" : "http://127.0.0.1:8787"),
         token: ((__SPECTATOR_DEBUG_TOKEN__ as string) || undefined),
         getGhostIds: () => [...this.room.state.ghostTiles.keys()],
       },
@@ -85,7 +127,7 @@ export class SpectatorDebugHud {
     this.restoreConsole = installSpectatorDebugConsoleForward(this.logRing);
 
     const panelStyle: Phaser.Types.GameObjects.Text.TextStyle = {
-      fontFamily: "ui-monospace, Menlo, Monaco, monospace",
+      fontFamily: SPECTATOR_UI_FONT_FAMILY,
       fontSize: "12px",
       color: "#fff",
       backgroundColor: "rgba(20,30,50,0.92)",
@@ -115,21 +157,38 @@ export class SpectatorDebugHud {
   attachTileHovers(
     tiles: readonly { img: Phaser.GameObjects.Image; col: number; row: number }[],
   ): void {
-    const tileId = (col: number, row: number) => `${col},${row}`;
+    const gridKey = (col: number, row: number) => `${col},${row}`;
     for (const { img, col, row } of tiles) {
-      const id = tileId(col, row);
+      const gk = gridKey(col, row);
       img.setInteractive({ useHandCursor: true });
       img.on("pointerover", () => {
-        const tc = this.room.state.tileCoords.get(id);
-        const cls = this.room.state.tileClasses.get(id);
-        const ghosts = ghostsAtTile(this.room, id);
+        const cellId = buildGridKeyToCellId(this.room).get(gk);
+        const tc = cellId !== undefined ? this.room.state.tileCoords.get(cellId) : undefined;
+        const cls = cellId !== undefined ? this.room.state.tileClasses.get(cellId) : undefined;
+        const itemsRaw = cellId !== undefined ? this.room.state.tileItemRefs.get(cellId) : undefined;
+        const itemRefs = parseItemRefs(itemsRaw);
+        const itemDisplay = itemRefs.map((r) => spectatorLabelForItemRef(this.room, r)).join(", ");
+        const ghosts = cellId !== undefined ? ghostsAtTile(this.room, cellId) : [];
+        const h3Label =
+          cellId === undefined ? "?" : cellId.length > 24 ? `${cellId.slice(0, 22)}…` : cellId;
+        const ghostSummary = ghosts.length
+          ? ghosts
+              .map((gid) => {
+                const mode =
+                  this.room.state.ghostModes.get(gid) === "conversational" ? "conversational" : "normal";
+                return `${gid} (${mode})`;
+              })
+              .join(", ")
+          : "(none)";
         this.tip.setText(
           [
-            `tileId ${id}`,
             `grid (${col},${row})`,
-            `tileCoords: ${tc ? `${tc.col},${tc.row}` : "MISSING"}`,
-            `tileClass: ${cls ?? "?"}`,
-            `ghosts here: ${ghosts.length ? ghosts.join(", ") : "(none)"}`,
+            `cell (H3): ${h3Label}`,
+            `terrain: ${cls ?? "?"}`,
+            `items: ${itemRefs.length ? itemDisplay : "(none)"}`,
+            `itemRefs: ${itemRefs.length ? itemRefs.join(", ") : "(none)"}`,
+            `ghosts: ${ghostSummary}`,
+            tc ? `tileCoords ok: ${tc.col},${tc.row}` : "tileCoords: MISSING",
           ].join("\n"),
         );
         this.tip.setVisible(true);

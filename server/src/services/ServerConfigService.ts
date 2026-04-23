@@ -12,6 +12,8 @@ export interface ServerConfig {
   readonly mapsRoot: string;
   readonly corsHeaders: Record<string, string>;
   readonly debugEnabled: boolean;
+  /** Absolute path to `*.items.json` sidecar. Undefined = use co-location fallback. */
+  readonly itemsPath: string | undefined;
 }
 
 export class ServerConfigService extends Context.Tag("aie-matrix/ServerConfigService")<
@@ -38,12 +40,19 @@ export function parseServerConfigFromEnv(env: NodeJS.ProcessEnv): ServerConfig {
   const mapPath =
     env.AIE_MATRIX_MAP ?? join(repoRoot, "maps/sandbox/freeplay.tmj");
   const mapsRoot = normalize(join(repoRoot, "maps"));
+
+  const rawItemsPath = env.AIE_MATRIX_ITEMS?.trim();
+  const itemsPath = rawItemsPath
+    ? normalize(join(repoRoot, rawItemsPath))
+    : undefined;
+
   return {
     httpPort,
     mapPath,
     mapsRoot,
     corsHeaders: defaultCorsHeaders,
     debugEnabled: isEnvTruthy(env.AIE_MATRIX_DEBUG),
+    itemsPath,
   };
 }
 

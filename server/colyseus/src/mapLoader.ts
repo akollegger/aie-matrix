@@ -1,11 +1,11 @@
-import { readFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
-import type { Compass } from "@aie-matrix/shared-types";
+import { access, readFile } from "node:fs/promises";
+import { basename, dirname, extname, join } from "node:path";
+import type { Compass, ItemDefinition, ItemSidecar } from "@aie-matrix/shared-types";
 import { COMPASS_DIRECTIONS } from "@aie-matrix/shared-types";
 import { getResolution, isValidCell, localIjToCell } from "h3-js";
 import { assignCompassToNeighbors } from "./hexCompass.js";
 import type { CellId, CellRecord, LoadedMap } from "./mapTypes.js";
-import { localIdFromGid, parseTsxTileset } from "./tilesetParser.js";
+import { localIdFromGid, parseTsxTileset, type ParsedTile } from "./tilesetParser.js";
 
 interface TmjProperty {
   name: string;
@@ -18,10 +18,55 @@ interface TmjTilesetRef {
   source: string;
 }
 
+/** Tiled tile layer slice read from `.tmj` (subset of Tiled JSON fields). */
 interface TmjLayer {
   data: number[];
   width: number;
   height: number;
+  name?: string;
+  /** Layer class (Tiled ≥1.9). Used to find navigable vs item layers — not the same as tile `type`. */
+  class?: string;
+  /** `"tilelayer"` when present; layers without `data` are ignored. */
+  type?: string;
+}
+
+/** Navigable hex grid — exactly one tile layer per map. */
+const LAYER_CLASS_LAYOUT = "layout";
+
+/** Startup items — zero or more tile layers; each non-empty cell appends one `itemRef` per painted item tile. */
+const LAYER_CLASS_ITEM_PLACEMENT = "item-placement";
+
+function isDataTileLayer(l: TmjLayer): boolean {
+  if (!Array.isArray(l.data) || l.data.length === 0) {
+    return false;
+  }
+  return l.type === undefined || l.type === "tilelayer";
+}
+
+function collectLayoutLayer(layers: TmjLayer[] | undefined, mapLabel: string): TmjLayer {
+  const found = (layers ?? []).filter((l) => l.class === LAYER_CLASS_LAYOUT && isDataTileLayer(l));
+  if (found.length === 0) {
+    throw new MapLoadError(
+      `${mapLabel}: no hex tile layer with Tiled class "${LAYER_CLASS_LAYOUT}" — set the navigable layer’s class in Tiled (Layer → Class)`,
+    );
+  }
+  if (found.length > 1) {
+    throw new MapLoadError(
+      `${mapLabel}: ${found.length} tile layers have class "${LAYER_CLASS_LAYOUT}"; exactly one navigable layout layer is required`,
+    );
+  }
+  return found[0]!;
+}
+
+/** All tile layers with class `item-placement`, in map layer order. */
+function collectItemPlacementLayers(layers: TmjLayer[] | undefined): TmjLayer[] {
+  const out: TmjLayer[] = [];
+  for (const l of layers ?? []) {
+    if (l.class === LAYER_CLASS_ITEM_PLACEMENT && isDataTileLayer(l)) {
+      out.push(l);
+    }
+  }
+  return out;
 }
 
 interface TmjMap {
@@ -81,11 +126,100 @@ function assertTiledPropertyType(
   }
 }
 
+async function loadItemSidecar(
+  tmAbsolutePath: string,
+  itemsPath: string | undefined,
+): Promise<Map<string, ItemDefinition>> {
+  let sidecarPath: string;
+  let explicitPath = false;
+
+  if (itemsPath) {
+    sidecarPath = itemsPath;
+    explicitPath = true;
+  } else {
+    const base = basename(tmAbsolutePath, extname(tmAbsolutePath));
+    sidecarPath = join(dirname(tmAbsolutePath), `${base}.items.json`);
+  }
+
+  try {
+    await access(sidecarPath);
+  } catch {
+    if (explicitPath) {
+      throw new MapLoadError(
+        `AIE_MATRIX_ITEMS points to "${sidecarPath}" which does not exist`,
+      );
+    }
+    return new Map();
+  }
+
+  const raw = await readFile(sidecarPath, "utf8");
+  let parsed: ItemSidecar;
+  try {
+    parsed = JSON.parse(raw) as ItemSidecar;
+  } catch {
+    throw new MapLoadError(`${basename(sidecarPath)}: invalid JSON in items sidecar`);
+  }
+
+  const result = new Map<string, ItemDefinition>();
+  for (const [ref, def] of Object.entries(parsed)) {
+    result.set(ref, def);
+  }
+  return result;
+}
+
+interface LoadedTilesetSlice {
+  firstgid: number;
+  sourcePath: string;
+  tiles: Map<number, ParsedTile>;
+}
+
+async function loadExternalTilesets(
+  mapDir: string,
+  refs: TmjTilesetRef[] | undefined,
+  mapLabel: string,
+): Promise<LoadedTilesetSlice[]> {
+  const filtered = (refs ?? []).filter((r) => typeof r.source === "string" && r.source.length > 0 && r.firstgid !== undefined);
+  if (filtered.length === 0) {
+    throw new MapLoadError(`${mapLabel} missing tileset reference`);
+  }
+  const sorted = [...filtered].sort((a, b) => a.firstgid - b.firstgid);
+  const out: LoadedTilesetSlice[] = [];
+  for (const ref of sorted) {
+    const tsxPath = join(mapDir, ref.source);
+    const xml = await readFile(tsxPath, "utf8");
+    out.push({ firstgid: ref.firstgid, sourcePath: tsxPath, tiles: parseTsxTileset(xml) });
+  }
+  return out;
+}
+
+/** Resolve global tile id to a parsed tile using Tiled `firstgid` ranges (ascending order). */
+function parsedTileForGid(tilesets: LoadedTilesetSlice[], gid: number): ParsedTile | undefined {
+  if (gid === 0) {
+    return undefined;
+  }
+  for (let i = tilesets.length - 1; i >= 0; i--) {
+    const ts = tilesets[i]!;
+    if (gid >= ts.firstgid) {
+      const localId = localIdFromGid(gid, ts.firstgid);
+      return ts.tiles.get(localId);
+    }
+  }
+  return undefined;
+}
+
 /**
- * Load a Tiled `.tmj` hex map + external `.tsx` tileset and derive a compass-labeled graph
- * keyed by H3 res-15 indices.
+ * Load a Tiled `.tmj` hex map + external `.tsx` tileset(s) and derive a compass-labeled graph
+ * keyed by H3 res-15 indices. Optionally loads an `*.items.json` sidecar.
+ *
+ * **Layers**: the navigable grid is the single tile layer with Tiled **layer class** `"layout"`.
+ * Zero or more tile layers with class `"item-placement"` (in file order) supply startup items.
+ * Each painted item tile’s **tile type** (`type` in `.tsx`) must equal an `itemRef` in the sidecar.
+ * Multiple `item-placement` layers and/or runtime mutations can stack several refs on one H3 cell.
  */
-export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
+export async function loadHexMap(
+  tmAbsolutePath: string,
+  options?: { itemsPath?: string },
+): Promise<LoadedMap> {
   const mapLabel = basename(tmAbsolutePath);
   const raw = await readFile(tmAbsolutePath, "utf8");
   let tmj: TmjMap;
@@ -95,12 +229,13 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
     throw new MapLoadError(`${mapLabel}: invalid JSON`);
   }
 
-  const layer = tmj.layers?.[0];
-  if (!layer?.data?.length) {
-    throw new MapLoadError(`${mapLabel} missing tile layer data`);
-  }
+  const itemSidecar = await loadItemSidecar(tmAbsolutePath, options?.itemsPath);
+
+  const layer = collectLayoutLayer(tmj.layers, mapLabel);
   if (layer.width !== tmj.width || layer.height !== tmj.height) {
-    throw new MapLoadError(`${mapLabel}: layer width/height mismatch with map dimensions`);
+    throw new MapLoadError(
+      `${mapLabel}: layout layer "${layer.name ?? "?"}" size ${layer.width}x${layer.height} must match map ${tmj.width}x${tmj.height}`,
+    );
   }
 
   assertTiledPropertyType(tmj.properties, "h3_anchor", "string", mapLabel);
@@ -133,13 +268,8 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
     );
   }
 
-  const tilesetRef = tmj.tilesets?.[0];
-  if (!tilesetRef?.source || tilesetRef.firstgid === undefined) {
-    throw new MapLoadError(`${mapLabel} missing tileset reference`);
-  }
-  const tsxPath = join(dirname(tmAbsolutePath), tilesetRef.source);
-  const tsxXml = await readFile(tsxPath, "utf8");
-  const tiles = parseTsxTileset(tsxXml);
+  const mapDir = dirname(tmAbsolutePath);
+  const tilesets = await loadExternalTilesets(mapDir, tmj.tilesets, mapLabel);
 
   const anchorH3 = anchorRaw;
 
@@ -149,6 +279,7 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
     gid: number;
     tileClass: string;
     h3Index: string;
+    capacity?: number;
   }[] = [];
 
   for (let row = 0; row < tmj.height; row++) {
@@ -157,11 +288,10 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
       if (gid === 0) {
         continue;
       }
-      const localId = localIdFromGid(gid, tilesetRef.firstgid);
-      const tile = tiles.get(localId);
+      const tile = parsedTileForGid(tilesets, gid);
       if (!tile?.tileClass) {
         throw new MapLoadError(
-          `${mapLabel}: missing tile class for gid ${gid} (local ${localId}) at col=${col} row=${row} — tileset ${tsxPath}`,
+          `${mapLabel}: missing tile class for gid ${gid} at col=${col} row=${row} — check external tilesets next to ${mapLabel}`,
         );
       }
       let h3Index: string;
@@ -171,7 +301,14 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
         const detail = e instanceof Error ? e.message : String(e);
         throw new MapLoadError(`${mapLabel}: localIjToCell failed at col=${col} row=${row}: ${detail}`);
       }
-      staged.push({ col, row, gid, tileClass: tile.tileClass, h3Index });
+
+      const capacityProp = tile.properties["capacity"];
+      const capacity =
+        capacityProp !== undefined && capacityProp !== ""
+          ? parseInt(capacityProp, 10)
+          : undefined;
+
+      staged.push({ col, row, gid, tileClass: tile.tileClass, h3Index, capacity });
     }
   }
 
@@ -194,13 +331,59 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
       }
     }
 
-    graph.set(s.h3Index, {
+    const cell: CellRecord = {
       col: s.col,
       row: s.row,
       h3Index: s.h3Index,
       tileClass: s.tileClass,
       neighbors,
-    });
+      initialItemRefs: [],
+    };
+    if (s.capacity !== undefined) {
+      cell.capacity = s.capacity;
+    }
+    graph.set(s.h3Index, cell);
+  }
+
+  const itemLayers = collectItemPlacementLayers(tmj.layers);
+  for (let li = 0; li < itemLayers.length; li++) {
+    const placementLayer = itemLayers[li]!;
+    if (placementLayer.width !== tmj.width || placementLayer.height !== tmj.height) {
+      throw new MapLoadError(
+        `${mapLabel}: layer "${placementLayer.name ?? `#${li + 1}`}" (class "${LAYER_CLASS_ITEM_PLACEMENT}") size ${placementLayer.width}x${placementLayer.height} must match map ${tmj.width}x${tmj.height}`,
+      );
+    }
+    for (let row = 0; row < tmj.height; row++) {
+      for (let col = 0; col < tmj.width; col++) {
+        const gid = gidAt(placementLayer, col, row);
+        if (gid === 0) {
+          continue;
+        }
+        const tile = parsedTileForGid(tilesets, gid);
+        if (!tile) {
+          continue;
+        }
+        const ref = tile.tileClass;
+        let h3Index: string;
+        try {
+          h3Index = localIjToCell(anchorH3, { i: col, j: row });
+        } catch {
+          continue;
+        }
+        const cell = graph.get(h3Index);
+        if (!cell) {
+          continue;
+        }
+        if (itemSidecar.has(ref)) {
+          cell.initialItemRefs.push(ref);
+        } else {
+          const layerLabel = placementLayer.name ?? `#${li + 1}`;
+          console.warn(
+            `${mapLabel}: layer "${layerLabel}" (class "${LAYER_CLASS_ITEM_PLACEMENT}") references itemRef "${ref}" which is not in the items sidecar — skipping`,
+          );
+        }
+      }
+    }
   }
 
   return {
@@ -208,5 +391,6 @@ export async function loadHexMap(tmAbsolutePath: string): Promise<LoadedMap> {
     height: tmj.height,
     anchorH3,
     cells: graph,
+    itemSidecar,
   };
 }

@@ -61,3 +61,22 @@ Axial neighbor deltas (apply in axial space, then convert back to offset):
 | `se`    | 0    | +1   |
 
 `server/colyseus` uses the same table (`COMPASS_AXIAL_DELTA`) so `exits`, `go`, and `look` stay aligned with the loaded graph.
+
+## World items
+
+World item definitions load from a `*.items.json` sidecar at startup and live in-memory in `ItemService` for the current PoC. Colyseus receives broadcast snapshots of per-tile items and ghost inventories through the world bridge.
+
+| Env | Values | Purpose |
+|-----|--------|---------|
+| `AIE_MATRIX_ITEMS` | Absolute path, repo-relative path, or unset | Override the `*.items.json` sidecar path. When unset, the loader falls back to `<map-dir>/<map-name>.items.json`. |
+
+### MCP item tools
+
+| Tool | Input | Success | Failure |
+|------|-------|---------|---------|
+| `inspect` | `{ itemRef }` | `{ ok: true, name, description? }` | `{ ok: false, code: "NOT_HERE" \| "NOT_FOUND", reason }` |
+| `take` | `{ itemRef }` | `{ ok: true, name }` | `{ ok: false, code: "NOT_CARRIABLE" \| "NOT_HERE" \| "NOT_FOUND" \| "RULESET_DENY", reason }` |
+| `drop` | `{ itemRef }` | `{ ok: true }` | `{ ok: false, code: "NOT_CARRYING" \| "TILE_FULL" \| "RULESET_DENY", reason }` |
+| `inventory` | _(none)_ | `{ ok: true, objects: [{ itemRef, name }] }` | Never fails |
+
+`look` is also extended: `TileInspectResult` always includes `objects: TileItemSummary[]` for the focal tile slice (empty when no items on that slice).

@@ -66,10 +66,22 @@ export {
   WorldApiMapIntegrity,
   WorldApiMovementBlocked,
   WorldApiNoPosition,
+  WorldApiItemNotCarriable,
+  WorldApiItemNotCarrying,
+  WorldApiItemNotFound,
+  WorldApiItemNotHere,
+  WorldApiTileFull,
   WorldApiUnknownCell,
   type WorldApiError,
 } from "./world-api-errors.js";
 export { handleGhostMcpEffect } from "./mcp-server.js";
+export {
+  ItemService,
+  ItemServiceImpl,
+  makeItemServiceLayer,
+  broadcastInitialItemState,
+  computeTileItemCost,
+} from "./ItemService.js";
 export {
   getRequestTraceId,
   runWithRequestTrace,

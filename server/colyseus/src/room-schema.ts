@@ -38,6 +38,31 @@ export class WorldSpectatorState extends Schema {
   @type({ map: "string" })
   declare ghostModes: MapSchema<string>;
 
+  /**
+   * h3Index → comma-separated itemRef list (IC-012).
+   * e.g. "key-brass,statue". Delete key when tile has no items.
+   */
+  @type({ map: "string" })
+  declare tileItemRefs: MapSchema<string>;
+
+  /**
+   * itemRef → short spectator glyph string (from `ItemDefinition.glyph` at map load; clipped server-side).
+   * Absent key means clients should fall back to showing the `itemRef` string.
+   */
+  @type({ map: "string" })
+  declare itemGlyphs: MapSchema<string>;
+
+  /**
+   * ghostId → comma-separated itemRef list (IC-012).
+   * Delete key when ghost carries nothing.
+   */
+  @type({ map: "string" })
+  declare ghostItemRefs: MapSchema<string>;
+
+  /** ghostId → short label of the last successful MCP tool (spectator debug HUD). */
+  @type({ map: "string" })
+  declare ghostLastActions: MapSchema<string>;
+
   constructor() {
     super();
     // Must assign after `super()` so @type accessors run (`$changes.setParent` / root `allChanges`).
@@ -47,6 +72,10 @@ export class WorldSpectatorState extends Schema {
     this.tileCoords = new MapSchema<TileCoord>();
     this.tileClasses = new MapSchema<string>();
     this.ghostModes = new MapSchema<string>();
+    this.tileItemRefs = new MapSchema<string>();
+    this.itemGlyphs = new MapSchema<string>();
+    this.ghostItemRefs = new MapSchema<string>();
+    this.ghostLastActions = new MapSchema<string>();
   }
 }
 

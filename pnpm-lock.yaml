@@ -54,6 +54,9 @@ importers:
       '@colyseus/schema':
         specifier: 2.0.35
         version: 2.0.35
+      '@fontsource/noto-color-emoji':
+        specifier: ^5.2.12
+        version: 5.2.12
       colyseus.js:
         specifier: 0.15.28
         version: 0.15.28
@@ -753,6 +756,9 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource/noto-color-emoji@5.2.12':
+    resolution: {integrity: sha512-UVOh4qxD/y42mcB4XvEdpV1WE01zn7O4+4tAWwzp5QAd4JY5jWPHu3/3T1kQoD04oYbQ5cJ9SI12IfcCKaS8aw==}
 
   '@gamestdio/clock@1.1.9':
     resolution: {integrity: sha512-O+PG3aRRytgX2BhAPMIhbM2ftq1Q8G4xUrYjEWYM6EmpoKn8oY4lXENGhpgfww6mQxHPbjfWyIAR6Xj3y1+avw==}
@@ -2445,6 +2451,8 @@ snapshots:
 
   '@esbuild/win32-x64@0.27.7':
     optional: true
+
+  '@fontsource/noto-color-emoji@5.2.12': {}
 
   '@gamestdio/clock@1.1.9': {}
 

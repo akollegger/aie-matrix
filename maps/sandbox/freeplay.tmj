@@ -1,54 +1,74 @@
-{ "compressionlevel":-1,
- "height":9,
- "properties":[
-        {
-         "name":"h3_anchor",
-         "type":"string",
-         "value":"8f2830828052d25"
-        },
-        {
-         "name":"h3_resolution",
-         "type":"int",
-         "value":15
-        }],
- "hexsidelength":16,
- "infinite":false,
- "layers":[
-        {
-         "data":[26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 29, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
-            26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26],
-         "height":9,
-         "id":1,
-         "name":"Tile Layer 1",
-         "opacity":1,
-         "type":"tilelayer",
-         "visible":true,
-         "width":13,
-         "x":0,
-         "y":0
-        }],
- "nextlayerid":2,
- "nextobjectid":1,
- "orientation":"hexagonal",
- "renderorder":"right-down",
- "staggeraxis":"x",
- "staggerindex":"odd",
- "tiledversion":"1.12.1",
- "tileheight":28,
- "tilesets":[
-        {
-         "firstgid":1,
-         "source":"color-set.tsx"
-        }],
- "tilewidth":32,
- "type":"map",
- "version":"1.10",
- "width":13
+{
+  "compressionlevel": -1,
+  "height": 9,
+  "properties": [
+    { "name": "h3_anchor", "type": "string", "value": "8f2830828052d25" },
+    { "name": "h3_resolution", "type": "int", "value": 15 }
+  ],
+  "hexsidelength": 16,
+  "infinite": false,
+  "layers": [
+    {
+      "class": "layout",
+      "data": [
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 29, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26,
+        26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26
+      ],
+      "height": 9,
+      "id": 1,
+      "name": "Tile Layer 1",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 13,
+      "x": 0,
+      "y": 0
+    },
+    {
+      "class": "item-placement",
+      "data": [
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 51, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33,
+        33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33, 33
+      ],
+      "height": 9,
+      "id": 2,
+      "name": "item-placement",
+      "opacity": 1,
+      "type": "tilelayer",
+      "visible": true,
+      "width": 13,
+      "x": 0,
+      "y": 0
+    }
+  ],
+  "nextlayerid": 3,
+  "nextobjectid": 1,
+  "orientation": "hexagonal",
+  "renderorder": "right-down",
+  "staggeraxis": "x",
+  "staggerindex": "odd",
+  "tiledversion": "1.12.1",
+  "tileheight": 28,
+  "tilesets": [
+    { "firstgid": 1, "source": "color-set.tsx" },
+    { "firstgid": 33, "source": "common-item-set.tsx" }
+  ],
+  "tilewidth": 32,
+  "type": "map",
+  "version": "1.10",
+  "width": 13
 }

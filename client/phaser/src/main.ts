@@ -1,3 +1,4 @@
+import "@fontsource/noto-color-emoji";
 import Phaser from "phaser";
 import { Client, MatchMakeError, type Room } from "colyseus.js";
 import { WorldSpectatorState } from "@aie-matrix/server-colyseus/room-schema";
@@ -8,9 +9,9 @@ import { WorldScene } from "./scenes/WorldScene.js";
  * Map/tile assets are copied into `public/maps` (see `scripts/copy-map-assets.mjs` + `predev` / `prebuild`)
  * and loaded from the same origin as the page (`import.meta.env.BASE_URL`).
  *
- * In Vite dev, `/spectator` is proxied to the game server (see `vite.config.ts`). Colyseus must use
- * the same origin as that proxy (`VITE_SERVER_HTTP`, then `VITE_DEV_PROXY_TARGET`, else :8787).
- * `VITE_SERVER_WS` overrides the WebSocket URL when set.
+ * In Vite dev, spectator + matchmake + threads + Colyseus room WebSockets are proxied (see
+ * `vite.config.ts`). `urlBuilder` rewrites matchmake and WS URLs to the page origin so the browser
+ * only talks to the Vite port (needed when the game server port is not reachable from the browser).
  */
 const assetBaseUrl = import.meta.env.BASE_URL.replace(/\/$/, "");
 
@@ -26,13 +27,41 @@ const backendHttp = (
 ).replace(/\/$/, "");
 const wsUrl = (import.meta.env.VITE_SERVER_WS ?? backendHttp.replace(/^http/, "ws")) as string;
 
+/**
+ * Colyseus HTTP uses `withCredentials` on matchmake calls. In Vite dev, route matchmake + WS through
+ * the dev origin so requests stay same-origin and can use the dev-server proxy (`ws: true` for rooms).
+ * Skip WS rewriting when `VITE_SERVER_WS` is set — that URL is intentional (custom host/tunnel).
+ */
+function colyseusBrowserDevUrlBuilder(): ((url: URL) => string) | undefined {
+  if (!import.meta.env.DEV || typeof window === "undefined") {
+    return undefined;
+  }
+  const wsManual =
+    typeof import.meta.env.VITE_SERVER_WS === "string" &&
+    import.meta.env.VITE_SERVER_WS.length > 0;
+  return (url: URL) => {
+    if (url.pathname.includes("/matchmake")) {
+      return `${window.location.origin}${url.pathname}${url.search}`;
+    }
+    if (
+      !wsManual &&
+      (url.protocol === "ws:" || url.protocol === "wss:")
+    ) {
+      const wsProto = window.location.protocol === "https:" ? "wss:" : "ws:";
+      return `${wsProto}//${window.location.host}${url.pathname}${url.search}`;
+    }
+    return url.href;
+  };
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /** Refetch room id + join; retries when the game server just restarted (stale id) or matchmaker races. */
 async function joinSpectatorWithRetry(): Promise<Room<WorldSpectatorState>> {
-  const client = new Client(wsUrl);
+  const urlBuilder = colyseusBrowserDevUrlBuilder();
+  const client = new Client(wsUrl, urlBuilder ? { urlBuilder } : undefined);
   const maxAttempts = 5;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const meta = await fetch(`${serverHttp}/spectator/room`);

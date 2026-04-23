@@ -3,8 +3,12 @@
  * One-terminal PoC: combined server → Vite spectator → random-house.
  * Ctrl+C stops all child processes.
  *
- * Extra args after `--` are forwarded to `ghost-random-house start`, e.g.:
- *   pnpm run demo -- --ghosts 2
+ * Extra args after `pnpm run demo -- …` are forwarded to the random-house script
+ * (same flags as `pnpm --filter @aie-matrix/ghost-random-house start --help`).
+ * Do not insert an extra `--` before those flags: pnpm already passes options through
+ * as `node dist/index.js <flags>` when using `pnpm … start <flags>`.
+ *
+ * Example: `pnpm run demo -- --ghosts 2`
  */
 import { execSync, spawn } from "node:child_process";
 import path from "node:path";
@@ -96,10 +100,7 @@ try {
     env: { ...process.env },
   });
   const ghostExtra = process.argv.slice(2);
-  const ghostStart = ["--filter", "@aie-matrix/ghost-random-house", "start"];
-  if (ghostExtra.length > 0) {
-    ghostStart.push("--", ...ghostExtra);
-  }
+  const ghostStart = ["--filter", "@aie-matrix/ghost-random-house", "start", ...ghostExtra];
   start("ghost", "pnpm", ghostStart);
 
   console.info(

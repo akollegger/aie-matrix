@@ -7,6 +7,7 @@ import { authoredRuleset, permissiveRuleset } from "./rules/movement-rules-servi
 import { parseGramRulesFile } from "./rules/gram-rules.js";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ItemServiceOps } from "./ItemService.js";
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "rules", "fixtures");
 
@@ -18,9 +19,10 @@ function redBlueMap(): LoadedMap {
     height: 1,
     anchorH3: "test-anchor",
     cells: new Map([
-      [r, { col: 0, row: 0, h3Index: r, tileClass: "Red", neighbors: { ne: b } }],
-      [b, { col: 1, row: 0, h3Index: b, tileClass: "Blue", neighbors: { sw: r } }],
+      [r, { col: 0, row: 0, h3Index: r, tileClass: "Red", initialItemRefs: [], neighbors: { ne: b } }],
+      [b, { col: 1, row: 0, h3Index: b, tileClass: "Blue", initialItemRefs: [], neighbors: { sw: r } }],
     ]),
+    itemSidecar: new Map(),
   };
 }
 
@@ -59,6 +61,30 @@ describe("evaluateGo with authored rules", () => {
     assert.equal(out.ok, true);
     if (out.ok) {
       assert.equal(out.tileId, makeCellId(1, 0));
+    }
+  });
+
+  it("blocks movement when destination capacity is consumed by items", () => {
+    const map = redBlueMap();
+    const dest = makeCellId(1, 0);
+    const destCell = map.cells.get(dest);
+    assert.ok(destCell);
+    destCell.capacity = 1;
+    const itemService: ItemServiceOps = {
+      getItemsOnTile: (h3Index) => (h3Index === dest ? ["statue"] : []),
+      getGhostInventory: () => [],
+      inspectItem: () => Effect.die("not used"),
+      takeItem: () => Effect.die("not used"),
+      dropItem: () => Effect.die("not used"),
+      getSidecar: () => new Map([["statue", { name: "Statue", itemClass: "Obstacle", carriable: false, capacityCost: 1 }]]),
+    };
+    const out = evaluateGo(map, makeCellId(0, 0), "ne", permissiveRuleset(), { ghostLabels: new Set() }, {
+      destGhostCount: 0,
+      itemService,
+    });
+    assert.equal(out.ok, false);
+    if (!out.ok) {
+      assert.equal(out.code, "TILE_FULL");
     }
   });
 });

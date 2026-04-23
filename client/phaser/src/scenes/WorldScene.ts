@@ -3,6 +3,7 @@ import type { Room } from "colyseus.js";
 import type { WorldSpectatorState } from "@aie-matrix/server-colyseus/room-schema";
 import { cellTopLeft } from "../hexLayout.js";
 import { SpectatorDebugHud } from "../spectatorDebug.js";
+import { TileItemMarkers } from "../tileItemMarkers.js";
 import { SpectatorView } from "./SpectatorView.js";
 
 interface TmjLayer {
@@ -36,6 +37,7 @@ export class WorldScene extends Phaser.Scene {
   private assetBaseUrl!: string;
   private spectatorDebug = false;
   private spectator?: SpectatorView;
+  private tileItems?: TileItemMarkers;
   private debugHud?: SpectatorDebugHud;
 
   constructor() {
@@ -94,6 +96,7 @@ export class WorldScene extends Phaser.Scene {
     }
 
     this.spectator = new SpectatorView(this, this.room, tw, th, this.spectatorDebug);
+    this.tileItems = new TileItemMarkers(this, this.room, tw, th);
 
     if (this.spectatorDebug && typeof window !== "undefined") {
       const spectator = this.spectator;
@@ -112,6 +115,8 @@ export class WorldScene extends Phaser.Scene {
     }
     this.debugHud?.destroy();
     this.debugHud = undefined;
+    this.tileItems?.destroy();
+    this.tileItems = undefined;
     this.spectator?.destroy();
     this.spectator = undefined;
   }

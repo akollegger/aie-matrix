@@ -3,6 +3,7 @@ import type { Compass, GoFailure, GoSuccess, TraverseFailure, TraverseSuccess } 
 import { goStepPermittedByRules } from "./rules/match-go.js";
 import type { ParsedRuleset } from "./rules/movement-rules-service.js";
 import { tileLabelsFromClass } from "./rules/tile-labels.js";
+import { computeTileItemCost, type ItemServiceOps } from "./ItemService.js";
 
 export interface GhostMoveContext {
   /** Labels or roles used by `ghostClass` constraints on `GO` edges; may be empty. */
@@ -19,7 +20,8 @@ export function resolveNeighbor(
 }
 
 /**
- * Evaluate an adjacent `go` step: geometry first, then rules (allow-list when authored).
+ * Evaluate an adjacent `go` step: geometry first, then rules (allow-list when authored),
+ * then capacity (ghost count + object costs must not exceed tile.capacity).
  */
 export function evaluateGo(
   map: LoadedMap,
@@ -27,6 +29,11 @@ export function evaluateGo(
   toward: Compass,
   rules: ParsedRuleset,
   ghostContext: GhostMoveContext = { ghostLabels: new Set() },
+  options?: {
+    /** Current ghost count on the destination tile (excluding the moving ghost). */
+    destGhostCount?: number;
+    itemService?: ItemServiceOps;
+  },
 ): GoSuccess | GoFailure {
   const cell = map.cells.get(fromCell);
   if (!cell) {
@@ -39,6 +46,14 @@ export function evaluateGo(
   const destRecord = map.cells.get(dest);
   if (!destRecord) {
     return { ok: false, reason: "Neighbor cell missing from map graph", code: "MAP_INTEGRITY" };
+  }
+
+  if (destRecord.capacity !== undefined && options?.itemService) {
+    const ghostCount = options.destGhostCount ?? 0;
+    const itemCost = computeTileItemCost(dest, options.itemService);
+    if (ghostCount + itemCost + 1 > destRecord.capacity) {
+      return { ok: false, reason: "Destination tile is at full capacity", code: "TILE_FULL" };
+    }
   }
 
   if (rules.mode === "permissive") {

@@ -1,12 +1,42 @@
 import { join } from "node:path";
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Room } from "@colyseus/core";
+import type { ItemDefinition } from "@aie-matrix/shared-types";
 import type { LoadedMap } from "./mapTypes.js";
 import { loadHexMap } from "./mapLoader.js";
 import { TileCoord, WorldSpectatorState } from "./room-schema.js";
 
 export interface MatrixRoomOptions {
   mapPath?: string;
+  itemsPath?: string;
+}
+
+/** Max UTF-16 code units stored per `ItemDefinition.glyph` in `WorldSpectatorState.itemGlyphs`. */
+const MAX_ITEM_GLYPH_UTF16 = 8;
+
+function clipGlyphForSpectator(raw: string): string {
+  const t = raw.trim();
+  if (t.length <= MAX_ITEM_GLYPH_UTF16) {
+    return t;
+  }
+  return t.slice(0, MAX_ITEM_GLYPH_UTF16);
+}
+
+function seedItemGlyphsFromSidecar(
+  sidecar: Map<string, ItemDefinition>,
+  emit: (itemRef: string, glyph: string) => void,
+): void {
+  for (const [ref, def] of sidecar) {
+    const g = def.glyph;
+    if (typeof g !== "string") {
+      continue;
+    }
+    const clipped = clipGlyphForSpectator(g);
+    if (clipped.length === 0) {
+      continue;
+    }
+    emit(ref, clipped);
+  }
 }
 
 export class MatrixRoom extends Room<WorldSpectatorState> {
@@ -26,13 +56,17 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
       options.mapPath ??
       process.env.AIE_MATRIX_MAP ??
       join(process.cwd(), "maps/sandbox/freeplay.tmj");
-    this.loadedMap = await loadHexMap(mapPath);
+    const itemsPath = options.itemsPath ?? process.env.AIE_MATRIX_ITEMS;
+    this.loadedMap = await loadHexMap(mapPath, { itemsPath });
     this.setState(new WorldSpectatorState());
     for (const [cellId, rec] of this.loadedMap.cells) {
       const tc = new TileCoord(rec.col, rec.row);
       this.state.tileCoords.set(cellId, tc);
       this.state.tileClasses.set(cellId, rec.tileClass);
     }
+    seedItemGlyphsFromSidecar(this.loadedMap.itemSidecar, (ref, glyph) => {
+      this.state.itemGlyphs.set(ref, glyph);
+    });
   }
 
   /** Broadcast a lightweight patch envelope (optional for non-schema listeners). */
@@ -88,5 +122,33 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     const gid = String(ghostId).trim();
     const mode = this.state.ghostModes.get(gid);
     return mode === "conversational" ? "conversational" : "normal";
+  }
+
+  setTileItems(h3Index: string, itemRefs: string[]): void {
+    if (itemRefs.length === 0) {
+      this.state.tileItemRefs.delete(h3Index);
+    } else {
+      this.state.tileItemRefs.set(h3Index, itemRefs.join(","));
+    }
+  }
+
+  setGhostInventory(ghostId: string, itemRefs: string[]): void {
+    const gid = String(ghostId).trim();
+    if (itemRefs.length === 0) {
+      this.state.ghostItemRefs.delete(gid);
+    } else {
+      this.state.ghostItemRefs.set(gid, itemRefs.join(","));
+    }
+  }
+
+  setGhostLastAction(ghostId: string, label: string): void {
+    const gid = String(ghostId).trim();
+    const text = String(label).trim();
+    if (text === "") {
+      this.state.ghostLastActions.delete(gid);
+      return;
+    }
+    const clipped = text.length > 200 ? `${text.slice(0, 197)}…` : text;
+    this.state.ghostLastActions.set(gid, clipped);
   }
 }

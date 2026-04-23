@@ -35,8 +35,19 @@ export default defineConfig(({ mode }) => {
         allow: [path.resolve(__dirname, "../..")],
       },
       proxy: {
-        // Same-origin in dev → avoids browser CORS on Colyseus matchmake when needed.
+        // Same-origin in dev → credentialed Colyseus matchmake + WS through one browser-reachable port.
         "/spectator": { target: gameServer, changeOrigin: true },
+        "/matchmake": { target: gameServer, changeOrigin: true },
+        "/threads": { target: gameServer, changeOrigin: true },
+        /**
+         * Colyseus room sockets: `ws(s)://…/{processId}/{roomId}?…` (nanoid segments — no dots).
+         * Exclude `/maps/*`, `/src/*`, Vite internals so static/module paths are not proxied.
+         */
+        "^/(?!maps/|src/|@vite/|node_modules/)[A-Za-z0-9_-]+/[A-Za-z0-9_-]+(\\?.*)?$": {
+          target: gameServer,
+          changeOrigin: true,
+          ws: true,
+        },
       },
     },
     build: {
