@@ -108,4 +108,15 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
       this.state.ghostItemRefs.set(gid, itemRefs.join(","));
     }
   }
+
+  setGhostLastAction(ghostId: string, label: string): void {
+    const gid = String(ghostId).trim();
+    const text = String(label).trim();
+    if (text === "") {
+      this.state.ghostLastActions.delete(gid);
+      return;
+    }
+    const clipped = text.length > 200 ? `${text.slice(0, 197)}…` : text;
+    this.state.ghostLastActions.set(gid, clipped);
+  }
 }

@@ -52,6 +52,10 @@ export class WorldSpectatorState extends Schema {
   @type({ map: "string" })
   declare ghostItemRefs: MapSchema<string>;
 
+  /** ghostId → short label of the last successful MCP tool (spectator debug HUD). */
+  @type({ map: "string" })
+  declare ghostLastActions: MapSchema<string>;
+
   constructor() {
     super();
     // Must assign after `super()` so @type accessors run (`$changes.setParent` / root `allChanges`).
@@ -63,6 +67,7 @@ export class WorldSpectatorState extends Schema {
     this.ghostModes = new MapSchema<string>();
     this.tileItemRefs = new MapSchema<string>();
     this.ghostItemRefs = new MapSchema<string>();
+    this.ghostLastActions = new MapSchema<string>();
   }
 }
 

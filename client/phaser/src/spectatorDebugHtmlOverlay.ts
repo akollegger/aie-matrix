@@ -2,7 +2,7 @@ import type { SpectatorDebugLogRing } from "./spectatorDebugTelemetry.js";
 import type { StoragePanelOptions } from "./spectatorDebugStoragePanel.js";
 import { buildStoragePanel } from "./spectatorDebugStoragePanel.js";
 
-type TabId = "state" | "log" | "storage";
+type TabId = "state" | "world" | "log" | "conversations";
 
 interface TabDef {
   id: TabId;
@@ -77,7 +77,7 @@ const css = `
 `;
 
 /**
- * Fixed HTML overlay (State / Log / Storage tabs). Attached under `document.body` with `position: fixed`.
+ * Fixed HTML overlay (State / World / Log / Conversations tabs). Attached under `document.body` with `position: fixed`.
  */
 export class SpectatorDebugHtmlOverlay {
   private readonly shadow: ShadowRoot;
@@ -88,6 +88,7 @@ export class SpectatorDebugHtmlOverlay {
   constructor(
     private readonly logRing: SpectatorDebugLogRing,
     private readonly getStateText: () => string,
+    private readonly getWorldText: () => string,
     storageOptions: StoragePanelOptions,
   ) {
     const root = document.createElement("div");
@@ -110,18 +111,24 @@ export class SpectatorDebugHtmlOverlay {
     statePre.className = "panel";
     statePre.setAttribute("role", "tabpanel");
 
+    // --- World panel ---
+    const worldPre = document.createElement("pre");
+    worldPre.className = "panel";
+    worldPre.setAttribute("role", "tabpanel");
+
     // --- Log panel ---
     const logPre = document.createElement("pre");
     logPre.className = "panel";
     logPre.setAttribute("role", "tabpanel");
 
-    // --- Storage panel ---
+    // --- Conversations panel (thread fetch) ---
     const { el: storageEl, refresh: refreshStorage, destroy: destroyStorage } = buildStoragePanel(storageOptions);
     storageEl.className = "panel";
     storageEl.dataset.layout = "flex";
     storageEl.setAttribute("role", "tabpanel");
 
     const refreshState = () => { statePre.textContent = this.getStateText(); };
+    const refreshWorld = () => { worldPre.textContent = this.getWorldText(); };
     const refreshLog = () => {
       logPre.textContent = this.logRing.snapshot().join("\n");
       logPre.scrollTop = logPre.scrollHeight;
@@ -129,9 +136,10 @@ export class SpectatorDebugHtmlOverlay {
 
     this.tabs = [
       { id: "state", label: "State", panel: statePre, onActivate: refreshState },
+      { id: "world", label: "World", panel: worldPre, onActivate: refreshWorld },
       { id: "log", label: "Log", panel: logPre, onActivate: refreshLog },
       {
-        id: "storage", label: "Storage", panel: storageEl,
+        id: "conversations", label: "Conversations", panel: storageEl,
         onActivate: refreshStorage,
         onDeactivate: destroyStorage,
       },
@@ -158,6 +166,7 @@ export class SpectatorDebugHtmlOverlay {
     document.body.appendChild(root);
 
     refreshState();
+    refreshWorld();
     refreshLog();
 
     this.unsubLog = this.logRing.subscribe(() => {
@@ -183,8 +192,8 @@ export class SpectatorDebugHtmlOverlay {
   }
 
   refreshState(): void {
-    if (this.active === "state") {
-      const def = this.tabs.find((t) => t.id === "state");
+    if (this.active === "state" || this.active === "world") {
+      const def = this.tabs.find((t) => t.id === this.active);
       def?.onActivate();
     }
   }
@@ -198,7 +207,7 @@ export class SpectatorDebugHtmlOverlay {
     this.unsubLog?.();
     this.unsubLog = undefined;
     // Stop storage polling if active
-    const storageDef = this.tabs.find((t) => t.id === "storage");
+    const storageDef = this.tabs.find((t) => t.id === "conversations");
     storageDef?.onDeactivate?.();
     this.shadow.host.remove();
   }

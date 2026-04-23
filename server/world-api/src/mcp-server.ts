@@ -5,7 +5,7 @@ import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/proto
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
-import { Cause, Effect, Exit, Layer, Option } from "effect";
+import { Cause, Effect, Exit, Layer, Option, pipe } from "effect";
 import { z } from "zod";
 import {
   COMPASS_DIRECTIONS,
@@ -24,6 +24,7 @@ import {
 import { ConversationGhostNoPosition, ConversationService } from "@aie-matrix/server-conversation";
 import {
   authenticateGhostRequestEffect,
+  ghostIdsFromAuth,
   ghostIdsFromAuthEffect,
 } from "./auth-context.js";
 import type { AuthError } from "./auth-errors.js";
@@ -60,6 +61,74 @@ type ToolServices =
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
+}
+
+function formatGhostLastAction(toolName: string, input: unknown): string {
+  if (input == null) {
+    return toolName;
+  }
+  if (typeof input !== "object" || Array.isArray(input)) {
+    const s = JSON.stringify(input);
+    return s.length > 120 ? `${toolName} ${s.slice(0, 117)}…` : `${toolName} ${s}`;
+  }
+  const keys = Object.keys(input as object);
+  if (keys.length === 0) {
+    return toolName;
+  }
+  const o = input as Record<string, unknown>;
+  if (toolName === "say" && typeof o.content === "string") {
+    const c = o.content.length > 48 ? `${o.content.slice(0, 45)}…` : o.content;
+    return `say ${JSON.stringify(c)}`;
+  }
+  if (typeof o.toward === "string") {
+    return `go ${o.toward}`;
+  }
+  if (typeof o.via === "string") {
+    const v = o.via.length > 64 ? `${o.via.slice(0, 61)}…` : o.via;
+    return `traverse ${JSON.stringify(v)}`;
+  }
+  if (typeof o.at === "string") {
+    return `look ${o.at}`;
+  }
+  if (typeof o.itemRef === "string") {
+    const ir = o.itemRef.length > 64 ? `${o.itemRef.slice(0, 61)}…` : o.itemRef;
+    if (toolName === "inspect") {
+      return `inspect ${ir}`;
+    }
+    if (toolName === "take") {
+      return `take ${ir}`;
+    }
+    if (toolName === "drop") {
+      return `drop ${ir}`;
+    }
+  }
+  const s = JSON.stringify(input);
+  return s.length > 120 ? `${toolName} ${s.slice(0, 117)}…` : `${toolName} ${s}`;
+}
+
+function recordGhostLastActionAfterSuccess(
+  servicesLayer: Layer.Layer<ToolServices>,
+  extra: McpToolExtra,
+  toolName: string,
+  input: unknown,
+): void {
+  if (!extra.authInfo) {
+    return;
+  }
+  try {
+    const { ghostId } = ghostIdsFromAuth(extra.authInfo);
+    Effect.runSync(
+      pipe(
+        Effect.gen(function* () {
+          const bridge = yield* WorldBridgeService;
+          bridge.setGhostLastAction(ghostId, formatGhostLastAction(toolName, input));
+        }),
+        Effect.provide(servicesLayer),
+      ),
+    );
+  } catch {
+    // Malformed auth — skip spectator last-action update.
+  }
 }
 
 function logMcpBridgeOp(
@@ -621,6 +690,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     toolName: string,
     input: unknown,
     eff: Effect.Effect<A, AuthError | WorldApiError, ToolServices>,
+    extra: McpToolExtra,
   ): Promise<CallToolResult> =>
     Effect.runPromise(
       Effect.gen(function* () {
@@ -669,6 +739,9 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
             });
           },
         });
+        if (Exit.isSuccess(exit)) {
+          recordGhostLastActionAfterSuccess(servicesLayer, extra, toolName, input);
+        }
         return effectExitToCallToolResult(exit);
       }),
     );
@@ -683,7 +756,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     {
       description: "Who am I? Resolve this ghost's id and caretaker for the current session.",
     },
-    async (extra) => runTool("whoami", {}, whoamiEffect(extra)),
+    async (extra) => runTool("whoami", {}, whoamiEffect(extra), extra),
   );
 
   server.registerTool(
@@ -691,7 +764,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     {
       description: "Where am I standing? Returns the occupied tile id and map coordinates.",
     },
-    async (extra) => runTool("whereami", {}, whereamiEffect(extra)),
+    async (extra) => runTool("whereami", {}, whereamiEffect(extra), extra),
   );
 
   server.registerTool(
@@ -703,7 +776,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         at: lookAtSchema.optional().describe("Where to look: here (default), around, or a compass face."),
       },
     },
-    async ({ at }, extra) => runTool("look", { at }, lookEffect(at, extra)),
+    async ({ at }, extra) => runTool("look", { at }, lookEffect(at, extra), extra),
   );
 
   server.registerTool(
@@ -712,7 +785,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       description:
         "List exits from your current tile — compass neighbors (H3 ids) plus named non-adjacent exits (elevators, portals) when configured.",
     },
-    async (extra) => runTool("exits", {}, exitsEffect(extra)),
+    async (extra) => runTool("exits", {}, exitsEffect(extra), extra),
   );
 
   server.registerTool(
@@ -724,7 +797,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         via: z.string().describe("Exit name as returned by exits (e.g. tck-elevator, pentagon-2)."),
       },
     },
-    async ({ via }, extra) => runTool("traverse", { via }, traverseEffect(via, extra)),
+    async ({ via }, extra) => runTool("traverse", { via }, traverseEffect(via, extra), extra),
   );
 
   server.registerTool(
@@ -736,7 +809,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         toward: compassEnum.describe("Which face to step through from your current cell."),
       },
     },
-    async ({ toward }, extra) => runTool("go", { toward }, goEffect(toward, extra)),
+    async ({ toward }, extra) => runTool("go", { toward }, goEffect(toward, extra), extra),
   );
 
   server.registerTool(
@@ -752,7 +825,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
           .describe("The message text to broadcast."),
       },
     },
-    async ({ content }, extra) => runTool("say", { content }, sayEffect(content, extra)),
+    async ({ content }, extra) => runTool("say", { content }, sayEffect(content, extra), extra),
   );
 
   server.registerTool(
@@ -761,7 +834,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       description:
         "End the conversation and return to normal mode, re-enabling movement. No-op if already in normal mode.",
     },
-    async (extra) => runTool("bye", {}, byeEffect(extra)),
+    async (extra) => runTool("bye", {}, byeEffect(extra), extra),
   );
 
   server.registerTool(
@@ -770,7 +843,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       description:
         "Return and drain all pending message.new notifications for this ghost. Call periodically to discover messages sent by nearby ghosts.",
     },
-    async (extra) => runTool("inbox", {}, inboxEffect(extra)),
+    async (extra) => runTool("inbox", {}, inboxEffect(extra), extra),
   );
 
   server.registerTool(
@@ -781,7 +854,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         itemRef: z.string().describe("The itemRef to inspect on your current tile."),
       },
     },
-    async ({ itemRef }, extra) => runTool("inspect", { itemRef }, inspectEffect(itemRef, extra)),
+    async ({ itemRef }, extra) => runTool("inspect", { itemRef }, inspectEffect(itemRef, extra), extra),
   );
 
   server.registerTool(
@@ -792,7 +865,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         itemRef: z.string().describe("The itemRef to take from your current tile."),
       },
     },
-    async ({ itemRef }, extra) => runTool("take", { itemRef }, takeEffect(itemRef, extra)),
+    async ({ itemRef }, extra) => runTool("take", { itemRef }, takeEffect(itemRef, extra), extra),
   );
 
   server.registerTool(
@@ -803,7 +876,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         itemRef: z.string().describe("The itemRef to drop from your inventory."),
       },
     },
-    async ({ itemRef }, extra) => runTool("drop", { itemRef }, dropEffect(itemRef, extra)),
+    async ({ itemRef }, extra) => runTool("drop", { itemRef }, dropEffect(itemRef, extra), extra),
   );
 
   server.registerTool(
@@ -811,7 +884,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     {
       description: "List the items you are currently carrying. Always succeeds, even when empty.",
     },
-    async (extra) => runTool("inventory", {}, inventoryEffect(extra)),
+    async (extra) => runTool("inventory", {}, inventoryEffect(extra), extra),
   );
 
   return server;

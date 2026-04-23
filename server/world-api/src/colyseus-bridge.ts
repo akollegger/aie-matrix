@@ -15,6 +15,8 @@ export interface ColyseusWorldBridge {
   setTileItems(h3Index: string, itemRefs: string[]): void;
   /** Replace the carried item list for a ghost. Pass empty array to clear (IC-012). */
   setGhostInventory(ghostId: string, itemRefs: string[]): void;
+  /** Spectator debug: last successful MCP tool label for this ghost. */
+  setGhostLastAction(ghostId: string, label: string): void;
 }
 
 export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
@@ -27,5 +29,6 @@ export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
     getGhostMode: (ghostId) => room.getGhostMode(ghostId),
     setTileItems: (h3Index, itemRefs) => room.setTileItems(h3Index, itemRefs),
     setGhostInventory: (ghostId, itemRefs) => room.setGhostInventory(ghostId, itemRefs),
+    setGhostLastAction: (ghostId, label) => room.setGhostLastAction(ghostId, label),
   };
 }

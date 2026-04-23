@@ -215,6 +215,8 @@ async function main(): Promise<void> {
       colyseusBridge.setTileItems(h3Index, itemRefs),
     setGhostInventory: (ghostId: string, itemRefs: string[]) =>
       colyseusBridge.setGhostInventory(ghostId, itemRefs),
+    setGhostLastAction: (ghostId: string, label: string) =>
+      colyseusBridge.setGhostLastAction(ghostId, label),
   };
 
   let neoDriver = createNeo4jDriverFromEnv() ?? null;

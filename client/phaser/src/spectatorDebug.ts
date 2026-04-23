@@ -32,25 +32,60 @@ function ghostsAtTile(room: Room<WorldSpectatorState>, tileId: string): string[]
   return ids;
 }
 
-export function formatStateSnapshot(room: Room<WorldSpectatorState>): string {
+/** Count itemRef tokens stored as comma-separated lists in a Colyseus string map. */
+function commaListItemCount(map: { forEach: (cb: (v: string) => void) => void; readonly size: number }): number {
+  let n = 0;
+  map.forEach((csv) => {
+    n += csv.split(",").map((s) => s.trim()).filter(Boolean).length;
+  });
+  return n;
+}
+
+function ghostInventoryLine(room: Room<WorldSpectatorState>, ghostId: string): string {
+  const raw = room.state.ghostItemRefs.get(ghostId);
+  if (!raw) {
+    return "(empty)";
+  }
+  const refs = raw.split(",").map((s) => s.trim()).filter(Boolean);
+  return refs.length ? refs.join(", ") : "(empty)";
+}
+
+function ghostLastActionLine(room: Room<WorldSpectatorState>, ghostId: string): string {
+  return room.state.ghostLastActions.get(ghostId) ?? "—";
+}
+
+export function formatWorldSnapshot(room: Room<WorldSpectatorState>): string {
   const lines: string[] = [];
   lines.push(`ghostTiles.size = ${room.state.ghostTiles.size}`);
   lines.push(`tileCoords.size = ${room.state.tileCoords.size}`);
   lines.push(`tileClasses.size = ${room.state.tileClasses.size}`);
+  lines.push(`tileItemRefs.entries = ${room.state.tileItemRefs.size}`);
+  lines.push(`tileItemRefs.itemCount = ${commaListItemCount(room.state.tileItemRefs)}`);
+  lines.push(`ghostItemRefs.entries = ${room.state.ghostItemRefs.size}`);
+  lines.push(`ghostItemRefs.itemCount = ${commaListItemCount(room.state.ghostItemRefs)}`);
+  return lines.join("\n");
+}
+
+export function formatStateSnapshot(room: Room<WorldSpectatorState>): string {
+  const lines: string[] = [];
   lines.push(`ghostModes.size = ${room.state.ghostModes.size}`);
   room.state.ghostTiles.forEach((tileId, ghostId) => {
     const c = room.state.tileCoords.get(tileId);
     const cls = room.state.tileClasses.get(tileId);
     const mode = room.state.ghostModes.get(ghostId) ?? "normal";
+    const inv = ghostInventoryLine(room, ghostId);
+    const last = ghostLastActionLine(room, ghostId);
     lines.push(
       `  ${ghostId} → tile "${tileId}"  coord=${c ? `${c.col},${c.row}` : "MISSING"}  class=${cls ?? "?"}  mode=${mode}`,
     );
+    lines.push(`    inventory: ${inv}`);
+    lines.push(`    last action: ${last}`);
   });
   return lines.join("\n");
 }
 
 /**
- * HTML overlay (State / Log tabs) + Phaser hover tooltip.
+ * HTML overlay (State / World / Log / Conversations) + Phaser hover tooltip.
  * Enable with `?debug=1` or `VITE_SPECTATOR_DEBUG=true`.
  *
  * Log tab: last 100 lines from `console.*` (after install) plus Effect logs routed through
@@ -72,7 +107,8 @@ export class SpectatorDebugHud {
     this.logRing = new SpectatorDebugLogRing();
     this.overlay = new SpectatorDebugHtmlOverlay(
       this.logRing,
-      () => `[spectator debug]\n${formatStateSnapshot(this.room)}`,
+      () => formatStateSnapshot(this.room),
+      () => formatWorldSnapshot(this.room),
       {
         serverBase:
           (import.meta.env.VITE_SERVER_HTTP as string | undefined)?.replace(/\/$/, "") ??
