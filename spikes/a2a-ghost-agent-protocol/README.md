@@ -25,4 +25,6 @@ This directory is the **only** allowed location for throwaway code for feature *
 - ADR (gated): `proposals/adr/0004-a2a-ghost-agent-protocol.md`
 - RFC: `proposals/rfc/0007-ghost-house-architecture.md`
 
-Sub-project READMEs and `package.json` files are created when implementation starts (`/speckit.implement` or manual spike work).
+Sub-project READMEs, `package.json`, and `npm run smoke` / `npm run dev` flows are in each `spike-*` directory. Start from [`spike-a-sdk-exercise/README.md`](spike-a-sdk-exercise/README.md) (SDK) then [`spike-b-skeleton-house/README.md`](spike-b-skeleton-house/README.md) (house + curls).
+
+Quickstart (repo-relative paths): [`specs/008-a2a-ghost-house-spike/quickstart.md`](../../specs/008-a2a-ghost-house-spike/quickstart.md).

@@ -21,11 +21,11 @@
 
 **Purpose**: Create isolated sub-project shells; no imports from `packages/` or `server/`.
 
-- [ ] T001 [P] Create `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json` with `"type": "module"`, Node 24–compatible ESM fields, `typescript` devDependency, and `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/tsconfig.json` targeting `src/`
-- [ ] T002 [P] Create `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/package.json` and `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/tsconfig.json` with `src/` entry layout
-- [ ] T003 [P] Create `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/package.json` and `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/tsconfig.json` with `src/` entry layout
-- [ ] T004 Add `@a2a-js/sdk` runtime dependency (pin version in lockfile) to `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json`, `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/package.json`, and `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/package.json` where each sub-project needs the SDK
-- [ ] T005 Verify `spikes/a2a-ghost-agent-protocol/README.md` links to `specs/008-a2a-ghost-house-spike/spec.md`, `specs/008-a2a-ghost-house-spike/quickstart.md`, and the three proposal paths; add any missing anchors
+- [x] T001 [P] Create `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json` with `"type": "module"`, Node 24–compatible ESM fields, `typescript` devDependency, and `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/tsconfig.json` targeting `src/`
+- [x] T002 [P] Create `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/package.json` and `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/tsconfig.json` with `src/` entry layout
+- [x] T003 [P] Create `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/package.json` and `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/tsconfig.json` with `src/` entry layout
+- [x] T004 Add `@a2a-js/sdk` runtime dependency (pin version in lockfile) to `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json`, `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/package.json`, and `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/package.json` where each sub-project needs the SDK
+- [x] T005 Verify `spikes/a2a-ghost-agent-protocol/README.md` links to `specs/008-a2a-ghost-house-spike/spec.md`, `specs/008-a2a-ghost-house-spike/quickstart.md`, and the three proposal paths; add any missing anchors
 
 **Checkpoint**: Each sub-project runs `npm install` locally without touching repo-root `pnpm-workspace.yaml`
 
@@ -37,11 +37,11 @@
 
 **⚠️ CRITICAL**: Do not begin US1–US3 feature logic until T010 is done.
 
-- [ ] T006 Add `build` and `smoke` npm scripts to `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json` (`smoke` may call a stub until US1 completes)
-- [ ] T007 [P] Add `dev`, `build`, and `start` npm scripts to `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/package.json` per README needs
-- [ ] T008 [P] Add `dev`, `build`, and `start` npm scripts to `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/package.json` per README needs
-- [ ] T009 [P] Insert FR-008 section heading scaffold into `spikes/a2a-ghost-agent-protocol/reports/spike-a-sdk-maturity.md` (*What worked*, *What didn’t*, *What we learned*, *Recommendation*)
-- [ ] T010 [P] Insert FR-008 section heading scaffold into `spikes/a2a-ghost-agent-protocol/reports/spike-b-contribution-model.md`
+- [x] T006 Add `build` and `smoke` npm scripts to `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json` (`smoke` may call a stub until US1 completes)
+- [x] T007 [P] Add `dev`, `build`, and `start` npm scripts to `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/package.json` per README needs
+- [x] T008 [P] Add `dev`, `build`, and `start` npm scripts to `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/package.json` per README needs
+- [x] T009 [P] Insert FR-008 section heading scaffold into `spikes/a2a-ghost-agent-protocol/reports/spike-a-sdk-maturity.md` (*What worked*, *What didn’t*, *What we learned*, *Recommendation*)
+- [x] T010 [P] Insert FR-008 section heading scaffold into `spikes/a2a-ghost-agent-protocol/reports/spike-b-contribution-model.md`
 
 **Checkpoint**: `npm run build` (or documented equivalent) succeeds in each sub-project with stub `src/` entrypoints
 
@@ -55,13 +55,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T011 [US1] Implement synchronous host→agent task round-trip per `spec.md` FR-001 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
-- [ ] T012 [US1] Implement streaming task with multiple agent-side updates per `spec.md` FR-002 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
-- [ ] T013 [US1] Implement host push to agent webhook (or SDK-equivalent push surface) per `spec.md` FR-003 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
-- [ ] T014 [US1] Implement agent card publication and host-side discovery per `spec.md` FR-004 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
-- [ ] T015 [US1] Wire `npm run smoke` in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json` to run all four exercises sequentially with non-zero exit on failure
-- [ ] T016 [US1] Document ports, start order, and log capture for Spike A in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/README.md`
-- [ ] T017 [US1] Complete `spikes/a2a-ghost-agent-protocol/reports/spike-a-sdk-maturity.md` with pass/fail per pattern, operator-error vs SDK-defect labels, and ADR-0004 escalation notes per `spec.md` FR-008 and edge cases
+- [x] T011 [US1] Implement synchronous host→agent task round-trip per `spec.md` FR-001 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
+- [x] T012 [US1] Implement streaming task with multiple agent-side updates per `spec.md` FR-002 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
+- [x] T013 [US1] Implement host push to agent webhook (or SDK-equivalent push surface) per `spec.md` FR-003 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
+- [x] T014 [US1] Implement agent card publication and host-side discovery per `spec.md` FR-004 in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/src/`
+- [x] T015 [US1] Wire `npm run smoke` in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/package.json` to run all four exercises sequentially with non-zero exit on failure
+- [x] T016 [US1] Document ports, start order, and log capture for Spike A in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/README.md`
+- [x] T017 [US1] Complete `spikes/a2a-ghost-agent-protocol/reports/spike-a-sdk-maturity.md` with pass/fail per pattern, operator-error vs SDK-defect labels, and ADR-0004 escalation notes per `spec.md` FR-008 and edge cases
 
 **Checkpoint**: Spike A time box satisfied or explicitly escalated with written evidence (`spec.md` SC-001)
 
@@ -75,13 +75,13 @@
 
 ### Implementation for User Story 2
 
-- [ ] T018 [US2] Implement catalog and **one** primary registration entry path per `spec.md` FR-005 in `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/src/`
-- [ ] T019 [US2] Implement spawn/session start distinguishable in logs per `spec.md` FR-006 in `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/src/`
-- [ ] T020 [US2] Emit synthetic world event payload conforming to `specs/008-a2a-ghost-house-spike/contracts/ic-008-spike-synthetic-world-event.md` from `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/src/` per `spec.md` FR-007
-- [ ] T021 [US2] Implement minimal contributed agent (card + handlers) in `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/src/` that receives the synthetic event and returns a capturable response
-- [ ] T022 [US2] Author operator runbook for the house in `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/README.md` (registration path highlighted first)
-- [ ] T023 [US2] Author contributor-facing steps and wall-clock worksheet in `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/README.md`
-- [ ] T024 [US2] Fill `spikes/a2a-ghost-agent-protocol/reports/spike-b-contribution-model.md` with FR-008 sections, SC-003 timing result, infrastructure prerequisites, and filled field matrix per `specs/008-a2a-ghost-house-spike/contracts/ic-009-rfc-0007-agent-card-field-matrix.md`
+- [x] T018 [US2] Implement catalog and **one** primary registration entry path per `spec.md` FR-005 in `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/src/`
+- [x] T019 [US2] Implement spawn/session start distinguishable in logs per `spec.md` FR-006 in `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/src/`
+- [x] T020 [US2] Emit synthetic world event payload conforming to `specs/008-a2a-ghost-house-spike/contracts/ic-008-spike-synthetic-world-event.md` from `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/src/` per `spec.md` FR-007
+- [x] T021 [US2] Implement minimal contributed agent (card + handlers) in `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/src/` that receives the synthetic event and returns a capturable response
+- [x] T022 [US2] Author operator runbook for the house in `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/README.md` (registration path highlighted first)
+- [x] T023 [US2] Author contributor-facing steps and wall-clock worksheet in `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/README.md`
+- [x] T024 [US2] Fill `spikes/a2a-ghost-agent-protocol/reports/spike-b-contribution-model.md` with FR-008 sections, SC-003 timing result, infrastructure prerequisites, and filled field matrix per `specs/008-a2a-ghost-house-spike/contracts/ic-009-rfc-0007-agent-card-field-matrix.md`
 
 **Checkpoint**: Spike B time box satisfied or escalated in writing (`spec.md` SC-002)
 
@@ -95,9 +95,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T025 [US3] Add executive summary (≤12 lines) to top of `spikes/a2a-ghost-agent-protocol/reports/spike-a-sdk-maturity.md` and `spikes/a2a-ghost-agent-protocol/reports/spike-b-contribution-model.md`
-- [ ] T026 [US3] Create merge-ready appendix body in `spikes/a2a-ghost-agent-protocol/reports/adr-0004-appendix-draft.md` citing both spike reports for `proposals/adr/0004-a2a-ghost-agent-protocol.md`
-- [ ] T027 [US3] Create `spikes/a2a-ghost-agent-protocol/reports/rfc-0007-open-questions-delta.md` listing RFC section ids/headings to edit with one-line rationale each for `proposals/rfc/0007-ghost-house-architecture.md`
+- [x] T025 [US3] Add executive summary (≤12 lines) to top of `spikes/a2a-ghost-agent-protocol/reports/spike-a-sdk-maturity.md` and `spikes/a2a-ghost-agent-protocol/reports/spike-b-contribution-model.md`
+- [x] T026 [US3] Create merge-ready appendix body in `spikes/a2a-ghost-agent-protocol/reports/adr-0004-appendix-draft.md` citing both spike reports for `proposals/adr/0004-a2a-ghost-agent-protocol.md`
+- [x] T027 [US3] Create `spikes/a2a-ghost-agent-protocol/reports/rfc-0007-open-questions-delta.md` listing RFC section ids/headings to edit with one-line rationale each for `proposals/rfc/0007-ghost-house-architecture.md`
 
 **Checkpoint**: `spec.md` SC-004 documentation action items are enumerated as PR-ready bullets
 
@@ -107,9 +107,9 @@
 
 **Purpose**: Quickstart truth, index hygiene, optional charter status.
 
-- [ ] T028 Run flows from `specs/008-a2a-ghost-house-spike/quickstart.md` against finished spike code; fix command drift in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/README.md`, `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/README.md`, and `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/README.md`, and update `specs/008-a2a-ghost-house-spike/quickstart.md` if paths or script names changed
-- [ ] T029 Finalize index links in `spikes/a2a-ghost-agent-protocol/reports/README.md` pointing to completed `spike-a-sdk-maturity.md`, `spike-b-contribution-model.md`, `adr-0004-appendix-draft.md`, and `rfc-0007-open-questions-delta.md`
-- [ ] T030 [P] Optional: set **Status** field in `proposals/spikes/spike-a2a-ghost-house-poc.md` to completed when reports are final
+- [x] T028 Run flows from `specs/008-a2a-ghost-house-spike/quickstart.md` against finished spike code; fix command drift in `spikes/a2a-ghost-agent-protocol/spike-a-sdk-exercise/README.md`, `spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house/README.md`, and `spikes/a2a-ghost-agent-protocol/spike-b-sample-agent/README.md`, and update `specs/008-a2a-ghost-house-spike/quickstart.md` if paths or script names changed
+- [x] T029 Finalize index links in `spikes/a2a-ghost-agent-protocol/reports/README.md` pointing to completed `spike-a-sdk-maturity.md`, `spike-b-contribution-model.md`, `adr-0004-appendix-draft.md`, and `rfc-0007-open-questions-delta.md`
+- [x] T030 [P] Optional: set **Status** field in `proposals/spikes/spike-a2a-ghost-house-poc.md` to completed when reports are final
 
 ---
 
