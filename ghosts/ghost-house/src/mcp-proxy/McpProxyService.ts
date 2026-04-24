@@ -1,4 +1,4 @@
-import { Context, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { McpToolRejected } from "../errors.js";
 import type { AgentSession } from "../types.js";
 
@@ -29,7 +29,11 @@ const extractMcpToolName: ExtractTool = (rawBody) => {
 };
 
 type McpProxy = {
-  readonly assertToolAllowed: (session: AgentSession, _method: string, rawBody: Buffer) => void;
+  readonly assertToolAllowed: (
+    session: AgentSession,
+    _method: string,
+    rawBody: Buffer,
+  ) => Effect.Effect<void, McpToolRejected>;
 };
 
 /**
@@ -45,11 +49,17 @@ export const makeMcpProxy = (): McpProxy => ({
   assertToolAllowed: (session, _m, rawBody) => {
     const name = extractMcpToolName(rawBody);
     if (name == null) {
-      return;
+      return Effect.void;
     }
     if (!session.requiredTools.includes(name)) {
-      throw new McpToolRejected({ toolName: name, message: "tool not declared in agent card requiredTools" });
+      return Effect.fail(
+        new McpToolRejected({
+          toolName: name,
+          message: "tool not declared in agent card requiredTools",
+        }),
+      );
     }
+    return Effect.void;
   },
 });
 

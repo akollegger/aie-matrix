@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { Effect } from "effect";
 import { makeTestSupervisor } from "../../src/supervisor/SupervisorService.js";
 import { readSupervisionConfig } from "../../src/supervisor/SupervisorService.js";
 import type { WorldCredential } from "../../src/types.js";
@@ -13,18 +14,19 @@ const h3 = () => latLngToCell(40.0, -74.0, 15);
  */
 describe("supervisor crash (integration)", () => {
   const catalog = {
-    get: async (id: string) => ({
-      agentId: id,
-      baseUrl: "http://127.0.0.1:4001",
-      agentCard: { name: "a", matrix: { requiredTools: [] } } as any,
-      registeredAt: new Date().toISOString(),
-      builtIn: false,
-    }),
-    load: async () => ({ agents: {} } as any),
-    save: async () => {},
-    register: async () => ({} as any),
-    list: async () => [],
-    deregister: async () => {},
+    get: (id: string) =>
+      Effect.succeed({
+        agentId: id,
+        baseUrl: "http://127.0.0.1:4001",
+        agentCard: { name: "a", matrix: { requiredTools: [] } } as any,
+        registeredAt: new Date().toISOString(),
+        builtIn: false,
+      }),
+    load: () => Effect.succeed({ agents: {} } as any),
+    save: () => Effect.void,
+    register: () => Effect.succeed({} as any),
+    list: () => Effect.succeed([]),
+    deregister: () => Effect.void,
   } as any;
 
   beforeEach(() => {
@@ -32,18 +34,18 @@ describe("supervisor crash (integration)", () => {
     vi.clearAllMocks();
   });
 
-  it("parallel session unaffected by another’s failure (T031)", async () => {
-    const badPing = vi.fn().mockRejectedValue(new Error("offline"));
+  it("parallel session unaffected by another's failure (T031)", async () => {
+    const badPing = vi.fn().mockReturnValue(Effect.fail(new Error("offline")));
     const supBad = makeTestSupervisor(
       {
         catalog,
         a2a: {
-          createClient: vi.fn().mockResolvedValue({}),
+          createClient: vi.fn().mockReturnValue(Effect.succeed({})),
           sendSpawnContext: vi
             .fn()
-            .mockResolvedValueOnce({ taskId: "1", contextId: "1" })
-            .mockRejectedValue(new Error("nope")),
-          cancelTask: vi.fn(),
+            .mockReturnValueOnce(Effect.succeed({ taskId: "1", contextId: "1" }))
+            .mockReturnValue(Effect.fail(new Error("nope"))),
+          cancelTask: vi.fn().mockReturnValue(Effect.void),
           pingAgent: badPing,
         } as any,
         publicHouseBaseUrl: "http://127.0.0.1:4000",
@@ -64,10 +66,10 @@ describe("supervisor crash (integration)", () => {
       {
         catalog,
         a2a: {
-          createClient: vi.fn().mockResolvedValue({}),
-          sendSpawnContext: vi.fn().mockResolvedValue({ taskId: "a", contextId: "b" }),
-          cancelTask: vi.fn(),
-          pingAgent: vi.fn().mockResolvedValue(undefined),
+          createClient: vi.fn().mockReturnValue(Effect.succeed({})),
+          sendSpawnContext: vi.fn().mockReturnValue(Effect.succeed({ taskId: "a", contextId: "b" })),
+          cancelTask: vi.fn().mockReturnValue(Effect.void),
+          pingAgent: vi.fn().mockReturnValue(Effect.void),
         } as any,
         publicHouseBaseUrl: "http://127.0.0.1:4000",
         defaultCapabilityManifest: new Set(),
@@ -81,14 +83,14 @@ describe("supervisor crash (integration)", () => {
       undefined,
     );
 
-    const s1 = await supBad.spawn({ agentId: "x", ghostId: "g1", credential: cred });
-    const s2 = await supOk.spawn({ agentId: "y", ghostId: "g2", credential: cred });
+    const s1 = await Effect.runPromise(supBad.spawn({ agentId: "x", ghostId: "g1", credential: cred }));
+    const s2 = await Effect.runPromise(supOk.spawn({ agentId: "y", ghostId: "g2", credential: cred }));
 
     await new Promise((r) => setTimeout(r, 350));
 
     expect(supBad.getSession(s1.sessionId)?.status).toBe("failed");
     expect(supOk.getSession(s2.sessionId)?.status).toBe("running");
 
-    await supOk.shutdown(s2.sessionId);
+    await Effect.runPromise(supOk.shutdown(s2.sessionId));
   });
 });

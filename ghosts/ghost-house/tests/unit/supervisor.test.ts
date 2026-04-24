@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { Effect, Exit } from "effect";
-import { makeTestSupervisor, type IAgentSupervisor, readSupervisionConfig } from "../../src/supervisor/SupervisorService.js";
+import {
+  makeTestSupervisor,
+  type IAgentSupervisor,
+  readSupervisionConfig,
+} from "../../src/supervisor/SupervisorService.js";
 import type { WorldCredential } from "../../src/types.js";
 import { latLngToCell } from "h3-js";
 
@@ -30,10 +34,12 @@ describe("AgentSupervisor (T030)", () => {
 
   beforeEach(() => {
     process.env.GHOST_HOUSE_SHUTDOWN_GRACE_MS = "50";
-    ping = vi.fn().mockResolvedValue(undefined);
-    createClient = vi.fn().mockResolvedValue({});
-    sendSpawnContext = vi.fn().mockResolvedValue({ taskId: "task-1", contextId: "ctx-1" });
-    cancelTask = vi.fn().mockResolvedValue(undefined);
+    ping = vi.fn().mockReturnValue(Effect.void);
+    createClient = vi.fn().mockReturnValue(Effect.succeed({}));
+    sendSpawnContext = vi
+      .fn()
+      .mockReturnValue(Effect.succeed({ taskId: "task-1", contextId: "ctx-1" }));
+    cancelTask = vi.fn().mockReturnValue(Effect.void);
   });
 
   afterEach(() => {
@@ -51,18 +57,19 @@ describe("AgentSupervisor (T030)", () => {
   ) {
     return makeTestSupervisor({
       catalog: {
-        get: async () => ({
-          agentId: "a1",
-          baseUrl: "http://127.0.0.1:4001",
-          agentCard: { name: "a", matrix: { requiredTools: [] } } as any,
-          registeredAt: new Date().toISOString(),
-          builtIn: false,
-        }),
-        load: async () => ({ agents: {} } as any),
-        save: async () => {},
-        register: async () => ({} as any),
-        list: async () => [],
-        deregister: async () => {},
+        get: (_id: string) =>
+          Effect.succeed({
+            agentId: "a1",
+            baseUrl: "http://127.0.0.1:4001",
+            agentCard: { name: "a", matrix: { requiredTools: [] } } as any,
+            registeredAt: new Date().toISOString(),
+            builtIn: false,
+          }),
+        load: () => Effect.succeed({ agents: {} } as any),
+        save: () => Effect.void,
+        register: () => Effect.succeed({} as any),
+        list: () => Effect.succeed([]),
+        deregister: () => Effect.void,
       } as any,
       a2a: {
         createClient,
@@ -80,13 +87,13 @@ describe("AgentSupervisor (T030)", () => {
   it("ping success keeps session running", async () => {
     const cfg = { ...readSupervisionConfig(), healthIntervalMs: 20, healthTimeoutMs: 200 };
     sup = makeSup(() => cfg);
-    const s = await sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred });
+    const s = await Effect.runPromise(sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred }));
     expect(s.status).toBe("running");
     await new Promise((r) => setTimeout(r, 600));
     const s2 = sup.getSession(s.sessionId);
     expect(s2?.status).toBe("running");
     expect(ping).toHaveBeenCalled();
-    await sup.shutdown(s.sessionId);
+    await Effect.runPromise(sup.shutdown(s.sessionId));
   });
 
   it("ping fail then reconnect transitions unhealthy → running", async () => {
@@ -98,16 +105,16 @@ describe("AgentSupervisor (T030)", () => {
       maxRestartsPerHour: 5,
     };
     ping
-      .mockRejectedValueOnce(new Error("down"))
-      .mockResolvedValueOnce(undefined);
+      .mockReturnValueOnce(Effect.fail(new Error("down")))
+      .mockReturnValue(Effect.void);
     sup = makeSup(() => cfg);
-    const s = await sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred });
+    const s = await Effect.runPromise(sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred }));
     expect(sendSpawnContext).toHaveBeenCalledTimes(1);
     await new Promise((r) => setTimeout(r, 1500));
     const s2 = sup.getSession(s.sessionId);
     expect(s2?.status).toBe("running");
     expect(sendSpawnContext).toHaveBeenCalledTimes(2);
-    await sup.shutdown(s.sessionId);
+    await Effect.runPromise(sup.shutdown(s.sessionId));
   });
 
   it("fails session after max restarts / hour (T028)", async () => {
@@ -120,11 +127,11 @@ describe("AgentSupervisor (T030)", () => {
     };
     sendSpawnContext
       .mockReset()
-      .mockResolvedValueOnce({ taskId: "task-1", contextId: "ctx-1" })
-      .mockRejectedValue(new Error("nope"));
-    ping.mockReset().mockRejectedValue(new Error("down"));
+      .mockReturnValueOnce(Effect.succeed({ taskId: "task-1", contextId: "ctx-1" }))
+      .mockReturnValue(Effect.fail(new Error("nope")));
+    ping.mockReset().mockReturnValue(Effect.fail(new Error("down")));
     sup = makeSup(() => cfg);
-    const s = await sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred });
+    const s = await Effect.runPromise(sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred }));
     await new Promise((r) => setTimeout(r, 400));
     const s2 = sup.getSession(s.sessionId);
     expect(s2?.status).toBe("failed");
