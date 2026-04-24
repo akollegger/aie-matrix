@@ -1,7 +1,7 @@
 # IC-009: RFC-0007 Agent Card Field Matrix (Spike B Validation)
 
 **Status**: Draft  
-**Source of truth**: [`proposals/rfc/0007-ghost-house-architecture.md`](../../../proposals/rfc/0007-ghost-house-architecture.md) — Agent Card Schema + `mx_*` table  
+**Source of truth**: [`proposals/rfc/0007-ghost-house-architecture.md`](../../../proposals/rfc/0007-ghost-house-architecture.md) — Agent Card Schema (`matrix` object)  
 **Spec reference**: `spec.md` IC-001
 
 ## Purpose
@@ -23,18 +23,19 @@ During Spike B, the contributor fills this matrix in the **Spike B report** (not
 | `defaultInputModes` | | |
 | `defaultOutputModes` | | |
 
-## RFC-0007 `mx_*` extensions
+## `matrix` extension (RFC-0007)
 
-| Field | Spike result | Notes |
-|--------|--------------|--------|
-| `mx_tier` | | |
-| `mx_ghost_classes` | | |
-| `mx_required_tools` | | |
-| `mx_capabilities_required` | | |
-| `mx_memory_kind` | | |
-| `mx_llm_provider` | | |
-| `mx_profile.about` | | |
-| `mx_authors` | | |
+| Path | Spike result | Notes |
+|------|--------------|--------|
+| `matrix.schemaVersion` | | |
+| `matrix.tier` | | |
+| `matrix.ghostClasses` | | |
+| `matrix.requiredTools` | | |
+| `matrix.capabilitiesRequired` | | |
+| `matrix.memoryKind` | | |
+| `matrix.llmProvider` | | |
+| `matrix.profile.about` | | |
+| `matrix.authors` | | |
 
 ## Pass criteria
 

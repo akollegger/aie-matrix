@@ -18,7 +18,7 @@
 
 ## What we learned (ADR / RFC deltas)
 
-- **RFC-0007 agent card:** Sample card includes `mx_*` fields via cast; confirm whether RFC schema should allow extension fields as passthrough vs strict validation at catalog.
+- **RFC-0007 agent card:** Sample card uses nested `matrix` (RFC-0007); confirm catalog validation vs opaque passthrough for unknown `matrix` keys.
 - **Catalog API:** House-specific REST is **not** A2A — RFC should keep catalog HTTP separate from A2A surfaces to avoid confusion.
 
 ## Recommendation
@@ -40,11 +40,12 @@
 | `capabilities.pushNotifications` | supported | `false` for sample |
 | `skills` | supported | single skill |
 | `defaultInputModes` / `defaultOutputModes` | supported | text |
-| `mx_tier` | supported (cast) | `wanderer` |
-| `mx_ghost_classes` | supported (cast) | `["any"]` |
-| `mx_required_tools` | supported (cast) | `[]` |
-| `mx_capabilities_required` | supported (cast) | `[]` |
-| `mx_memory_kind` | supported (cast) | `none` |
-| `mx_llm_provider` | supported (cast) | `none` |
-| `mx_profile.about` | supported (cast) | |
-| `mx_authors` | supported (cast) | |
+| `matrix.schemaVersion` | supported | `1` |
+| `matrix.tier` | supported | `wanderer` |
+| `matrix.ghostClasses` | supported | `["any"]` |
+| `matrix.requiredTools` | supported | `[]` |
+| `matrix.capabilitiesRequired` | supported | `[]` |
+| `matrix.memoryKind` | supported | `none` |
+| `matrix.llmProvider` | supported | `none` |
+| `matrix.profile.about` | supported | |
+| `matrix.authors` | supported | |
