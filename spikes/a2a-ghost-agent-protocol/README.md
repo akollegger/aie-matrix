@@ -7,6 +7,7 @@ This directory is the **only** allowed location for throwaway code for feature *
 - Do **not** import from `packages/`, `server/`, or other production app paths.
 - Do **not** add these folders to the repo-root `pnpm-workspace.yaml`.
 - Each exercise lives in its own subfolder with its own `package.json` and local installs.
+- **Package manager:** these sandboxes use **npm** and committed `package-lock.json` on purpose so they stay isolated from the repo-root **pnpm** workspace; do not add them to `pnpm-workspace.yaml`.
 
 ## Layout
 

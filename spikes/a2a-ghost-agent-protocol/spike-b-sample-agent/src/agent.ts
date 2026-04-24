@@ -12,7 +12,15 @@ import {
 import { buildSampleAgentCard } from "./buildAgentCard.js";
 import { SampleContributedExecutor } from "./executor.js";
 
-const port = Number(process.env.PORT ?? 4731);
+function listenPortFromEnv(envName: string, fallback: number): number {
+  const raw = process.env[envName];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0 || n >= 65536) return fallback;
+  return n;
+}
+
+const port = listenPortFromEnv("PORT", 4731);
 const publicBase = `http://127.0.0.1:${port}`;
 const agentCard = buildSampleAgentCard(publicBase);
 const requestHandler = new DefaultRequestHandler(

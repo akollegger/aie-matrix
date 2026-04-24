@@ -8,7 +8,7 @@
 { "agentId": "demo", "baseUrl": "http://127.0.0.1:4731" }
 ```
 
-The house fetches `/.well-known/agent-card.json` from `baseUrl` to verify the agent is reachable, then stores the catalog entry.
+The house fetches `/.well-known/agent-card.json` from `baseUrl` to verify the agent is reachable, then stores the catalog entry. For this spike, **`baseUrl` must be `http(s)://127.0.0.1:…` or `http(s)://localhost:…`** (loopback only); outbound fetches use a **15s** timeout.
 
 ## Other endpoints
 
@@ -28,7 +28,7 @@ npm install
 npm run dev
 ```
 
-**Terminal 2 — house** (`HOUSE_PORT` default `4730`):
+**Terminal 2 — house** (`HOUSE_PORT` default `4730`; invalid values fall back to `4730`):
 
 ```bash
 cd spikes/a2a-ghost-agent-protocol/spike-b-skeleton-house

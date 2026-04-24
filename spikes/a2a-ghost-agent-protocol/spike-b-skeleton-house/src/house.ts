@@ -11,7 +11,36 @@ import {
 } from "@a2a-js/sdk/client";
 import { v4 as uuidv4 } from "uuid";
 
-const PORT = Number(process.env.HOUSE_PORT ?? 4730);
+function listenPortFromEnv(envName: string, fallback: number): number {
+  const raw = process.env[envName];
+  if (raw === undefined || raw.trim() === "") return fallback;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0 || n >= 65536) return fallback;
+  return n;
+}
+
+/** Spike-only: refuse non-loopback agent URLs (mitigates accidental SSRF while developing locally). */
+function assertLocalAgentBaseUrl(raw: string): string {
+  const normalized = raw.trim().replace(/\/$/, "");
+  let u: URL;
+  try {
+    u = new URL(normalized);
+  } catch {
+    throw new Error("baseUrl is not a valid URL");
+  }
+  if (u.protocol !== "http:" && u.protocol !== "https:") {
+    throw new Error("baseUrl must use http: or https:");
+  }
+  const h = u.hostname;
+  if (h !== "127.0.0.1" && h !== "localhost") {
+    throw new Error(
+      "spike house only allows agent baseUrl on 127.0.0.1 or localhost",
+    );
+  }
+  return normalized;
+}
+
+const PORT = listenPortFromEnv("HOUSE_PORT", 4730);
 
 interface CatalogEntry {
   baseUrl: string;
@@ -20,8 +49,11 @@ interface CatalogEntry {
 const catalog = new Map<string, CatalogEntry>();
 const sessions = new Map<string, { agentId: string; baseUrl: string }>();
 
+const fetchWithTimeout: typeof fetch = (input, init) =>
+  fetch(input, { ...init, signal: AbortSignal.timeout(15_000) });
+
 const clientOptions = ClientFactoryOptions.createFrom(ClientFactoryOptions.default, {
-  transports: [new JsonRpcTransportFactory()],
+  transports: [new JsonRpcTransportFactory({ fetchImpl: fetchWithTimeout })],
 });
 
 const app = express();
@@ -37,7 +69,13 @@ app.post("/v1/catalog/register", async (req, res) => {
       res.status(400).json({ error: "agentId and baseUrl are required" });
       return;
     }
-    const normalized = baseUrl.replace(/\/$/, "");
+    let normalized: string;
+    try {
+      normalized = assertLocalAgentBaseUrl(baseUrl);
+    } catch (err) {
+      res.status(400).json({ error: String(err) });
+      return;
+    }
     const factory = new ClientFactory(clientOptions);
     const client = await factory.createFromUrl(normalized);
     await client.getAgentCard();

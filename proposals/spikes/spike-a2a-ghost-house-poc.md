@@ -3,7 +3,7 @@
 **Status:** completed (implementation report: `spikes/a2a-ghost-agent-protocol/reports/`)  
 **Date:** 2026-04-23  
 **Authors:** @akollegger  
-**Related:** [ADR-0004](proposals/adr/0004-a2a-ghost-agent-protocol.md) · [RFC-0007](proposals/rfc/0007-ghost-house-architecture.md)
+**Related:** [ADR-0004](../adr/0004-a2a-ghost-agent-protocol.md) · [RFC-0007](../rfc/0007-ghost-house-architecture.md)
 
 ## Purpose
 
