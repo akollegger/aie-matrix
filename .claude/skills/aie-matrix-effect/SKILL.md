@@ -226,6 +226,86 @@ Ghost-house currently reads `process.env` inline in several places — new code 
 
 ---
 
+## 8. JSON parsing: `Schema.decodeUnknown`, not `JSON.parse`
+
+Use `effect/Schema` to parse and validate external JSON. It combines decoding, validation, and typed errors in one step — `JSON.parse` gives you `unknown` with no validation and throws on malformed input.
+
+**Define a schema:**
+```typescript
+import { Schema } from "effect";
+
+const AgentCardSchema = Schema.Struct({
+  name: Schema.String,
+  url: Schema.String,
+  matrix: Schema.Struct({
+    requiredTools: Schema.Array(Schema.String),
+  }),
+});
+
+type AgentCard = Schema.Schema.Type<typeof AgentCardSchema>;
+```
+
+**Parse a raw JSON string inside an Effect pipeline:**
+```typescript
+import { Schema, Effect } from "effect";
+
+// Schema.decodeUnknownEither / Schema.decodeUnknown return typed ParseError on failure
+const parseAgentCard = Schema.decodeUnknown(AgentCardSchema);
+
+const loadJson = (raw: string): Effect.Effect<AgentCard, Schema.ParseError> =>
+  Effect.try({ try: () => JSON.parse(raw) as unknown, catch: (e) => new Schema.ParseError(/* ... */) })
+    .pipe(Effect.flatMap(parseAgentCard));
+```
+
+**Preferred one-liner using `Schema.decode` on a string input:**
+```typescript
+// Schema.parseJson wraps JSON.parse + Schema.decode in a single step:
+const parseAgentCard = Schema.decodeUnknown(Schema.parseJson(AgentCardSchema));
+
+const result: Effect.Effect<AgentCard, Schema.ParseError> = parseAgentCard(rawString);
+```
+
+**At an HTTP boundary — convert `ParseError` to 400:**
+```typescript
+import { Schema, Effect, ParseResult } from "effect";
+
+Effect.catchAll((e) =>
+  ParseResult.isParseError(e)
+    ? Effect.sync(() => res.status(400).json({ code: "VALIDATION_FAILED", message: String(e) }))
+    : Effect.sync(() => res.status(500).json({ code: "INTERNAL" })),
+)
+```
+
+**Catalog / file I/O pattern (replaces raw `JSON.parse` + manual guards):**
+```typescript
+const CatalogFileSchema = Schema.Struct({
+  agents: Schema.Record({ key: Schema.String, value: CatalogEntrySchema }),
+});
+
+load = (): Effect.Effect<CatalogFile> =>
+  Effect.tryPromise({
+    try: () => readFile(this.catalogFilePath, "utf8"),
+    catch: () => new Error("catalog read failed"),
+  }).pipe(
+    Effect.orDie,
+    Effect.flatMap(Schema.decodeUnknown(Schema.parseJson(CatalogFileSchema))),
+    Effect.orElse(() => Effect.succeed(emptyCatalog())),  // corrupt → safe fallback
+  );
+```
+
+**Key points:**
+- `Schema.parseJson(S)` handles both `JSON.parse` and schema validation in one pass.
+- `Schema.decodeUnknown` returns `Effect<A, ParseError>` — never throws.
+- `ParseError` has structured `.message` and `.errors` fields — far more useful than a raw `SyntaxError`.
+- Use `Effect.orElse(() => Effect.succeed(fallback))` when a missing/corrupt file should degrade gracefully rather than crash the fiber.
+
+**Canonical targets for migration:**
+- `ghosts/ghost-house/src/catalog/CatalogService.ts` — `load()` uses `JSON.parse` + manual shape guard → replace with `Schema.parseJson(CatalogFileSchema)`
+- `ghosts/ghost-house/src/catalog/agent-card-schema.ts` — `parseAndValidateAgentCard` uses Zod → replace with `Schema.decodeUnknown(AgentCardSchema)`
+- Any route handler that reads `req.body as SomeType` without validation → add `Schema.decodeUnknown` before using the value
+
+---
+
 ## Anti-pattern quick-reference
 
 | Anti-pattern | Correct form |
@@ -238,6 +318,9 @@ Ghost-house currently reads `process.env` inline in several places — new code 
 | `console.info(JSON.stringify({...}))` | `yield* Effect.logInfo("...").pipe(Effect.annotateLogs({...}))` |
 | `process.env.X` read inside a service | `yield* AppConfig` (inject via Layer) |
 | Module-level mutable singleton | `Layer.sync` / `Layer.succeed` |
+| `JSON.parse(raw) as T` | `Schema.decodeUnknown(Schema.parseJson(MySchema))(raw)` |
+| `req.body as SomeType` without validation | `yield* Schema.decodeUnknown(MySchema)(req.body)` |
+| Zod `z.parse(...)` throwing on failure | `Schema.decodeUnknown(MySchema)` returning `Effect<T, ParseError>` |
 
 ---
 
