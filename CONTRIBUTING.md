@@ -49,15 +49,29 @@ This adds a `Signed-off-by` line certifying that you have the right to submit th
 
 | Command | When to use |
 |---------|-------------|
-| `pnpm run demo` | One terminal: combined server + Vite spectator + `random-house` |
+| `pnpm run demo` | One terminal: combined server + Vite spectator + **@aie-matrix/ghost-house** + **@aie-matrix/random-agent** (Wanderer on localhost; see comment block in `scripts/demo.mjs`) |
 | `pnpm run server` / `pnpm run server:dev` | Server only (production-like `start` vs `tsx watch`) |
-| `pnpm run spectator` / `pnpm run ghost:house` | Phaser spectator or ghost walker alone (multi-shell debugging) |
+| `pnpm run spectator` / `pnpm run ghost:house` | Phaser spectator, or **ghost house** alone (`@aie-matrix/ghost-house`) for multi-shell debugging |
 | `pnpm run ghost:register` | One-shot: adopt a ghost and write `GHOST_TOKEN` to `.env` |
 | `pnpm run ghost:cli` | Interactive ghost CLI (or one-shot: `ghost:cli -- whoami`) |
 | `pnpm run test:e2e` | Playwright (CI-friendly autostart; needs Chromium via Playwright install); `pnpm run test:e2e:autostart` is equivalent |
 | `pnpm run test:tck` | Minimal `ghosts/tck` smoke — **start the server first** |
 
 Details: root [`README.md`](README.md), [`specs/001-minimal-poc/quickstart.md`](specs/001-minimal-poc/quickstart.md), and per-package READMEs under `server/`, `client/phaser/`, `ghosts/*/`.
+
+### Ghost agents (A2A ghost house)
+
+Third-party **ghost agents** are hosted by the **ghost house** package (`@aie-matrix/ghost-house`) and speak **A2A** to the house, not directly to the browser. The normative feature spec and contracts live under [`specs/009-ghost-house-a2a/`](specs/009-ghost-house-a2a/).
+
+| Topic | Where to look |
+|--------|----------------|
+| **Tiers** | **Wanderer** (movement / minimal), **Listener** (world events, no `say`), **Social** (events + `say` via MCP). Declared on the agent card. |
+| **Agent card** | [IC-001](specs/009-ghost-house-a2a/contracts/ic-001-agent-card-schema.md) — `matrix` block (`tier`, `requiredTools`, `schemaVersion`, …) on `/.well-known/agent-card.json`. |
+| **Catalog** | [IC-005](specs/009-ghost-house-a2a/contracts/ic-005-catalog-api.md) — register with `POST {GHOST_HOUSE_URL}/v1/catalog/register` (bearer `GHOST_HOUSE_DEV_TOKEN`). |
+| **TCK** | `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` — same package has `tck:listener` and `tck:social` for the other tiers (server + house + agent must be running). |
+| **Phase 1 networking** | **Localhost** — the catalog stores a reachable `baseUrl` for your agent; production TLS and non-local auth are follow-ups. |
+
+**Reference implementation:** [`ghosts/random-agent/`](ghosts/random-agent/) (Wanderer). End-to-end steps: [`specs/009-ghost-house-a2a/quickstart.md`](specs/009-ghost-house-a2a/quickstart.md).
 
 ### Code Style and CI
 

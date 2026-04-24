@@ -23,6 +23,25 @@ export type WorldCredential = {
   readonly worldApiBaseUrl: string;
 };
 
+export type GhostCard = {
+  readonly class: string;
+  readonly displayName: string;
+  readonly partnerEmail: string | null;
+};
+
+/**
+ * @see `specs/009-ghost-house-a2a/contracts/ic-006-spawn-context.md`
+ */
+export type SpawnContext = {
+  readonly schema: "aie-matrix.ghost-house.spawn-context.v1";
+  readonly ghostId: string;
+  readonly ghostCard: GhostCard;
+  readonly worldEntryPoint: string;
+  readonly houseEndpoints: { readonly mcp: string; readonly a2a: string };
+  readonly token: string;
+  readonly expiresAt: string;
+};
+
 export type AgentSession = {
   readonly sessionId: string;
   readonly agentId: string;
@@ -37,6 +56,14 @@ export type AgentSession = {
   readonly requiredTools: readonly string[];
   currentTaskId: string | null;
   currentA2AContextId: string | null;
+  /** Set when the agent card requests push; spawn uses non-blocking A2A + setTaskPushNotificationConfig. */
+  usesA2APush: boolean;
+  /** Last successful IC-006 payload — used to reconnect A2A after a failed health check. */
+  lastSpawnContext?: SpawnContext;
+  /** Timestamps of reconnect attempts in the last hour (for T028 cap). */
+  restartWindow: number[];
+  /** Current exponential backoff (ms) before a reconnect; resets on success. */
+  currentBackoffMs: number;
   spawnClient?: import("@a2a-js/sdk/client").Client;
 };
 
@@ -55,23 +82,4 @@ export type WorldEvent = {
   readonly kind: WorldEventKind;
   readonly payload: Record<string, unknown>;
   readonly sentAt: string;
-};
-
-export type GhostCard = {
-  readonly class: string;
-  readonly displayName: string;
-  readonly partnerEmail: string | null;
-};
-
-/**
- * @see `specs/009-ghost-house-a2a/contracts/ic-006-spawn-context.md`
- */
-export type SpawnContext = {
-  readonly schema: "aie-matrix.ghost-house.spawn-context.v1";
-  readonly ghostId: string;
-  readonly ghostCard: GhostCard;
-  readonly worldEntryPoint: string;
-  readonly houseEndpoints: { readonly mcp: string; readonly a2a: string };
-  readonly token: string;
-  readonly expiresAt: string;
 };

@@ -12,6 +12,8 @@ packages:
   - ghosts/ts-client
   - ghosts/random-house
   - ghosts/ghost-house
+  - ghosts/ghost-house/examples/observer-agent
+  - ghosts/ghost-house/examples/echo-agent
   - ghosts/random-agent
   - ghosts/ghost-cli
   - ghosts/tck

@@ -129,6 +129,7 @@ async function main(): Promise<void> {
 
   const httpServer = createServer();
   const store = createRegistryStore();
+  const internalFanoutToken = process.env.AIE_MATRIX_INTERNAL_FANOUT_TOKEN?.trim() ?? "";
   let matrixRoomId: string | undefined;
   const worldApiBaseUrl = `http://127.0.0.1:${httpPort}/mcp`;
 
@@ -217,6 +218,7 @@ async function main(): Promise<void> {
       colyseusBridge.setGhostInventory(ghostId, itemRefs),
     setGhostLastAction: (ghostId: string, label: string) =>
       colyseusBridge.setGhostLastAction(ghostId, label),
+    fanoutWorldV1: (payload: unknown) => colyseusBridge.fanoutWorldV1(payload),
   };
 
   let neoDriver = createNeo4jDriverFromEnv() ?? null;
@@ -322,7 +324,8 @@ async function main(): Promise<void> {
           p.startsWith("/maps/") ||
           p.startsWith("/registry") ||
           p.startsWith("/threads") ||
-          p === "/mcp"
+          p === "/mcp" ||
+          p === "/internal/world-fanout"
         ) {
           res.writeHead(204, corsHeaders);
           res.end();
@@ -412,6 +415,45 @@ async function main(): Promise<void> {
         );
         return;
       }
+      if (req.method === "POST" && url.pathname === "/internal/world-fanout") {
+        if (internalFanoutToken.length === 0) {
+          res.writeHead(503, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error: "FANOUT_DISABLED",
+              message: "Set AIE_MATRIX_INTERNAL_FANOUT_TOKEN to enable world fanout",
+            }),
+          );
+          return;
+        }
+        if (req.headers.authorization !== `Bearer ${internalFanoutToken}`) {
+          res.writeHead(401, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(JSON.stringify({ error: "UNAUTHORIZED" }));
+          return;
+        }
+        const buf = await readRequestBody(req);
+        let fanout: unknown;
+        try {
+          fanout = buf.length ? JSON.parse(buf.toString("utf8")) : {};
+        } catch {
+          res.writeHead(400, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(JSON.stringify({ error: "BAD_JSON" }));
+          return;
+        }
+        room.broadcast("world-v1", fanout);
+        res.writeHead(204, corsHeaders);
+        res.end();
+        return;
+      }
       if (!res.headersSent && !res.writableEnded) {
         res.writeHead(404, { "Content-Type": "text/plain", ...corsHeaders });
         res.end("Not found");
@@ -431,6 +473,11 @@ async function main(): Promise<void> {
   console.log(`  MCP world-api (Streamable HTTP): POST ${worldApiBaseUrl}`);
   console.log(`  Colyseus WebSocket: ws://127.0.0.1:${httpPort} (matchmake routes on same port)`);
   console.log(`  Spectator room id: GET http://127.0.0.1:${httpPort}/spectator/room`);
+  if (internalFanoutToken.length > 0) {
+    console.log(
+      `  World fanout (dev): POST http://127.0.0.1:${httpPort}/internal/world-fanout (Bearer AIE_MATRIX_INTERNAL_FANOUT_TOKEN)`,
+    );
+  }
   console.log(`  Conversation threads: GET http://127.0.0.1:${httpPort}/threads/:ghostId`);
   console.log(`  Map assets (dev): GET http://127.0.0.1:${httpPort}/maps/...`);
 }

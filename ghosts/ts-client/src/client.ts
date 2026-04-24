@@ -30,6 +30,8 @@ export class GhostMcpClient {
     const transport = new StreamableHTTPClientTransport(new URL(this.options.worldApiBaseUrl), {
       requestInit: {
         headers: {
+          // Streamable HTTP server rejects requests that do not advertise both content types.
+          Accept: "application/json, text/event-stream",
           Authorization: `Bearer ${this.options.token}`,
           // Avoid HTTP keep-alive issues with some Node / MCP Streamable HTTP stacks (ECONNRESET on follow-up POSTs).
           Connection: "close",

@@ -17,6 +17,11 @@ export interface ColyseusWorldBridge {
   setGhostInventory(ghostId: string, itemRefs: string[]): void;
   /** Spectator debug: last successful MCP tool label for this ghost. */
   setGhostLastAction(ghostId: string, label: string): void;
+  /**
+   * Fan out a `world-v1` Colyseus message to every connected bridge client
+   * (e.g. ghost house) — used after `say` to reach nearby Social agents.
+   */
+  fanoutWorldV1(payload: unknown): void;
 }
 
 export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
@@ -30,5 +35,8 @@ export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
     setTileItems: (h3Index, itemRefs) => room.setTileItems(h3Index, itemRefs),
     setGhostInventory: (ghostId, itemRefs) => room.setGhostInventory(ghostId, itemRefs),
     setGhostLastAction: (ghostId, label) => room.setGhostLastAction(ghostId, label),
+    fanoutWorldV1: (payload) => {
+      room.broadcast("world-v1", payload);
+    },
   };
 }

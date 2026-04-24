@@ -1,4 +1,4 @@
-import { loadRootEnv } from "@aie-matrix/root-env";
+import { loadRootEnv, isEnvTruthy } from "@aie-matrix/root-env";
 import { Layer } from "effect";
 import express, { type Request, type Response } from "express";
 import { A2AHostServiceLive, createA2AHostService } from "./a2a-host/A2AHostService.js";
@@ -6,6 +6,7 @@ import { buildHouseAgentCard } from "./house-agent-card.js";
 import { mapHouseError } from "./http-error-map.js";
 import { McpProxyServiceLive, makeMcpProxy } from "./mcp-proxy/mcp-proxy.layer.js";
 import { createCatalogService, CatalogServiceLive } from "./catalog/CatalogService.js";
+import { readHouseCapabilityManifest } from "./house-capabilities.js";
 import { AgentSupervisorLayer, makeTestSupervisor } from "./supervisor/SupervisorService.js";
 import {
   ActiveSessionsPreventDeregister,
@@ -14,6 +15,7 @@ import {
   SessionNotFound,
   Unauthorized,
 } from "./errors.js";
+import { startColyseusWorldBridge, type ColyseusWorldBridgeHandle } from "./colyseus-bridge/ColyseusWorldBridge.js";
 import type { WorldCredential } from "./types.js";
 
 loadRootEnv();
@@ -32,6 +34,11 @@ const publicBase =
   (process.env.GHOST_HOUSE_PUBLIC_BASE_URL ?? "").replace(/\/$/, "") ||
   `http://127.0.0.1:${port}`;
 
+const worldHttpBase = (process.env.AIE_MATRIX_HTTP_BASE_URL ?? "http://127.0.0.1:8787").replace(
+  /\/$/,
+  "",
+);
+
 if (devToken.length === 0) {
   console.error("GHOST_HOUSE_DEV_TOKEN is required");
   process.exit(1);
@@ -44,7 +51,10 @@ export const appLayer = Layer.mergeAll(
   base,
   McpProxyServiceLive,
   Layer.provide(
-    AgentSupervisorLayer({ publicHouseBaseUrl: publicBase, defaultCapabilityManifest: new Set() }),
+    AgentSupervisorLayer({
+      publicHouseBaseUrl: publicBase,
+      defaultCapabilityManifest: readHouseCapabilityManifest(),
+    }),
     base,
   ),
 );
@@ -56,7 +66,7 @@ const supervisor = makeTestSupervisor({
   catalog,
   a2a,
   publicHouseBaseUrl: publicBase,
-  defaultCapabilityManifest: new Set(),
+  defaultCapabilityManifest: readHouseCapabilityManifest(),
 });
 
 function requireBearer(req: Request): void {
@@ -89,7 +99,13 @@ async function handleMcp(req: Request, res: Response): Promise<void> {
   try {
     if (req.method === "GET") {
       const wUrl = session.worldCredential.worldApiBaseUrl;
-      const f = await fetch(wUrl, { method: "GET", headers: { connection: "close" } });
+      const f = await fetch(wUrl, {
+        method: "GET",
+        headers: {
+          accept: req.headers.accept?.toString() || "application/json, text/event-stream",
+          connection: "close",
+        },
+      });
       res.status(f.status);
       f.headers.forEach((v, k) => {
         if (k === "transfer-encoding" || k === "connection") {
@@ -108,6 +124,7 @@ async function handleMcp(req: Request, res: Response): Promise<void> {
     const f = await fetch(wUrl, {
       method: "POST",
       headers: {
+        accept: req.headers.accept?.toString() || "application/json, text/event-stream",
         "content-type": (req.headers["content-type"] as string) || "application/json",
         authorization: `Bearer ${session.worldCredential.token}`,
         ...(req.headers["mcp-protocol-version"]
@@ -134,6 +151,15 @@ async function handleMcp(req: Request, res: Response): Promise<void> {
     res.status(m.status).json(m.body);
   }
 }
+
+/** A2A agent → house push target (set via setTaskPushNotificationConfig; dev sink). */
+app.post(
+  "/v1/internal/a2a-agent-push",
+  express.json({ limit: "4mb" }),
+  (_req, res) => {
+    res.status(204).end();
+  },
+);
 
 app.post(
   "/v1/mcp",
@@ -302,13 +328,44 @@ app.use(
   },
 );
 
+let colyseusHandle: ColyseusWorldBridgeHandle | undefined;
+
 const server = app.listen(port, "0.0.0.0", () => {
   console.info(
     JSON.stringify({ kind: "ghost-house.start", publicBase, port, catalog: catalogFilePath }),
   );
+  if (!isEnvTruthy(process.env.GHOST_HOUSE_DISABLE_COLYSEUS_BRIDGE)) {
+    const roomIdOverride = process.env.GHOST_SPECTATOR_ROOM_ID?.trim() || undefined;
+    void (async () => {
+      try {
+        colyseusHandle = await startColyseusWorldBridge({
+          worldHttpBase,
+          roomIdOverride,
+          onEvent: (ev) => {
+            void supervisor.deliverWorldEvent(ev);
+          },
+        });
+        console.info(
+          JSON.stringify({
+            kind: "colyseus.world-bridge.started",
+            worldHttpBase,
+            roomIdOverride: roomIdOverride ?? null,
+          }),
+        );
+      } catch (e) {
+        console.error(
+          JSON.stringify({
+            kind: "colyseus.world-bridge.failed",
+            message: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      }
+    })();
+  }
 });
 
 const shutdown = async () => {
+  colyseusHandle?.close();
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });

@@ -8,6 +8,9 @@ const IC003_TOOLS = new Set([
   "go",
   "traverse",
   "inventory",
+  "say",
+  "bye",
+  "inbox",
 ]);
 
 const matrixZ = z.object({

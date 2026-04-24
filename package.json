@@ -20,7 +20,7 @@
     "server": "pnpm --filter @aie-matrix/server start",
     "server:dev": "pnpm --filter @aie-matrix/server dev",
     "spectator": "pnpm --filter @aie-matrix/client-phaser dev",
-    "ghost:house": "pnpm --filter @aie-matrix/ghost-random-house build && pnpm --filter @aie-matrix/ghost-random-house start",
+    "ghost:house": "pnpm --filter @aie-matrix/ghost-house dev",
     "ghost:register": "node scripts/register-ghost.mjs",
     "ghost:cli": "pnpm --filter @aie-matrix/ghost-cli start",
     "demo": "node scripts/demo.mjs",

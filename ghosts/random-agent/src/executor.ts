@@ -72,6 +72,8 @@ export class RandomWandererExecutor implements AgentExecutor {
     const tid = taskId ?? randomUUID();
     const sp = parseSpawnData(userMessage);
     if (sp) {
+      globalLoop?.cancel();
+      globalLoop = null;
       const t = task
         ? task
         : ({

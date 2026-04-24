@@ -57,7 +57,7 @@
 - [X] T023 [US1] Implement `ghosts/random-agent/src/agent.ts` — A2A endpoint served by `@a2a-js/sdk`; spawn task handler (parse IC-006 context, start movement loop, return ack); health-check ping responder; shutdown handler (stop movement loop)
 - [X] T024 [US1] Add Wanderer TCK suite in `ghosts/tck/src/wanderer.ts` — tests: agent card at `/.well-known/agent-card.json` passes IC-001 validation; spawn context delivered and acked within 30 s (IC-006); agent calls `whereami` returning H3 res-15 (IC-003); agent calls `go` successfully for 10 steps; agent card tier matches capabilities (IC-002)
 - [X] T025 [P] [US1] Add `tck:wanderer` script to `ghosts/tck/package.json` pointing at `wanderer.ts`
-- [ ] T026 [US1] Run `quickstart.md` end-to-end on a clean shell — start house, start random-agent, register, spawn, run `tck:wanderer`; confirm all steps succeed and document any deviations from `quickstart.md` in the file
+- [X] T026 [US1] Run `quickstart.md` end-to-end on a clean shell — start house, start random-agent, register, spawn, run `tck:wanderer`; confirm all steps succeed and document any deviations from `quickstart.md` in the file
 
 **Checkpoint**: `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` passes. Quickstart verified. US1 is independently deliverable.
 
@@ -71,11 +71,11 @@
 
 ### Implementation
 
-- [ ] T027 [US4] Add health-check fiber to `SupervisorService` in `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — `Effect.forkScoped` per session; A2A ping on configurable interval (default 30 s timeout); on timeout: transition session to `unhealthy`, emit health-check failure log
-- [ ] T028 [US4] Add restart policy to `SupervisorService` — exponential backoff (start 5 s, double each retry); cap at 5 restarts per hour; on cap exceeded: transition to `failed`, emit permanent-failure log; restart resets on successful health check
-- [ ] T029 [US4] Add per-agent action rate limiting in `SupervisorService` — configurable max actions/minute per session; log and drop excess actions without crashing the session
-- [ ] T030 [US4] Unit tests for `SupervisorService` failure paths in `ghosts/ghost-house/tests/unit/supervisor.test.ts` — mock A2A ping; verify `unhealthy` → `restarting` → `running` transitions; verify `failed` state after retry limit; verify hard-kill timeout fires
-- [ ] T031 [US4] Integration test: crash + restart in `ghosts/ghost-house/tests/integration/supervisor-crash.test.ts` — start house + agent; interrupt agent; verify supervisor restarts; verify parallel session unaffected
+- [X] T027 [US4] Add health-check fiber to `SupervisorService` in `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — `Effect.forkScoped` per session; A2A ping on configurable interval (default 30 s timeout); on timeout: transition session to `unhealthy`, emit health-check failure log
+- [X] T028 [US4] Add restart policy to `SupervisorService` — exponential backoff (start 5 s, double each retry); cap at 5 restarts per hour; on cap exceeded: transition to `failed`, emit permanent-failure log; restart resets on successful health check
+- [X] T029 [US4] Add per-agent action rate limiting in `SupervisorService` — configurable max actions/minute per session; log and drop excess actions without crashing the session
+- [X] T030 [US4] Unit tests for `SupervisorService` failure paths in `ghosts/ghost-house/tests/unit/supervisor.test.ts` — mock A2A ping; verify `unhealthy` → `restarting` → `running` transitions; verify `failed` state after retry limit; verify hard-kill timeout fires
+- [X] T031 [US4] Integration test: crash + restart in `ghosts/ghost-house/tests/integration/supervisor-crash.test.ts` — start house + agent; interrupt agent; verify supervisor restarts; verify parallel session unaffected
 
 **Checkpoint**: Supervisor health-check and retry loop verified by unit + integration tests. US4 independently testable.
 
@@ -89,18 +89,18 @@
 
 ### Implementation
 
-- [ ] T032 [US2] Implement `ColyseusService` in `ghosts/ghost-house/src/colyseus-bridge/Colyseusbridge.ts` — subscribe to Colyseus world room as ghost house; receive Colyseus event fanouts for adopted ghosts
-- [ ] T033 [US2] Implement `ghosts/ghost-house/src/colyseus-bridge/colyseus-bridge.layer.ts`
-- [ ] T034 [US2] Translate `message.new` Colyseus events → `world.message.new` IC-004 envelopes in `Colyseusbridge.ts` (include `from`, `role`, `priority`, `text` in payload)
-- [ ] T035 [P] [US2] Translate proximity events → `world.proximity.enter` / `world.proximity.exit` IC-004 envelopes in `Colyseusbridge.ts`
-- [ ] T036 [P] [US2] Translate quest trigger events → `world.quest.trigger` IC-004 envelopes in `Colyseusbridge.ts`
-- [ ] T037 [P] [US2] Translate session events → `world.session.start` / `world.session.end` IC-004 envelopes in `Colyseusbridge.ts`
-- [ ] T038 [US2] Wire bridge → supervisor event routing in `SupervisorService` — receive `WorldEvent` from bridge, find session by `ghostId`, deliver as A2A push notification using non-blocking send + `setTaskPushNotificationConfig` (IC-002 push invariant)
-- [ ] T039 [US2] Create `observer-agent` Listener example in `ghosts/ghost-house/examples/observer-agent/` — exposes A2A endpoint with `capabilities.pushNotifications: true`; logs all received IC-004 events; does NOT emit `say`
-- [ ] T040 [US2] Add Listener TCK suite in `ghosts/tck/src/listener.ts` — tests: agent card declares `tier: "listener"` and `pushNotifications: true`; house delivers IC-004 `world.message.new` event within observable latency; envelope passes IC-004 schema (schema literal, ULID eventId, valid sentAt); agent does NOT emit `say` in response (non-speech property)
-- [ ] T041 [P] [US2] Add `tck:listener` script to `ghosts/tck/package.json`
+- [X] T032 [US2] Implement Colyseus world bridge in `ghosts/ghost-house/src/colyseus-bridge/ColyseusWorldBridge.ts` — subscribe to Colyseus world room as ghost house; receive Colyseus event fanouts for adopted ghosts
+- [X] T033 [US2] Implement `ghosts/ghost-house/src/colyseus-bridge/colyseus-bridge.layer.ts`
+- [X] T034 [US2] Translate `message.new` Colyseus events → `world.message.new` IC-004 envelopes in `Colyseusbridge.ts` (include `from`, `role`, `priority`, `text` in payload)
+- [X] T035 [P] [US2] Translate proximity events → `world.proximity.enter` / `world.proximity.exit` IC-004 envelopes in `Colyseusbridge.ts`
+- [X] T036 [P] [US2] Translate quest trigger events → `world.quest.trigger` IC-004 envelopes in `Colyseusbridge.ts`
+- [X] T037 [P] [US2] Translate session events → `world.session.start` / `world.session.end` IC-004 envelopes in `Colyseusbridge.ts`
+- [X] T038 [US2] Wire bridge → supervisor event routing in `SupervisorService` — receive `WorldEvent` from bridge, find session by `ghostId`, deliver as A2A push notification using non-blocking send + `setTaskPushNotificationConfig` (IC-002 push invariant)
+- [X] T039 [US2] Create `observer-agent` Listener example in `ghosts/ghost-house/examples/observer-agent/` — exposes A2A endpoint with `capabilities.pushNotifications: true`; logs all received IC-004 events; does NOT emit `say`
+- [X] T040 [US2] Add Listener TCK suite in `ghosts/tck/src/listener.ts` — tests: agent card declares `tier: "listener"` and `pushNotifications: true`; house delivers IC-004 `world.message.new` event within observable latency; envelope passes IC-004 schema (schema literal, ULID eventId, valid sentAt); agent does NOT emit `say` in response (non-speech property)
+- [X] T041 [P] [US2] Add `tck:listener` script to `ghosts/tck/package.json`
 
-**Checkpoint**: `pnpm --filter @aie-matrix/tck run tck:listener` passes against `observer-agent`. US2 independently testable.
+**Checkpoint**: `pnpm --filter @aie-matrix/ghost-tck run tck:listener` passes against `observer-agent`. US2 independently testable.
 
 ---
 
@@ -112,12 +112,12 @@
 
 ### Implementation
 
-- [ ] T042 [US3] Add outbound `say` handler in `Colyseusbridge.ts` — receive `say` action from a Social agent's A2A stream; emit into Colyseus as a conversation record attributed to the ghost
-- [ ] T043 [US3] Wire `say` routing path: A2A host receives `say` from agent → `AgentSupervisor` routes to `Colyseusbridge` → Colyseus emits conversation record → bridge fans out `world.message.new` to nearby ghost sessions
-- [ ] T044 [US3] Implement capability manifest query in `AgentSupervisor` — expose available house capabilities (initially `telemetry.otlp` if configured); validate `matrix.capabilitiesRequired` at spawn; return `CapabilityUnmet` error if a required capability is unavailable
-- [ ] T045 [US3] Create Social echo-agent example in `ghosts/ghost-house/examples/echo-agent/` — receives `world.message.new` events; emits a `say` action echoing the received text; validates the full Social round-trip
-- [ ] T046 [US3] Add Social TCK suite in `ghosts/tck/src/social.ts` — tests: agent card declares `tier: "social"` and `pushNotifications: true`; agent receives `world.message.new` event; agent emits `say` action; `say` appears in world conversation log attributed to the ghost; ghost-to-ghost message delivery round-trip
-- [ ] T047 [P] [US3] Add `tck:social` script to `ghosts/tck/package.json`
+- [X] T042 [US3] Outbound social speech — Social agents use MCP `say` via the house proxy; world `ConversationService` persists; `ColyseusWorldBridge#fanoutWorldV1` in `server/world-api` + doc in `social-say-routing.ts`
+- [X] T043 [US3] `say` routing — MCP `say` in world server runs `fanoutWorldV1` to each `mx_listener` (ghost house Colyseus client → IC-004 → supervisor)
+- [X] T044 [US3] Implement capability manifest query in `AgentSupervisor` — expose available house capabilities (initially `telemetry.otlp` if configured); validate `matrix.capabilitiesRequired` at spawn; return `CapabilityUnmet` error if a required capability is unavailable
+- [X] T045 [US3] Create Social echo-agent example in `ghosts/ghost-house/examples/echo-agent/` — receives `world.message.new` events; emits a `say` action echoing the received text; validates the full Social round-trip
+- [X] T046 [US3] Add Social TCK suite in `ghosts/tck/src/social.ts` — tests: agent card declares `tier: "social"` and `pushNotifications: true`; agent receives `world.message.new` event; agent emits `say` action; `say` appears in world conversation log attributed to the ghost; ghost-to-ghost message delivery round-trip
+- [X] T047 [P] [US3] Add `tck:social` script to `ghosts/tck/package.json`
 
 **Checkpoint**: `pnpm --filter @aie-matrix/tck run tck:social` passes against `echo-agent`. US3 independently testable.
 
@@ -127,13 +127,14 @@
 
 **Purpose**: Documentation sync, proposal updates, and final integration verification.
 
-- [ ] T048 [P] Update RFC-0007 `proposals/rfc/0007-ghost-house-architecture.md` — mark all §Open Questions resolved (catalog paths → IC-005, event envelope → IC-004, spawn contract → IC-006, catalog persistence → file-backed JSON, task model → streaming + discrete, push notification prerequisites → documented in IC-002); update §Spawn and Supervision Contract step 4 to reference A2A task delivery
-- [ ] T049 [P] Update `docs/architecture.md` component map — add ghost house service block and its connections to world server (MCP proxy), Colyseus (bridge), and ghost agents
-- [ ] T050 [P] Update `CONTRIBUTING.md` with ghost agent contribution path — tier tiers, IC-001 agent card format, catalog registration endpoint (IC-005), TCK invocation per tier, localhost Phase 1 requirement
-- [ ] T051 [P] Update `ghosts/ghost-house/README.md` — environment variables table, `pnpm dev` startup, catalog file location, relationship to `random-agent` and TCK
-- [ ] T052 [P] Update `ghosts/random-agent/README.md` — environment variables, startup, how to register with the house, Wanderer TCK invocation
-- [ ] T053 Run `pnpm typecheck` across all workspace packages; fix any type errors introduced by ghost-house or random-agent
-- [ ] T054 Run full `quickstart.md` on a clean shell one final time; confirm every step succeeds with the production packages (not the spike)
+- [X] T048 [P] Update RFC-0007 `proposals/rfc/0007-ghost-house-architecture.md` — mark all §Open Questions resolved (catalog paths → IC-005, event envelope → IC-004, spawn contract → IC-006, catalog persistence → file-backed JSON, task model → streaming + discrete, push notification prerequisites → documented in IC-002); update §Spawn and Supervision Contract step 4 to reference A2A task delivery
+- [X] T049 [P] Update `docs/architecture.md` component map — add ghost house service block and its connections to world server (MCP proxy), Colyseus (bridge), and ghost agents
+- [X] T050 [P] Update `CONTRIBUTING.md` with ghost agent contribution path — tier tiers, IC-001 agent card format, catalog registration endpoint (IC-005), TCK invocation per tier, localhost Phase 1 requirement
+- [X] T051 [P] Update `ghosts/ghost-house/README.md` — environment variables table, `pnpm dev` startup, catalog file location, relationship to `random-agent` and TCK
+- [X] T052 [P] Update `ghosts/random-agent/README.md` — environment variables, startup, how to register with the house, Wanderer TCK invocation
+- [X] T053 Run `pnpm typecheck` across all workspace packages; fix any type errors introduced by ghost-house or random-agent
+- [X] T054 Run full `quickstart.md` on a clean shell one final time; confirm every step succeeds with the production packages (not the spike)
+- [X] T055 [P] **Gate: start after T026 (or T054) when the A2A flow is demoable.** Update root `package.json` `demo` target and `scripts/demo.mjs` to orchestrate **@aie-matrix/ghost-house** + **@aie-matrix/random-agent** (and the world / registry steps needed) instead of legacy `pnpm --filter @aie-matrix/ghost-random-house start`; preserve one-command `pnpm run demo` for a visible wanderer. Document required env, ports, and startup order in the demo script comment block or a short note the demo touches.
 
 ---
 
@@ -147,7 +148,7 @@
 - **Phase 4 (US4 Reliability)**: Depends on Phase 3 — extends the supervisor built in US1
 - **Phase 5 (US2 Listener)**: Depends on Phase 4 — Colyseus bridge needs a reliable supervisor
 - **Phase 6 (US3 Social)**: Depends on Phase 5 — `say` routing extends the bridge built in US2
-- **Phase 7 (Polish)**: Depends on all desired user stories complete
+- **Phase 7 (Polish)**: Depends on all desired user stories complete; **T055** is the exception — it may be picked up as soon as **T026** (or **T054**) shows the A2A stack is demoable, and should run **before** treating `pnpm run demo` as the canonical 009 story (do not repoint `demo` while quickstart is still unverified)
 
 ### User Story Dependencies
 
@@ -173,6 +174,7 @@
 - T025 (tck:wanderer script) in parallel with T026 (quickstart verification)
 - T034, T035, T036, T037 (bridge event translators) all in parallel — different event kinds
 - T048–T052 (polish docs) all in parallel
+- T055 (demo target update) in parallel with T048–T052 **after T026 (or T054) passes** — different files
 
 ---
 
@@ -244,5 +246,7 @@ After Phase 3:
 | 4 Reliability | US4 (P2) | T027–T031 | T030 |
 | 5 Listener | US2 (P2) | T032–T041 | T035, T036, T037, T041 |
 | 6 Social | US3 (P3) | T042–T047 | T047 |
-| 7 Polish | — | T048–T054 | T048–T052 |
-| **Total** | | **54 tasks** | **~15 parallel** |
+| 7 Polish | — | T048–T055 | T048–T052, T055† |
+| **Total** | | **55 tasks** | **~16 parallel** |
+
+† T055 only after T026 (or T054) verifies the A2A quickstart; then safe to run alongside doc polish

@@ -9,7 +9,7 @@
     "dev": "node --import tsx src/main.ts",
     "start": "node dist/main.js",
     "test": "vitest run",
-    "test:unit": "vitest run --dir tests/unit",
+    "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run --dir tests/integration"
   },
   "dependencies": {
@@ -17,6 +17,7 @@
     "@aie-matrix/ghost-ts-client": "workspace:*",
     "@aie-matrix/root-env": "workspace:*",
     "@colyseus/core": "0.15.57",
+    "colyseus.js": "0.15.28",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "effect": "^3.21.0",
     "express": "^4.21.2",

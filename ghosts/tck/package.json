@@ -8,12 +8,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "pretest": "pnpm --filter @aie-matrix/ghost-ts-client run build",
     "test": "pnpm run build && node dist/index.js",
-    "tck:wanderer": "pnpm run build && node dist/wanderer.js"
+    "tck:wanderer": "pnpm run build && node dist/wanderer.js",
+    "tck:listener": "pnpm run build && node dist/listener.js",
+    "tck:social": "pnpm run build && node dist/social.js"
   },
   "dependencies": {
     "@aie-matrix/ghost-ts-client": "workspace:*",
     "@aie-matrix/root-env": "workspace:*",
-    "h3-js": "^4.1.0"
+    "h3-js": "^4.1.0",
+    "ulid": "^2.3.0"
   },
   "devDependencies": {
     "@types/node": "^24.12.2"
