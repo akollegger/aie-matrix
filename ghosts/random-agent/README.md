@@ -19,6 +19,16 @@ pnpm --filter @aie-matrix/random-agent dev
 # Default: http://127.0.0.1:4001
 ```
 
+## Multiple ghosts (one `random-agent` process)
+
+One **catalog** registration (`baseUrl` for this process) can back **many** in-world ghosts. Each registry **adopt** gives a distinct `ghostId`; each house **spawn** for that ghost delivers its own IC-006 spawn context and MCP token. This package runs **one movement loop per `ghostId`** in parallel inside the same Node process. A new spawn for the **same** `ghostId` cancels and replaces that ghost’s loop only (other `ghostId`s keep running).
+
+For **hard isolation** between ghosts (separate crashes, memory, or CPU limits), run **N processes** on N ports and register N catalog entries instead of sharing one process.
+
+### Known limitations
+
+- The ghost house supervisor rejects a second **concurrent** session for the same `ghostId` while one is already active (`SpawnFailed: ghostId already has an active session`). The reference agent still implements same-`ghostId` replace for local tests or if house policy changes. N concurrent **distinct** `ghostId`s each with their own house session is the supported multi-ghost path.
+
 ## Register with the house
 
 1. With both **world server** and **ghost house** running, `POST` to the house (bearer = `GHOST_HOUSE_DEV_TOKEN`):

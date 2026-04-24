@@ -138,6 +138,26 @@
 
 ---
 
+## Phase 8: Reference Hardening
+
+**Purpose**: Improve the **Wanderer** reference implementation (`@aie-matrix/random-agent`) so it matches contributor expectations: **N concurrent in-world ghosts** (N spawn contexts / distinct `ghostId`) can move in parallel in **one** process, each with its own IC-006 spawn context and house MCP client. This phase is **in-branch** and **intentionally narrow** — it does not add a new W3C/A2A contract, a multi-session TCK gate, or SLOs for the whole platform. Out of scope: new house APIs, OAuth, production scale testing, and mandatory TCK for N-way concurrency.
+
+**Goal**: A contributor running multiple registry **adopt** + house **spawn** pairs against the same registered `baseUrl` sees all ghosts moving, not only the last spawn. Documentation explains when to use **one process (N keys)** vs **N processes (strong isolation)**.
+
+**Independent test**: After implementation, at least one automated test proves two **distinct** `ghostId` spawn contexts result in two independent loop lifecycles; existing `tck:wanderer` (single session) still passes. Optional manual: two adoptions, two spawns, observe both ghosts stepping.
+
+### Implementation
+
+- [X] T056 [Ref] Refactor `ghosts/random-agent/src/executor.ts` (and any minimal wiring in `agent.ts` if required) — replace the single `globalLoop` with a **registry keyed by `ghostId`** from `aie-matrix.ghost-house.spawn-context.v1`; **one** `GhostMcpClient` + movement loop per active `ghostId`; on a **new** spawn for the **same** `ghostId`, **cancel and replace** the previous loop (explicit policy); on spawn for a **new** `ghostId`, run **in parallel**; ensure shutdown / cancel paths do not leak timers or clients; add logs that include `ghostId` for each loop
+- [X] T057 [P] [Ref] Add or extend **unit tests** in `ghosts/random-agent/` — cover at least: (a) two distinct `ghostId` values can both be “active” without the second cancelling the first; (b) a second spawn with the **same** `ghostId` cancels only that key’s previous loop. Use test doubles or minimal mocks; no new E2E harness required in this task
+- [X] T058 [P] [Ref] **Documentation** — update `ghosts/random-agent/README.md` and add a short **“Multiple ghosts (same `random-agent` process)”** subsection to `specs/009-ghost-house-a2a/quickstart.md`: registry adopt per human ghost, spawn per `ghostId`, one catalog `baseUrl`; note **optional** N-process deployment for hard isolation; keep scope honest (reference agent, not a production SLO)
+- [X] T059 [P] [Ref] **Contributor path** — add a compact subsection under the ghost agent section in `CONTRIBUTING.md` pointing to the README + quickstart for multi-ghost behavior (do not duplicate the full walkthrough in CONTRIBUTING)
+- [X] T060 [Ref] **Regression gate** — `pnpm typecheck` at repo root; `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` (single-ghost) passes unchanged; if verification surfaces a **house** limitation (e.g. serialization of spawns to one agent), document in `ghosts/random-agent/README.md` **Known limitations** in this task — **no** house code change in Phase 8 scope
+
+**Checkpoint**: `random-agent` is a better reference for N concurrent world ghosts; docs and tests match; Wanderer TCK still green. Platform-wide multi-session TCK and RFCs remain out of scope unless promoted later.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
@@ -149,6 +169,7 @@
 - **Phase 5 (US2 Listener)**: Depends on Phase 4 — Colyseus bridge needs a reliable supervisor
 - **Phase 6 (US3 Social)**: Depends on Phase 5 — `say` routing extends the bridge built in US2
 - **Phase 7 (Polish)**: Depends on all desired user stories complete; **T055** is the exception — it may be picked up as soon as **T026** (or **T054**) shows the A2A stack is demoable, and should run **before** treating `pnpm run demo` as the canonical 009 story (do not repoint `demo` while quickstart is still unverified)
+- **Phase 8 (Reference Hardening)**: Depends on **Phase 3 (US1)** — the reference agent and IC-006 spawn path must exist. Run after **Phase 7** in branch order so docs and `demo` already match 009; **T060** must be last in the phase (regression gate)
 
 ### User Story Dependencies
 
@@ -175,6 +196,7 @@
 - T034, T035, T036, T037 (bridge event translators) all in parallel — different event kinds
 - T048–T052 (polish docs) all in parallel
 - T055 (demo target update) in parallel with T048–T052 **after T026 (or T054) passes** — different files
+- **Phase 8**: T057, T058, T059 in parallel after **T056**; **T060** serial after T056–T059
 
 ---
 
@@ -212,6 +234,7 @@ Task F: "T026 quickstart.md end-to-end verification"
 4. Phase 5 (US2) → Listener agents receive world events
 5. Phase 6 (US3) → Social agents speak; full conversation loop complete
 6. Phase 7 → docs synced, ADR/RFC updated, typecheck clean
+7. Phase 8 (optional) → `random-agent` N-concurrent-ghost hardening; contributor docs; T060 regression
 
 ### Parallel Team Strategy
 
@@ -229,6 +252,7 @@ After Phase 3:
 
 - `[P]` = different files, no incomplete dependencies — safe to parallelize
 - `[US#]` = maps task to its user story for traceability
+- `[Ref]` = Phase 8 (Reference Hardening) — not a user story; tracks `random-agent` + contributor docs
 - `quickstart.md` was written during planning; T026 and T054 *run* it to verify
 - RF-0007 and ADR-0004 must stay in sync per FR-021; T048 is the final checkpoint
 - The spike (`spikes/a2a-ghost-agent-protocol/`) is reference material only — production code goes in `ghosts/`
@@ -247,6 +271,7 @@ After Phase 3:
 | 5 Listener | US2 (P2) | T032–T041 | T035, T036, T037, T041 |
 | 6 Social | US3 (P3) | T042–T047 | T047 |
 | 7 Polish | — | T048–T055 | T048–T052, T055† |
-| **Total** | | **55 tasks** | **~16 parallel** |
+| 8 Reference Hardening | — | T056–T060 | T057–T059 after T056; T060 last |
+| **Total** | | **60 tasks** | **~18 parallel** |
 
 † T055 only after T026 (or T054) verifies the A2A quickstart; then safe to run alongside doc polish

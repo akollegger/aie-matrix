@@ -11,11 +11,28 @@ import type { SpawnContext } from "./spawn-types.js";
 
 type MoveLoop = { cancel: () => void };
 
-let globalLoop: MoveLoop | null = null;
+/** One movement loop per `ghostId`; parallel distinct `ghostId`s. */
+const loopsByGhostId = new Map<string, MoveLoop>();
 
-function assertH3Res15(h3: string, step: string): void {
+/** Latest spawn task id per ghost (IC-006); used to drop stale task metadata on re-spawn. */
+const ghostIdToTaskId = new Map<string, string>();
+
+type SpawnTaskMeta = { readonly ghostId: string; readonly contextId: string };
+
+const spawnTaskMeta = new Map<string, SpawnTaskMeta>();
+
+function registerSpawnTask(taskId: string, ghostId: string, contextId: string): void {
+  const prev = ghostIdToTaskId.get(ghostId);
+  if (prev !== undefined && prev !== taskId) {
+    spawnTaskMeta.delete(prev);
+  }
+  ghostIdToTaskId.set(ghostId, taskId);
+  spawnTaskMeta.set(taskId, { ghostId, contextId });
+}
+
+function assertH3Res15(h3: string, step: string, ghostId: string): void {
   if (!isValidCell(h3) || getResolution(h3) !== 15) {
-    throw new Error(`[random-agent] ${step}: expected H3 res-15, got ${h3}`);
+    throw new Error(`[random-agent] ghostId=${ghostId} ${step}: expected H3 res-15, got ${h3}`);
   }
 }
 
@@ -31,33 +48,84 @@ function parseSpawnData(msg: Message | undefined): SpawnContext | null {
   return null;
 }
 
-async function startMovementFromSpawn(b: () => string | undefined, ctx: SpawnContext): Promise<void> {
+/** Cancels the in-flight loop for `ghostId` (replace policy); does not remove the map entry — the new loop overwrites after `cancel()`. */
+function cancelMovementForGhost(ghostId: string, reason: string): void {
+  const loop = loopsByGhostId.get(ghostId);
+  if (loop) {
+    console.info(
+      JSON.stringify({
+        kind: "random-agent.movement.cancel",
+        ghostId,
+        reason,
+      }),
+    );
+    loop.cancel();
+  }
+}
+
+async function startMovementFromSpawn(
+  getMoveIntervalMs: () => string | undefined,
+  ctx: SpawnContext,
+): Promise<void> {
+  const { ghostId } = ctx;
+  cancelMovementForGhost(ghostId, "spawn-replace");
+
   const mcp = new GhostMcpClient({
     worldApiBaseUrl: ctx.houseEndpoints.mcp,
     token: ctx.token,
   });
   await mcp.connect();
-  const moveMs = Math.max(200, parseInt(b() ?? "2000", 10) || 2000);
+  const moveMs = Math.max(200, parseInt(getMoveIntervalMs() ?? "2000", 10) || 2000);
   let go = true;
-  globalLoop = { cancel: () => { go = false; } };
+  const handle: MoveLoop = { cancel: () => { go = false; } };
+  loopsByGhostId.set(ghostId, handle);
+  console.info(
+    JSON.stringify({
+      kind: "random-agent.movement.start",
+      ghostId,
+      intervalMs: moveMs,
+    }),
+  );
   try {
     while (go) {
       const w = (await mcp.callTool("whereami", {})) as { h3Index?: string; tileId?: string };
       const cell = w.h3Index && w.h3Index.length > 0 ? w.h3Index : w.tileId;
       if (typeof cell === "string") {
-        assertH3Res15(cell, "whereami");
+        assertH3Res15(cell, "whereami", ghostId);
       }
       const ex = (await mcp.callTool("exits", {})) as { exits?: ReadonlyArray<{ toward?: string }> };
-      const toward = ex.exits?.[0]?.toward;
+      const exits = ex.exits ?? [];
+      if (exits.length === 0) {
+        continue;
+      }
+      const pick = exits[Math.floor(Math.random() * exits.length)]!;
+      const toward = pick.toward;
       if (typeof toward === "string" && toward.length > 0) {
-        const r = (await mcp.callTool("go", { toward })) as { ok?: boolean; tileId?: string };
-        if (r?.ok === true && typeof r.tileId === "string") {
-          assertH3Res15(r.tileId, "go");
+        try {
+          const r = (await mcp.callTool("go", { toward })) as { ok?: boolean; tileId?: string };
+          if (r?.ok === true && typeof r.tileId === "string") {
+            assertH3Res15(r.tileId, "go", ghostId);
+          }
+        } catch (e) {
+          // `GhostMcpClient` throws on MCP `isError` (RULESET_DENY, TILE_FULL, MOVEMENT_BLOCKED, …).
+          // Always taking `exits[0]` used to kill the loop on first denial so only “lucky” ghosts moved.
+          const msg = e instanceof Error ? e.message : String(e);
+          console.info(
+            JSON.stringify({
+              kind: "random-agent.movement.go-rejected",
+              ghostId,
+              toward,
+              message: msg.length > 200 ? `${msg.slice(0, 197)}…` : msg,
+            }),
+          );
         }
       }
       await new Promise((r) => setTimeout(r, moveMs));
     }
   } finally {
+    if (loopsByGhostId.get(ghostId) === handle) {
+      loopsByGhostId.delete(ghostId);
+    }
     await mcp.disconnect().catch(() => {});
   }
 }
@@ -72,8 +140,6 @@ export class RandomWandererExecutor implements AgentExecutor {
     const tid = taskId ?? randomUUID();
     const sp = parseSpawnData(userMessage);
     if (sp) {
-      globalLoop?.cancel();
-      globalLoop = null;
       const t = task
         ? task
         : ({
@@ -95,8 +161,10 @@ export class RandomWandererExecutor implements AgentExecutor {
         status: { state: "working", timestamp: new Date().toISOString() },
       };
       eventBus.publish(w);
-      void startMovementFromSpawn(this.getMoveInterval, sp)
-        .catch((e) => console.error("[random-agent] movement", e));
+      registerSpawnTask(t.id, sp.ghostId, contextId ?? t.contextId);
+      void startMovementFromSpawn(this.getMoveInterval, sp).catch((e) =>
+        console.error(`[random-agent] movement ghostId=${sp.ghostId}`, e),
+      );
       const done: TaskStatusUpdateEvent = {
         kind: "status-update",
         taskId: t.id,
@@ -131,9 +199,25 @@ export class RandomWandererExecutor implements AgentExecutor {
     eventBus.finished();
   }
 
-  cancelTask = async (): Promise<void> => {
-    globalLoop?.cancel();
-    globalLoop = null;
+  cancelTask = async (taskId: string, eventBus: ExecutionEventBus): Promise<void> => {
+    const meta = spawnTaskMeta.get(taskId);
+    const ghostId = meta?.ghostId;
+    if (ghostId) {
+      cancelMovementForGhost(ghostId, "a2a-cancel-task");
+    }
+    spawnTaskMeta.delete(taskId);
+    if (ghostId && ghostIdToTaskId.get(ghostId) === taskId) {
+      ghostIdToTaskId.delete(ghostId);
+    }
+    const ctxId = meta?.contextId ?? "";
+    const canceled: TaskStatusUpdateEvent = {
+      kind: "status-update",
+      taskId,
+      contextId: ctxId,
+      final: true,
+      status: { state: "canceled", timestamp: new Date().toISOString() },
+    };
+    eventBus.publish(canceled);
   };
 }
 
@@ -145,4 +229,3 @@ function userText(userMessage: Message | undefined): string {
   }
   return "";
 }
-

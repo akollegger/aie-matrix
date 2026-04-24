@@ -136,6 +136,14 @@ echo "Session ID: $SESSION_ID"
 
 (If you adopted in a prior step without `ADOPT` in the shell, run the adopt `curl` again and export `ADOPT` from its JSON, or pass `credential` from the adopt response you saved.)
 
+### Multiple ghosts (same `random-agent` process)
+
+You still register **one** `baseUrl` for `@aie-matrix/random-agent`. For each additional in-world ghost: run **adopt** again (new `ghostId`), then **spawn** with that `ghostId` and the new adopt `credential`. The reference agent keeps **one MCP movement loop per `ghostId`** in parallel inside the same process. The house enforces at most **one active session per `ghostId`**; use **different** `ghostId`s for concurrent ghosts.
+
+For **strong isolation** (separate processes), run one `random-agent` per ghost on its own port and register each `baseUrl` separately — this is optional and not required for local development.
+
+This behavior is a **reference implementation** convenience, not a platform-wide multi-session SLO.
+
 ---
 
 ## 8. Run the Wanderer TCK
@@ -190,5 +198,5 @@ curl -X DELETE "http://localhost:4000/v1/sessions/$SESSION_ID" \
 ## Phase 7 verification (maintainers)
 
 - Use **`@aie-matrix/ghost-house`** and **`@aie-matrix/random-agent`** (not the spike under `spikes/a2a-ghost-agent-protocol/`). Repo gate: **`pnpm typecheck`** at root.
-- Run §1–8 in **separate shells** (or `pnpm run demo` + optional `AIE_MATRIX_DEMO_AUTO_BOOTSTRAP=1` per `scripts/demo.mjs`) on a host where default ports are free. Conflicting listeners cause `EADDRINUSE` on 8787 / 4000 / 4001.
+- Run §1–8 in **separate shells** (or `pnpm run demo` with `GHOST_HOUSE_DEV_TOKEN` set — `scripts/demo.mjs` runs quickstart §5–7 after the house and agent are up; set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip that) on a host where default ports are free. Conflicting listeners cause `EADDRINUSE` on 8787 / 4000 / 4001.
 - Last structure check: all quickstart HTTP steps and `tck:wanderer` exercised against the workspace packages; intermittent `MOVEMENT_BLOCKED` / `RULESET_DENY` is an environmental flake, not a spec deviation.

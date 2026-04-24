@@ -73,6 +73,8 @@ Third-party **ghost agents** are hosted by the **ghost house** package (`@aie-ma
 
 **Reference implementation:** [`ghosts/random-agent/`](ghosts/random-agent/) (Wanderer). End-to-end steps: [`specs/009-ghost-house-a2a/quickstart.md`](specs/009-ghost-house-a2a/quickstart.md).
 
+**Several ghosts, one Wanderer process:** the random-agent README and quickstart §7 describe how distinct `ghostId`s map to parallel movement loops against a single registered `baseUrl`, versus running N agent processes for isolation.
+
 ### Code Style and CI
 
 - CI checks run on every PR. All checks must pass before merge.

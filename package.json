@@ -30,6 +30,9 @@
     "test:e2e:autostart": "pnpm run test:e2e",
     "test:tck": "pnpm --filter @aie-matrix/ghost-tck test"
   },
+  "dependencies": {
+    "@aie-matrix/root-env": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^24.12.2",
     "typescript": "~5.7.3"

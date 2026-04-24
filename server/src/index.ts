@@ -130,8 +130,37 @@ async function main(): Promise<void> {
   const httpServer = createServer();
   const store = createRegistryStore();
   const internalFanoutToken = process.env.AIE_MATRIX_INTERNAL_FANOUT_TOKEN?.trim() ?? "";
-  let matrixRoomId: string | undefined;
+  /** Set after `matchMaker.createRoom` — stable id for the matrix room. */
+  let roomIdForSpectators: string | undefined;
+  /** Flipped true only after Neo4j / movement rules / Effect runtime wiring (registry + MCP). */
+  let spectatorMetaReady = false;
   const worldApiBaseUrl = `http://127.0.0.1:${httpPort}/mcp`;
+
+  // `scripts/demo.mjs` polls this as soon as the TCP port is open. Colyseus registers its HTTP
+  // layer during `listen()`; our main `httpServer.on` handler is attached much later after slow
+  // init. Answer `/spectator/room` here first so clients get 503 (starting) then 200 (ready).
+  httpServer.prependListener("request", (req, res) => {
+    if (res.headersSent || res.writableEnded) {
+      return;
+    }
+    const url = new URL(req.url ?? "/", `http://127.0.0.1:${httpPort}`);
+    if (req.method !== "GET" || url.pathname !== "/spectator/room") {
+      return;
+    }
+    if (!spectatorMetaReady || !roomIdForSpectators) {
+      res.writeHead(503, {
+        "Content-Type": "application/json",
+        ...corsHeaders,
+      });
+      res.end(JSON.stringify({ error: "STARTING", message: "Room not ready" }));
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      ...corsHeaders,
+    });
+    res.end(JSON.stringify({ roomId: roomIdForSpectators, roomName: "matrix" }));
+  });
 
   const gameServer = new Server({
     transport: new WebSocketTransport({ server: httpServer }),
@@ -148,6 +177,7 @@ async function main(): Promise<void> {
   if (!(room instanceof MatrixRoom)) {
     throw new Error("Expected MatrixRoom instance from matchmaker");
   }
+  roomIdForSpectators = listing.roomId;
   const colyseusBridge = createColyseusBridge(room);
   const ghostAuthority = new Map<string, string>();
   const bridge = {
@@ -297,7 +327,7 @@ async function main(): Promise<void> {
     mapHttpError: (e: unknown) => errorToResponse(e as HttpMappingError),
   });
 
-  matrixRoomId = listing.roomId;
+  spectatorMetaReady = true;
 
   httpServer.on("request", (req, res) => {
     void (async () => {
@@ -333,22 +363,6 @@ async function main(): Promise<void> {
         }
       }
 
-      if (req.method === "GET" && url.pathname === "/spectator/room") {
-        if (!matrixRoomId) {
-          res.writeHead(503, {
-            "Content-Type": "application/json",
-            ...corsHeaders,
-          });
-          res.end(JSON.stringify({ error: "STARTING", message: "Room not ready" }));
-          return;
-        }
-        res.writeHead(200, {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        });
-        res.end(JSON.stringify({ roomId: matrixRoomId, roomName: "matrix" }));
-        return;
-      }
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
         return;
       }

@@ -44,10 +44,10 @@ Goal: combined server + Phaser spectator + reference ghost moving on the sample 
 **Fewest steps from clone**: 
 
 1. `git clone` → `cd` → **`pnpm install`**
-2.  **`pnpm run demo --ghosts 5`** 
+2.  **`pnpm run demo -- --ghosts 5`** (omit `--ghosts` for a single wanderer; `--` forwards args to `scripts/demo.mjs`)
 3. open the Vite **Local** URL from the log (often **http://localhost:5174/** or **http://127.0.0.1:5174/**). 
 
-One terminal; **Ctrl+C** stops server, spectator, and 5 ghosts. Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run server`**, **`pnpm run spectator`**, and **`pnpm run ghost:house`** shells instead.
+One terminal; **Ctrl+C** stops server, spectator, ghost house, and random-agent (five in-world ghosts when using `--ghosts 5`). Orchestration lives in [`scripts/demo.mjs`](scripts/demo.mjs). For debugging, use separate **`pnpm run server`**, **`pnpm run spectator`**, and ghost-house / random-agent shells instead.
 
 ### Human prerequisites (read before debugging code)
 

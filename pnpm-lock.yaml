@@ -10,6 +10,10 @@ overrides:
 importers:
 
   .:
+    dependencies:
+      '@aie-matrix/root-env':
+        specifier: workspace:*
+        version: link:shared/root-env
     devDependencies:
       '@types/node':
         specifier: ^24.12.2
