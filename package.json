@@ -20,7 +20,7 @@
     "server": "pnpm --filter @aie-matrix/server start",
     "server:dev": "pnpm --filter @aie-matrix/server dev",
     "spectator": "pnpm --filter @aie-matrix/client-phaser dev",
-    "ghost:house": "pnpm --filter @aie-matrix/ghost-random-house build && pnpm --filter @aie-matrix/ghost-random-house start",
+    "ghost:house": "pnpm --filter @aie-matrix/ghost-house dev",
     "ghost:register": "node scripts/register-ghost.mjs",
     "ghost:cli": "pnpm --filter @aie-matrix/ghost-cli start",
     "demo": "node scripts/demo.mjs",
@@ -29,6 +29,9 @@
     "test:e2e": "pnpm --filter @aie-matrix/e2e test",
     "test:e2e:autostart": "pnpm run test:e2e",
     "test:tck": "pnpm --filter @aie-matrix/ghost-tck test"
+  },
+  "dependencies": {
+    "@aie-matrix/root-env": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.12.2",

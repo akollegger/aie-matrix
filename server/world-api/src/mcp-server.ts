@@ -19,6 +19,7 @@ import {
   type TileItemSummary,
   type TileInspectResult,
   type WhereAmIResult,
+  type SayResult,
   type WhoAmIResult,
 } from "@aie-matrix/shared-types";
 import { ConversationGhostNoPosition, ConversationService } from "@aie-matrix/server-conversation";
@@ -510,6 +511,7 @@ function sayEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const conversation = yield* ConversationService;
+    const bridge = yield* WorldBridgeService;
     const result = yield* (conversation.say(ghostId, content).pipe(
       Effect.mapError((e) => {
         if (e instanceof ConversationGhostNoPosition) {
@@ -517,7 +519,19 @@ function sayEffect(
         }
         return new WorldApiMovementBlocked({ message: e.message, code: "STORE_UNAVAILABLE" }) as WorldApiError;
       }),
-    ) as Effect.Effect<unknown, WorldApiError, never>);
+    ) as Effect.Effect<SayResult, WorldApiError, never>);
+    for (const lid of result.mx_listeners) {
+      bridge.fanoutWorldV1({
+        t: "message.new",
+        targetGhostId: lid,
+        payload: {
+          from: ghostId,
+          role: "ghost",
+          priority: "NEAR",
+          text: content,
+        },
+      });
+    }
     return result;
   });
 }

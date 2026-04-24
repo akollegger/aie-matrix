@@ -129,8 +129,38 @@ async function main(): Promise<void> {
 
   const httpServer = createServer();
   const store = createRegistryStore();
-  let matrixRoomId: string | undefined;
+  const internalFanoutToken = process.env.AIE_MATRIX_INTERNAL_FANOUT_TOKEN?.trim() ?? "";
+  /** Set after `matchMaker.createRoom` — stable id for the matrix room. */
+  let roomIdForSpectators: string | undefined;
+  /** Flipped true only after Neo4j / movement rules / Effect runtime wiring (registry + MCP). */
+  let spectatorMetaReady = false;
   const worldApiBaseUrl = `http://127.0.0.1:${httpPort}/mcp`;
+
+  // `scripts/demo.mjs` polls this as soon as the TCP port is open. Colyseus registers its HTTP
+  // layer during `listen()`; our main `httpServer.on` handler is attached much later after slow
+  // init. Answer `/spectator/room` here first so clients get 503 (starting) then 200 (ready).
+  httpServer.prependListener("request", (req, res) => {
+    if (res.headersSent || res.writableEnded) {
+      return;
+    }
+    const url = new URL(req.url ?? "/", `http://127.0.0.1:${httpPort}`);
+    if (req.method !== "GET" || url.pathname !== "/spectator/room") {
+      return;
+    }
+    if (!spectatorMetaReady || !roomIdForSpectators) {
+      res.writeHead(503, {
+        "Content-Type": "application/json",
+        ...corsHeaders,
+      });
+      res.end(JSON.stringify({ error: "STARTING", message: "Room not ready" }));
+      return;
+    }
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      ...corsHeaders,
+    });
+    res.end(JSON.stringify({ roomId: roomIdForSpectators, roomName: "matrix" }));
+  });
 
   const gameServer = new Server({
     transport: new WebSocketTransport({ server: httpServer }),
@@ -147,6 +177,7 @@ async function main(): Promise<void> {
   if (!(room instanceof MatrixRoom)) {
     throw new Error("Expected MatrixRoom instance from matchmaker");
   }
+  roomIdForSpectators = listing.roomId;
   const colyseusBridge = createColyseusBridge(room);
   const ghostAuthority = new Map<string, string>();
   const bridge = {
@@ -217,6 +248,7 @@ async function main(): Promise<void> {
       colyseusBridge.setGhostInventory(ghostId, itemRefs),
     setGhostLastAction: (ghostId: string, label: string) =>
       colyseusBridge.setGhostLastAction(ghostId, label),
+    fanoutWorldV1: (payload: unknown) => colyseusBridge.fanoutWorldV1(payload),
   };
 
   let neoDriver = createNeo4jDriverFromEnv() ?? null;
@@ -295,7 +327,7 @@ async function main(): Promise<void> {
     mapHttpError: (e: unknown) => errorToResponse(e as HttpMappingError),
   });
 
-  matrixRoomId = listing.roomId;
+  spectatorMetaReady = true;
 
   httpServer.on("request", (req, res) => {
     void (async () => {
@@ -322,7 +354,8 @@ async function main(): Promise<void> {
           p.startsWith("/maps/") ||
           p.startsWith("/registry") ||
           p.startsWith("/threads") ||
-          p === "/mcp"
+          p === "/mcp" ||
+          p === "/internal/world-fanout"
         ) {
           res.writeHead(204, corsHeaders);
           res.end();
@@ -330,22 +363,6 @@ async function main(): Promise<void> {
         }
       }
 
-      if (req.method === "GET" && url.pathname === "/spectator/room") {
-        if (!matrixRoomId) {
-          res.writeHead(503, {
-            "Content-Type": "application/json",
-            ...corsHeaders,
-          });
-          res.end(JSON.stringify({ error: "STARTING", message: "Room not ready" }));
-          return;
-        }
-        res.writeHead(200, {
-          "Content-Type": "application/json",
-          ...corsHeaders,
-        });
-        res.end(JSON.stringify({ roomId: matrixRoomId, roomName: "matrix" }));
-        return;
-      }
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
         return;
       }
@@ -412,6 +429,45 @@ async function main(): Promise<void> {
         );
         return;
       }
+      if (req.method === "POST" && url.pathname === "/internal/world-fanout") {
+        if (internalFanoutToken.length === 0) {
+          res.writeHead(503, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error: "FANOUT_DISABLED",
+              message: "Set AIE_MATRIX_INTERNAL_FANOUT_TOKEN to enable world fanout",
+            }),
+          );
+          return;
+        }
+        if (req.headers.authorization !== `Bearer ${internalFanoutToken}`) {
+          res.writeHead(401, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(JSON.stringify({ error: "UNAUTHORIZED" }));
+          return;
+        }
+        const buf = await readRequestBody(req);
+        let fanout: unknown;
+        try {
+          fanout = buf.length ? JSON.parse(buf.toString("utf8")) : {};
+        } catch {
+          res.writeHead(400, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(JSON.stringify({ error: "BAD_JSON" }));
+          return;
+        }
+        room.broadcast("world-v1", fanout);
+        res.writeHead(204, corsHeaders);
+        res.end();
+        return;
+      }
       if (!res.headersSent && !res.writableEnded) {
         res.writeHead(404, { "Content-Type": "text/plain", ...corsHeaders });
         res.end("Not found");
@@ -431,6 +487,11 @@ async function main(): Promise<void> {
   console.log(`  MCP world-api (Streamable HTTP): POST ${worldApiBaseUrl}`);
   console.log(`  Colyseus WebSocket: ws://127.0.0.1:${httpPort} (matchmake routes on same port)`);
   console.log(`  Spectator room id: GET http://127.0.0.1:${httpPort}/spectator/room`);
+  if (internalFanoutToken.length > 0) {
+    console.log(
+      `  World fanout (dev): POST http://127.0.0.1:${httpPort}/internal/world-fanout (Bearer AIE_MATRIX_INTERNAL_FANOUT_TOKEN)`,
+    );
+  }
   console.log(`  Conversation threads: GET http://127.0.0.1:${httpPort}/threads/:ghostId`);
   console.log(`  Map assets (dev): GET http://127.0.0.1:${httpPort}/maps/...`);
 }

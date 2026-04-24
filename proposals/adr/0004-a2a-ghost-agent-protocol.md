@@ -108,13 +108,24 @@ should track v1.0 adoption in the SDK and plan a version upgrade when stable.
 Protocol version is negotiated via the `A2A-Version` header and declared in agent
 cards' `protocolVersion` field.
 
-**Authentication model deferred.** The credential flow between ghost house and
-third-party agent endpoints — who authenticates to whom, what credential types
-are supported (API key, OAuth 2.0, OpenID Connect per A2A's OpenAPI-aligned
-security schemes), and whether the house offers sandboxed hosting for agents
-without their own infrastructure — is deferred to a follow-up ADR. **This ADR is
-not complete until that follow-up is accepted; the ghost house RFC (RFC-0007)
-must not enter implementation before the auth ADR lands.**
+**Authentication model — scoped deferral.** The credential flow between ghost
+house and third-party agent endpoints — who authenticates to whom, what
+credential types are supported (API key, OAuth 2.0, OpenID Connect per A2A's
+OpenAPI-aligned security schemes), and whether the house offers sandboxed
+hosting for agents without their own infrastructure — is deferred to a
+follow-up ADR.
+
+**Phase 1 exception (localhost only):** Phase 1 implementation may use a
+static shared bearer token (`GHOST_HOUSE_DEV_TOKEN` env var) for both
+directions (agent → house and house → agent). This is explicitly unsafe for
+production: it exercises the auth header path in code without requiring
+credential issuance infrastructure. The A2A SDK's `getToken` callback is wired
+to `() => process.env.GHOST_HOUSE_DEV_TOKEN` on both sides. This mechanism
+**must not be used outside localhost deployments**.
+
+**The auth ADR remains required before any non-local deployment** (public
+endpoint, multi-machine, or third-party agent registration outside a dev
+environment).
 
 ## Rationale
 
@@ -205,11 +216,39 @@ with growing tooling and ecosystem support.
   competing implementations
 
 **Open questions deferred to implementation:**
-- Whether the A2A task model (discrete tasks) or streaming model (continuous
-  long-running task) better fits autonomous ghost behavior — or whether both are
-  used for different interaction modes (autonomous movement loop vs. partner
-  message interrupt)
+- ~~Whether the A2A task model (discrete tasks) or streaming model (continuous
+  long-running task) better fits autonomous ghost behavior~~ — **resolved by
+  spike-008**: use streaming for the autonomous movement loop, discrete tasks
+  for partner message interrupts. The hybrid is natural and validated end-to-end.
 - The `matrix` agent card extension object (tier, ghost classes, tools, profile,
-  authors, etc.) — defined in the ghost house RFC
+  authors, etc.) — defined in the ghost house RFC and validated by spike-008.
 - Capability manifest format: what the house advertises as available to agents it
   spawns (memory backends, available MCP tools, notification types)
+
+## Appendix: Spike Evidence
+
+**Source:** spike-008 (`spikes/a2a-ghost-agent-protocol/`) — full reports at
+`reports/spike-a-sdk-maturity.md` and `reports/spike-b-contribution-model.md`.
+
+**SDK maturity (Spike A).** `@a2a-js/sdk` 0.3.13 on Node 24 exercised
+synchronous messaging, SSE streaming, push-notification delivery, and
+agent-card discovery without repository patches or custom workarounds. All
+four interaction patterns passed. One non-fatal caveat: occasional SDK console
+noise (`Task … not found`) during simple round-trips — treat as UX noise until
+confirmed with SDK maintainers.
+
+**Push notification pattern.** Validated with non-blocking `sendMessage` +
+`setTaskPushNotificationConfig` before terminal task state. Agents must not use
+blocking send when expecting push delivery. Source:
+`spike-a-sdk-exercise/src/smoke.ts`.
+
+**Contribution model (Spike B).** A skeleton house plus contributed-style
+agent (`spike-b-skeleton-house`, `spike-b-sample-agent`) demonstrated the full
+path: catalog registration (one HTTP call), spawn handshake, and one synthetic
+world event round-trip using the IC-008 envelope format. The `matrix` agent
+card extension object (all fields defined in RFC-0007) was exercised
+end-to-end.
+
+**Authentication.** Deliberately out of scope for the spike
+(`UserBuilder.noAuthentication`). The proposed deferral in this ADR remains
+appropriate; production must gate on the follow-up auth ADR.

@@ -1,0 +1,21 @@
+{
+  "name": "@aie-matrix/observer-agent",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node --import tsx src/agent.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@a2a-js/sdk": "^0.3.13",
+    "@aie-matrix/root-env": "workspace:*",
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^24.12.2",
+    "tsx": "^4.19.4",
+    "typescript": "~5.7.3"
+  }
+}

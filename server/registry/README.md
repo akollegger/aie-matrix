@@ -2,7 +2,7 @@
 
 In-memory REST registry for **GhostHouse** registration and **caretaker → ghost** adoption (IC-001 / IC-002). Mounted on the combined PoC HTTP server under **`/registry/*`** (default base **`http://127.0.0.1:8787`**).
 
-For day-to-day demos, prefer **`pnpm run demo`** (server + Vite + `random-house` in one terminal) or **`pnpm run ghost:house`** from the repository root, which performs the registry + MCP steps below via `ghosts/random-house`. To provision CLI credentials specifically, use **`pnpm run ghost:register`**.
+For day-to-day demos, prefer **`pnpm run demo`** (server + Vite + ghost-house + random-agent; optional **`-- --ghosts N`** for multiple adoptions) or **`pnpm run ghost:house`** / **`pnpm --filter @aie-matrix/random-house start`** from the repository root for the legacy random-house path. To provision CLI credentials specifically, use **`pnpm run ghost:register`**.
 
 ## Script-first flow (pnpm + optional curl)
 
