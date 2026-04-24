@@ -91,6 +91,7 @@ const handleMcpEffect = (req: Request, res: Response) =>
             method: "GET",
             headers: {
               accept: req.headers.accept?.toString() || "application/json, text/event-stream",
+              authorization: `Bearer ${session.worldCredential.token}`,
               connection: "close",
             },
           }),
