@@ -153,7 +153,12 @@ const handleMcpEffect = (req: Request, res: Response) =>
   );
 
 /** A2A agent → house push target (set via setTaskPushNotificationConfig; dev sink). */
-app.post("/v1/internal/a2a-agent-push", express.json({ limit: "4mb" }), (_req, res) => {
+app.post("/v1/internal/a2a-agent-push", express.json({ limit: "4mb" }), (req, res) => {
+  const tok = getBearerValue(req);
+  if (!tok || tok !== devToken) {
+    res.status(401).json({ error: "invalid or missing Authorization", code: "UNAUTHORIZED" });
+    return;
+  }
   res.status(204).end();
 });
 
