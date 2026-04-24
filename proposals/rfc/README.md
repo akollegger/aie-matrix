@@ -56,3 +56,5 @@ What other approaches were considered?
 | [RFC-0007](0007-ghost-house-architecture.md) | Ghost House Architecture | accepted |
 | [RFC-0008](0008-human-spectator-client.md) | Intermedium — Human Spectator Client | draft |
 | [RFC-0009](0009-map-format-pipeline.md) | Map Format Pipeline (.tmj → .map.gram → HTTP) | draft |
+| [RFC-0010](0010-h3geojson-map-editor.md) | H3 GeoJSON Map Editor | draft |
+| [RFC-0011](0011-ghost-personality-substructure.md) | Ghost Personality Substructure | draft |
