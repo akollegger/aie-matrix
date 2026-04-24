@@ -76,13 +76,17 @@ export class CatalogServiceImpl implements ICatalogService {
           return emptyCatalog();
         }
         const raw = await readFile(this.catalogFilePath, "utf8");
-        const j = JSON.parse(raw) as CatalogFile;
-        if (!j || typeof j !== "object" || j.agents === undefined) {
+        try {
+          const j = JSON.parse(raw) as CatalogFile;
+          if (!j || typeof j !== "object" || j.agents === undefined) {
+            return emptyCatalog();
+          }
+          return j;
+        } catch {
           return emptyCatalog();
         }
-        return j;
       },
-      catch: () => new Error("catalog load failed"),
+      catch: () => new Error("catalog read failed"),
     }).pipe(Effect.orDie);
 
   save = (c: CatalogFile): Effect.Effect<void> =>
