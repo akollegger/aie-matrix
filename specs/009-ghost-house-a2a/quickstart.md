@@ -100,7 +100,7 @@ GHOST_HOUSE_ID=$(curl -sX POST http://localhost:8787/registry/houses \
   -H "Content-Type: application/json" \
   -d '{ "displayName": "quickstart-house" }' | jq -r .ghostHouseId)
 
-# Adopt a ghost
+# Adopt a ghost (save full body for spawn credential)
 ADOPT=$(curl -sX POST http://localhost:8787/registry/adopt \
   -H "Content-Type: application/json" \
   -d "{\"caretakerId\": \"$CARETAKER_ID\", \"ghostHouseId\": \"$GHOST_HOUSE_ID\"}")
@@ -113,23 +113,36 @@ echo "Ghost ID: $GHOST_ID"
 
 ## 7. Spawn random-agent for the ghost
 
+Re-use the registry credential from adopt so the house MCP proxy can call the world server on the ghost’s behalf.
+
 ```bash
 SESSION=$(curl -sX POST "http://localhost:4000/v1/sessions/spawn/random-agent" \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer dev-secret-change-me" \
-  -d "{\"ghostId\": \"$GHOST_ID\"}")
+  -d "{
+    \"ghostId\": \"$GHOST_ID\",
+    \"credential\": {
+      \"token\": \"$(echo $ADOPT | jq -r .credential.token)\",
+      \"worldApiBaseUrl\": \"$(echo $ADOPT | jq -r .credential.worldApiBaseUrl)\"
+    }
+  }")
 SESSION_ID=$(echo $SESSION | jq -r .sessionId)
 
 echo "Session ID: $SESSION_ID"
 # The ghost is now moving randomly in the world.
 ```
 
+(If you adopted in a prior step without `ADOPT` in the shell, run the adopt `curl` again and export `ADOPT` from its JSON, or pass `credential` from the adopt response you saved.)
+
 ---
 
 ## 8. Run the Wanderer TCK
 
 ```bash
-pnpm --filter @aie-matrix/tck run tck:wanderer
+# Optional: if not using defaults
+export GHOST_HOUSE_URL=http://localhost:4000
+export RANDOM_AGENT_BASE_URL=http://localhost:4001
+pnpm --filter @aie-matrix/ghost-tck run tck:wanderer
 # [tck] wanderer PASS
 ```
 

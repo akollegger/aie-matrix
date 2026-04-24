@@ -10,11 +10,11 @@
 
 **Purpose**: Scaffold the two new workspace packages and wire them into the monorepo.
 
-- [ ] T001 Create `ghosts/ghost-house/` package — `src/`, `tests/unit/`, `tests/integration/`, `package.json` (`@aie-matrix/ghost-house`), `tsconfig.json`, `.env.example`, `README.md`
-- [ ] T002 Create `ghosts/random-agent/` package — `src/`, `tests/`, `package.json` (`@aie-matrix/random-agent`), `tsconfig.json`, `.env.example`, `README.md`
-- [ ] T003 Add `ghosts/ghost-house` and `ghosts/random-agent` to `pnpm-workspace.yaml`
-- [ ] T004 [P] Configure `vitest` for `ghosts/ghost-house` in `ghosts/ghost-house/package.json` (scripts: `test`, `test:unit`, `test:integration`)
-- [ ] T005 [P] Configure `vitest` for `ghosts/random-agent` in `ghosts/random-agent/package.json` (script: `test`)
+- [X] T001 Create `ghosts/ghost-house/` package — `src/`, `tests/unit/`, `tests/integration/`, `package.json` (`@aie-matrix/ghost-house`), `tsconfig.json`, `.env.example`, `README.md`
+- [X] T002 Create `ghosts/random-agent/` package — `src/`, `tests/`, `package.json` (`@aie-matrix/random-agent`), `tsconfig.json`, `.env.example`, `README.md`
+- [X] T003 Add `ghosts/ghost-house` and `ghosts/random-agent` to `pnpm-workspace.yaml`
+- [X] T004 [P] Configure `vitest` for `ghosts/ghost-house` in `ghosts/ghost-house/package.json` (scripts: `test`, `test:unit`, `test:integration`)
+- [X] T005 [P] Configure `vitest` for `ghosts/random-agent` in `ghosts/random-agent/package.json` (script: `test`)
 
 ---
 
@@ -24,12 +24,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T006 Define shared runtime types in `ghosts/ghost-house/src/types.ts` — `CatalogEntry`, `AgentSession`, `AgentSessionStatus`, `WorldEvent`, `WorldEventKind`, `SpawnContext` (from data-model.md)
-- [ ] T007 Define `Data.TaggedError` subtypes in `ghosts/ghost-house/src/errors.ts` — `AgentCardInvalid`, `AgentAlreadyRegistered`, `AgentCardFetchFailed`, `AgentNotFound`, `SpawnFailed`, `SpawnTimeout`, `HealthCheckTimeout`, `RetryLimitExceeded`, `CapabilityUnmet`
-- [ ] T008 [P] Add production deps to `ghosts/ghost-house/package.json`: `@a2a-js/sdk`, `@modelcontextprotocol/sdk`, `@colyseus/core`, `effect`, `zod`, `ulid`, `@aie-matrix/root-env`
-- [ ] T009 [P] Add production deps to `ghosts/random-agent/package.json`: `@a2a-js/sdk`, `@modelcontextprotocol/sdk`, `@aie-matrix/root-env`
-- [ ] T010 Create Effect `ManagedRuntime` scaffold in `ghosts/ghost-house/src/main.ts` (empty service stubs composed into a runtime; HTTP server start on `GHOST_HOUSE_PORT`)
-- [ ] T011 Verify A2A SDK types resolve and imports compile in both packages (`pnpm typecheck` on ghost-house and random-agent)
+- [X] T006 Define shared runtime types in `ghosts/ghost-house/src/types.ts` — `CatalogEntry`, `AgentSession`, `AgentSessionStatus`, `WorldEvent`, `WorldEventKind`, `SpawnContext` (from data-model.md)
+- [X] T007 Define `Data.TaggedError` subtypes in `ghosts/ghost-house/src/errors.ts` — `AgentCardInvalid`, `AgentAlreadyRegistered`, `AgentCardFetchFailed`, `AgentNotFound`, `SpawnFailed`, `SpawnTimeout`, `HealthCheckTimeout`, `RetryLimitExceeded`, `CapabilityUnmet`
+- [X] T008 [P] Add production deps to `ghosts/ghost-house/package.json`: `@a2a-js/sdk`, `@modelcontextprotocol/sdk`, `@colyseus/core`, `effect`, `zod`, `ulid`, `@aie-matrix/root-env`
+- [X] T009 [P] Add production deps to `ghosts/random-agent/package.json`: `@a2a-js/sdk`, `@modelcontextprotocol/sdk`, `@aie-matrix/root-env`
+- [X] T010 Create Effect `ManagedRuntime` scaffold in `ghosts/ghost-house/src/main.ts` (empty service stubs composed into a runtime; HTTP server start on `GHOST_HOUSE_PORT`)
+- [X] T011 Verify A2A SDK types resolve and imports compile in both packages (`pnpm typecheck` on ghost-house and random-agent)
 
 **Checkpoint**: Package structure compiles — user story implementation can begin.
 
@@ -39,27 +39,27 @@
 
 **Goal**: A third-party contributor registers a Wanderer-tier agent, sees it running as a live ghost in the world, and the TCK Wanderer suite passes.
 
-**Independent Test**: Register `random-agent`, spawn it for a ghost, run `pnpm --filter @aie-matrix/tck run tck:wanderer`. Pass = MVP.
+**Independent Test**: Register `random-agent`, spawn it for a ghost, run `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer`. Pass = MVP.
 
 ### Implementation
 
-- [ ] T012 [P] [US1] Implement `CatalogService` in `ghosts/ghost-house/src/catalog/CatalogService.ts` — `register`, `list`, `get`, `deregister` methods; file-backed JSON persistence (`CATALOG_FILE_PATH`); IC-001 validation (tier, required tools, matrix schema version)
-- [ ] T013 [P] [US1] Implement `ghosts/ghost-house/src/catalog/catalog.layer.ts` — `Layer` that provides `CatalogService` backed by the catalog JSON file
-- [ ] T014 [US1] Implement `A2AHostService` in `ghosts/ghost-house/src/a2a-host/A2AHostService.ts` — wrap `@a2a-js/sdk` server; expose streaming + non-blocking send; IC-002 protocol version header; `GHOST_HOUSE_DEV_TOKEN` bearer auth
-- [ ] T015 [US1] Implement `ghosts/ghost-house/src/a2a-host/a2a-host.layer.ts` — `Layer` providing `A2AHostService`
-- [ ] T016 [US1] Implement `MCPProxyService` in `ghosts/ghost-house/src/mcp-proxy/MCPProxyService.ts` — forward MCP tool calls to world server (`WORLD_API_BASE_URL`) using ghost-scoped token; validate caller's `requiredTools` against IC-003; reject calls to undeclared tools
-- [ ] T017 [US1] Implement `ghosts/ghost-house/src/mcp-proxy/mcp-proxy.layer.ts`
-- [ ] T018 [US1] Implement `AgentSupervisor` (spawn + shutdown only) in `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — spawn: resolve catalog entry, mint token, send IC-006 spawn context as first A2A task, await ack, transition session to `running`; shutdown: graceful cancel via A2A then hard-kill after 10 s
-- [ ] T019 [US1] Implement `ghosts/ghost-house/src/supervisor/supervisor.layer.ts`
-- [ ] T020 [US1] Wire catalog + session HTTP routes in `ghosts/ghost-house/src/main.ts` per IC-005 — `POST /v1/catalog/register`, `GET /v1/catalog`, `GET /v1/catalog/:agentId`, `DELETE /v1/catalog/:agentId`, `POST /v1/sessions/spawn/:agentId`, `DELETE /v1/sessions/:sessionId`, `GET /.well-known/agent-card.json`
-- [ ] T021 [P] [US1] Implement `ghosts/random-agent/src/buildAgentCard.ts` — IC-001 compliant Wanderer agent card (`tier: "wanderer"`, `requiredTools: ["whereami","exits","go"]`, `capabilities.streaming: true`, `capabilities.pushNotifications: false`, `matrix.schemaVersion: 1`)
-- [ ] T022 [US1] Implement MCP movement executor in `ghosts/random-agent/src/executor.ts` — connect to `houseEndpoints.mcp` from spawn context; call `whereami`, `exits`, `go` (random adjacent step); movement loop at configurable interval
-- [ ] T023 [US1] Implement `ghosts/random-agent/src/agent.ts` — A2A endpoint served by `@a2a-js/sdk`; spawn task handler (parse IC-006 context, start movement loop, return ack); health-check ping responder; shutdown handler (stop movement loop)
-- [ ] T024 [US1] Add Wanderer TCK suite in `ghosts/tck/src/wanderer.ts` — tests: agent card at `/.well-known/agent-card.json` passes IC-001 validation; spawn context delivered and acked within 30 s (IC-006); agent calls `whereami` returning H3 res-15 (IC-003); agent calls `go` successfully for 10 steps; agent card tier matches capabilities (IC-002)
-- [ ] T025 [P] [US1] Add `tck:wanderer` script to `ghosts/tck/package.json` pointing at `wanderer.ts`
+- [X] T012 [P] [US1] Implement `CatalogService` in `ghosts/ghost-house/src/catalog/CatalogService.ts` — `register`, `list`, `get`, `deregister` methods; file-backed JSON persistence (`CATALOG_FILE_PATH`); IC-001 validation (tier, required tools, matrix schema version)
+- [X] T013 [P] [US1] Implement `ghosts/ghost-house/src/catalog/catalog.layer.ts` — `Layer` that provides `CatalogService` backed by the catalog JSON file
+- [X] T014 [US1] Implement `A2AHostService` in `ghosts/ghost-house/src/a2a-host/A2AHostService.ts` — wrap `@a2a-js/sdk` server; expose streaming + non-blocking send; IC-002 protocol version header; `GHOST_HOUSE_DEV_TOKEN` bearer auth
+- [X] T015 [US1] Implement `ghosts/ghost-house/src/a2a-host/a2a-host.layer.ts` — `Layer` providing `A2AHostService`
+- [X] T016 [US1] Implement `MCPProxyService` in `ghosts/ghost-house/src/mcp-proxy/MCPProxyService.ts` — forward MCP tool calls to world server (`WORLD_API_BASE_URL`) using ghost-scoped token; validate caller's `requiredTools` against IC-003; reject calls to undeclared tools
+- [X] T017 [US1] Implement `ghosts/ghost-house/src/mcp-proxy/mcp-proxy.layer.ts`
+- [X] T018 [US1] Implement `AgentSupervisor` (spawn + shutdown only) in `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — spawn: resolve catalog entry, mint token, send IC-006 spawn context as first A2A task, await ack, transition session to `running`; shutdown: graceful cancel via A2A then hard-kill after 10 s
+- [X] T019 [US1] Implement `ghosts/ghost-house/src/supervisor/supervisor.layer.ts`
+- [X] T020 [US1] Wire catalog + session HTTP routes in `ghosts/ghost-house/src/main.ts` per IC-005 — `POST /v1/catalog/register`, `GET /v1/catalog`, `GET /v1/catalog/:agentId`, `DELETE /v1/catalog/:agentId`, `POST /v1/sessions/spawn/:agentId`, `DELETE /v1/sessions/:sessionId`, `GET /.well-known/agent-card.json`
+- [X] T021 [P] [US1] Implement `ghosts/random-agent/src/buildAgentCard.ts` — IC-001 compliant Wanderer agent card (`tier: "wanderer"`, `requiredTools: ["whereami","exits","go"]`, `capabilities.streaming: true`, `capabilities.pushNotifications: false`, `matrix.schemaVersion: 1`)
+- [X] T022 [US1] Implement MCP movement executor in `ghosts/random-agent/src/executor.ts` — connect to `houseEndpoints.mcp` from spawn context; call `whereami`, `exits`, `go` (random adjacent step); movement loop at configurable interval
+- [X] T023 [US1] Implement `ghosts/random-agent/src/agent.ts` — A2A endpoint served by `@a2a-js/sdk`; spawn task handler (parse IC-006 context, start movement loop, return ack); health-check ping responder; shutdown handler (stop movement loop)
+- [X] T024 [US1] Add Wanderer TCK suite in `ghosts/tck/src/wanderer.ts` — tests: agent card at `/.well-known/agent-card.json` passes IC-001 validation; spawn context delivered and acked within 30 s (IC-006); agent calls `whereami` returning H3 res-15 (IC-003); agent calls `go` successfully for 10 steps; agent card tier matches capabilities (IC-002)
+- [X] T025 [P] [US1] Add `tck:wanderer` script to `ghosts/tck/package.json` pointing at `wanderer.ts`
 - [ ] T026 [US1] Run `quickstart.md` end-to-end on a clean shell — start house, start random-agent, register, spawn, run `tck:wanderer`; confirm all steps succeed and document any deviations from `quickstart.md` in the file
 
-**Checkpoint**: `pnpm --filter @aie-matrix/tck run tck:wanderer` passes. Quickstart verified. US1 is independently deliverable.
+**Checkpoint**: `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` passes. Quickstart verified. US1 is independently deliverable.
 
 ---
 
