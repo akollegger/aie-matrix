@@ -1,5 +1,4 @@
 import { execSync, spawn } from "node:child_process";
-import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,20 +8,25 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
  * Playwright starts `webServer` before `globalSetup`, so production bundles must
  * exist before `pnpm --filter @aie-matrix/server start` / Vite preview run.
  */
+/** Match `global-setup.mjs` — preview must not bake `VITE_SPECTATOR_DEBUG=true` or the no-debug e2e fails. */
+const e2eClientEnv = {
+  ...process.env,
+  VITE_SPECTATOR_DEBUG: "",
+};
+
 function ensureClientPreviewBuild() {
-  const marker = path.join(root, "client/phaser/dist/index.html");
-  if (fs.existsSync(marker) && process.env.CI !== "1") {
-    console.info("[e2e dev-stack] client/phaser dist present; skipping client build");
-    return;
-  }
+  // Always rebuild: a cached `dist/` may have been produced with `VITE_SPECTATOR_DEBUG=true` from a
+  // developer `.env`, which bakes debug on for every page load and breaks the "no ?debug" e2e.
   console.info("[e2e dev-stack] building client for Vite preview…");
   execSync("pnpm --filter @aie-matrix/client-phaser run copy-map-assets", {
     cwd: root,
     stdio: "inherit",
+    env: e2eClientEnv,
   });
   execSync("pnpm --filter @aie-matrix/client-phaser build", {
     cwd: root,
     stdio: "inherit",
+    env: e2eClientEnv,
   });
 }
 
