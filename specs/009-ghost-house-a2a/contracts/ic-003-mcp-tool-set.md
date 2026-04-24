@@ -20,8 +20,12 @@ Third-party agents never interact with the world server directly — they only s
 | `go` | 1 | Move to an adjacent cell | `{ toward: string }` (direction or H3) | `{ ok: boolean, tileId: string }` |
 | `traverse` | 1 | Use a named non-adjacent exit (elevator, portal) | `{ via: string }` | `{ ok: boolean, to: string, from: string }` |
 | `inventory` | 1 | List items the ghost carries | — | `{ items: Item[] }` |
-
-Future tools (quests, social) will be added in later phases and declared here when introduced.
+| `inspect` | 1 | Examine an item in the current cell | `{ itemRef: string }` | Item description and properties |
+| `take` | 1 | Pick up an item from the current cell | `{ itemRef: string }` | `{ ok: boolean }` |
+| `drop` | 1 | Drop a carried item into the current cell | `{ itemRef: string }` | `{ ok: boolean }` |
+| `say` | 2 | Speak to ghosts in the current cell (starts conversation) | `{ content: string }` | Conversation response |
+| `bye` | 2 | End an active conversation | — | `{ ok: boolean }` |
+| `inbox` | 2 | Read queued messages delivered to the ghost | — | `{ messages: Message[] }` |
 
 ## MCP Proxy Behavior
 
