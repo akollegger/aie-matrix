@@ -218,6 +218,7 @@ to implementation.
 - Agent Supervisor with spawn/shutdown
 - `random-agent` passes TCK at Wanderer tier
 - No Colyseus Bridge event routing yet (Wanderer doesn't need it)
+- Auth: `GHOST_HOUSE_DEV_TOKEN` static bearer, localhost only
 
 **Phase 2 — Listener tier (weeks 3-4)**
 - Colyseus Bridge: inbound event translation (`message.new`, proximity, quest)
@@ -236,16 +237,21 @@ if the timeline tightens.
 
 ## Open Questions
 
-**Authentication model** — gating question for implementation, per ADR-0004.
-Credential flow, supported schemes, and whether the house offers sandboxed
-hosting for agents without public endpoints. Needs a follow-up ADR before
-Phase 1 implementation.
+**Authentication model** — full credential design (OAuth 2.0, OpenID Connect,
+sandboxed hosting) is deferred to a follow-up ADR and is required before any
+non-local deployment. Spike-008 ran `UserBuilder.noAuthentication` throughout,
+confirming auth is not a Phase 1 blocker for localhost work.
 
-**Task model vs. streaming model** — for autonomous ghost behavior, is the
-agent a single long-running A2A streaming task, or a series of discrete tasks
-dispatched by the house? Partner message interrupts likely want discrete-task
-semantics; autonomous movement likely wants streaming. The hybrid may be
-natural but needs validation against the A2A SDK.
+**Phase 1 uses `GHOST_HOUSE_DEV_TOKEN`** — a static shared bearer token read
+from the environment by both the house and spawned agents. Both directions
+(agent → house and house → agent) use the same token. This is explicitly
+unsafe outside localhost and is the only auth mechanism permitted for Phase 1.
+The auth ADR gates any deployment beyond a single developer machine.
+
+**Task model vs. streaming model** — *spike-008 validated the hybrid*: use
+streaming for the autonomous movement loop, discrete tasks for partner message
+interrupts. The hybrid is natural in the SDK. No further design work needed;
+implementation should document the routing rule in the Agent Supervisor.
 
 **Agent sandbox** — if third parties cannot host A2A endpoints themselves,
 does the ghost house offer a container-based sandbox (Docker, WASM, V8
@@ -255,6 +261,23 @@ be out of scope for AIEWF 2026. Worth an explicit decision.
 **Catalog persistence** — where does agent card state live? Options: in-memory
 (restart loses contributed agents), file-backed (simple, good for weekend
 event), database (over-engineered for this scope). Lean toward file-backed.
+
+**Catalog HTTP paths** — spike-008 used ad-hoc `/v1/catalog/register`,
+`/v1/catalog`, and `/v1/catalog/spawn/:agentId` paths. These are non-normative
+placeholders. The RFC should either canonicalize these paths or explicitly mark
+them as implementation-defined before Phase 1 ships.
+
+**Push notification prerequisites** — spike-008 confirmed that push
+notifications under A2A v0.3.0 require the task to be started non-blocking
+before calling `setTaskPushNotificationConfig`. Agents must not send a
+blocking `sendMessage` when expecting push delivery. Implementation should
+document this invariant in the A2A Host integration guide.
+
+**Contributor networking** — spike-008 validated the contribution model only
+on localhost. Vendor NAT traversal, TLS termination, and webhook delivery to
+non-public endpoints were not tested. The RFC should state the assumption
+explicitly: Phase 1 requires contributors to provide a reachable public HTTPS
+endpoint. Agent sandbox (above) is the mitigation if that assumption fails.
 
 **Observability** — tracing agent behavior across house→MCP proxy→world
 server→Colyseus bridge→agent is a non-trivial trace. Adopting A2A's OTLP
