@@ -17,7 +17,7 @@ Define the complete agent card format that ghost agents must publish at `/.well-
   "description": "Reference Wanderer agent: random movement, no memory, no speech.",
   "protocolVersion": "0.3.0",
   "version": "0.1.0",
-  "url": "http://localhost:4001",
+  "url": "http://localhost:4001/a2a/jsonrpc",
   "capabilities": {
     "streaming": true,
     "pushNotifications": false
@@ -58,7 +58,7 @@ Define the complete agent card format that ghost agents must publish at `/.well-
 | `description` | string | Non-empty |
 | `protocolVersion` | string | Must be `"0.3.0"` for this feature version |
 | `version` | string | SemVer; agent's own release version |
-| `url` | string | Reachable base URL; house fetches agent card from `{url}/.well-known/agent-card.json` |
+| `url` | string | The agent's A2A JSON-RPC endpoint URL (per A2A spec — this is the request target, not a base URL). The house fetches the agent card using the **`baseUrl`** supplied at `POST /v1/catalog/register`, not this field. |
 | `capabilities.streaming` | boolean | Wanderer: `true` (required for movement loop); Listener/Social: `true` |
 | `capabilities.pushNotifications` | boolean | Wanderer: `false`; Listener/Social: `true` |
 | `skills` | array | At least one skill entry with `id`, `name`, `description` |
