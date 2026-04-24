@@ -9,6 +9,7 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Neo4j (world graph — cell identity property changes to `h3Index`); in-memory Colyseus schema (005-h3-coordinate-system)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `ulid` (new — message IDs) (006-ghost-conversation)
 - JSONL on disk (`{ghost_id}.jsonl` per thread); in-memory ghost state in `ConversationService` (006-ghost-conversation)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` per ADR-0004 / RFC-0007; minimal additional npm deps only where the SDK does not cover HTTP serving (spike-local choice — document in `research.md` if changed) (008-a2a-ghost-house-spike)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -56,6 +57,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 008-a2a-ghost-house-spike: Throwaway A2A spike sandbox under `spikes/a2a-ghost-agent-protocol/` (not in pnpm workspace). TypeScript 5.7 / Node.js 24 (ESM) + `@a2a-js/sdk` for SDK maturity and contributor-model exercises per `specs/008-a2a-ghost-house-spike/`.
 - 006-ghost-conversation: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `ulid` (new — message IDs)
 - 005-h3-coordinate-system: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `h3-js` (new, all affected packages), `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `effect` v3+, `zod` 3
-- 004-ghost-cli: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@effect/cli`, `@effect/platform-node`, `ink` (v5+), `react` (v18)
