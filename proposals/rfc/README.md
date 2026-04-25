@@ -49,5 +49,10 @@ What other approaches were considered?
 |---|---|---|
 | [RFC-0001](0001-minimal-poc.md) | Minimal Proof-of-Concept | draft |
 | [RFC-0002](0002-rule-based-movement.md) | Rule-Based Movement Mechanics Using Pattern Matching | draft |
-| [RFC-0004](0004-h3-geospatial-coordinate-system.md) | H3 Geospatial Coordinate System | draft |
+| [RFC-0003](0003-ghost-cli.md) | ghost-cli — Human-Operated Ghost CLI | draft |
+| [RFC-0004](0004-h3-geospatial-coordinate-system.md) | H3 Geospatial Coordinate System | accepted |
 | [RFC-0005](0005-ghost-conversation-model.md) | Ghost Conversation Model | accepted |
+| [RFC-0006](0006-world-objects.md) | World Items | under review |
+| [RFC-0007](0007-ghost-house-architecture.md) | Ghost House Architecture | accepted |
+| [RFC-0008](0008-human-spectator-client.md) | Intermedium — Human Spectator Client | draft |
+| [RFC-0009](0009-map-format-pipeline.md) | Map Format Pipeline (.tmj → .map.gram → HTTP) | draft |

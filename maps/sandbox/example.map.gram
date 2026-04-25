@@ -1,0 +1,48 @@
+// experimental map format
+{
+    kind: "matrix-map",
+    mapId: "example-a",
+    elevation: 0
+}
+
+(carpetedFloor:TileType:CarpetedFloor {
+    name: "big-room",
+    color: css`gray` // styling of these type of tiles
+})
+
+// the bounding polygon for the map, defined by an ordered sequence of tiles which form a closed shape
+[lobby:Polygon:CarpetedFloor | // maps will have multiple Polygons that are implicitly filled with tiles matching the named TileType, here `CarpetedFloor`
+    topLeft, // these are example IDs for tile nodes. the actual IDs will be opaque rather than semantic
+    topRight,
+    bottomRight,
+    bottomLeft
+]
+
+(topLeft:CarpetedFloor { // the `topLeft` identifier is illustrative, not normative
+    location: 1234, // h3 coordinate
+    // other properties as needed
+})
+
+(pillar:TileType:Pillar {
+    name: "pillar"
+})
+
+(pillar1:Pillar {
+    location: 1235, // a tile instance may be inside a Polygon, overriding the tile type at that location
+})
+
+
+// h3-adjacent hex tiles are implicitly connected to avoid exhaustively enumerating every navigable path
+
+
+// items have a type definition
+(brassKey:ItemType:BrassKey { // `brassKey` is normative. `ItemType` sets this apart from instances of `BrassKey`
+    name: "brass key",
+    color: css`red`,
+    glyph: "🔑"
+})
+
+// an instance of placed item
+(key1:BrassKey { // `BrassKey` without the `ItemType` qualifier.
+    location: 1234  // an h3 coordinate
+})
