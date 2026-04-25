@@ -1,0 +1,217 @@
+# RFC-0009: Map Format Pipeline (.tmj → .map.gram → HTTP)
+
+**Status:** draft  
+**Date:** 2026-04-25  
+**Authors:** @akollegger  
+**Related:** [ADR-0005](../adr/0005-h3-native-map-format.md) (H3-native map format),
+[RFC-0004](0004-h3-geospatial-coordinate-system.md) (H3 coordinate system),
+[RFC-0006](0006-world-objects.md) (world objects / items sidecar),
+[RFC-0008](0008-human-spectator-client.md) (intermedium / human spectator client)
+
+## Summary
+
+Implement the artifact, conversion, and serving halves of [ADR-0005](../adr/0005-h3-native-map-format.md). A new build-time CLI (`tools/tmj-to-gram`) converts a Tiled `.tmj` plus its `*.items.json` sidecar into a single `.map.gram` artifact. The world-api gains a `GET /maps/:mapId` endpoint that serves either format from the same source. The intermedium (RFC-0008) consumes `?format=gram`; the Phaser debugger consumes `?format=tmj`. The runtime room-load path inside Colyseus is **out of scope** for this RFC: the artifact and the endpoint contract are enough to unblock RFC-0008 without churning Colyseus internals.
+
+## Motivation
+
+ADR-0005 fixes the format. RFC-0008 needs a stable map endpoint to render the hex scene at startup. Two pieces of work follow directly:
+
+1. **Conversion** — `.tmj` + `*.items.json` → `.map.gram`, runnable locally and in CI.
+2. **Serving** — `GET /maps/:mapId?format=...` on world-api, debugger-compatible (`tmj`), intermedium-compatible (`gram`).
+
+A third piece — switching the runtime Colyseus room loader from `.tmj` to `.map.gram` — is intentionally deferred. AGENTS.md flags `server/colyseus/src/` as off-limits to mid-flight refactors, and the switch requires a new Effect-Layer seam through the colyseus-bridge that is its own design problem. RFC-0008's intermedium does not need the runtime path to switch — only the HTTP endpoint to exist. Scoping this RFC to artifact + serving keeps the work landable in one PR and unblocks RFC-0008 without disturbing the room.
+
+## Design
+
+### Components and scope
+
+```
+maps/<scene>/<map>.tmj                ┐
+maps/<scene>/<map>.items.json         ├── input (authored in Tiled, RFC-0006 sidecar)
+maps/<scene>/*.tsx                    ┘
+
+  ↓ tools/tmj-to-gram (CLI; build-time; not a runtime dependency)
+
+maps/<scene>/<map>.map.gram           ── derived artifact (committed)
+
+  ↑ GET /maps/:mapId?format=gram|tmj
+       served by world-api MapRoutes
+
+Consumers:
+  - Phaser debugger        → ?format=tmj    (no change)
+  - Intermedium (RFC-0008) → ?format=gram   (new)
+
+Out of scope:
+  - server/colyseus/src/mapLoader.ts (continues to read .tmj as today)
+  - Neo4j gram-based seed (deferred to a follow-up)
+```
+
+During the transition, the `.tmj` is read twice in different contexts: once by Colyseus's existing `mapLoader.ts` for room state, and once by the world-api MapService for HTTP serving. Both read the same source files. Consolidating to a single load path is a follow-up RFC.
+
+### `tools/tmj-to-gram` CLI
+
+A new package, `@aie-matrix/tmj-to-gram`, in `tools/tmj-to-gram/`. ESM TypeScript per the workspace convention. Dependencies: `h3-js`, `@relateby/pattern` (already in repo, used by `server/world-api/src/rules/gram-rules.ts`), and `fast-xml-parser` (already in repo for tileset parsing).
+
+```bash
+pnpm tmj-to-gram convert maps/sandbox/freeplay.tmj
+# writes maps/sandbox/freeplay.map.gram next to the source
+
+pnpm tmj-to-gram convert maps/sandbox/freeplay.tmj --out path/to/out.map.gram
+```
+
+**Inputs:**
+- A `.tmj` path (required).
+- The matching `*.items.json` sidecar, located by filename-stem convention (per `mapLoader.ts`).
+- External `.tsx` tileset files referenced by the `.tmj`.
+
+**Translation rules:**
+- Read the `.tmj` properties: `h3_anchor` (required), `h3_resolution` (must be 15), `elevation` (default 0), `map_name` (default = filename stem).
+- Emit the gram **document header** record: `{ kind: "matrix-map", name: <map_name>, elevation: <elevation> }`.
+- For each painted cell on the `layout` layer:
+  - Compute its H3 index via `h3.localIjToCell(anchor, { i: col, j: row })` — same call the legacy loader uses.
+  - Apply the *tile-area compression rule* (next subsection); cells whose tile type matches an enclosing `tile-area` are not emitted as individual nodes.
+  - Otherwise emit `(<id>:<TileTypeLabel> { location: "<h3Index>" })`.
+- For each unique tile `type` encountered (whether on `layout`, introduced by a `tile-area`, or both): emit one `(<typeId>:TileType:<TileTypeLabel> { name })` definition. Visual hints (`color`) are emitted only when present in tile properties — see Open Question 6.
+- For each object on a `tile-area` layer: see *Tile area translation* below.
+- For each painted cell on any `item-placement` layer: emit `(<id>:<ItemTypeLabel> { location: "<h3Index>" })`. The `ItemTypeLabel` is derived from the sidecar's `itemClass` field.
+- For each `*.items.json` entry: emit one `(<itemId>:ItemType:<ItemTypeLabel> { name, color?, glyph? })` definition. Sidecar entries that are not placed are still emitted as definitions; placement and definition are independent.
+- The map boundary is the axis-aligned bounding box of all H3 cells covered by the map (polygon-derived plus individually emitted), per ADR-0005. It is not authored and not stored in the gram.
+- **Portals are out of scope** per ADR-0005's descope. The utility ignores any Tiled point objects that look like portal markers and logs a warning.
+
+### Tile area translation
+
+ADR-0005 Part 1 specifies the authoring conventions; this is the conversion algorithm.
+
+**Pipeline per `tile-area` object:**
+
+1. **Reject ellipses early.** A Tiled object with an `"ellipse": true` flag fails the conversion with a clear error pointing at the object's `id` and `name`. ADR-0005 excludes ellipses; the utility never silently approximates them.
+
+2. **Pixel → hex → H3 per vertex.** Build the vertex pixel list:
+   - **Polygon shapes** — use the object's `polygon` array of `{x, y}` points, offset by the object's `(x, y)`.
+   - **Rectangle shapes** — synthesize four vertex points at the rect corners (`(x, y)`, `(x+w, y)`, `(x+w, y+h)`, `(x, y+h)`), in clockwise order.
+   For each vertex, run point-in-hex resolution against the Tiled hex grid (`tilewidth`, `tileheight`, `hexsidelength`, `staggeraxis`, `staggerindex`) to find the `(col, row)` of the hex containing the point. Convert via `h3.localIjToCell(anchor, { i: col, j: row })`. ADR-0005's vertex-in-hex authoring rule guarantees each pixel lands inside exactly one hex; if a vertex falls in a gutter (no hex contains it), fail-closed with the offending object id, vertex index, and pixel coordinate.
+
+3. **Emit a gram polygon node.** `[<id>:Polygon:<TileTypeLabel> | v1, v2, ..., vN]` where the `vN` are the H3 cell IDs from step 2, in vertex order. Tiled rectangles and polygons both lower to the same gram form (the gram has no rectangle primitive — see ADR-0005 Part 2).
+
+4. **Compute interior cell set.** Run `h3.polygonToCells` over the vertex list (or the equivalent — see Open Question 8). The result is the set of H3 cells the area covers. This set is *not* enumerated into the gram; it is used only for compression and overlap checks.
+
+5. **Compression / override against `layout`.** For each cell in the interior set:
+   - If the `layout` layer has no painted tile at that cell, do nothing (the polygon fill instantiates it implicitly).
+   - If the `layout` layer has a tile whose type matches the area's `type`, **omit** it from the individual-tile emission list (compression rule).
+   - If the `layout` layer has a tile whose type differs from the area's `type`, **keep** it in the emission list (override rule).
+   The tile-emit step in *Translation rules* above consumes this filtered list.
+
+6. **Type-mismatch warning.** If the area's `type` does not resolve to a known tile type in the loaded `.tsx` tilesets, log a warning naming the object id, name, and unknown type. Do not fail.
+
+**Cross-area validation:**
+
+- **Overlap detection.** After step 4 has run for every `tile-area` object, assert pairwise empty intersection of the interior cell sets. Any overlap fails the conversion with the two offending object ids and the cell count of their intersection. ADR-0005's non-overlap rule is enforced here; failure is the only correct response.
+
+**Determinism note.** Tiled `draworder` (`"index"` or `"topdown"`) is irrelevant once non-overlap is enforced — no two areas claim the same cell, so iteration order does not affect output. The conversion sorts areas by `id` before processing for stable error messages and stable polygon-node ordering in the gram.
+
+**Determinism.** Byte-stable output for the same input. Cells are emitted in lexical H3-index order; items are emitted in lexical `itemRef` order. This makes the artifact diff-friendly when committed and lets CI re-derive it as an equality check.
+
+### `MapService` and HTTP endpoint (world-api)
+
+A new directory `server/world-api/src/map/`:
+
+- `MapService.ts` — Effect `Context.Tag` + `Layer`. At startup, scans `maps/**/*.{tmj,map.gram}` and builds an in-memory index keyed by `mapId`. `mapId` is the gram file's `name` metadata field (verified against the filename stem convention; a mismatch is a startup error). Each `mapId` maps to a `{ tmj, gram }` pair of file paths.
+- `MapService.raw(mapId, format)` — returns the on-disk byte stream of the requested format. `MapNotFoundError` if `mapId` is unknown; `UnsupportedFormatError` if `format` is neither `"tmj"` nor `"gram"`.
+- `MapService.validate()` (startup) — parses each `.map.gram` once with `@relateby/pattern` and asserts the `name` metadata field is present and matches the file's index entry. Catches malformed gram before the first HTTP request. No `LoadedMap` production here — that belongs to the follow-up RFC that switches the runtime path.
+- `MapRoutes.ts` — HTTP handler mounted on the world-api router, alongside `/mcp` and `/registry`. Routes:
+
+```
+GET /maps/:mapId
+GET /maps/:mapId?format=tmj
+GET /maps/:mapId?format=gram
+```
+
+Default format is `gram`. Content-Type:
+
+| format | Content-Type |
+|---|---|
+| `gram` | `text/plain; charset=utf-8` (see Open Question 2) |
+| `tmj` | `application/json` |
+
+Errors flow through `errorToResponse()` in `server/src/errors.ts`. Two new tagged errors are added: `MapNotFoundError` (→ 404) and `UnsupportedFormatError` (→ 400). Both must have a `Match.tag` branch in `errorToResponse` per AGENTS.md's "Match.exhaustive as a compile gate" convention; the build fails if either is omitted.
+
+The endpoint shares request tracing and structured logging with the existing world-api routes per `docs/guides/effect-ts.md`.
+
+### Tests
+
+Syntactic correctness of the gram alone is a weak guarantee — a `.map.gram` can parse cleanly and still misrepresent the source map. The test strategy verifies the conversion at three layers, each catching a different failure mode.
+
+**Layer 1 — Structural invariants (unit tests).** Property-style assertions over the conversion output for each fixture:
+- Every emitted `location` is a valid H3 index (`h3.isValidCell`) at resolution 15.
+- Every individual tile node references a `TileType` that is also defined in the gram.
+- Every item instance node references an `ItemType` that is also defined in the gram.
+- Every `tile-area` polygon's vertex list is a non-empty sequence of valid H3 cells.
+- Pairwise interior cell sets of `tile-area` polygons do not intersect (non-overlap invariant).
+- Compression invariant: for every cell in a polygon's interior, a `layout`-painted tile of the matching type is *not* present as an individual tile node, and a non-matching painted tile *is* present.
+- Bounding-box invariant: the AABB derived from all emitted cells matches the AABB derived from the legacy `mapLoader.ts` output for the same `.tmj`.
+- Item invariant: every entry in `*.items.json` appears as a definition; every placement appears as an instance.
+
+**Layer 2 — Committed golden artifacts (CI byte-equality).** `maps/sandbox/*.map.gram` is checked in. A CI step re-runs `tmj-to-gram` on each `.tmj` and asserts byte equality against the committed gram. Any conversion change that affects output is forced to surface as a reviewable diff in the PR. Determinism (Layer 1) and golden artifacts (Layer 2) together let CI catch silent semantic drift even when no test was specifically written for the new behavior.
+
+**Layer 3 — Headless reference renderer + pixel-diff (visual parity).** The risk this layer addresses: the gram parses, the structural invariants hold, but the resulting world *looks* wrong (a rotated polygon, a shifted anchor, a tile-class color mismatch, an off-by-one in `localIjToCell`). The test that catches this is rendering both formats and pixel-comparing the result.
+
+A test-only `tools/tmj-to-gram/test/render/` package contains:
+- A minimal SVG renderer that takes a uniform "rendered map" intermediate (`{ tileTypes, cells: [{h3, type}], items: [...] }`) and emits an SVG image of fixed canvas size.
+- Two adapters that produce that intermediate from each format: one reads `.tmj` directly (mirroring the legacy `mapLoader.ts` cell projection), one reads `.map.gram` (parsing with `@relateby/pattern` and expanding polygons via `h3.polygonToCells`).
+- A pixel-diff harness (`pixelmatch` or equivalent) that fails on any non-zero diff.
+
+For each fixture in `maps/sandbox/`, the test renders the `.tmj` and the `.map.gram` through the same SVG emitter, rasterizes both, and asserts pixel-identical output. The renderer is deliberately minimal — flat-color hexagons with item glyphs — and is not coupled to the intermedium's renderer. Color and glyph fallbacks for tile types and item types missing visual hints come from a fixed table in the test package — see Open Question 8.
+
+A `golden/` directory under the renderer holds the rasterized PNGs from one format (the `.tmj` side, which the Phaser debugger already reads correctly today). The other side is generated at test time and diffed against it. When a fixture is intentionally changed, the developer regenerates the golden with a documented script step, the same way snapshot tests work elsewhere.
+
+**Polygon-specific test fixtures.** `maps/sandbox/map-with-polygons.tmj` exercises:
+- A rectangle area (`Red`) with no overlapping painted tiles → all cells implicit, no individual nodes emitted for the area's interior.
+- A polygon area (`Blue`) covering a region that contains painted `Pillar` overrides → compression emits zero `Blue` individual nodes, override emits the `Pillar` nodes as expected.
+- An area whose `type` introduces a tile class with no painted tiles → polygon-only fill works.
+- Two non-overlapping polygons sharing a vertex → no-overlap check passes.
+- (Negative) A handcrafted `.tmj` with two overlapping `tile-area` objects → conversion fails-closed with both object ids reported.
+- (Negative) A handcrafted `.tmj` containing an `"ellipse": true` object → conversion fails-closed with a clear error.
+- (Negative) A handcrafted `.tmj` with a polygon vertex in the gutter between hexes → conversion fails-closed naming the object id, vertex index, and pixel coordinate.
+
+**Other tests:**
+- **Determinism.** Convert the same `.tmj` twice in the same process and on different machines (CI matrix); the output bytes must match.
+- **HTTP contract tests.** `GET /maps/freeplay?format=gram` → 200 + file body; `format=tmj` → 200 + JSON; default format is `gram`; unknown `mapId` → 404; unknown `format` → 400.
+- **Startup validation.** A handcrafted `.map.gram` with malformed gram syntax causes a typed startup error. A gram whose `name` metadata does not match the filename stem causes a typed startup error. `mapId` collision across scenes causes a typed startup error.
+
+### Migration sequence
+
+1. Land `tools/tmj-to-gram` with the parity TCK against `maps/sandbox/`.
+2. Run the CLI on `maps/sandbox/*.tmj`. Commit the resulting `.map.gram` files (the user has already done this manually for `freeplay.map.gram`; it will be regenerated and re-committed).
+3. Land `MapService` and `MapRoutes`. The endpoint is additive — no flag, no toggle.
+4. RFC-0008 implementation work consumes `GET /maps/:mapId?format=gram`.
+5. (Out of scope; follow-up RFC) Switch the runtime room loader from `mapLoader.ts` to a gram-based loader. This requires an Effect-Layer seam through the colyseus-bridge and is its own change.
+
+## Open Questions
+
+1. **Committed artifact vs derived-on-build.** Should `.map.gram` files be checked in, or generated as a CI step from the `.tmj`? Committing makes diffs reviewable (a map author's PR shows the derived change alongside their Tiled edit) and matches what the user has already done locally for `freeplay.map.gram`. Generating avoids drift between source and derived. Suggested default: commit, with a CI check that re-converts and asserts byte equality. Reviewers, weigh in.
+
+2. **`gram` content-type.** No registered IANA media type exists for gram. `text/plain; charset=utf-8` is correct and unsurprising. Coining `application/vnd.aie-matrix.gram` adds discoverability but is a one-way commitment. Suggested: `text/plain` for now; revisit when a clear consumer benefit emerges.
+
+3. ~~**Polygon support timing.**~~ **Resolved.** Polygon and rectangle `tile-area` objects are in scope for this RFC; see *Tile area translation* in Design. The sandbox fixture `maps/sandbox/map-with-polygons.tmj` exercises every shape and edge case the conversion must handle.
+
+4. **`mapId` namespacing.** The MapService keys on the gram's `name` metadata field. With multiple scenes, two maps could share a name. Should `mapId` collision be a startup error (chosen here for simplicity), or should `mapId` be `<scene>/<name>` to prefix-namespace? Suggested: error for now; reopen when multi-scene production maps land.
+
+5. **Where the gram parser lives.** `MapService.validate()` consumes `@relateby/pattern` directly, alongside the existing `server/world-api/src/rules/gram-rules.ts`. Should there be a shared `server/world-api/src/gram/` module, or do the two consumers stay independent? Suggested: independent for now; abstract when a third consumer appears.
+
+6. **Visual hint authoring (color, glyph).** ADR-0005 names `color` and `glyph` as rendering hints but the current `.tsx` tilesets do not carry them. The conversion will leave them blank in the gram for now. Authoring path is unspecified — Tiled tile properties? a sibling `*.style.json`? hand-edits after conversion? Suggested: leave blank in this RFC; intermedium tolerates absence; a follow-up adds an authoring convention once the intermedium has a concrete rendering need.
+
+7. **Round-trip back to `.tmj`.** Is `.map.gram → .tmj` ever needed (e.g., to round-trip from gram back to Tiled for re-editing)? Out of scope for this RFC — `.tmj` is the source of truth; the gram is derived. Flagged so reviewers know the question was considered and answered.
+
+8. **Reference renderer fallback table.** The Layer 3 visual-parity renderer needs a deterministic color-and-glyph mapping for tile types and item types that lack visual hints in their definitions (current `.tsx` tilesets do not carry `color`; sidecars may omit `glyph`). Options: a checked-in table indexed by type label; a hash-based palette derived from the label; pull from a future shared `*.style.json`. Suggested: a small checked-in table in `tools/tmj-to-gram/test/render/fallbacks.ts` covering the sandbox fixtures, with a documented "add an entry when you add a fixture" rule. The table is test-only and does not influence runtime rendering.
+
+9. **Polygon-to-cells provider.** Conversion's compression and overlap checks need to expand a Tiled-derived polygon into the H3 cell set it covers. Two candidate implementations: (a) call `h3.polygonToCells` on the *pixel-derived geographic boundary* (after projecting vertex pixels through the H3 anchor's geographic frame), (b) flood-fill from a known interior cell using H3 adjacency until the polygon's hex-grid boundary is reached. (a) reuses an existing library call; (b) avoids any geographic projection step and stays entirely in hex-grid space. Suggested: start with (a) and pivot to (b) only if projection precision becomes a problem at sandbox scale.
+
+## Alternatives
+
+**Generate `.map.gram` on the fly inside world-api on each request.** Skip the discrete CLI; have the HTTP handler convert `.tmj` to gram lazily. Rejected: conversion errors would surface at the first HTTP request after deploy rather than at build/CI time, and authors would have no local tool to validate their Tiled work without running the server. A discrete CLI also gives the conversion its own testable surface.
+
+**Skip the gram artifact and serve a JSON projection of `LoadedMap` over HTTP.** The intermedium could consume an already-parsed JSON payload, avoiding a gram parser in the client. Rejected: ADR-0005's rationale for gram is that it is a graph-shaped, committable record of the world. A JSON-projection convenience can be added without disturbing the format. Doing JSON-only would miss the architectural intent and re-introduce the translation layer ADR-0005 set out to remove.
+
+**Static-file serving for `.tmj` (debugger) and dynamic serving only for `.map.gram` (intermedium).** Two endpoints, two surfaces. Rejected: a single `GET /maps/:mapId?format=...` endpoint is one route, one error path, one set of contract tests. Splitting saves a small amount of code at the cost of operational and documentation duplication.
+
+**Move `mapLoader.ts` from `server/colyseus/` to `server/world-api/` in this RFC.** Relocate the legacy loader and rewrite it on top of `@relateby/pattern` in a single change. Rejected: AGENTS.md flags Colyseus internals as off-limits to mid-flight refactors. Touching the room load path also forces an Effect-Layer seam through the colyseus-bridge that is its own design problem. Bundling it would double the scope of this RFC and risk it landing nothing. Deferred to a follow-up RFC.
