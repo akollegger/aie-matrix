@@ -1,7 +1,7 @@
 # IC-002: `GET /maps/:mapId` HTTP API Contract
 
 **Contract ID**: IC-002  
-**Feature**: `012-tmj-to-gram`  
+**Feature**: `010-tmj-to-gram`  
 **Related RFC**: `proposals/rfc/0009-map-format-pipeline.md`
 
 ## Purpose

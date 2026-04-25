@@ -1,7 +1,7 @@
 # IC-003: `tmj-to-gram` CLI Interface Contract
 
 **Contract ID**: IC-003  
-**Feature**: `012-tmj-to-gram`  
+**Feature**: `010-tmj-to-gram`  
 **Related RFC**: `proposals/rfc/0009-map-format-pipeline.md`
 
 ## Purpose

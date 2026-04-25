@@ -1,6 +1,6 @@
 # Feature Specification: Map Format Pipeline
 
-**Feature Branch**: `012-tmj-to-gram`  
+**Feature Branch**: `010-tmj-to-gram`  
 **Created**: 2026-04-25  
 **Status**: Draft  
 **Input**: Map format pipeline as described in RFC-0009
@@ -163,9 +163,9 @@ When the world-api starts, `MapService.validate()` parses each committed `.map.g
 
 ### Interface Contracts *(mandatory)*
 
-- **IC-001**: `.map.gram` gram format — document header, `TileType` definitions, cell instance nodes, `Polygon` area nodes, `ItemType` definitions, item instance nodes — defined in `specs/012-tmj-to-gram/contracts/ic-001-map-gram-format.md`.
-- **IC-002**: `GET /maps/:mapId` HTTP API contract — path, query parameters, response bodies, content types, status codes, error shapes — defined in `specs/012-tmj-to-gram/contracts/ic-002-maps-http-api.md`.
-- **IC-003**: `tmj-to-gram` CLI interface — positional arguments, flags, exit codes, warning and error message formats — defined in `specs/012-tmj-to-gram/contracts/ic-003-cli-interface.md`.
+- **IC-001**: `.map.gram` gram format — document header, `TileType` definitions, cell instance nodes, `Polygon` area nodes, `ItemType` definitions, item instance nodes — defined in `specs/010-tmj-to-gram/contracts/ic-001-map-gram-format.md`.
+- **IC-002**: `GET /maps/:mapId` HTTP API contract — path, query parameters, response bodies, content types, status codes, error shapes — defined in `specs/010-tmj-to-gram/contracts/ic-002-maps-http-api.md`.
+- **IC-003**: `tmj-to-gram` CLI interface — positional arguments, flags, exit codes, warning and error message formats — defined in `specs/010-tmj-to-gram/contracts/ic-003-cli-interface.md`.
 
 ## Success Criteria *(mandatory)*
 
