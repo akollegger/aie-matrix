@@ -172,7 +172,7 @@ When the world-api starts, `MapService.validate()` parses each committed `.map.g
 ### Measurable Outcomes
 
 - **SC-001**: A world author can run `pnpm tmj-to-gram convert maps/sandbox/freeplay.tmj` from the repo root and produce a byte-identical gram on any machine with Node.js 24 installed — no environment-specific output.
-- **SC-002**: `GET /maps/freeplay?format=gram` returns 200 within the same p99 latency budget as other world-api endpoints (file I/O; no gram parsing on request path).
+- **SC-002**: `GET /maps/freeplay?format=gram` returns 200 within 50ms p99 under normal load (file I/O byte-passthrough; no gram parsing on the request path). Verified manually with `curl` timing during quickstart; automated load-testing is deferred to a follow-up RFC.
 - **SC-003**: `GET /maps/freeplay?format=tmj` returns 200 with the original JSON body — the Phaser debugger continues to work with zero code changes on its side.
 - **SC-004**: CI byte-equality check on `maps/sandbox/*.map.gram` catches any conversion change that alters output, forcing it to surface as a PR diff.
 - **SC-005**: The three-layer test suite passes: (1) structural invariants pass for every `maps/sandbox/` fixture, (2) golden CI byte-equality check passes, (3) headless pixel-diff between `.tmj`-rendered and `.map.gram`-rendered SVGs is zero pixels.

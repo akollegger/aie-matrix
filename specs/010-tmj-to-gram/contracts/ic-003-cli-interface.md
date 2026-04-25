@@ -28,9 +28,9 @@ The tool is invoked via the workspace `pnpm` script. The `convert` subcommand is
 | Code | Meaning |
 |---|---|
 | 0 | Conversion succeeded. Output file written. |
-| 1 | Input validation failure (missing `h3_anchor`, wrong `h3_resolution`, `--out` path not writable, etc.). |
+| 1 | Input validation failure (missing `h3_anchor`, wrong `h3_resolution`, etc.). |
 | 2 | Conversion error: ellipse object detected, polygon vertex in gutter, overlapping tile-area objects, or other geometry failure. |
-| 3 | I/O error: input file not found, tileset file not readable, output directory does not exist. |
+| 3 | I/O error: input file not found, tileset file not readable, output directory does not exist, output path not writable. |
 
 ## Stderr Output
 
