@@ -8,9 +8,13 @@ import test from "node:test";
 import { Effect, ManagedRuntime } from "effect";
 import { Gram } from "@relateby/pattern";
 import { makeMapServiceLayer } from "../src/map/MapService.js";
-import { tryHandleMapAssetGet } from "../src/map/MapRoutes.js";
+import { parseMapsPath, tryHandleMapAssetGet } from "../src/map/MapRoutes.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+
+test("parseMapsPath returns undefined for malformed percent-encoding in mapId", () => {
+  assert.equal(parseMapsPath("/maps/bad%"), undefined);
+});
 
 function httpGet(url: string): Promise<{ status: number; headers: NodeJS.Dict<string | string[]>; body: string }> {
   return new Promise((resolve, reject) => {

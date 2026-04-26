@@ -76,6 +76,7 @@ export {
 } from "./world-api-errors.js";
 export {
   GramParseError,
+  MapFileReadError,
   MapIdCollisionError,
   MapNameMismatchError,
   MapNotFoundError,

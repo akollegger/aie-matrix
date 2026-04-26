@@ -146,7 +146,8 @@ async function runConvertPipeline(
   const mergedCells = [...cells, ...vertexStubs].sort((a, b) =>
     a.h3Index < b.h3Index ? -1 : a.h3Index > b.h3Index ? 1 : a.id.localeCompare(b.id),
   );
-  const tileOrder = tileTypeEncounterOrder(mergedCells, tileAreaTypesInIdOrder);
+  // TileType definition order: layout `cell-*` encounters only (IC-001), then tile-area types by object id.
+  const tileOrder = tileTypeEncounterOrder(cells, tileAreaTypesInIdOrder);
 
   const text = serializeGram({
     mapId: ctx.mapStem,

@@ -23,3 +23,8 @@ export class MapIdCollisionError extends Data.TaggedError("MapError.IdCollision"
   readonly mapId: string;
   readonly paths: readonly string[];
 }> {}
+
+export class MapFileReadError extends Data.TaggedError("MapError.FileRead")<{
+  readonly path: string;
+  readonly cause: string;
+}> {}

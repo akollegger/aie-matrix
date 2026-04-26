@@ -5,6 +5,7 @@ import type {
 } from "@aie-matrix/server-registry";
 import type {
   AuthError,
+  MapFileReadError,
   MapNotFoundError,
   McpHandlerError,
   UnsupportedFormatError,
@@ -33,6 +34,7 @@ export {
 } from "@aie-matrix/server-world-api";
 export {
   GramParseError,
+  MapFileReadError,
   MapIdCollisionError,
   MapNameMismatchError,
   MapNotFoundError,
@@ -59,7 +61,8 @@ export type HttpMappingError =
   | WorldBridgeError
   | McpHandlerError
   | MapNotFoundError
-  | UnsupportedFormatError;
+  | UnsupportedFormatError
+  | MapFileReadError;
 
 function authErrorBody(error: AuthError): string {
   const variant = error._tag.slice("AuthError.".length);
@@ -175,6 +178,15 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
           error: "UnsupportedFormatError",
           message: `Unsupported format '${error.format}'. Supported formats: gram, tmj.`,
           requested: error.format,
+        }),
+      };
+    case "MapError.FileRead":
+      return {
+        status: 500,
+        body: JSON.stringify({
+          error: "MapFileReadError",
+          message: `Could not read map file: ${error.cause}`,
+          path: error.path,
         }),
       };
     default: {

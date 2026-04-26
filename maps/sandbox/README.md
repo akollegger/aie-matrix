@@ -72,7 +72,7 @@ Terrain tiles (`color-set.tsx`) carry only gameplay fields such as **`capacity`*
 2. **Object `type`** — must match a **tile type label** from your `.tsx` (e.g. `Red`, `Blue`). Unknown types log `[warn]` but do not fail conversion.
 3. **Vertex rule** — each vertex pixel must land inside a hex cell of the **`layout`** grid (same `h3_anchor`, `staggeraxis`, `staggerindex`, `tilewidth` / `tileheight` / `hexsidelength` as the map). Vertices in the gutter between hexes fail conversion.
 4. **Non-overlap** — interiors of two `tile-area` objects must not share any H3 cell; overlap fails with both object ids.
-5. **Compression** — interior cells whose `layout` tile **type matches** the area’s type are omitted as individual gram cell nodes (the polygon carries them). **Overrides** — if `layout` paints a **different** type inside the interior, that cell is still emitted as its own node.
+5. **Compression** — the polygon contributes a **shape cover** on the `layout` grid: filled cells **plus cells hit by the polygon vertices**. Cells in that cover whose `layout` tile **type matches** the area’s type are omitted as individual gram cell nodes (the polygon carries them). **Overrides** — if `layout` paints a **different** type anywhere in that same shape cover, that cell is still emitted as its own node.
 
 Only **`staggeraxis: "x"`** is supported for tile-area math today (matches sandbox hex maps).
 

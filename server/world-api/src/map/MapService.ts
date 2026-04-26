@@ -6,6 +6,7 @@ import type { GramParseError as RelatebyGramParseError } from "@relateby/pattern
 import { Context, Effect, HashMap, Layer, Option, pipe } from "effect";
 import {
   GramParseError,
+  MapFileReadError,
   MapIdCollisionError,
   MapNameMismatchError,
   MapNotFoundError,
@@ -21,7 +22,7 @@ export interface MapServiceOps {
   readonly raw: (
     mapId: string,
     format: "gram" | "tmj",
-  ) => Effect.Effect<Buffer, MapNotFoundError>;
+  ) => Effect.Effect<Buffer, MapNotFoundError | MapFileReadError>;
   readonly validate: () => Effect.Effect<void, GramParseError | MapNameMismatchError | MapIdCollisionError>;
 }
 
@@ -217,13 +218,14 @@ export const makeMapServiceLayer = (
               return Effect.fail(new MapNotFoundError({ mapId }));
             }
             const path = format === "gram" ? entry.gramPath : entry.tmjPath;
-            return pipe(
-              Effect.tryPromise({
-                try: () => readFile(path),
-                catch: (e) => new Error(`Map file read failed (${path}): ${String(e)}`),
-              }),
-              Effect.orDie,
-            );
+            return Effect.tryPromise({
+              try: () => readFile(path),
+              catch: (e) =>
+                new MapFileReadError({
+                  path,
+                  cause: e instanceof Error ? e.message : String(e),
+                }),
+            });
           },
         };
 

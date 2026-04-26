@@ -1,14 +1,21 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect } from "effect";
 import { getRequestTraceId } from "../request-trace.js";
-import { MapNotFoundError, UnsupportedFormatError } from "./map-errors.js";
+import { MapFileReadError, MapNotFoundError, UnsupportedFormatError } from "./map-errors.js";
 import { MapService } from "./MapService.js";
 
 const MAPS_SINGLE_SEGMENT = /^\/maps\/([^/]+)$/;
 
 export function parseMapsPath(pathname: string): string | undefined {
   const m = MAPS_SINGLE_SEGMENT.exec(pathname);
-  return m?.[1] !== undefined ? decodeURIComponent(m[1]) : undefined;
+  if (m?.[1] === undefined) {
+    return undefined;
+  }
+  try {
+    return decodeURIComponent(m[1]);
+  } catch {
+    return undefined;
+  }
 }
 
 export function parseMapFormatParam(searchParams: URLSearchParams): string {
@@ -37,7 +44,7 @@ export function handleMapAssetGet(
   url: URL,
   corsHeaders: Record<string, string>,
   mapId: string,
-): Effect.Effect<void, MapNotFoundError | UnsupportedFormatError, MapService> {
+): Effect.Effect<void, MapNotFoundError | UnsupportedFormatError | MapFileReadError, MapService> {
   return Effect.gen(function* () {
     const fmtRaw = parseMapFormatParam(url.searchParams);
     const fmt = normalizeFormat(fmtRaw);
@@ -124,6 +131,20 @@ function pipeHandle(
               error: "UnsupportedFormatError",
               message: `Unsupported format '${e.format}'. Supported formats: gram, tmj.`,
               requested: e.format,
+            }),
+          );
+          return true;
+        }
+        if (e._tag === "MapError.FileRead") {
+          res.writeHead(500, {
+            "Content-Type": "application/json",
+            ...corsHeaders,
+          });
+          res.end(
+            JSON.stringify({
+              error: "MapFileReadError",
+              message: `Could not read map file: ${e.cause}`,
+              path: e.path,
             }),
           );
           return true;

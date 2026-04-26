@@ -43,7 +43,7 @@ Warnings are prefixed with `[warn]` and do not cause a non-zero exit:
 ```
 [warn] Ignoring portal object id=<id> name=<name> at (<x>,<y>) — portals are out of scope.
 [warn] tile-area object id=<id> name=<name> has unknown type "<type>" (not found in any .tsx tileset).
-[warn] layout layer cell at (<col>,<row>) has unknown tile type "<type>" — emitted with label as authored.
+[warn] layout layer cell at (<col>,<row>) uses unknown gid <gid> — skipping cell
 ```
 
 ### Error messages

@@ -20,7 +20,7 @@ pnpm tmj-to-gram convert maps/sandbox/freeplay.tmj
 
 Expected output:
 - `maps/sandbox/freeplay.map.gram` is written next to the source.
-- CLI exits 0 with a log line like `[info] Wrote maps/sandbox/freeplay.map.gram (N nodes)`.
+- CLI exits 0. Diagnostics (warnings/errors only) go to stderr per IC-003; success is silent unless the map logs `[warn]` lines.
 
 To write to a custom path:
 
