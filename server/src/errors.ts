@@ -5,7 +5,9 @@ import type {
 } from "@aie-matrix/server-registry";
 import type {
   AuthError,
+  MapNotFoundError,
   McpHandlerError,
+  UnsupportedFormatError,
   WorldApiError,
   WorldBridgeError,
 } from "@aie-matrix/server-world-api";
@@ -30,6 +32,11 @@ export {
   type WorldBridgeError,
 } from "@aie-matrix/server-world-api";
 export {
+  GramParseError,
+  MapIdCollisionError,
+  MapNameMismatchError,
+  MapNotFoundError,
+  UnsupportedFormatError,
   WorldApiMapIntegrity,
   WorldApiMovementBlocked,
   WorldApiNoPosition,
@@ -50,7 +57,9 @@ export type HttpMappingError =
   | RegistryErrorUnion
   | WorldApiError
   | WorldBridgeError
-  | McpHandlerError;
+  | McpHandlerError
+  | MapNotFoundError
+  | UnsupportedFormatError;
 
 function authErrorBody(error: AuthError): string {
   const variant = error._tag.slice("AuthError.".length);
@@ -149,6 +158,24 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
       return {
         status: 500,
         body: JSON.stringify({ error: "MCP_HANDLER", message: error.message }),
+      };
+    case "MapError.NotFound":
+      return {
+        status: 404,
+        body: JSON.stringify({
+          error: "MapNotFoundError",
+          message: `Map '${error.mapId}' not found.`,
+          mapId: error.mapId,
+        }),
+      };
+    case "MapError.UnsupportedFormat":
+      return {
+        status: 400,
+        body: JSON.stringify({
+          error: "UnsupportedFormatError",
+          message: `Unsupported format '${error.format}'. Supported formats: gram, tmj.`,
+          requested: error.format,
+        }),
       };
     default: {
       // `HttpMappingError` spans multiple workspace packages; `switch (error._tag)` can leave the

@@ -68,6 +68,17 @@ Adjacent ghost `go` steps are evaluated in **`server/world-api`** (not inside Co
 
 Canonical cell identity for ghosts, Colyseus `ghostTiles`, and MCP tools is **H3 resolution 15** (see [RFC-0004](../proposals/rfc/0004-h3-geospatial-coordinate-system.md)). Tiled maps supply `h3_anchor` so every navigable cell gets a stable `h3Index`. In **Neo4j**, `(:Cell { h3Index })` is the node identity for the world graph (uniqueness constraint `cell_h3_unique`); non-adjacent exits use `ELEVATOR` and `PORTAL` relationship types with a `name` property matching MCP `exits` / `traverse`.
 
+### Map formats: two readers during the transition (RFC-0009)
+
+Until a follow-up unifies loading, **two** code paths read the same authored maps from `maps/`:
+
+| Consumer | Format | Code |
+|----------|--------|------|
+| Colyseus room / Phaser | `.tmj` | `server/colyseus/` (`mapLoader.ts` and friends — unchanged by RFC-0009) |
+| HTTP `GET /maps/:mapId` (intermedium, debugger) | `.map.gram` or `.tmj` | `server/world-api/src/map/MapService.ts` — byte passthrough of committed artifacts |
+
+The **`.map.gram`** file is produced offline by `tools/tmj-to-gram` and committed next to the `.tmj`. Startup validates every indexed gram (`@relateby/pattern` parse + `name` vs filename stem). Consolidating on a single load path (e.g. gram-only in Colyseus via the world bridge) is **out of scope** for RFC-0009 and belongs in a dedicated follow-up RFC so Colyseus internals stay off-limits per [AGENTS.md](../AGENTS.md).
+
 ### World item state (PoC)
 
 World items are currently a PoC-layer extension around the existing map + MCP stack:

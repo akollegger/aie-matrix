@@ -70,10 +70,10 @@ pnpm tmj-to-gram convert maps/sandbox/freeplay.tmj --out path/to/out.map.gram
 - For each painted cell on the `layout` layer:
   - Compute its H3 index via `h3.localIjToCell(anchor, { i: col, j: row })` — same call the legacy loader uses.
   - Apply the *tile-area compression rule* (next subsection); cells whose tile type matches an enclosing `tile-area` are not emitted as individual nodes.
-  - Otherwise emit `(<id>:<TileTypeLabel> { location: "<h3Index>" })`.
+  - Otherwise emit `(<id>:<TileTypeLabel> { location: h3\`<hex>\` })` (tagged string; see IC-001).
 - For each unique tile `type` encountered (whether on `layout`, introduced by a `tile-area`, or both): emit one `(<typeId>:TileType:<TileTypeLabel> { name })` definition. Visual hints (`color`) are emitted only when present in tile properties — see Open Question 6.
 - For each object on a `tile-area` layer: see *Tile area translation* below.
-- For each painted cell on any `item-placement` layer: emit `(<id>:<ItemTypeLabel> { location: "<h3Index>" })`. The `ItemTypeLabel` is derived from the sidecar's `itemClass` field.
+- For each painted cell on any `item-placement` layer: emit `(<id>:<ItemTypeLabel> { location: h3\`<hex>\` })`. The `ItemTypeLabel` is derived from the sidecar's `itemClass` field.
 - For each `*.items.json` entry: emit one `(<itemId>:ItemType:<ItemTypeLabel> { name, color?, glyph? })` definition. Sidecar entries that are not placed are still emitted as definitions; placement and definition are independent.
 - The map boundary is the axis-aligned bounding box of all H3 cells covered by the map (polygon-derived plus individually emitted), per ADR-0005. It is not authored and not stored in the gram.
 - **Portals are out of scope** per ADR-0005's descope. The utility ignores any Tiled point objects that look like portal markers and logs a warning.
@@ -91,13 +91,13 @@ ADR-0005 Part 1 specifies the authoring conventions; this is the conversion algo
    - **Rectangle shapes** — synthesize four vertex points at the rect corners (`(x, y)`, `(x+w, y)`, `(x+w, y+h)`, `(x, y+h)`), in clockwise order.
    For each vertex, run point-in-hex resolution against the Tiled hex grid (`tilewidth`, `tileheight`, `hexsidelength`, `staggeraxis`, `staggerindex`) to find the `(col, row)` of the hex containing the point. Convert via `h3.localIjToCell(anchor, { i: col, j: row })`. ADR-0005's vertex-in-hex authoring rule guarantees each pixel lands inside exactly one hex; if a vertex falls in a gutter (no hex contains it), fail-closed with the offending object id, vertex index, and pixel coordinate.
 
-3. **Emit a gram polygon node.** `[<id>:Polygon:<TileTypeLabel> | v1, v2, ..., vN]` where the `vN` are the H3 cell IDs from step 2, in vertex order. Tiled rectangles and polygons both lower to the same gram form (the gram has no rectangle primitive — see ADR-0005 Part 2).
+3. **Emit a gram polygon node.** `[<id>:Polygon:<TileTypeLabel> | ref1, ref2, ..., refN]` where each `refK` is a Gram identifier for a tile instance defined in the same file (`cell-<h3>` when that layout cell is emitted, or `poly-<id>-v<i>` vertex stubs when the shape implies that hex and layout does not emit a `cell-*`). Values match the H3 indices from step 2, in vertex order. Tiled rectangles and polygons both lower to the same gram form (the gram has no rectangle primitive — see ADR-0005 Part 2).
 
-4. **Compute interior cell set.** Run `h3.polygonToCells` over the vertex list (or the equivalent — see Open Question 8). The result is the set of H3 cells the area covers. This set is *not* enumerated into the gram; it is used only for compression and overlap checks.
+4. **Compute interior cell set.** Run `h3.polygonToCells` over the vertex list (or the equivalent — see Open Question 8). The result is the strict **fill interior**. It is *not* enumerated into the gram. It is used for **pairwise non-overlap checks** only (below).
 
-5. **Compression / override against `layout`.** For each cell in the interior set:
-   - If the `layout` layer has no painted tile at that cell, do nothing (the polygon fill instantiates it implicitly).
-   - If the `layout` layer has a tile whose type matches the area's `type`, **omit** it from the individual-tile emission list (compression rule).
+5. **Shape cover vs `layout`.** Build **shape cover** = fill interior ∪ **every vertex hex** (defining corners are always treated as part of the authored shape, independent of `polygonToCells` boundary behavior). For each H3 in shape cover:
+   - If the `layout` layer has no painted tile at that cell, do nothing (the polygon instantiates it implicitly).
+   - If the `layout` layer has a tile whose type matches the area's `type`, **omit** it from the individual-tile emission list (polygon is authoritative; no redundant `cell-*`).
    - If the `layout` layer has a tile whose type differs from the area's `type`, **keep** it in the emission list (override rule).
    The tile-emit step in *Translation rules* above consumes this filtered list.
 
@@ -105,7 +105,7 @@ ADR-0005 Part 1 specifies the authoring conventions; this is the conversion algo
 
 **Cross-area validation:**
 
-- **Overlap detection.** After step 4 has run for every `tile-area` object, assert pairwise empty intersection of the interior cell sets. Any overlap fails the conversion with the two offending object ids and the cell count of their intersection. ADR-0005's non-overlap rule is enforced here; failure is the only correct response.
+- **Overlap detection.** After step 4 has run for every `tile-area` object, assert pairwise empty intersection of the **fill interior** sets (`polygonToCells` only — not vertex-only extensions). Any overlap fails the conversion with the two offending object ids and the cell count of their intersection. ADR-0005's non-overlap rule is enforced here; failure is the only correct response.
 
 **Determinism note.** Tiled `draworder` (`"index"` or `"topdown"`) is irrelevant once non-overlap is enforced — no two areas claim the same cell, so iteration order does not affect output. The conversion sorts areas by `id` before processing for stable error messages and stable polygon-node ordering in the gram.
 
@@ -130,7 +130,7 @@ Default format is `gram`. Content-Type:
 
 | format | Content-Type |
 |---|---|
-| `gram` | `text/plain; charset=utf-8` (see Open Question 2) |
+| `gram` | `text/plain; charset=utf-8` (normative; see § Open Questions item 2 — **Resolved**) |
 | `tmj` | `application/json` |
 
 Errors flow through `errorToResponse()` in `server/src/errors.ts`. Two new tagged errors are added: `MapNotFoundError` (→ 404) and `UnsupportedFormatError` (→ 400). Both must have a `Match.tag` branch in `errorToResponse` per AGENTS.md's "Match.exhaustive as a compile gate" convention; the build fails if either is omitted.
@@ -142,12 +142,12 @@ The endpoint shares request tracing and structured logging with the existing wor
 Syntactic correctness of the gram alone is a weak guarantee — a `.map.gram` can parse cleanly and still misrepresent the source map. The test strategy verifies the conversion at three layers, each catching a different failure mode.
 
 **Layer 1 — Structural invariants (unit tests).** Property-style assertions over the conversion output for each fixture:
-- Every emitted `location` is a valid H3 index (`h3.isValidCell`) at resolution 15.
+- Every emitted `location` (as `h3\`…\`` tagged string content, or legacy quoted form in older artifacts) decodes to a valid H3 index (`h3.isValidCell`) at resolution 15.
 - Every individual tile node references a `TileType` that is also defined in the gram.
 - Every item instance node references an `ItemType` that is also defined in the gram.
-- Every `tile-area` polygon's vertex list is a non-empty sequence of valid H3 cells.
+- Every `tile-area` polygon's vertex reference list is non-empty; each reference resolves to a defined instance whose `location` is a valid H3 cell at resolution 15.
 - Pairwise interior cell sets of `tile-area` polygons do not intersect (non-overlap invariant).
-- Compression invariant: for every cell in a polygon's interior, a `layout`-painted tile of the matching type is *not* present as an individual tile node, and a non-matching painted tile *is* present.
+- Shape-primary invariant: for every H3 in a polygon's **shape cover** (fill ∪ vertices), a `layout`-painted tile of the matching type is *not* present as an individual `cell-*` node, and a non-matching painted tile *is* present (override).
 - Bounding-box invariant: the AABB derived from all emitted cells matches the AABB derived from the legacy `mapLoader.ts` output for the same `.tmj`.
 - Item invariant: every entry in `*.items.json` appears as a definition; every placement appears as an instance.
 
@@ -155,18 +155,18 @@ Syntactic correctness of the gram alone is a weak guarantee — a `.map.gram` ca
 
 **Layer 3 — Headless reference renderer + pixel-diff (visual parity).** The risk this layer addresses: the gram parses, the structural invariants hold, but the resulting world *looks* wrong (a rotated polygon, a shifted anchor, a tile-class color mismatch, an off-by-one in `localIjToCell`). The test that catches this is rendering both formats and pixel-comparing the result.
 
-A test-only `tools/tmj-to-gram/test/render/` package contains:
-- A minimal SVG renderer that takes a uniform "rendered map" intermediate (`{ tileTypes, cells: [{h3, type}], items: [...] }`) and emits an SVG image of fixed canvas size.
-- Two adapters that produce that intermediate from each format: one reads `.tmj` directly (mirroring the legacy `mapLoader.ts` cell projection), one reads `.map.gram` (parsing with `@relateby/pattern` and expanding polygons via `h3.polygonToCells`).
-- A pixel-diff harness (`pixelmatch` or equivalent) that fails on any non-zero diff.
+A test-only `tools/tmj-to-gram/test/render/` tree contains:
+- A shared **render intermediate** (merged terrain + items) built from `.tmj` (polygon shape cover + layout merge, mirroring conversion geometry) and from `.map.gram` (`Gram.parse` + `h3.polygonToCells` **plus** vertex hexes for each polygon).
+- A minimal **flat-color SVG** emitter for human inspection, plus a **direct RGBA rasterizer** (same hex layout math) feeding `pngjs` so `pixelmatch` stays deterministic (no SVG→raster stack in CI).
+- A pixel-diff harness (`pixelmatch`) that fails on any non-zero diff between the TMJ-derived and gram-derived PNGs.
 
-For each fixture in `maps/sandbox/`, the test renders the `.tmj` and the `.map.gram` through the same SVG emitter, rasterizes both, and asserts pixel-identical output. The renderer is deliberately minimal — flat-color hexagons with item glyphs — and is not coupled to the intermedium's renderer. Color and glyph fallbacks for tile types and item types missing visual hints come from a fixed table in the test package — see Open Question 8.
+For each fixture in `maps/sandbox/`, the test asserts the two PNGs are identical, then compares the TMJ-derived PNG to a committed **golden** snapshot. Color / item-marker fallbacks for types without hints live in `tools/tmj-to-gram/test/render/fallbacks.ts` — see Open Question 8.
 
-A `golden/` directory under the renderer holds the rasterized PNGs from one format (the `.tmj` side, which the Phaser debugger already reads correctly today). The other side is generated at test time and diffed against it. When a fixture is intentionally changed, the developer regenerates the golden with a documented script step, the same way snapshot tests work elsewhere.
+The `golden/` directory holds reference PNGs from the TMJ path. Regenerate with `pnpm --filter @aie-matrix/tmj-to-gram golden:regen` when visuals change intentionally.
 
 **Polygon-specific test fixtures.** `maps/sandbox/map-with-polygons.tmj` exercises:
-- A rectangle area (`Red`) with no overlapping painted tiles → all cells implicit, no individual nodes emitted for the area's interior.
-- A polygon area (`Blue`) covering a region that contains painted `Pillar` overrides → compression emits zero `Blue` individual nodes, override emits the `Pillar` nodes as expected.
+- A rectangle area (`Red`) with no overlapping painted tiles → all cells implicit, no individual nodes emitted for the area's shape cover.
+- A polygon area (`Blue`) covering a region that contains painted `Pillar` overrides → shape-primary omission emits zero redundant `Blue` individual nodes, override emits the `Pillar` nodes as expected.
 - An area whose `type` introduces a tile class with no painted tiles → polygon-only fill works.
 - Two non-overlapping polygons sharing a vertex → no-overlap check passes.
 - (Negative) A handcrafted `.tmj` with two overlapping `tile-area` objects → conversion fails-closed with both object ids reported.
@@ -188,9 +188,9 @@ A `golden/` directory under the renderer holds the rasterized PNGs from one form
 
 ## Open Questions
 
-1. **Committed artifact vs derived-on-build.** Should `.map.gram` files be checked in, or generated as a CI step from the `.tmj`? Committing makes diffs reviewable (a map author's PR shows the derived change alongside their Tiled edit) and matches what the user has already done locally for `freeplay.map.gram`. Generating avoids drift between source and derived. Suggested default: commit, with a CI check that re-converts and asserts byte equality. Reviewers, weigh in.
+1. ~~**Committed artifact vs derived-on-build.**~~ **Resolved.** Commit `.map.gram` files to the repository and add a CI step that re-converts each tracked `.tmj` and asserts byte equality against the committed `.map.gram`. Rationale: PR diffs stay reviewable (the author's Tiled edit and the derived gram land together); any silent converter drift fails CI instead of slipping through. Recorded in `specs/010-tmj-to-gram/research.md` (OQ-1).
 
-2. **`gram` content-type.** No registered IANA media type exists for gram. `text/plain; charset=utf-8` is correct and unsurprising. Coining `application/vnd.aie-matrix.gram` adds discoverability but is a one-way commitment. Suggested: `text/plain` for now; revisit when a clear consumer benefit emerges.
+2. ~~**`gram` content-type.**~~ **Resolved.** Serve gram bodies as `text/plain; charset=utf-8`. No vendor MIME type for now; revisit when the intermedium (RFC-0008) or another consumer has a concrete need for Content-Type–based discovery. Recorded in `specs/010-tmj-to-gram/research.md` (OQ-2).
 
 3. ~~**Polygon support timing.**~~ **Resolved.** Polygon and rectangle `tile-area` objects are in scope for this RFC; see *Tile area translation* in Design. The sandbox fixture `maps/sandbox/map-with-polygons.tmj` exercises every shape and edge case the conversion must handle.
 
@@ -204,7 +204,7 @@ A `golden/` directory under the renderer holds the rasterized PNGs from one form
 
 8. **Reference renderer fallback table.** The Layer 3 visual-parity renderer needs a deterministic color-and-glyph mapping for tile types and item types that lack visual hints in their definitions (current `.tsx` tilesets do not carry `color`; sidecars may omit `glyph`). Options: a checked-in table indexed by type label; a hash-based palette derived from the label; pull from a future shared `*.style.json`. Suggested: a small checked-in table in `tools/tmj-to-gram/test/render/fallbacks.ts` covering the sandbox fixtures, with a documented "add an entry when you add a fixture" rule. The table is test-only and does not influence runtime rendering.
 
-9. **Polygon-to-cells provider.** Conversion's compression and overlap checks need to expand a Tiled-derived polygon into the H3 cell set it covers. Two candidate implementations: (a) call `h3.polygonToCells` on the *pixel-derived geographic boundary* (after projecting vertex pixels through the H3 anchor's geographic frame), (b) flood-fill from a known interior cell using H3 adjacency until the polygon's hex-grid boundary is reached. (a) reuses an existing library call; (b) avoids any geographic projection step and stays entirely in hex-grid space. Suggested: start with (a) and pivot to (b) only if projection precision becomes a problem at sandbox scale.
+9. ~~**Polygon-to-cells provider.**~~ **Resolved.** Use `h3.polygonToCells` on `[lat, lng]` rings derived from each Tiled vertex (grid cell → `h3.localIjToCell(anchor, { i, j })` → `h3.cellToLatLng`, then pass vertices at resolution 15). Flood-fill in pure hex-grid space remains a documented fallback if projection precision ever fails at venue scale. Recorded in `specs/010-tmj-to-gram/research.md` (OQ-9).
 
 ## Alternatives
 

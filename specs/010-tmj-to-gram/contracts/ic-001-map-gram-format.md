@@ -63,32 +63,33 @@ One node per entry in the `*.items.json` sidecar:
 One node per `tile-area` object from the source map (sorted by Tiled object `id`):
 
 ```
-[<id>:Polygon:<TileTypeLabel> | <h3CellId1>, <h3CellId2>, ..., <h3CellIdN>]
+[<id>:Polygon:<TileTypeLabel> | <vertexRef1>, <vertexRef2>, ..., <vertexRefN>]
 ```
 
 - `<id>` is derived from the Tiled object `id` with a `poly-` prefix (e.g. `poly-42`).
 - `<TileTypeLabel>` matches the object's Tiled `type` field.
-- Vertices are the H3 cell IDs of the hexes containing each polygon corner, in Tiled vertex order (clockwise for rectangles).
-- A rectangle shape produces exactly 4 vertices; a polygon shape produces N vertices.
+- Each `<vertexRefK>` is a **Gram identifier** that resolves to a tile instance defined elsewhere in the same file (typically `cell-<h3Index>` when that cell is emitted on the `layout` layer, or `poly-<id>-v<i>` for a vertex-only stub when the layout cell is suppressed by compression).
+- Vertex order follows Tiled vertex order (clockwise for rectangles).
+- A rectangle shape produces exactly 4 vertex references; a polygon shape produces N.
 
 ### 5. Individual Tile Cell Nodes
 
-One node per painted cell on the `layout` layer, excluding cells suppressed by the compression rule:
+One node per painted cell on the `layout` layer, excluding cells suppressed by the compression rule, **plus** optional `poly-<id>-v<i>` vertex stubs so every polygon vertex reference has a definition:
 
 ```
-(<id>:<TileTypeLabel> { location: "<h3Index>" })
+(<id>:<TileTypeLabel> { location: h3`<hex>` })
 ```
 
-- `<id>` is `cell-<h3Index>`.
-- `<h3Index>` is the H3 cell index at resolution 15.
-- Cells whose tile type matches an enclosing tile-area's type are **not** emitted (compression). Cells whose tile type differs from an enclosing tile-area's type **are** emitted (override).
+- `<id>` is `cell-<h3Index>` for layout cells, or `poly-<tile-area-object-id>-v<vertexIndex>` for vertex-only stubs.
+- `location` uses the **`h3` tagged string** form: `h3` followed by backticks around the lowercase H3 index string (no `0x` prefix inside the tag content; optional `0x` is stripped by consumers for compatibility).
+- Cells whose H3 lies in a tile-area’s **shape cover** (`h3.polygonToCells` on the vertex ring, **plus** every vertex hex) and whose tile type matches that area’s type are **not** emitted as redundant `cell-*` (the polygon is authoritative). Cells whose tile type differs from an enclosing tile-area's type **are** emitted (override).
 
 ### 6. Item Instance Nodes
 
 One node per painted cell on any `item-placement` layer:
 
 ```
-(<id>:<ItemTypeLabel> { location: "<h3Index>" })
+(<id>:<ItemTypeLabel> { location: h3`<hex>` })
 ```
 
 - `<id>` is `item-<h3Index>-<itemRef>`.
@@ -110,7 +111,7 @@ Output MUST be byte-stable for the same input across runs and machines:
 
 1. The document parses without error using `@relateby/pattern`.
 2. The `name` field in the header record matches the filename stem.
-3. Every `location` value in cell and item nodes is a valid H3 cell index at resolution 15 (`h3.isValidCell` returns true and `h3.getResolution` returns 15).
+3. Every `location` in cell and item nodes is an `h3\`…\`` tagged string (or legacy quoted string) whose content decodes to a valid H3 cell index at resolution 15 (`h3.isValidCell` returns true and `h3.getResolution` returns 15).
 4. Every `<TileTypeLabel>` referenced in a cell or polygon node has a corresponding `TileType` definition in the same document.
 5. Every `<ItemTypeLabel>` referenced in an item instance node has a corresponding `ItemType` definition in the same document.
 
@@ -125,12 +126,14 @@ Output MUST be byte-stable for the same input across runs and machines:
 
 (sign-welcome:ItemType:SignWelcome { name: "Welcome Board", glyph: "📋" })
 
-[poly-42:Polygon:Grass | 8f2830828047d9f, 8f2830828047c9f, 8f28308280455af, 8f28308280456af]
+[poly-42:Polygon:Grass | cell-8f2830828047d9f, cell-8f2830828047c9f, cell-8f28308280455af, cell-8f28308280456af]
 
-(cell-8f2830828047d9f:Path { location: "8f2830828047d9f" })
-(cell-8f28308280455af:Pillar { location: "8f28308280455af" })
+(cell-8f2830828047d9f:Path { location: h3`8f2830828047d9f` })
+(cell-8f2830828047c9f:Grass { location: h3`8f2830828047c9f` })
+(cell-8f28308280455af:Pillar { location: h3`8f28308280455af` })
+(cell-8f28308280456af:Grass { location: h3`8f28308280456af` })
 
-(item-8f2830828047d9f-sign-welcome:SignWelcome { location: "8f2830828047d9f" })
+(item-8f2830828047d9f-sign-welcome:SignWelcome { location: h3`8f2830828047d9f` })
 ```
 
 ## Consumers

@@ -63,3 +63,29 @@ For map-defined items:
 3. Give each item layer class **`item-placement`**, same width and height as the map. Paint one **item** tile per cell that should start with that item. Empty cells use tile `0` / eraser.
 
 Terrain tiles (`color-set.tsx`) carry only gameplay fields such as **`capacity`**; item refs live on the item tileset used in `item-placement` layers.
+
+## Tile-area polygons (compression + overrides)
+
+`tile-area` **object layers** feed the `tmj-to-gram` converter (see [RFC-0009](../../proposals/rfc/0009-map-format-pipeline.md)). Conventions:
+
+1. **Layer class** — use Tiled layer **class** `tile-area` (objects are rectangles or closed polygons; **ellipses are rejected** with exit code 2).
+2. **Object `type`** — must match a **tile type label** from your `.tsx` (e.g. `Red`, `Blue`). Unknown types log `[warn]` but do not fail conversion.
+3. **Vertex rule** — each vertex pixel must land inside a hex cell of the **`layout`** grid (same `h3_anchor`, `staggeraxis`, `staggerindex`, `tilewidth` / `tileheight` / `hexsidelength` as the map). Vertices in the gutter between hexes fail conversion.
+4. **Non-overlap** — interiors of two `tile-area` objects must not share any H3 cell; overlap fails with both object ids.
+5. **Compression** — interior cells whose `layout` tile **type matches** the area’s type are omitted as individual gram cell nodes (the polygon carries them). **Overrides** — if `layout` paints a **different** type inside the interior, that cell is still emitted as its own node.
+
+Only **`staggeraxis: "x"`** is supported for tile-area math today (matches sandbox hex maps).
+
+## Gram artifact regeneration
+
+After editing a `.tmj` (or tilesets / sidecar):
+
+```bash
+pnpm tmj-to-gram convert maps/sandbox/<name>.tmj
+```
+
+Commit the updated `<name>.map.gram`. CI enforces byte equality:
+
+```bash
+pnpm --filter @aie-matrix/tmj-to-gram ci:golden
+```
