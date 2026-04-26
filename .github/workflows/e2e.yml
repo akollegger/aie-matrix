@@ -10,7 +10,7 @@ on:
       - "server/**"
       - "shared/root-env/**"
       - "shared/types/**"
-      - "client/phaser/**"
+      - "clients/debugger/phaser/**"
       - "ghosts/random-house/**"
   push:
     branches:
@@ -21,7 +21,7 @@ on:
       - "server/**"
       - "shared/root-env/**"
       - "shared/types/**"
-      - "client/phaser/**"
+      - "clients/debugger/phaser/**"
       - "ghosts/random-house/**"
   workflow_dispatch:
 

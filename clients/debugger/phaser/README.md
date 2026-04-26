@@ -42,4 +42,4 @@ Build static assets:
 pnpm --filter @aie-matrix/client-phaser build
 ```
 
-The production build writes to `client/phaser/dist/`; serve that folder with any static host while the game server remains reachable at `VITE_SERVER_HTTP` (or rebuild with the correct value baked in).
+The production build writes to `dist/` under this package (`clients/debugger/phaser/dist/` from repo root); serve that folder with any static host while the game server remains reachable at `VITE_SERVER_HTTP` (or rebuild with the correct value baked in).

@@ -93,7 +93,7 @@ http://localhost:5173?ghost=ghost-uuid-here
 
 1. Navigate to Neighbor scale — the paired ghost's thread stub should appear in the panel.
 2. Navigate to Partner scale — the full conversation panel should be visible (showing the "unavailable" placeholder if the A2A conversation endpoint is not yet implemented).
-3. Navigate to Ghost scale — the interiority placeholder should render with "loading…" sections for inventory, quest, and memories.
+3. Navigate to Ghost scale — the interiority placeholder should render with "loading…" sections for inventory, active goal, and memories.
 
 ## Phaser Debugger (after rename)
 

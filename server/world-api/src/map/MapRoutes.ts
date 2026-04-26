@@ -2,9 +2,72 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect } from "effect";
 import { getRequestTraceId } from "../request-trace.js";
 import { MapFileReadError, MapNotFoundError, UnsupportedFormatError } from "./map-errors.js";
-import { MapService } from "./MapService.js";
+import { type MapIndexEntry, MapService } from "./MapService.js";
 
 const MAPS_SINGLE_SEGMENT = /^\/maps\/([^/]+)$/;
+
+/** JSON body for `GET /maps` / `GET /maps/` (collection). @see `specs/010-tmj-to-gram/contracts/ic-002-maps-http-api.md` */
+export interface MapListItem {
+  readonly id: string;
+  /**
+   * Discoverable fetch URLs. `self` is the default map representation (same as `gram`;
+   * `format` query defaults to gram for `GET /maps/:mapId` per IC-002).
+   */
+  readonly links: {
+    readonly self: string;
+    readonly gram: string;
+    readonly tmj: string;
+  };
+}
+
+export interface MapListResponse {
+  readonly maps: readonly MapListItem[];
+}
+
+/** True for collection resource paths (no :mapId segment). */
+export function isMapsCollectionPathname(pathname: string): boolean {
+  return pathname === "/maps" || pathname === "/maps/";
+}
+
+/**
+ * Resolves a stable public base URL for `Location`-style and hyperlink fields (forwarded headers first).
+ */
+export function publicRequestRoot(req: IncomingMessage, requestUrl: URL): string {
+  const rawProto = requestUrl.protocol.replace(":", "");
+  const xfProto = (req.headers["x-forwarded-proto"] as string | undefined)
+    ?.split(",")[0]
+    ?.trim();
+  const proto =
+    xfProto && xfProto.length > 0 ? xfProto : rawProto;
+  const xfHost = (req.headers["x-forwarded-host"] as string | undefined)
+    ?.split(",")[0]
+    ?.trim();
+  const host = (xfHost && xfHost.length > 0 ? xfHost : req.headers.host) as string | undefined;
+  if (host && host.length > 0) {
+    return `${proto}://${host}`;
+  }
+  return requestUrl.origin;
+}
+
+function mapHyperlinks(
+  publicRoot: string,
+  mapId: string,
+): { readonly self: string; readonly gram: string; readonly tmj: string } {
+  const idSeg = encodeURIComponent(mapId);
+  const base = `${publicRoot}/maps/${idSeg}`;
+  return {
+    self: base,
+    gram: `${base}?format=gram`,
+    tmj: `${base}?format=tmj`,
+  };
+}
+
+function toMapListItem(publicRoot: string, entry: Readonly<MapIndexEntry>): MapListItem {
+  return {
+    id: entry.mapId,
+    links: mapHyperlinks(publicRoot, entry.mapId),
+  };
+}
 
 export function parseMapsPath(pathname: string): string | undefined {
   const m = MAPS_SINGLE_SEGMENT.exec(pathname);
@@ -34,6 +97,34 @@ function normalizeFormat(raw: string): "gram" | "tmj" | UnsupportedFormatError {
     return "tmj";
   }
   return new UnsupportedFormatError({ format: raw });
+}
+
+/**
+ * `GET /maps` / `GET /maps/` — collection; JSON list with hyperlinks to each `GET /maps/:mapId` resource.
+ */
+export function handleMapList(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  corsHeaders: Record<string, string>,
+): Effect.Effect<void, never, MapService> {
+  return Effect.gen(function* () {
+    const map = yield* MapService;
+    const entries = yield* map.listEntries();
+    const publicRoot = publicRequestRoot(req, url);
+    const body: MapListResponse = {
+      maps: entries.map((e) => toMapListItem(publicRoot, e)),
+    };
+    const traceId = getRequestTraceId();
+    yield* Effect.logInfo("map.list").pipe(
+      Effect.annotateLogs({ traceId: traceId ?? "", count: String(body.maps.length) }),
+    );
+    res.writeHead(200, {
+      "Content-Type": "application/json; charset=utf-8",
+      ...corsHeaders,
+    });
+    res.end(JSON.stringify(body));
+  });
 }
 
 /**
@@ -75,7 +166,11 @@ export function handleMapAssetGet(
   });
 }
 
-export function tryHandleMapAssetGet(
+/**
+ * Handles `GET /maps` (collection) and `GET /maps/:mapId` (IC-002 map instance).
+ * Collection takes precedence; unknown paths return `false` so the outer router can continue.
+ */
+export function tryHandleMapGet(
   req: IncomingMessage,
   res: ServerResponse,
   url: URL,
@@ -84,12 +179,24 @@ export function tryHandleMapAssetGet(
   if (req.method !== "GET") {
     return Effect.succeed(false);
   }
+  if (isMapsCollectionPathname(url.pathname)) {
+    return Effect.gen(function* () {
+      yield* handleMapList(req, res, url, corsHeaders);
+      return true;
+    });
+  }
   const mapId = parseMapsPath(url.pathname);
   if (mapId === undefined) {
     return Effect.succeed(false);
   }
   return pipeHandle(req, res, url, corsHeaders, mapId);
 }
+
+/**
+ * @deprecated Use {@link tryHandleMapGet} — the same implementation (name kept for call sites
+ *   that predate the collection route).
+ */
+export const tryHandleMapAssetGet = tryHandleMapGet;
 
 function pipeHandle(
   _req: IncomingMessage,

@@ -29,7 +29,7 @@ import {
   ItemServiceImpl,
   runWithRequestTrace,
   seedNeo4jGraphArtifacts,
-  tryHandleMapAssetGet,
+  tryHandleMapGet,
   type MovementRulesService,
   type RegistryStoreService,
   type WorldBridgeService,
@@ -356,6 +356,8 @@ async function main(): Promise<void> {
         const p = url.pathname;
         if (
           p === "/spectator/room" ||
+          p === "/maps" ||
+          p === "/maps/" ||
           p.startsWith("/maps/") ||
           p.startsWith("/registry") ||
           p.startsWith("/threads") ||
@@ -371,7 +373,7 @@ async function main(): Promise<void> {
       if (req.method === "GET") {
         const traceId = randomUUID();
         const mapHandled = await runWithRequestTrace(traceId, () =>
-          runtime.runPromise(tryHandleMapAssetGet(req, res, url, corsHeaders)),
+          runtime.runPromise(tryHandleMapGet(req, res, url, corsHeaders)),
         );
         if (mapHandled) {
           return;
@@ -508,6 +510,9 @@ async function main(): Promise<void> {
   }
   console.log(`  Conversation threads: GET http://127.0.0.1:${httpPort}/threads/:ghostId`);
   console.log(`  Map assets (dev): GET http://127.0.0.1:${httpPort}/maps/...`);
+  console.log(
+    `  Map index: GET http://127.0.0.1:${httpPort}/maps  (JSON; links to each /maps/<mapId>)`,
+  );
   console.log(
     `  Map gram/tmj (MapService): GET http://127.0.0.1:${httpPort}/maps/<mapId>?format=gram|tmj`,
   );

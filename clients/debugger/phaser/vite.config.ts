@@ -2,7 +2,7 @@ import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
-  const envDir = path.resolve(__dirname, "../..");
+  const envDir = path.resolve(__dirname, "../../..");
   const env = loadEnv(mode, envDir, "");
 
   /** Must match Colyseus HTTP/WS base in `src/main.ts` when using the dev proxy. */
@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5174,
       fs: {
-        allow: [path.resolve(__dirname, "../..")],
+        allow: [path.resolve(__dirname, "../../..")],
       },
       proxy: {
         // Same-origin in dev → credentialed Colyseus matchmake + WS through one browser-reachable port.

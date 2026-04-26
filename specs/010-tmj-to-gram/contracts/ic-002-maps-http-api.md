@@ -1,4 +1,4 @@
-# IC-002: `GET /maps/:mapId` HTTP API Contract
+# IC-002: Maps HTTP API Contract
 
 **Contract ID**: IC-002  
 **Feature**: `010-tmj-to-gram`  
@@ -8,7 +8,20 @@
 
 Defines the HTTP interface for the `MapRoutes` handler mounted in `server/world-api`. Consumers must be able to rely on this contract without inspecting the server source.
 
-## Endpoint
+Design follows common REST practice: a **plural collection** at `/maps` (discoverability), and **map instances** at `/maps/:mapId` (see [collections and resources](https://swagger.io/resources/articles/best-practices-in-api-design/)).
+
+## Endpoints
+
+### Collection (discovery)
+
+```
+GET /maps
+GET /maps/
+```
+
+Same resource; both return the same JSON. No `mapId` path segment.
+
+### Map instance (bytes)
 
 ```
 GET /maps/:mapId
@@ -32,7 +45,34 @@ Mounted on the world-api router alongside `/mcp` and `/registry`.
 
 ## Responses
 
-### 200 OK
+### `GET /maps` — 200 OK
+
+```
+Content-Type: application/json; charset=utf-8
+```
+
+Body: a JSON object with a `maps` array, sorted by `id` (map stem / `mapId`), each item describing one indexed map and **absolute** hyperlinks for clients (forwarding headers are respected when building URLs):
+
+```json
+{
+  "maps": [
+    {
+      "id": "freeplay",
+      "links": {
+        "self": "http://127.0.0.1:8787/maps/freeplay",
+        "gram": "http://127.0.0.1:8787/maps/freeplay?format=gram",
+        "tmj": "http://127.0.0.1:8787/maps/freeplay?format=tmj"
+      }
+    }
+  ]
+}
+```
+
+- `links.self` is the same URL as a default `GET /maps/:mapId` (default `format` is `gram` per the instance contract below).  
+- `links.gram` and `links.tmj` are explicit alternates.  
+- `id` is the `mapId` path parameter for the instance resource.
+
+### `GET /maps/:mapId` — 200 OK
 
 Returned when the `mapId` is known and the format is supported.
 
@@ -96,6 +136,7 @@ These are the assertions the HTTP contract tests in `tools/tmj-to-gram/test/` an
 
 | Test case | Request | Expected status | Expected Content-Type |
 |---|---|---|---|
+| Map index | `GET /maps` or `GET /maps/` | 200 | `application/json; charset=utf-8` |
 | Gram default | `GET /maps/freeplay` | 200 | `text/plain; charset=utf-8` |
 | Gram explicit | `GET /maps/freeplay?format=gram` | 200 | `text/plain; charset=utf-8` |
 | TMJ | `GET /maps/freeplay?format=tmj` | 200 | `application/json` |
@@ -106,6 +147,7 @@ These are the assertions the HTTP contract tests in `tools/tmj-to-gram/test/` an
 
 | Consumer | Format | Notes |
 |---|---|---|
+| Intermedium (RFC-0008) | `GET /maps` then `?format=gram` | May list maps, then fetch chosen `mapId` |
 | Intermedium (RFC-0008) | `?format=gram` | Parses gram with `@relateby/pattern` |
 | Phaser debugger | `?format=tmj` | Parses JSON as Tiled map; no code change required |
 | CI health check | `?format=gram` | Asserts 200 after server startup |

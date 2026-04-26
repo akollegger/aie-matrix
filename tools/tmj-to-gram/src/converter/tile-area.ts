@@ -1,8 +1,8 @@
-import { cellToLatLng, localIjToCell, polygonToCells } from "h3-js";
+import { cellToLatLng, polygonToCells } from "h3-js";
 import type { MapContext } from "./map-context.js";
 import type { TmjDocument, TmjLayer, TmjObject } from "./parse-tmj.js";
 import type { TilesetSlice } from "./parse-tsx.js";
-import { hexRenderParams, resolvePixelToColRow } from "./tiled-hex-grid.js";
+import { hexRenderParams, makeTileToH3, resolvePixelToColRow } from "./tiled-hex-grid.js";
 
 const TILE_AREA_CLASS = "tile-area";
 
@@ -113,6 +113,7 @@ export function buildTileAreas(
   if (p === undefined) {
     return { _tag: "err", message: `[error] Invalid hex map dimensions for tile-area conversion.` };
   }
+  const tileToH3 = makeTileToH3(p, ctx.h3Anchor, tmj.width, tmj.height);
 
   const objects = collectTileAreaLayerObjects(tmj.layers);
   const areas: TileAreaPolygon[] = [];
@@ -146,10 +147,8 @@ export function buildTileAreas(
           message: `[error] tile-area object id=${obj.id} vertex ${vi} at pixel (${px},${py}) maps outside the map grid.`,
         };
       }
-      let h3: string;
-      try {
-        h3 = localIjToCell(ctx.h3Anchor, { i: ij.col, j: ij.row });
-      } catch {
+      const h3 = tileToH3(ij.col, ij.row);
+      if (h3 === null) {
         return {
           _tag: "err",
           message: `[error] tile-area object id=${obj.id} vertex ${vi} at pixel (${px},${py}) could not be projected to H3.`,

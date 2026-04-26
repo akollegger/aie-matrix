@@ -6,8 +6,9 @@ packages:
   - server/world-api
   - server/registry
   - server/auth
-  - client/phaser
-  - client/map-overlay
+  - clients/debugger/phaser
+  - clients/debugger/map-overlay
+  - clients/intermedium
   - shared/types
   - shared/root-env
   - ghosts/ts-client

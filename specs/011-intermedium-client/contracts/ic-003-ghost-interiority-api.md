@@ -8,7 +8,7 @@
 
 ## Purpose
 
-Documents the interface the intermedium needs from the ghost house to display a ghost's inner state at Ghost scale: inventory, active quest, and memory log. This is a **placeholder contract** — the data model for ghost interiority is not yet defined in RFC-0007. This document records the expected shape so the ghost house team can design to it.
+Documents the interface the intermedium needs from the ghost house to display a ghost's inner state at Ghost scale: **inventory**, **active goal** (user-facing: not "quest" or RPG-quest diction; see `spec.md` US4), and **memories** (not "memory log"). This is a **placeholder contract** — the data model for ghost interiority is not yet defined in RFC-0007. This document records the expected shape so the ghost house team can design to it.
 
 ## Context
 
@@ -35,13 +35,13 @@ GET /ghost/:ghostId/state
     { "itemId": "artefact-001", "name": "Mysterious Artefact", "quantity": 1 },
     { "itemId": "key-card-b12", "name": "B12 Access Card", "quantity": 1 }
   ],
-  "activeQuest": {
-    "questId": "quest-001",
-    "title": "Find the Hidden Cache",
-    "description": "Locate the artefact cache near the sponsor hall.",
+  "activeGoal": {
+    "goalId": "goal-001",
+    "title": "Track session attendance",
+    "description": "Revisit the sponsor hall before 17:00 to confirm booth presence.",
     "status": "active"
   },
-  "memoryLog": [
+  "memories": [
     {
       "entryId": "mem-001",
       "content": "Encountered ghost-b at H3 cell 8f2830828052d25. They mentioned a cache nearby.",
@@ -55,7 +55,7 @@ GET /ghost/:ghostId/state
 
 ```
 read_ghost_state({ ghostId: "ghost-uuid" })
-→ { inventory, activeQuest, memoryLog }
+→ { inventory, activeGoal, memories }
 ```
 
 If MCP is chosen, the intermedium would require an MCP client dependency — explicitly undesirable per RFC-0008 ("No MCP tool is introduced for map topology; … keeps the intermedium free of an MCP client dependency"). HTTP is strongly preferred.
@@ -65,12 +65,12 @@ If MCP is chosen, the intermedium would require an MCP client dependency — exp
 Until the ghost house team implements this API:
 
 1. `GhostInteriority.isAvailable` is set to `false` for all ghosts.
-2. The Ghost scale panel renders a structured placeholder showing the data categories (inventory, quest, memories) with "loading…" states.
+2. The Ghost scale panel renders a structured placeholder showing the data categories (inventory, active goal, memories) with "loading…" states.
 3. No network call is made in MVP.
 
 ## Live Updates
 
-Ghost interiority changes (inventory acquired, quest updated, memory added) during a session:
+Ghost interiority changes (inventory acquired, goal updated, memory added) during a session:
 
 - **Polling**: `GET /ghost/:ghostId/state` every 5 seconds while Ghost scale is active. Simple; acceptable for MVP.
 - **Push (preferred)**: SSE or WebSocket event stream at `GET /ghost/:ghostId/state/stream`. More efficient; consistent with conversation stream pattern.

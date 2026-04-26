@@ -19,6 +19,11 @@ export interface MapIndexEntry {
 }
 
 export interface MapServiceOps {
+  /**
+   * Known maps in this process (index built at layer acquisition).
+   * Sorted by `mapId` for stable API output.
+   */
+  readonly listEntries: () => Effect.Effect<readonly Readonly<MapIndexEntry>[], never>;
   readonly raw: (
     mapId: string,
     format: "gram" | "tmj",
@@ -210,7 +215,15 @@ export const makeMapServiceLayer = (
         const index = yield* scanMapPairs(repoRoot);
         yield* validateAllGrams(index);
 
+        const listSorted = () =>
+          Effect.succeed(
+            [...index.values()]
+              .sort((a, b) => a.mapId.localeCompare(b.mapId, "en", { sensitivity: "variant" }))
+              .map((e) => ({ ...e } as Readonly<MapIndexEntry>)),
+          );
+
         const impl: MapServiceOps = {
+          listEntries: listSorted,
           validate: () => Effect.void,
           raw: (mapId, format) => {
             const entry = index.get(mapId);

@@ -59,10 +59,10 @@
 
 **Decision**: Ghost scale is implemented as a placeholder panel for MVP. The interiority data contract is blocked on the ghost house team.
 
-**Rationale**: RFC-0008 §Open Question 4: "The Ghost scale requires a read API for ghost inventory, quest state, and memories. This is not yet defined in RFC-0007." Ghost scale is a navigation destination and its UI shell is implemented; content is stubbed.
+**Rationale**: RFC-0008 §Open Question 4: "The Ghost scale requires a read API for ghost inventory, goal state, and memories." This is not yet defined in RFC-0007. Ghost scale is a navigation destination and its UI shell is implemented; content is stubbed.
 
 **Expected production contract shape**:
-- `GET /ghost/:ghostId/state` → `{ inventory: InventoryItem[], activeQuest: Quest | null, memoryLog: MemoryEntry[] }`
+- `GET /ghost/:ghostId/state` → `{ inventory: InventoryItem[], activeGoal: Goal | null, memories: Memory[] }`
 - Or MCP tool call: `read_ghost_state({ ghostId })` → same payload
 
 ---

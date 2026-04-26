@@ -63,11 +63,11 @@ clients/                         # renamed from client/
         useMapGram.ts            # map topology fetch + gram parse
         useA2AConversation.ts    # A2A conversation stream (stub until IC-002 resolved)
       components/
-        SceneView/               # deck.gl canvas + layer composition
-        PanelView/               # scale-dependent panel switcher
+        SceneView/               # deck.gl canvas + layers; full-viewport; scale = zoom; Area+ show world+local grid; Partner = 1 cell, 3/4, 3D cloud (FR-024, FR-025)
+        PanelView/               # scale-dependent **overlay** panes (not flex sidebars)
         GhostCard/               # ghost identity + proximity info
         ConversationThread/      # paired ghost conversation (read + send)
-        GhostInteriority/        # inventory, quest, memory log (stub)
+        GhostInteriority/        # inventory, active goal, memories (stub; observability copy, not game-quest)
       layers/
         hexGridLayer.ts          # H3HexagonLayer configuration
         ghostPointCloudLayer.ts  # PointCloudLayer configuration

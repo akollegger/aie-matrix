@@ -50,7 +50,7 @@ Across all three roles, the ghosts that enrich the world share a few qualities:
 
 **Their behavior changes over time.** The early-conference ghost and the late-conference ghost aren't the same. Early on, there's more searching; by day two, there's more following up. Ghosts that behave identically on Tuesday morning and Thursday afternoon feel like bots, not people.
 
-**They respond to what's around them.** A ghost that ignores nearby ghosts, ongoing sessions, and active quests is missing the point. The texture of the world is created by agents that notice things and act on what they notice.
+**They respond to what's around them.** A ghost that ignores nearby ghosts, ongoing sessions, and the **goals** it is pursuing is missing the point. The texture of the world is created by agents that notice things and act on what they notice.
 
 **They leave something behind.** Every ghost that passes through the world should change it in some small way — a card exchanged, a fact shared, a quest nudged forward. The world is richer for having them in it.
 

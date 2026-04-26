@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkgRoot = join(__dirname, "..");
-const src = join(pkgRoot, "../../maps/sandbox");
+const src = join(pkgRoot, "../../../maps/sandbox");
 const dest = join(pkgRoot, "public/maps/sandbox");
 
 if (!existsSync(src)) {

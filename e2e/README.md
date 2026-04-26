@@ -1,6 +1,6 @@
 # End-to-end tests (`@aie-matrix/e2e`)
 
-Playwright guards the Phaser spectator **Colyseus `ghostTiles` sync** (regression for passing `WorldSpectatorState` into `joinById`). The test spawns **random-house** and waits for `window.__aieSpectatorE2e.ghostTilesSize()` (only when `?debug=1`; see `client/phaser/src/scenes/WorldScene.ts`).
+Playwright guards the Phaser debugger **Colyseus `ghostTiles` sync** (regression for passing `WorldSpectatorState` into `joinById`). The test spawns **random-house** and waits for `window.__aieSpectatorE2e.ghostTilesSize()` (only when `?debug=1`; see `clients/debugger/phaser/src/scenes/WorldScene.ts`).
 
 ## Browser install (Chromium)
 

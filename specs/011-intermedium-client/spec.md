@@ -41,7 +41,7 @@ A conference attendee opens the intermedium in a browser and immediately sees th
 
 ### User Story 2 — Drill-Down Navigation from Map to Neighbor Scale (Priority: P1)
 
-An attendee sees interesting activity in a region of the world. They double-click a tile cluster to zoom into Area scale (an 80:20 scene-to-panel split), see ghost identities in that area, and continue drilling to Neighbor scale (50:50 split) to watch the 7-hex proximity interactions of the ghosts nearest their focus point.
+An attendee sees interesting activity in a region of the world. They double-click a tile cluster to zoom into Area scale (**~80:20** panel **overlay** on a **full-bleed** world), see ghost identities in that area, and continue drilling to Neighbor scale (**~50:50 overlay**) to watch the 7-hex proximity interactions of the ghosts nearest their focus point.
 
 **Why this priority**: Navigation is the core interaction mechanic. Without it, the intermedium is a static map. Scale transitions expose the observability hierarchy that is the project's central thesis.
 
@@ -49,8 +49,8 @@ An attendee sees interesting activity in a region of the world. They double-clic
 
 **Acceptance Scenarios**:
 
-1. **Given** the attendee is at Map scale, **When** they double-click a tile or ghost cluster, **Then** the view transitions to Area scale centred on that location with ghost identity information visible in the panel.
-2. **Given** the attendee is at Area scale, **When** they double-click a ghost, **Then** the view transitions to Neighbor scale showing the 7-hex proximity cluster and a 50:50 scene-to-panel split.
+1. **Given** the attendee is at Map scale, **When** they double-click a tile or ghost cluster, **Then** the view transitions to Area scale centred on that location with ghost identity information visible in the **panel overlay** (FR-003).
+2. **Given** the attendee is at Area scale, **When** they double-click a ghost, **Then** the view transitions to Neighbor scale showing the 7-hex proximity cluster and a **~50:50** scene:panel **overlay** footprint.
 3. **Given** the attendee is at any scale below Map, **When** they activate the back control (button or keyboard shortcut), **Then** the view returns to the previous scale with the prior focus preserved.
 4. **Given** the attendee is at Neighbor scale with a focused ghost, **When** the ghost moves, **Then** the viewport lazily follows, keeping the ghost within the central third of the visible area.
 
@@ -75,7 +75,7 @@ An attendee who has been paired with a ghost (via a separate pairing flow outsid
 
 ### User Story 4 — Ghost Interiority at Ghost Scale (Priority: P3)
 
-A paired attendee navigates to Ghost scale and views their ghost's inner state: what it carries (inventory), what it is trying to accomplish (active quest), and what it remembers (memory log). There is no map view and no conversation input at this scale — it is a read-only window into the ghost's mind.
+A paired attendee navigates to Ghost scale and views their ghost's inner state: what it carries (inventory), what it is currently pursuing (active goal), and what it remembers (memories). There is no map view and no conversation input at this scale — it is a read-only window into the ghost's mind. Copy is **game-inspired** (structure borrows from game UIs) but the product is **not** a game: avoid "quest" / "quest log" tone in user-facing text.
 
 **Why this priority**: Ghost scale is the deepest observability level and the most speculative — its data contract depends on the ghost house team delivering a read API. It is in scope as a navigation destination but its content is a placeholder pending that contract.
 
@@ -83,8 +83,8 @@ A paired attendee navigates to Ghost scale and views their ghost's inner state: 
 
 **Acceptance Scenarios**:
 
-1. **Given** the attendee is at Partner scale with a paired ghost, **When** they navigate to Ghost scale, **Then** the display shows the ghost's inventory, active quest summary, and memory log as a structured document.
-2. **Given** the attendee is at Ghost scale, **When** the ghost's state changes (e.g., quest updates), **Then** the display reflects the updated state without a page reload.
+1. **Given** the attendee is at Partner scale with a paired ghost, **When** they navigate to Ghost scale, **Then** the display shows the ghost's inventory, active goal summary, and memories as a structured document.
+2. **Given** the attendee is at Ghost scale, **When** the ghost's state changes (e.g., goal or memory updates), **Then** the display reflects the updated state without a page reload.
 3. **Given** the attendee is at Ghost scale, **When** they activate the back control, **Then** the view returns to Partner scale.
 
 ---
@@ -96,24 +96,25 @@ A paired attendee navigates to Ghost scale and views their ghost's inner state: 
 - What happens if the A2A conversation subscription fails or returns no history?
 - What happens when the attendee navigates to Partner or Ghost scale without a pairing?
 - When the world map fails to load: auto-retry 3× with 2-second backoff, then display the "fail whale" — a point-cloud globe slowly rotating and pulsing — with a manual retry button (FR-023).
+- At **Partner** scale, if the paired ghost’s `h3Index` updates faster than the eye can follow, the **underfoot** cell and status text MUST stay consistent; the **fixed** 3D point cloud must not imply the ghost is “off-map” (FR-025).
 - When zero ghosts are active: hex grid renders normally with a subtle "Awaiting ghost arrivals…" overlay; overlay clears automatically on first ghost arrival (FR-022).
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-- **FR-001**: The client MUST render the ghost world as a wireframe hex grid at Map, Area, and Neighbor scales.
-- **FR-002**: The client MUST represent ghost positions as point-cloud clusters positioned at H3 cell centroids.
-- **FR-003**: The client MUST support five discrete navigation scales: Map, Area, Neighbor, Partner, and Ghost, each with its defined scene:panel ratio (100:0, 80:20, 50:50, 20:80, 0:100).
+- **FR-001**: The client MUST render the ghost world as a wireframe hex grid at Map, Area, Neighbor, and **Partner** scales, with **camera zoom and H3 density matched to the active scale** (farthest at Map, tightest at Partner; Partner frames **one** cell — FR-025).
+- **FR-002**: The client MUST represent ghost positions as point-cloud clusters. At **Map through Neighbor** scales, clusters are positioned at H3 **cell centroids** (2D + depth cue). At **Partner** scale the paired ghost MUST be a **3D point-cloud volume** (volumetric cluster, not a flat layer-only dot), with behaviour per **FR-025**.
+- **FR-003**: The client MUST support five discrete navigation scales: Map, Area, Neighbor, Partner, and Ghost, each with a defined **effective** scene:panel ratio (100:0, 80:20, 50:50, 20:80, 0:100) describing how much of the view is used by panels **as overlays** — the deck.gl **hex world MUST always fill the full viewport** at Map, Area, Neighbor, and Partner; panels MUST NOT use a side-by-side flex layout that shrinks the world canvas. At Ghost scale there is no map (0:100 = full view for the interiority document only).
 - **FR-004**: The client MUST maintain a view state of `{ scale, focus }` where `focus` is null at Map scale, a region identifier at Area scale, and a ghost ID at Neighbor/Partner/Ghost scale.
 - **FR-005**: The client MUST subscribe to live ghost positions from the Colyseus server, consuming H3 index broadcasts without coordinate conversion.
 - **FR-006**: The client MUST fetch world map topology (tile types, item placements, H3 cell graph) from the HTTP map endpoint at startup and parse the `.map.gram` format.
 - **FR-007**: The client MUST display a ghost identity panel at Area scale showing each visible ghost's name, class, and current tile type. No conversation content is shown at this scale.
 - **FR-008**: The client MUST display at Neighbor scale a proximity panel listing all ghosts within the 7-hex cluster around the focused ghost, showing each ghost's name, class, and current tile type. If the attendee's paired ghost is within the cluster, the panel appends a compact view of the most recent conversation message below the ghost list.
-- **FR-009**: The client MUST display the full paired-ghost conversation thread at Partner scale, with a minimal ghost location status widget.
+- **FR-009**: The client MUST display the full paired-ghost conversation thread at Partner scale, with a minimal ghost location **status** widget **inside the Partner panel overlay** (not in a separate narrow "mini-map" column; the world remains full-bleed under overlays). The status readout MUST reflect the **current** H3 cell under the ghost (it **changes** when the ghost moves; the **3D point cloud** in the scene is governed by **FR-025**).
 - **FR-010**: The client MUST allow the attendee to send messages to their paired ghost from the Partner scale panel.
 - **FR-011**: The client MUST consume the paired ghost's conversation thread via the ghost house conversation interface (IC-003). In MVP, this is implemented as HTTP polling (`GET /conversation/:ghostId/messages?since=<timestamp>` every 5 seconds). When IC-003 is resolved and the ghost house exposes a streaming endpoint, the polling implementation MUST be replaceable with a Server-Sent Events subscription without changes to `ConversationThread` or `PartnerPanel`.
-- **FR-012**: The client MUST display ghost interiority (inventory, active quest, memory log) at Ghost scale as a read-only structured view.
+- **FR-012**: The client MUST display ghost interiority (inventory, active goal, memories) at Ghost scale as a read-only structured view, using product copy that is observability-first (not RPG-quest phrasing; see US4).
 - **FR-013**: Navigation to Partner and Ghost scale MUST be gated on the presence of a pairing; unmatched attendees MUST see a clear unavailability message.
 - **FR-014**: Navigation between scales MUST be triggered by explicit interaction: double-click or `Enter` on a focused tile or ghost to zoom in; on-screen back button or `Escape` key to zoom out one scale.
 - **FR-015**: The hex grid viewport MUST lazily follow the focused ghost at Neighbor scale and above, keeping the focus within the central third of the visible area.
@@ -125,10 +126,12 @@ A paired attendee navigates to Ghost scale and views their ghost's inner state: 
 - **FR-021**: When the Colyseus WebSocket connection drops, the client MUST freeze ghost positions at their last-known locations (not clear them), display a small non-blocking reconnecting banner, and automatically restore live position updates when the connection is restored — without requiring a page reload.
 - **FR-022**: When zero ghosts are present in the world, the client MUST display the hex grid with a subtle ambient overlay message ("Awaiting ghost arrivals…"). The overlay MUST disappear automatically once the first ghost position is received from Colyseus.
 - **FR-023**: When the world map fails to load at startup, the client MUST display a full-screen error state rendered as a point-cloud globe (using PointCloudLayer) slowly rotating and pulsing with a breathing rhythm, with a manual retry button. The client MUST auto-retry the map fetch up to 3 times with 2-second backoff before surfacing this error state. The visual must be consistent with the ghost-world aesthetic (void background, point-cloud rendering).
+- **FR-024**: At **Area, Neighbor, and Partner** scales, the view MUST make legible **both** (a) the **world-scale** hex context (the surrounding map at a **reduced** visual prominence — e.g. fainter, inset, or background layer) and (b) the **local-scale** grid at the **zoom level** of that scale (browsable region, 7-hex cluster, or single cell). The attendee MUST be able to relate the zoomed view to the whole-world grid.
+- **FR-025** (Partner spatial scene): At **Partner** scale, the world scene MUST frame **a single H3 cell** — the one the paired ghost **currently occupies** (or equivalent “underfoot” cell for that ghost). The camera MUST use a **high 3/4** view (tilted away from straight **overhead**; oblique / perspective may **begin** at this scale). The paired ghost MUST be shown as a **3D point cloud** in view space. When the ghost’s **in-world** `h3Index` changes, the **point-cloud MUST NOT** translate across the map like a sliding sprite; it remains **visually fixed** in the Partner view while the **floor hex / cell (grid under the ghost) updates** to the new H3 index — i.e. the **cell underfoot advances**, the cloud does not “walk” across the terrain. (Implementation may use a second `PointCloudLayer` with per-point `positions` in camera space, or equivalent; the mockup is the source of design truth.)
 
 ### Key Entities
 
-- **Ghost**: An autonomous agent with a current H3 tile index, identity (name, class), and optionally an interiority state (inventory, quest, memories). Ghosts arrive as live position broadcasts and as conversation participants.
+- **Ghost**: An autonomous agent with a current H3 tile index, identity (name, class), and optionally an interiority state (inventory, goals, memories). Ghosts arrive as live position broadcasts and as conversation participants.
 - **Tile**: An H3 cell in the world grid with a type (open floor, vendor booth, session room, etc.) and optional item placements. Tiles are loaded once at startup from the map topology endpoint.
 - **ViewState**: The top-level client navigation state `{ scale, focus }`. Scale is one of five named modes; focus is null or an identifier (region or ghost ID).
 - **Conversation Thread**: An ordered sequence of messages between a human attendee and their paired ghost, delivered via the ghost house A2A interface.
@@ -139,7 +142,7 @@ A paired attendee navigates to Ghost scale and views their ghost's inner state: 
 - **IC-001**: Colyseus `ghostTiles` broadcast — H3 index array per ghost, consumed directly as layer inputs without coordinate conversion. Backward-compat `tileCoords` field is ignored by the intermedium.
 - **IC-002**: HTTP `GET /:mapId?format=gram` — world map topology as a `.map.gram` payload per ADR-0005. Parsed at startup.
 - **IC-003**: Ghost house A2A conversation stream — the mechanism (streaming task, push notification, or dedicated read endpoint) for subscribing to and sending messages in the paired conversation thread. Contract gap pending RFC-0007 ghost house team resolution.
-- **IC-004**: Ghost interiority read API — the A2A or MCP endpoint for reading a ghost's inventory, active quest, and memory log at Ghost scale. Not yet defined; Ghost scale content is a placeholder pending this contract.
+- **IC-004**: Ghost interiority read API — the A2A or MCP endpoint for reading a ghost's inventory, active goal, and memories at Ghost scale. Not yet defined; Ghost scale content is a placeholder pending this contract.
 
 ## Success Criteria *(mandatory)*
 

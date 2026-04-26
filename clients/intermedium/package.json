@@ -1,0 +1,37 @@
+{
+  "name": "@aie-matrix/intermedium",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@aie-matrix/server-colyseus": "workspace:*",
+    "@aie-matrix/shared-types": "workspace:*",
+    "@math.gl/web-mercator": "^4.1.0",
+    "@deck.gl/geo-layers": "^9.1.14",
+    "@deck.gl/layers": "^9.1.14",
+    "@deck.gl/react": "^9.1.14",
+    "@relateby/pattern": "^0.4.0",
+    "colyseus.js": "0.15.28",
+    "deck.gl": "^9.1.14",
+    "effect": "^3.21.0",
+    "h3-js": "^4.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "~5.7.3",
+    "vite": "^6.3.5",
+    "vite-plugin-top-level-await": "^1.6.0",
+    "vite-plugin-wasm": "^3.6.0"
+  }
+}

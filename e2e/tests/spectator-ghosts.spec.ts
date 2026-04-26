@@ -17,7 +17,7 @@ function spectatorOriginFromConfig(baseURL: string | undefined): string {
   }
 }
 
-/** Mirrors `SpectatorE2eHook` in `client/phaser` (debug / `?debug=1` only). */
+/** Mirrors `SpectatorE2eHook` in `clients/debugger/phaser` (debug / `?debug=1` only). */
 type SpectatorE2eHook = {
   ghostTilesSize(): number;
   tileCoordsSize(): number;

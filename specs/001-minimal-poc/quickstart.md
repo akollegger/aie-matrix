@@ -88,7 +88,7 @@ This runs **`pnpm run server`** (combined server), waits until **`GET /spectator
 
 3. With **`pnpm run ghost:house`** (or `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2`) running, confirm markers move without refreshing.
 
-4. **Debug hook** — append **`?debug=1`** for extra HUD / logs (`window.__aieSpectatorE2e` for Playwright). See `client/phaser/README.md`.
+4. **Debug hook** — append **`?debug=1`** for extra HUD / logs (`window.__aieSpectatorE2e` for Playwright). See `clients/debugger/phaser/README.md`.
 
 **Two ghosts**: `pnpm --filter @aie-matrix/ghost-random-house start -- --ghosts 2` **or** two shells each running `pnpm run ghost:house` (two separate GhostHouse registrations).
 

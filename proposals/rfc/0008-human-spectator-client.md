@@ -15,8 +15,10 @@ as the human-facing interface to the ghost world. The intermedium renders the
 ghost world as wireframe hex geometry and point-cloud ghost representations
 using deck.gl, and provides a paired-ghost conversation panel. Navigation
 between five discrete zoom scales — Map, Area, Neighbor, Partner, and Ghost —
-determines how much of the display is devoted to the spatial view versus the
-interaction panel. This RFC also proposes renaming the top-level `client/`
+sets an **effective** scene:panel ratio (how much of the view the UI panels
+**cover** as **overlays**). The H3 / deck.gl world **always fills the viewport**
+from Map through Partner; panels are not a flex side column that shrinks the
+canvas. This RFC also proposes renaming the top-level `client/`
 directory to `clients/` and the existing Phaser client to `clients/debugger/`,
 establishing a two-client structure with distinct audiences.
 
@@ -86,13 +88,13 @@ back-control or keyboard shortcut to zoom out).
 
 The five scales accumulate both spatial intimacy and information access:
 
-| Scale | Spatial focus | Scene:Panel | Info access | Requires pairing |
+| Scale | Spatial focus | Scene:Panel (overlay footprint) | Info access | Requires pairing |
 |---|---|---|---|---|
 | Map | Entire world | 100:0 | Public tile metadata (hover) | No |
-| Area | Browsable section | 80:20 | Public + ghost identity | No |
-| Neighbor | 7-hex cluster | 50:50 | Public interactions + paired thread | Partial |
-| Partner | None (status only) | 20:80 | Private conversation | Yes |
-| Ghost | Ghost interiority | 0:100 | Inventory, quest, memories | Yes |
+| Area | Browsable section (full-bleed) | ~80:20 | Public + ghost identity in **right overlay** | No |
+| Neighbor | 7-hex cluster (full-bleed) | ~50:50 | Public interactions + paired thread in **overlay** | Partial |
+| Partner | Full world under glass | ~20:80 | Private conversation in **large overlay**; **no** separate mini-map strip (status + thread in overlay) | Yes |
+| Ghost | (no map) | 0:100 | **Inventory, active goal, memories** (observability copy, not RPG-quest) | Yes |
 
 `focus` transitions drive data subscriptions: entering neighbor scale for a
 ghost subscribes to that ghost's 7-hex proximity events; entering partner scale
@@ -118,8 +120,10 @@ ecosystem), chosen because:
 1. `H3HexagonLayer` — wireframe hex grid, `filled: false`, coloured by tile
    type. Filled variant for tiles with semantic content (vendor booth, session
    room, etc.)
-2. `PointCloudLayer` — one point cluster per ghost, positioned at H3 cell
-   centroid, size scaled by proximity to focus
+2. `PointCloudLayer` — one point cluster per ghost. **Map–Neighbor:** positioned
+   at H3 **cell centroids** (2D, with size scaled by proximity to focus).
+   **Partner (paired ghost):** **3D** volume in view space, per `spec.md` **FR-025** (not a
+   gliding 2D dot across the map; floor cell updates under a fixed cloud).
 3. Marker overlays — items on tiles rendered as simple icon sprites via
    `IconLayer`
 4. Selection highlight — active ghost or cluster outlined via `H3HexagonLayer`
@@ -127,31 +131,48 @@ ecosystem), chosen because:
 
 At area scale and below, the deck.gl viewport responds to pan gestures. At
 neighbor scale and above, the viewport lazily follows the focused ghost,
-keeping it within the central third of the visible area.
+keeping it within the central third of the visible area (until Partner-specific
+framing; see `specs/011-intermedium-client/spec.md` FR-015, FR-024, FR-025).
 
-### Interaction Panel
+### Camera zoom, dual grid, and Partner 3/4 (spec FR-024 – FR-025)
 
-The panel is the right or bottom portion of the display, sized by scale ratio.
-It is absent at map scale. Its content is scale-dependent:
+Each **scale** is not just an overlay size — it is a **zoom level** on the H3
+grid. **Area, Neighbor, and Partner** present **two** legible levels: a
+**world-scale** context (faint, inset, or background) and a **local-scale** grid
+at the zoom of that mode (region, 7-hex cluster, or **single cell**). **Partner**
+is special: the scene is **one H3 cell** (the cell the paired ghost stands on);
+the camera moves to a **high 3/4** (oblique) view — the point at which
+perspective may **diverge** from strict overhead. The **paired ghost** is a
+**3D point cloud**. When the ghost’s real `h3Index` changes, the **cloud stays
+fixed** in the Partner view; the **cell under the ghost** **re-targets** to the new
+index (the underfoot floor advances, not a sliding point cloud across the map).
+
+### Interaction panels (overlays)
+
+**Layout rule:** the deck.gl scene is **full width and full height** at Map, Area, Neighbor, and Partner. **Panels float on top** (typical: anchored right, semi-opaque) with a footprint that matches the nominal scene:panel ratio — they do **not** reallocate main-axis space away from the world the way a two-column app shell would. Map scale has no panel overlay. Content is scale-dependent:
 
 - **Area**: Public info about hovered or selected ghost (name, class, current
   tile type). No conversation.
 - **Neighbor**: Public activity feed for the 7-hex cluster. If a paired ghost
   is within the cluster, their conversation thread is appended below.
-- **Partner**: Full conversation thread with the paired ghost. Ghost location
-  rendered as a minimal ambient status widget (current tile type, last move
-  direction) rather than a map view.
-- **Ghost**: Interiority view — inventory list, active quest summary, memory
-  log. No map. No conversation input (read-only at this scale).
+- **Partner**: Full conversation thread with the paired ghost, inside the
+  Partner overlay. Ghost location is a minimal **status** readout (tile type,
+  last move direction) in the **same overlay** — **not** a second narrow
+  “mini-map” column beside the thread.
+- **Ghost**: Interiority view — **inventory**, **active goal** summary, and
+  **memories** (avoid “quest” / “quest log” / “memory log” in user copy; the
+  aesthetic is **game-inspired**, the product is **not** a game). No map. No
+  conversation input (read-only at this scale).
 
 ### Ghost Interiority (Ghost Scale)
 
 The ghost scale is the only scale with no hex grid. It presents the ghost's
-inner state as a structured document: what it carries, what it is trying to do,
-what it remembers. The data source is the ghost's MCP state, surfaced via the
-ghost house API. This is the most speculative component — the exact data model
-depends on RFC-0007 ghost house implementation. It is scoped here as a
-placeholder and deferred to a follow-up spec.
+inner state as a structured document: what it carries, what it is trying to
+accomplish (**goals**), and what it **remembers** — framed for **observability
+of an agent**, not a player-inventory screen. The data source is the ghost's
+MCP state, surfaced via the ghost house API. This is the most speculative
+component — the exact data model depends on RFC-0007 ghost house
+implementation. It is scoped here as a placeholder and deferred to a follow-up spec.
 
 ### Repository Structure
 
@@ -233,7 +254,7 @@ showcase at AIEWF 2026.
    with deck.gl. Deferred to implementation iteration.
 
 4. **Ghost interiority data contract.** The Ghost scale requires a read API for
-   ghost inventory, quest state, and memories. This is not yet defined in
+   ghost inventory, **goal** state, and **memories**. This is not yet defined in
    RFC-0007. Ghost scale is in scope for this RFC as a navigation destination
    but its content is blocked on a follow-up contract with the ghost house.
 
@@ -247,10 +268,11 @@ showcase at AIEWF 2026.
    are instant cuts or smooth morphs is an implementation choice. Suggested
    default: instant for MVP, animated in follow-up.
 
-7. **Mobile layout.** The scene:panel ratio model is described for desktop.
-   On mobile (phone), the Pokémon Go framing suggests the spatial view should
-   dominate more aggressively, with the panel as a pull-up drawer rather than
-   a side column. Deferred — MVP targets desktop/tablet.
+7. **Mobile layout.** The overlay footprint model is described for desktop. On
+   mobile (phone), the spatial view should **dominate more aggressively**, with
+   interaction UI as a pull-up drawer. Deferred — MVP targets desktop/tablet;
+   same **full-bleed world** principle: panels overlay, they do not shrink the
+   map canvas.
 
 ## Alternatives
 

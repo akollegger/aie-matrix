@@ -138,14 +138,16 @@ interface InventoryItem {
   quantity: number;
 }
 
-interface Quest {
-  questId: string;
+/** Current objective (wording is observability-flavoured, not RPG-quest) */
+interface Goal {
+  goalId: string;
   title: string;
   description: string;
   status: 'active' | 'completed' | 'failed';
 }
 
-interface MemoryEntry {
+/** One remembered line; the collection is surfaced in UI as "memories" */
+interface Memory {
   entryId: string;
   content: string;
   timestamp: string;   // ISO 8601
@@ -154,8 +156,8 @@ interface MemoryEntry {
 interface GhostInteriority {
   ghostId: string;
   inventory: InventoryItem[];
-  activeQuest: Quest | null;
-  memoryLog: MemoryEntry[];
+  activeGoal: Goal | null;
+  memories: Memory[];
   isAvailable: boolean;   // false until ghost house read API is defined (IC-003)
 }
 ```

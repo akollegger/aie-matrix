@@ -185,7 +185,7 @@ Tile system design, movement rules, quest engine, leaderboard logic, BoF activat
 Accurate hex-tile modeling of Moscone West — floors, rooms, booths, transitions. Ideally done in collaboration with AIEWF organizers and venue data.
 
 **Frontend / Mobile**
-Phaser client, ghost management UI, goal stack inspector, checkpoint briefing interface, ghost card design, and mobile-responsive layout. A spectator/ambient view of the world for hallway screens and livestreams.
+Phaser **debugger** (`clients/debugger/`), **intermedium** human spectator client (`clients/intermedium/` — full-bleed H3 world, **overlay** UI, goals/memories copy per RFC-0008), ghost management UI, goal stack inspector, checkpoint briefing interface, ghost card design, and mobile-responsive layout. A spectator/ambient view of the world for hallway screens and livestreams.
 
 **Agent Architecture**
 The ghost reasoning layer: goal decomposition, plan generation, checkpoint triggering logic, and the significance-scoring system that determines when to surface a decision point. Clean abstractions that support multiple agent implementations.
