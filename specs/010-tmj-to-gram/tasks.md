@@ -192,11 +192,11 @@
 - [ ] T048 [P] Update `docs/architecture.md` — add note on the two-read transition (Colyseus reads `.tmj`; world-api reads `.map.gram`) and flag the follow-up RFC that will unify them
 - [ ] T049 Run `pnpm typecheck` across all packages; fix any `R`-channel or `Match.exhaustive` failures introduced by the new `MapService` Layer wiring
 - [ ] T050 Run `pnpm run lint` and resolve any new lint errors
-- [ ] T051 Run full test suite `pnpm test` and verify no regressions in existing world-api tests
+- [ ] T051 Run `pnpm test` (package unit tests via `test:packages`) and `pnpm run test:e2e`; verify no regressions in existing world-api tests
 - [ ] T052 Follow `quickstart.md` end-to-end: convert `freeplay.tmj`, start server, hit all four curl examples, confirm expected responses; use `curl -w "\ntime_total: %{time_total}s\n"` to manually verify SC-002 (< 50ms p99 for gram endpoint)
 - [ ] T053 Confirm `proposals/rfc/0009-map-format-pipeline.md` still reflects all decisions made during implementation (no drift introduced); update any implementation notes if wording was refined during coding (the OQ-1/OQ-2/OQ-9 write-back was done in T000 before Phase 1)
 
-**Checkpoint**: `pnpm typecheck && pnpm test && pnpm --filter @aie-matrix/tmj-to-gram ci:golden` all exit 0. Documentation consistent.
+**Checkpoint**: `pnpm typecheck && pnpm run lint && pnpm test && pnpm run test:e2e && pnpm --filter @aie-matrix/tmj-to-gram ci:golden` all exit 0. Documentation consistent.
 
 ---
 

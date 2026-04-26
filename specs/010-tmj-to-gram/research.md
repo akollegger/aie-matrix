@@ -8,7 +8,7 @@
 
 **Decision**: Commit `.map.gram` artifacts; add CI byte-equality check.
 
-**Rationale**: The user has already committed `maps/sandbox/example.map.gram` manually. Committing makes PR diffs reviewable (the world author's Tiled change and its gram output appear together). The CI equality check (`tmj-to-gram` re-run + `diff`) catches any drift and forces silent output changes to surface as a PR diff. This is the same pattern used by golden-file tests throughout the industry.
+**Rationale**: The repo includes a committed illustrative gram (`maps/sandbox/canonical.map.gram`, unpaired with TMJ so it is not indexed by `MapService`). Committing makes PR diffs reviewable (the world author's Tiled change and its gram output appear together). The CI equality check (`tmj-to-gram` re-run + `diff`) catches any drift and forces silent output changes to surface as a PR diff. This is the same pattern used by golden-file tests throughout the industry.
 
 **Alternatives considered**: Generate-on-build (CI artifact, not committed) — rejected because diffs aren't reviewable and the gram cannot be inspected without running a CI job.
 

@@ -20,7 +20,7 @@ TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` 
 ```bash
 pnpm install          # install all workspace deps
 pnpm dev              # run combined server in watch mode
-pnpm test             # unit / TCK tests
+pnpm test             # package unit tests (no Playwright; no ghost-tck — needs live server)
 pnpm test:e2e         # Playwright end-to-end
 pnpm test:tck         # ghost contract tests (server must be running)
 pnpm typecheck        # TypeScript across all packages

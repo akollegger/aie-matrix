@@ -26,9 +26,12 @@
     "demo": "node scripts/demo.mjs",
     "ports": "node scripts/kill-poc-ports.mjs",
     "ports:kill": "node scripts/kill-poc-ports.mjs --kill",
+    "test": "pnpm run test:packages",
+    "test:packages": "pnpm --filter @aie-matrix/server-world-api test && pnpm --filter @aie-matrix/server-colyseus test && pnpm --filter @aie-matrix/tmj-to-gram test && pnpm --filter @aie-matrix/ghost-house test && pnpm --filter @aie-matrix/ghost-cli test && pnpm --filter @aie-matrix/random-agent test && pnpm --filter @aie-matrix/client-map-overlay test",
     "test:e2e": "pnpm --filter @aie-matrix/e2e test",
     "test:e2e:autostart": "pnpm run test:e2e",
-    "test:tck": "pnpm --filter @aie-matrix/ghost-tck test"
+    "test:tck": "pnpm --filter @aie-matrix/ghost-tck test",
+    "tmj-to-gram": "node ./tools/tmj-to-gram/dist/main.js"
   },
   "dependencies": {
     "@aie-matrix/root-env": "workspace:*"

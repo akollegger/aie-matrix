@@ -72,7 +72,7 @@ See `proposals/adr/README.md` and `proposals/rfc/README.md` for file formats.
 pnpm install             # workspace install
 pnpm dev                 # combined server + watch
 pnpm typecheck           # TypeScript across all packages (primary correctness gate)
-pnpm test                # unit / TCK
+pnpm test                # package unit tests (`test:packages`; not ghost-tck — needs server)
 pnpm test:e2e            # Playwright (auto-starts server)
 pnpm test:tck            # ghost contract tests (start server first)
 pnpm run lint
