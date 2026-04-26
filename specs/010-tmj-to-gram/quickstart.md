@@ -121,7 +121,7 @@ git checkout maps/sandbox/freeplay.map.gram
 pnpm --filter @aie-matrix/tmj-to-gram test:visual
 ```
 
-This renders both the `.tmj` and the `.map.gram` to SVG, rasterizes both PNGs, and pixel-diffs them. Any non-zero diff fails the test.
+This builds the same logical terrain from TMJ and from the committed gram, rasterizes both views to PNG (`pngjs`), and asserts `pixelmatch` is zero. Any non-zero diff fails the test.
 
 To regenerate the golden PNGs after an intentional visual change:
 

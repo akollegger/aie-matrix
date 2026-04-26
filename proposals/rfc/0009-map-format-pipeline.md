@@ -130,7 +130,7 @@ Default format is `gram`. Content-Type:
 
 | format | Content-Type |
 |---|---|
-| `gram` | `text/plain; charset=utf-8` (see Open Question 2) |
+| `gram` | `text/plain; charset=utf-8` (normative; see § Open Questions item 2 — **Resolved**) |
 | `tmj` | `application/json` |
 
 Errors flow through `errorToResponse()` in `server/src/errors.ts`. Two new tagged errors are added: `MapNotFoundError` (→ 404) and `UnsupportedFormatError` (→ 400). Both must have a `Match.tag` branch in `errorToResponse` per AGENTS.md's "Match.exhaustive as a compile gate" convention; the build fails if either is omitted.
@@ -155,14 +155,14 @@ Syntactic correctness of the gram alone is a weak guarantee — a `.map.gram` ca
 
 **Layer 3 — Headless reference renderer + pixel-diff (visual parity).** The risk this layer addresses: the gram parses, the structural invariants hold, but the resulting world *looks* wrong (a rotated polygon, a shifted anchor, a tile-class color mismatch, an off-by-one in `localIjToCell`). The test that catches this is rendering both formats and pixel-comparing the result.
 
-A test-only `tools/tmj-to-gram/test/render/` package contains:
-- A minimal SVG renderer that takes a uniform "rendered map" intermediate (`{ tileTypes, cells: [{h3, type}], items: [...] }`) and emits an SVG image of fixed canvas size.
-- Two adapters that produce that intermediate from each format: one reads `.tmj` directly (mirroring the legacy `mapLoader.ts` cell projection), one reads `.map.gram` (parsing with `@relateby/pattern` and expanding polygons via `h3.polygonToCells`).
-- A pixel-diff harness (`pixelmatch` or equivalent) that fails on any non-zero diff.
+A test-only `tools/tmj-to-gram/test/render/` tree contains:
+- A shared **render intermediate** (merged terrain + items) built from `.tmj` (polygon + layout merge, mirroring conversion geometry) and from `.map.gram` (`Gram.parse` + `h3.polygonToCells` for polygon interiors).
+- A minimal **flat-color SVG** emitter for human inspection, plus a **direct RGBA rasterizer** (same hex layout math) feeding `pngjs` so `pixelmatch` stays deterministic (no SVG→raster stack in CI).
+- A pixel-diff harness (`pixelmatch`) that fails on any non-zero diff between the TMJ-derived and gram-derived PNGs.
 
-For each fixture in `maps/sandbox/`, the test renders the `.tmj` and the `.map.gram` through the same SVG emitter, rasterizes both, and asserts pixel-identical output. The renderer is deliberately minimal — flat-color hexagons with item glyphs — and is not coupled to the intermedium's renderer. Color and glyph fallbacks for tile types and item types missing visual hints come from a fixed table in the test package — see Open Question 8.
+For each fixture in `maps/sandbox/`, the test asserts the two PNGs are identical, then compares the TMJ-derived PNG to a committed **golden** snapshot. Color / item-marker fallbacks for types without hints live in `tools/tmj-to-gram/test/render/fallbacks.ts` — see Open Question 8.
 
-A `golden/` directory under the renderer holds the rasterized PNGs from one format (the `.tmj` side, which the Phaser debugger already reads correctly today). The other side is generated at test time and diffed against it. When a fixture is intentionally changed, the developer regenerates the golden with a documented script step, the same way snapshot tests work elsewhere.
+The `golden/` directory holds reference PNGs from the TMJ path. Regenerate with `pnpm --filter @aie-matrix/tmj-to-gram golden:regen` when visuals change intentionally.
 
 **Polygon-specific test fixtures.** `maps/sandbox/map-with-polygons.tmj` exercises:
 - A rectangle area (`Red`) with no overlapping painted tiles → all cells implicit, no individual nodes emitted for the area's interior.
@@ -188,9 +188,9 @@ A `golden/` directory under the renderer holds the rasterized PNGs from one form
 
 ## Open Questions
 
-1. **Committed artifact vs derived-on-build.** Should `.map.gram` files be checked in, or generated as a CI step from the `.tmj`? Committing makes diffs reviewable (a map author's PR shows the derived change alongside their Tiled edit) and matches what the user has already done locally for `freeplay.map.gram`. Generating avoids drift between source and derived. Suggested default: commit, with a CI check that re-converts and asserts byte equality. Reviewers, weigh in.
+1. ~~**Committed artifact vs derived-on-build.**~~ **Resolved.** Commit `.map.gram` files to the repository and add a CI step that re-converts each tracked `.tmj` and asserts byte equality against the committed `.map.gram`. Rationale: PR diffs stay reviewable (the author's Tiled edit and the derived gram land together); any silent converter drift fails CI instead of slipping through. Recorded in `specs/010-tmj-to-gram/research.md` (OQ-1).
 
-2. **`gram` content-type.** No registered IANA media type exists for gram. `text/plain; charset=utf-8` is correct and unsurprising. Coining `application/vnd.aie-matrix.gram` adds discoverability but is a one-way commitment. Suggested: `text/plain` for now; revisit when a clear consumer benefit emerges.
+2. ~~**`gram` content-type.**~~ **Resolved.** Serve gram bodies as `text/plain; charset=utf-8`. No vendor MIME type for now; revisit when the intermedium (RFC-0008) or another consumer has a concrete need for Content-Type–based discovery. Recorded in `specs/010-tmj-to-gram/research.md` (OQ-2).
 
 3. ~~**Polygon support timing.**~~ **Resolved.** Polygon and rectangle `tile-area` objects are in scope for this RFC; see *Tile area translation* in Design. The sandbox fixture `maps/sandbox/map-with-polygons.tmj` exercises every shape and edge case the conversion must handle.
 
@@ -204,7 +204,7 @@ A `golden/` directory under the renderer holds the rasterized PNGs from one form
 
 8. **Reference renderer fallback table.** The Layer 3 visual-parity renderer needs a deterministic color-and-glyph mapping for tile types and item types that lack visual hints in their definitions (current `.tsx` tilesets do not carry `color`; sidecars may omit `glyph`). Options: a checked-in table indexed by type label; a hash-based palette derived from the label; pull from a future shared `*.style.json`. Suggested: a small checked-in table in `tools/tmj-to-gram/test/render/fallbacks.ts` covering the sandbox fixtures, with a documented "add an entry when you add a fixture" rule. The table is test-only and does not influence runtime rendering.
 
-9. **Polygon-to-cells provider.** Conversion's compression and overlap checks need to expand a Tiled-derived polygon into the H3 cell set it covers. Two candidate implementations: (a) call `h3.polygonToCells` on the *pixel-derived geographic boundary* (after projecting vertex pixels through the H3 anchor's geographic frame), (b) flood-fill from a known interior cell using H3 adjacency until the polygon's hex-grid boundary is reached. (a) reuses an existing library call; (b) avoids any geographic projection step and stays entirely in hex-grid space. Suggested: start with (a) and pivot to (b) only if projection precision becomes a problem at sandbox scale.
+9. ~~**Polygon-to-cells provider.**~~ **Resolved.** Use `h3.polygonToCells` on `[lat, lng]` rings derived from each Tiled vertex (grid cell → `h3.localIjToCell(anchor, { i, j })` → `h3.cellToLatLng`, then pass vertices at resolution 15). Flood-fill in pure hex-grid space remains a documented fallback if projection precision ever fails at venue scale. Recorded in `specs/010-tmj-to-gram/research.md` (OQ-9).
 
 ## Alternatives
 

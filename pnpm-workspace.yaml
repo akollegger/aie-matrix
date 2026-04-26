@@ -1,4 +1,5 @@
 packages:
+  - tools/tmj-to-gram
   - server
   - server/colyseus
   - server/conversation

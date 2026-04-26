@@ -1,0 +1,5 @@
+{ kind: "matrix-map", name: "shared", elevation: 0 }
+
+(blue:TileType:Blue { name: "Blue" })
+
+(cell-8f2800000000000:Blue { location: "8f2800000000000" })

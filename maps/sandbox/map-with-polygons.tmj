@@ -119,14 +119,14 @@
                  "y":350
                 }, 
                 {
-                 "height":84,
+                 "height":72,
                  "id":6,
                  "name":"purple-area",
                  "opacity":1,
                  "rotation":0,
                  "type":"Purple",
                  "visible":true,
-                 "width":213.880570250157,
+                 "width":180,
                  "x":230,
                  "y":350
                 }, 
