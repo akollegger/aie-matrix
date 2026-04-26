@@ -1,0 +1,33 @@
+{
+  "name": "@aie-matrix/tmj-to-gram",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "cli": "node dist/main.js",
+    "test": "pnpm run build && vitest run",
+    "test:watch": "vitest",
+    "test:visual": "pnpm run build && vitest run test/render/parity.test.ts",
+    "golden:regen": "pnpm run build && REGEN_VISUAL_GOLDENS=1 vitest run test/render/parity.test.ts",
+    "ci:golden": "bash scripts/ci-golden-check.sh",
+    "gallery:parity": "pnpm run build && tsx scripts/build-parity-gallery.ts"
+  },
+  "dependencies": {
+    "@effect/cli": "^0.75.0",
+    "@effect/platform-node": "^0.106.0",
+    "@relateby/pattern": "^0.4.0",
+    "effect": "^3.21.0",
+    "fast-xml-parser": "4.5.5",
+    "h3-js": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "pixelmatch": "^7.1.0",
+    "pngjs": "^7.0.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.7.3",
+    "vitest": "^3.2.4"
+  }
+}

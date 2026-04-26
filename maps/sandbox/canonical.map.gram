@@ -1,7 +1,7 @@
-// experimental map format
+// canonical map format example
 {
     kind: "matrix-map",
-    mapId: "example-a",
+    name: "canonical-example",
     elevation: 0
 }
 
@@ -19,7 +19,7 @@
 ]
 
 (topLeft:CarpetedFloor { // the `topLeft` identifier is illustrative, not normative
-    location: 1234, // h3 coordinate
+    location: h3`0x8f2800000000195` // an h3 coordinate is a 64-bit hex string
     // other properties as needed
 })
 
@@ -28,7 +28,7 @@
 })
 
 (pillar1:Pillar {
-    location: 1235, // a tile instance may be inside a Polygon, overriding the tile type at that location
+    location: h3`8f2800000000012` // a tile instance may be inside a Polygon, overriding the tile type at that location
 })
 
 
@@ -44,5 +44,5 @@
 
 // an instance of placed item
 (key1:BrassKey { // `BrassKey` without the `ItemType` qualifier.
-    location: 1234  // an h3 coordinate
+    location: h3`8f2800000000015`
 })

@@ -27,6 +27,7 @@ lerna-debug.log*
 .pnpm-store/
 
 # Build & bundler output
+artifacts/
 dist/
 build/
 out/

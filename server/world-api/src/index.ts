@@ -74,6 +74,22 @@ export {
   WorldApiUnknownCell,
   type WorldApiError,
 } from "./world-api-errors.js";
+export {
+  GramParseError,
+  MapFileReadError,
+  MapIdCollisionError,
+  MapNameMismatchError,
+  MapNotFoundError,
+  UnsupportedFormatError,
+} from "./map/map-errors.js";
+export {
+  MapService,
+  makeMapServiceLayer,
+  defaultRepoRootForMapService,
+  type MapIndexEntry,
+  type MapServiceOps,
+} from "./map/MapService.js";
+export { handleMapAssetGet, parseMapsPath, tryHandleMapAssetGet } from "./map/MapRoutes.js";
 export { handleGhostMcpEffect } from "./mcp-server.js";
 export {
   ItemService,

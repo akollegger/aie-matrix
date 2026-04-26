@@ -1,0 +1,54 @@
+name: TMJ→Gram parity gallery
+
+# Always build an HTML + SVG artifact when converter or sandbox maps change.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/tmj-to-gram-parity-gallery.yml"
+      - "tools/tmj-to-gram/**"
+      - "maps/sandbox/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/tmj-to-gram-parity-gallery.yml"
+      - "tools/tmj-to-gram/**"
+      - "maps/sandbox/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: parity-gallery-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  parity-gallery:
+    name: svg gallery artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.14.1"
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build TMJ vs gram SVG gallery
+        run: pnpm --filter @aie-matrix/tmj-to-gram run gallery:parity
+
+      - name: Upload parity gallery
+        uses: actions/upload-artifact@v4
+        with:
+          name: tmj-gram-parity-gallery
+          path: artifacts/parity-gallery/
+          if-no-files-found: error

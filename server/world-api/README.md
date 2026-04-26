@@ -2,6 +2,30 @@
 
 MCP `world-api` (ghost tools) lives here. For the PoC it calls Colyseus **in-process** via `colyseus-bridge.ts` (see `specs/001-minimal-poc/research.md`).
 
+## Map assets (`GET /maps/:mapId`) — RFC-0009
+
+The world HTTP surface (same process as the PoC server) exposes read-only map bytes for tooling and the RFC-0008 intermedium.
+
+| Route | Default | Notes |
+|-------|---------|--------|
+| `GET /maps/:mapId` | `?format=gram` | `Content-Type: text/plain; charset=utf-8` — body is the committed `.map.gram` UTF-8 |
+| `GET /maps/:mapId?format=gram` | explicit gram | Same as default |
+| `GET /maps/:mapId?format=tmj` | TMJ JSON | `Content-Type: application/json` — original `.tmj` bytes |
+
+- **`:mapId`** is the filename stem (e.g. `freeplay` for `maps/sandbox/freeplay.map.gram` paired with `freeplay.tmj`).
+- **404** — unknown `mapId` (`MapNotFoundError`).
+- **400** — unsupported `format` query (`UnsupportedFormatError`).
+
+### `MapService` (Effect `Layer`)
+
+`server/world-api/src/map/MapService.ts` defines `Context.Tag("aie-matrix/MapService")`. The scoped `Layer`:
+
+1. **Indexes** pairs under `maps/` where a `.tmj` and same-stem `.map.gram` live in the same directory (`mapId` = stem).
+2. **Startup validation** — before the HTTP port is considered ready, every indexed gram is parsed with `@relateby/pattern`; the document header `name` must match the stem. Failures use typed errors (`GramParseError`, `MapNameMismatchError`, `MapIdCollisionError`) and abort startup.
+3. **`raw(mapId, format)`** — reads the file from disk and returns a `Buffer` (no conversion on the request path).
+
+`MapRoutes.ts` wires the handler next to `/mcp` and `/registry` (see `server/world-api/src/index.ts`). Contract tests: `server/world-api/test/map-routes.test.ts`.
+
 ## Movement rules (Gram + @relateby/pattern)
 
 Rule-based adjacent `go` is specified in [RFC-0002](../../proposals/rfc/0002-rule-based-movement.md) with the implementation plan in [specs/003-rule-based-movement/plan.md](../../specs/003-rule-based-movement/plan.md).

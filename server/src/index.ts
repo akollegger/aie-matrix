@@ -17,16 +17,19 @@ import {
   handleGhostMcpEffect,
   loadMovementRulesFromEnv,
   makeLiveNeo4jGraphLayer,
+  makeMapServiceLayer,
   makeMovementRulesLayer,
   makeNoOpNeo4jGraphLayer,
   makeItemServiceLayer,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
+  MapService,
   Neo4jGraphService,
   ItemService,
   ItemServiceImpl,
   runWithRequestTrace,
   seedNeo4jGraphArtifacts,
+  tryHandleMapAssetGet,
   type MovementRulesService,
   type RegistryStoreService,
   type WorldBridgeService,
@@ -297,7 +300,8 @@ async function main(): Promise<void> {
     | ServerConfigService
     | ConversationService
     | Neo4jGraphService
-    | ItemService;
+    | ItemService
+    | MapService;
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -307,6 +311,7 @@ async function main(): Promise<void> {
     conversationLayer,
     neo4jGraphLayer,
     makeItemServiceLayer(itemServiceImpl),
+    makeMapServiceLayer(repoRoot),
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
@@ -363,6 +368,15 @@ async function main(): Promise<void> {
         }
       }
 
+      if (req.method === "GET") {
+        const traceId = randomUUID();
+        const mapHandled = await runWithRequestTrace(traceId, () =>
+          runtime.runPromise(tryHandleMapAssetGet(req, res, url, corsHeaders)),
+        );
+        if (mapHandled) {
+          return;
+        }
+      }
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
         return;
       }
@@ -494,6 +508,9 @@ async function main(): Promise<void> {
   }
   console.log(`  Conversation threads: GET http://127.0.0.1:${httpPort}/threads/:ghostId`);
   console.log(`  Map assets (dev): GET http://127.0.0.1:${httpPort}/maps/...`);
+  console.log(
+    `  Map gram/tmj (MapService): GET http://127.0.0.1:${httpPort}/maps/<mapId>?format=gram|tmj`,
+  );
 }
 
 void main().catch((err) => {
