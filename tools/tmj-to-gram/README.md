@@ -57,6 +57,7 @@ Portal `objectgroup` entries are logged as **`[warn]`** and skipped. Unknown lay
 | 1 — Structure | `pnpm test` | H3 validity, tile/item references, polygon invariants, CLI negatives |
 | 2 — Golden bytes | `pnpm ci:golden` | Re-converts every `maps/sandbox/*.tmj` and diffs against committed `.map.gram` |
 | 3 — Visual parity | `pnpm test:visual` | TMJ vs gram rasterized to PNG; `pixelmatch` must be zero |
+| SVG gallery (inspect) | `pnpm gallery:parity` | Writes `artifacts/parity-gallery/` (`index.html` + per-map TMJ/gram SVGs) for local review |
 
 Regenerate **visual** reference PNGs after intentional renderer or fixture changes:
 
@@ -84,5 +85,10 @@ git add test/render/golden/
 | `test/unit/` | Layer 1 & CLI tests |
 | `test/render/` | Layer 3 renderer + `parity.test.ts` |
 | `scripts/ci-golden-check.sh` | Layer 2 CI script |
+| `scripts/build-parity-gallery.ts` | Builds the SVG + HTML gallery (`gallery:parity`) |
+
+### CI: parity gallery artifact
+
+On pushes/PRs that touch `tools/tmj-to-gram/` or `maps/sandbox/`, workflow **TMJ→Gram parity gallery** uploads **`tmj-gram-parity-gallery`**. Download the zip from the run’s **Artifacts**, unzip, and open **`index.html`** for a left/right TMJ vs committed gram view (same geometry as Layer 3 `renderSvg`).
 
 More context: [specs/010-tmj-to-gram/quickstart.md](../../specs/010-tmj-to-gram/quickstart.md).

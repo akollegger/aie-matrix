@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "test:visual": "pnpm run build && vitest run test/render/parity.test.ts",
     "golden:regen": "pnpm run build && REGEN_VISUAL_GOLDENS=1 vitest run test/render/parity.test.ts",
-    "ci:golden": "bash scripts/ci-golden-check.sh"
+    "ci:golden": "bash scripts/ci-golden-check.sh",
+    "gallery:parity": "pnpm run build && tsx scripts/build-parity-gallery.ts"
   },
   "dependencies": {
     "@effect/cli": "^0.75.0",
