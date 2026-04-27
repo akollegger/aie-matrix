@@ -50,3 +50,4 @@ What becomes easier or harder as a result of this decision?
 | [ADR-0003](0003-conversation-server.md) | Conversation Server as a Dedicated Service | accepted |
 | [ADR-0004](0004-a2a-ghost-agent-protocol.md) | A2A as the Ghost Agent Protocol | proposed |
 | [ADR-0005](0005-h3-native-map-format.md) | H3-Native Map Format (.map.gram) | proposed |
+| [ADR-0006](0006-personal-stop-renderer.md) | Personal-Stop Rendering Stack | proposed |

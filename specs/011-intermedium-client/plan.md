@@ -10,13 +10,13 @@ Build `clients/intermedium/` — a React SPA that serves as the human-facing obs
 ## Technical Context
 
 **Language/Version**: TypeScript 5.7 (browser target), React 18, Node.js 24 (build/dev only)  
-**Primary Dependencies**: deck.gl ≥ 9 (H3HexagonLayer, PointCloudLayer, IconLayer), `h3-js` ≥ 4, `colyseus.js` (matches `@colyseus/core` 0.15.57), `@relateby/pattern` (gram parsing, per IC-002 consumer note in spec-010), `@aie-matrix/shared-types` (existing workspace package)  
+**Primary Dependencies**: deck.gl ≥ 9 (H3HexagonLayer, PointCloudLayer, IconLayer), `h3-js` ≥ 4, `colyseus.js` (matches `@colyseus/core` 0.15.57), `@relateby/pattern` (gram parsing, per IC-002 consumer note in spec-010), `@aie-matrix/shared-types` (existing workspace package), `@react-three/fiber` ≥ 8 + `three` ≥ 0.170 (Personal stop only — per ADR-0006)  
 **Storage**: None — stateless client; reads from Colyseus (live positions), HTTP (map topology at startup), A2A (conversation stream)  
 **Testing**: Vitest (unit/component), Playwright (e2e — existing `pnpm test:e2e` harness)  
 **Target Platform**: Modern desktop/tablet browsers (Chrome, Firefox, Safari current)  
 **Project Type**: Web application (React SPA built with Vite 5+)  
 **Performance Goals**: Ghost positions refresh <1 s; map renders and is interactive <3 s on conference Wi-Fi  
-**Constraints**: No mobile layout for MVP; instant scale transitions (no animation); no MCP client dependency; `clients/debugger/` must remain fully functional after rename  
+**Constraints**: No mobile layout for MVP; animated stop transitions use deck.gl `LinearInterpolator` (LOD flip is a hard cut; deck.gl↔R3F swap uses fade); no MCP client dependency; `clients/debugger/` must remain fully functional after rename  
 **Scale/Scope**: ~500–1 000 concurrent spectators; one paired ghost per attendee; ~500 ghosts on the world
 
 ## Constitution Check
@@ -25,7 +25,7 @@ Build `clients/intermedium/` — a React SPA that serves as the human-facing obs
 
 | Gate | Status | Notes |
 |------|--------|-------|
-| Proposal linkage (`proposals/rfc/…` or `proposals/adr/…`) | ✅ | RFC-0008 covers full scope; ADR-0005 covers map format; ADR-0004 covers A2A protocol role |
+| Proposal linkage (`proposals/rfc/…` or `proposals/adr/…`) | ✅ | RFC-0008 covers full scope; ADR-0005 covers map format; ADR-0004 covers A2A protocol role; ADR-0006 covers Personal-stop renderer decision |
 | Planned structure preserves documented architectural boundaries | ✅ | New `clients/intermedium/` package; `client/` → `clients/debugger/` is mechanical rename with no internal changes |
 | Shared interfaces have contract artifacts planned under `contracts/` | ⚠️ | IC-001 (Colyseus) and HTTP map endpoint (IC-002 in spec-010) are defined; IC-002 (A2A conversation) and IC-003 (ghost interiority) are gap contracts pending ghost house team |
 | Verification covers each user slice; runnable code includes smoke test and local run instructions | ✅ | 4 user stories define independent acceptance scenarios; quickstart.md documents local run |
@@ -58,13 +58,14 @@ clients/                         # renamed from client/
   intermedium/                   # new React SPA (this feature)
     src/
       hooks/
-        useViewState.ts          # { scale, focus } navigation state machine
+        useViewState.ts          # { stop, focus } navigation state machine — 7 stops, keyboard cycling, pitch per stop
         useColyseus.ts           # Colyseus connection + ghostTiles subscription
         useMapGram.ts            # map topology fetch + gram parse
         useA2AConversation.ts    # A2A conversation stream (stub until IC-002 resolved)
       components/
-        SceneView/               # deck.gl canvas + layers; full-viewport; scale = zoom; Area+ show world+local grid; Partner = 1 cell, 3/4, 3D cloud (FR-024, FR-025)
-        PanelView/               # scale-dependent **overlay** panes (not flex sidebars)
+        SceneView/               # deck.gl canvas + layers; full-viewport; exterior stops = extruded board; interior = flat tiles; Situational = 45° + point clouds (FR-024, FR-025)
+        PersonalScene/           # React Three Fiber canvas — non-geospatial ghost figure + interiority annotation (ADR-0006, FR-029)
+        PanelView/               # stop-dependent **overlay** panes (not flex sidebars)
         GhostCard/               # ghost identity + proximity info
         ConversationThread/      # paired ghost conversation (read + send)
         GhostInteriority/        # inventory, active goal, memories (stub; observability copy, not game-quest)
@@ -111,6 +112,27 @@ See [research.md](research.md) for findings. Key decisions resolved:
 4. **A2A conversation** — No stable non-agent consumer API exists yet. MVP stubs the conversation panel with a polling HTTP fallback against the ghost house `/conversation/:ghostId` route (if implemented) or renders a "conversation unavailable" placeholder. IC-002 documents the gap and the expected contract shape.
 5. **Ghost interiority** — Fully stubbed for MVP; IC-003 documents the placeholder and expected ghost house read API shape.
 6. **Rename `client/` → `clients/`** — Mechanical shell rename; all internal paths within the Phaser client are relative and do not reference the top-level directory name. The pnpm workspace `packages` glob in `pnpm-workspace.yaml` must be updated from `client/**` to `clients/**`.
+
+---
+
+## Revision: Camera Stop Model (2026-04-27)
+
+During implementation on this branch, exploration of deck.gl rendering at H3 resolution 15 revealed that the original five-scale model under-specified the exterior world view and the intimate ghost view. The navigation model was redesigned to **seven discrete camera stops** grouped into two rendering regimes:
+
+| Regime | Stops | Board | Pitch | Ghosts |
+|---|---|---|---|---|
+| Exterior | Global, Regional, Neighborhood | Extruded | 0° / 0° / 45° | Invisible |
+| Interior | Plan, Room, Situational | Flat tiles | 0° / 0° / 45° | Circles → point clouds |
+| Personal | Personal | R3F scene (ADR-0006) | ~80° | 3D point cloud |
+
+Key consequences for the plan:
+
+- **Phases 2–5** (completed): remain valid; the infrastructure and Map/Area/Neighbor implementations are the foundation for Plan/Room/Situational.
+- **Phase 2 mockups** (T010–T017): the five existing SVGs cover the interior stop aesthetics; three new exterior-stop mockups and a revised transition diagram are needed (Phase 9 below).
+- **Phases 6 and 7** (not yet started): the Partner and Ghost scale implementations are **superseded** by the Personal stop. Those phases are preserved as historical record; new Phases 10–13 implement the revised approach.
+- **Animated transitions**: previously deferred; now in scope (FR-028). `LinearInterpolator` handles zoom + pitch + pan; LOD flip is a hard cut; deck.gl↔R3F swap is a fade.
+
+Proposals updated: RFC-0008 (Design section), spec.md (FRs 001–029). New ADR-0006 documents the R3F decision.
 
 ---
 

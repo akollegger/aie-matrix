@@ -6,6 +6,22 @@
 
 **Tests**: No TDD approach requested. Each phase includes a smoke-test checkpoint per spec acceptance scenarios.
 
+---
+
+## ⚠️ Design Revision — 2026-04-27
+
+The five-scale navigation model was redesigned to a **seven-stop camera model** during implementation. See `plan.md` § "Revision: Camera Stop Model" for the full rationale.
+
+**Impact on existing phases:**
+- Phases 1–5 (all ✅): remain valid — the infrastructure and deck.gl scene are the foundation for the new interior stops.
+- Phase 2 mockups (T010–T017 ✅): three new exterior-stop mockups and a revised transition diagram are needed — see **Phase 9** below.
+- **Phase 6 (Partner scale) and Phase 7 (Ghost scale): preserved as history but superseded.** The Personal stop (Phases 11–12) implements the revised approach for paired conversation and ghost interiority.
+- Phase 8 (Polish): extended by **Phase 13**.
+
+New work starts at **Phase 9**.
+
+---
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
@@ -181,18 +197,107 @@
 
 ---
 
+---
+
+## Phase 9: Updated Stop Mockups ⚠️ GATE — blocks Phases 10–12
+
+**Purpose**: Produce the three missing exterior-stop mockups and a revised stop-transition diagram reflecting the 7-stop model. The existing five interior-stop mockups (T010–T014) remain valid and are not replaced.
+
+- [ ] T076 [P] Produce `specs/011-intermedium-client/mockups/07-global-stop.pdf` (or `.svg`) — extruded board tiny in a dark void, overhead 0°; no ghosts
+- [ ] T077 [P] Produce `specs/011-intermedium-client/mockups/08-regional-stop.pdf` (or `.svg`) — board visible as a landmark, overhead 0°; no ghosts; floor platter begins to show
+- [ ] T078 [P] Produce `specs/011-intermedium-client/mockups/09-neighborhood-stop.pdf` (or `.svg`) — board fills frame at 45°, extruded, floor platter visible; no ghosts
+- [ ] T079 Produce `specs/011-intermedium-client/mockups/00-stop-transitions.pdf` (or `.svg`) — revised composite: 7-stop ladder, exterior/interior split, pitch per stop, LOD flip timing at Neighborhood→Plan, deck.gl↔R3F fade at Personal
+- [ ] T080 Commit T076–T079 and request author approval — **Phases 10–12 blocked until approved**
+
+**Checkpoint**: ⚠️ 4 new SVG files committed; author has approved exterior-stop and transition design direction.
+
+---
+
+## Phase 10: Seven-Stop Navigation State Machine
+
+**Purpose**: Extend the existing `useViewState` and `hexViewport` to support all seven stops, keyboard cycling, and pitch-aware camera placement. Builds on the `{ scale, focus }` foundation from T018/T041 without removing it.
+
+- [ ] T081 Extend `clients/intermedium/src/types/viewState.ts` — add `CameraStop` union type (`"global" | "regional" | "neighborhood" | "plan" | "room" | "situational" | "personal"`); extend `ViewState` to `{ stop: CameraStop; focus: string | null }` (FR-004 revised)
+- [ ] T082 Extend `useViewState` in `clients/intermedium/src/hooks/useViewState.ts` — implement 7-stop ordered sequence; zoom-in / zoom-out key cycling; `Personal` stop requires `pairing !== null`; preserve existing `Escape` and double-click behaviour (FR-014 revised)
+- [ ] T083 [P] Extend `clients/intermedium/src/utils/hexViewport.ts` — add pitch constant per stop (0° Global/Regional/Plan/Room; 45° Neighborhood/Situational); add `globalView`, `regionalView` viewport calculations (FR-027)
+- [ ] T084 [P] Update `ClientState.tsx` context — thread new `stop` type through; ensure `nav` actions expose `cycleTo(stop)` alongside existing `zoomInFrom…` helpers
+
+**Checkpoint**: `useViewState` cycles through all 7 stops via keyboard; pitch values are correct per stop; type system enforces `CameraStop` throughout.
+
+---
+
+## Phase 11: Exterior Stops
+
+**Purpose**: Render Global, Regional, and Neighborhood stops — extruded board, floor platter, no ghosts, pitch per stop. Builds on existing `hexGridLayer` and `SceneView`.
+
+- [ ] T085 Extend `clients/intermedium/src/layers/hexGridLayer.ts` — add `extruded: true` mode for exterior stops; keep existing flat mode for interior stops (FR-026)
+- [ ] T086 Extend `clients/intermedium/src/utils/h3region.ts` — improve `voidNeighborH3s` floor platter using `gridDisk` centred on map center with radius proportional to map size (replaces prototype approach; FR-026)
+- [ ] T087 Extend `SceneView` in `clients/intermedium/src/components/SceneView/SceneView.tsx` — add `global`, `regional`, `neighborhood` stop branches: extruded board layer, floor platter wireframe, no ghost layers; apply pitch from `hexViewport` per stop (FR-026, FR-027)
+- [ ] T088 [P] Implement LOD hard-cut logic in `SceneView` — on Neighborhood → Plan transition, swap extruded → flat board at the `transitionDuration / 2` midpoint (FR-028)
+
+**Checkpoint**: All three exterior stops render correctly; extruded board visible at Global/Regional; 45° pitch and floor platter at Neighborhood; no ghosts shown.
+
+---
+
+## Phase 12: Animated Stop Transitions
+
+**Purpose**: Smooth camera animation between all stops — simultaneous zoom + pitch + pan with easement curve; LOD hard cut at transition midpoint.
+
+- [ ] T089 Implement stop transition animator in `SceneView` — use `deck.gl` `LinearInterpolator` with `transitionProps: ['longitude','latitude','zoom','pitch']` and a cubic-in-out easing function; wire to stop changes from `useViewState` (FR-028)
+- [ ] T090 [P] Implement fade wrapper for deck.gl ↔ R3F renderer swap in `clients/intermedium/src/App.tsx` — CSS opacity transition: fade-out before `DeckGL` unmount, fade-in after `PersonalScene` mount; reverse on exit from Personal stop (FR-028, FR-029)
+- [ ] T091 Smoke test all 7 stop transitions: verify zoom + pitch animate simultaneously; LOD flip occurs at midpoint; no flash on Personal stop entry/exit
+
+**Checkpoint**: All stop-to-stop transitions animate smoothly; deck.gl ↔ R3F swap is invisible behind the fade.
+
+---
+
+## Phase 13: Personal Stop (R3F) — replaces Phases 6 + 7
+
+**Purpose**: Personal stop — the non-geospatial ghost-presence view. React Three Fiber scene for the ghost figure; conversation thread and ghost interiority in the panel overlay. Requires pairing (FR-013, FR-029).
+
+- [ ] T092 Add `@react-three/fiber` and `three` to `clients/intermedium/package.json`; verify build (ADR-0006)
+- [ ] T093 Implement `clients/intermedium/src/components/PersonalScene/PersonalScene.tsx` — R3F `Canvas`: dark void background, ghost point-cloud figure (`Points`), ghost interiority annotation scaffold (inventory/goal/memories as floating labels), orbit disabled (ghost stays centred) (FR-029, FR-002)
+- [ ] T094 [P] Implement `clients/intermedium/src/components/PanelView/PersonalPanel.tsx` — ~80% overlay: `GhostStatusWidget` (tile type + last move direction) + `ConversationThread` + `MessageInput` + `GhostInteriority` stub; no separate mini-map (FR-009)
+- [ ] T095 [P] Implement `useA2AConversation` hook in `clients/intermedium/src/hooks/useA2AConversation.ts` — polls `GET /conversation/:ghostId/messages`; `isAvailable: false` on 404/error; optimistic append on send (IC-002, FR-011)
+- [ ] T096 [P] Implement `ConversationThread` in `clients/intermedium/src/components/ConversationThread/ConversationThread.tsx` and `MessageInput` in `…/MessageInput.tsx` — ordered message list; disabled input with tooltip when `!isAvailable` (FR-010, FR-011)
+- [ ] T097 [P] Implement `GhostInteriority` annotation component in `clients/intermedium/src/components/PersonalScene/GhostInteriority.tsx` — three stubs (inventory, active goal, memories); `isAvailable: false` note; observability-first copy (FR-012); no game-quest phrasing
+- [ ] T098 Wire Personal stop in `clients/intermedium/src/App.tsx` — mount `PersonalScene` + `PersonalPanel` when `stop === "personal"`; `PairingGate` blocks navigation without pairing (FR-013)
+- [ ] T099 Smoke test Personal stop with mock `?ghost=`: R3F scene renders ghost figure; conversation stub visible; interiority stubs visible; back control returns to Situational
+
+**Checkpoint**: All 4 revised user stories functional. Ghost world legible at all 7 stops.
+
+---
+
+## Phase 14: Extended Polish
+
+**Purpose**: Documentation updates required by the camera stop redesign, beyond those already listed in Phase 8.
+
+- [ ] T100 [P] Update `docs/architecture.md` — add React Three Fiber alongside deck.gl in the "Human spectator client" row (per RFC-0008, ADR-0006)
+- [ ] T101 [P] Update `clients/intermedium/README.md` — document 7-stop model, exterior/interior distinction, two-renderer architecture (deck.gl + R3F)
+- [ ] T102 Run complete 7-stop smoke test sequence — verify all stops, all transitions, conversation panel, interiority stubs; record results against spec acceptance scenarios
+
+**Checkpoint**: All documentation consistent with 7-stop model; smoke test passes across all stops.
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies
 
-- **Phase 1 (Setup)**: No dependencies — start immediately
-- **Phase 2 (Design Review)**: Depends on Phase 1 — GATE; **Phases 4–7 blocked until author approval**
-- **Phase 3 (Foundational)**: Depends on Phase 1; can run **in parallel with Phase 2 (mockup gate)**. After Phase 2 author approval, Phase 3+ implementation may proceed; Phase 4+ still need Phase 3 complete
-- **Phase 4 (US1)**: Depends on Phase 2 approval + Phase 3 completion
-- **Phase 5 (US2)**: Depends on Phase 4 completion (builds on SceneView)
-- **Phase 6 (US3)**: Depends on Phase 3 completion; can run in parallel with Phase 5
-- **Phase 7 (US4)**: Depends on Phase 6 completion (Ghost scale builds on Partner)
-- **Phase 8 (Polish)**: Depends on all desired user story phases
+- **Phase 1 (Setup)**: No dependencies — start immediately ✅
+- **Phase 2 (Design Review)**: Depends on Phase 1 — GATE ✅
+- **Phase 3 (Foundational)**: Depends on Phase 1; parallel with Phase 2 ✅
+- **Phase 4 (US1)**: Depends on Phase 2 approval + Phase 3 completion ✅
+- **Phase 5 (US2)**: Depends on Phase 4 completion ✅
+- **Phase 6 (US3)**: ~~Superseded by Phase 13~~ — preserved as history
+- **Phase 7 (US4)**: ~~Superseded by Phase 13~~ — preserved as history
+- **Phase 8 (Polish)**: Extended by Phase 14
+- **Phase 9 (Updated Mockups)**: No code dependencies — GATE; **Phases 10–12 blocked until author approval**
+- **Phase 10 (Seven-Stop State Machine)**: Depends on Phase 9 approval; builds on Phase 5
+- **Phase 11 (Exterior Stops)**: Depends on Phase 10
+- **Phase 12 (Animated Transitions)**: Depends on Phase 11
+- **Phase 13 (Personal Stop)**: Depends on Phase 12; can run in parallel with Phase 11 for non-SceneView components
+- **Phase 14 (Extended Polish)**: Depends on Phase 13
 
 ### User Story Dependencies
 
@@ -243,14 +348,17 @@ T060, T061, T062 (concurrent)
 
 | After phase | Deliverable |
 |-------------|-------------|
-| Phase 1 | Debugger renamed; intermedium scaffolded |
-| Phase 2 ✅ | Design approved → implementation unblocked |
-| Phase 3 | App shell + data layer running |
-| Phase 4 (US1) | **MVP**: hex world live at Map scale |
-| Phase 5 (US2) | Full scale navigation (Map → Neighbor) |
-| Phase 6 (US3) | Paired conversation at Partner scale |
-| Phase 7 (US4) | Ghost interiority shell (stub) |
-| Phase 8 | Docs clean; demo-ready |
+| Phase 1 | Debugger renamed; intermedium scaffolded ✅ |
+| Phase 2 ✅ | Interior-stop design approved → implementation unblocked ✅ |
+| Phase 3 | App shell + data layer running ✅ |
+| Phase 4 (US1) | **MVP**: hex world live at Plan stop ✅ |
+| Phase 5 (US2) | Stop navigation (Plan → Room → Situational) ✅ |
+| Phase 9 | Exterior-stop design approved → Phases 10–12 unblocked |
+| Phase 10 | 7-stop state machine + pitch per stop |
+| Phase 11 | Exterior stops live (Global → Neighborhood) |
+| Phase 12 | All transitions animated |
+| Phase 13 | Personal stop with R3F + conversation + interiority stubs |
+| Phase 8 + 14 | Docs clean; all 7 stops demo-ready |
 
 ---
 
@@ -258,12 +366,18 @@ T060, T061, T062 (concurrent)
 
 | Phase | Tasks | Story | Parallel opportunities |
 |-------|-------|-------|----------------------|
-| 1: Setup | T001–T009 (9) | — | T003, T005, T006, T007, T008, T009 |
-| 2: Design Review | T010–T017 (8) | — | T010–T015 all parallel |
-| 3: Foundational | T018–T029, T072, T073, T074, T075 (16) | — | T018–T022, T074, T024–T026, T075 (types + stubs before PanelView) |
-| 4: US1 Map Scale | T030–T040 (11) | US1 | T032, T033 |
-| 5: US2 Navigation | T041–T051 (11) | US2 | T042, T043, T044 |
-| 6: US3 Conversation | T052–T059 (8) | US3 | — |
-| 7: US4 Interiority | T060–T065 (6) | US4 | T060, T061, T062 |
-| 8: Polish | T066–T071 (6) | — | T066, T067, T068, T070 |
-| **Total** | **75** | | |
+| 1: Setup ✅ | T001–T009 (9) | — | T003, T005–T009 |
+| 2: Design Review ✅ | T010–T017 (8) | — | T010–T015 all parallel |
+| 3: Foundational ✅ | T018–T029, T072–T075 (16) | — | T018–T022, T074, T024–T026, T075 |
+| 4: US1 Plan Scale ✅ | T030–T040 (11) | US1 | T032, T033 |
+| 5: US2 Navigation ✅ | T041–T051 (11) | US2 | T042–T044 |
+| 6: US3 Conversation | T052–T059 (8) | ~~US3~~ | — superseded by Phase 13 |
+| 7: US4 Interiority | T060–T065 (6) | ~~US4~~ | — superseded by Phase 13 |
+| 8: Polish | T066–T071 (6) | — | T066–T068, T070 |
+| 9: Updated Mockups | T076–T080 (5) | — | T076–T078 parallel |
+| 10: 7-Stop State Machine | T081–T084 (4) | — | T083, T084 |
+| 11: Exterior Stops | T085–T088 (4) | US1 ext. | — |
+| 12: Animated Transitions | T089–T091 (3) | US2 ext. | — |
+| 13: Personal Stop | T092–T099 (8) | US3+US4 | T094–T097 parallel |
+| 14: Extended Polish | T100–T102 (3) | — | T100, T101 |
+| **Total** | **102** | | |
