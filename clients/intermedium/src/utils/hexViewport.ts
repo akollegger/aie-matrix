@@ -109,14 +109,15 @@ export const STOP_PITCH: Readonly<Record<CameraStop, number>> = {
 };
 
 /**
- * “Global” stop: board visible as a tiny landmark; zoom fixed to show ~earth scale.
- * Center on the board's geographic centroid (FR-026).
+ * “Global” stop: full-globe view using deck.gl _GlobeView.
+ * zoom: 0 shows the entire sphere; center on the board's centroid so it faces forward.
+ * (FR-026)
  */
 export function globalView(
   tiles: ReadonlyMap<string, WorldTile>,
 ): MapViewport {
   const center = tileCentroid(tiles);
-  return { longitude: center[1], latitude: center[0], zoom: 2 };
+  return { longitude: center[1], latitude: center[0], zoom: 0 };
 }
 
 /**

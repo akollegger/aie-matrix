@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import DeckGL from "@deck.gl/react";
-import { MapView, type MapViewState, MapController, LinearInterpolator } from "deck.gl";
+import { MapView, type MapViewState, MapController, LinearInterpolator, _GlobeView } from "deck.gl";
 import { useClientState } from "../../context/ClientState.js";
 import {
   createH3WireframeLayer,
@@ -167,6 +167,8 @@ export function SceneView() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [vp, setVp] = useState({ w: 1024, h: 768 });
   const lockedZoomRef = useRef(12);
+  // Track view-type changes (GlobeView ↔ MapView) to hard-cut instead of interpolate.
+  const prevIsGlobeRef = useRef(viewState.stop === "global");
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -232,6 +234,10 @@ export function SceneView() {
   });
 
   useEffect(() => {
+    const isGlobe = viewState.stop === "global";
+    const crossingViewTypes = isGlobe !== prevIsGlobeRef.current;
+    prevIsGlobeRef.current = isGlobe;
+
     lockedZoomRef.current = target.zoom;
     setDeckVS((v) => ({
       ...v,
@@ -240,13 +246,12 @@ export function SceneView() {
       zoom: target.zoom,
       pitch: target.pitch,
       bearing: 0,
-      minZoom: target.zoom,
-      maxZoom: target.zoom,
-      transitionDuration: TRANSITION_DURATION,
-      transitionInterpolator: TRANSITION_INTERPOLATOR,
-      transitionEasing: cubicInOut,
+      // Hard-cut when switching between GlobeView and MapView; interpolate within same type.
+      transitionDuration: crossingViewTypes ? 0 : TRANSITION_DURATION,
+      transitionInterpolator: crossingViewTypes ? undefined : TRANSITION_INTERPOLATOR,
+      transitionEasing: crossingViewTypes ? undefined : cubicInOut,
     }));
-  }, [centerKey, target, tiles.size]);
+  }, [centerKey, target, tiles.size, viewState.stop]);
 
   const voidH3 = useMemo(() => voidNeighborH3s(tiles), [tiles]);
 
@@ -465,7 +470,9 @@ export function SceneView() {
       style={{ position: "absolute", top: "0", left: "0", right: "0", bottom: "0", minHeight: 0 }}
     >
       <DeckGL
-        views={new MapView({ id: "map" })}
+        views={viewState.stop === "global"
+          ? new _GlobeView({ id: "globe" })
+          : new MapView({ id: "map" })}
         viewState={deckVS}
         onViewStateChange={({ viewState: vsIn }) => {
           // All user interactions are disabled; this fires only during deck.gl transitions.
