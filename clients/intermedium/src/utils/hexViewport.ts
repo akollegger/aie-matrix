@@ -103,7 +103,6 @@ export type MapViewport = {
 export const STOP_PITCH: Readonly<Record<CameraStop, number>> = {
   global: 0,
   regional: 0,
-  neighborhood: 45,
   plan: 0,
   room: 0,
   situational: 45,

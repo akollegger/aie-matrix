@@ -18,7 +18,6 @@ export function PanelView({ viewState, pairing }: PanelViewProps) {
   if (
     viewState.stop === "global" ||
     viewState.stop === "regional" ||
-    viewState.stop === "neighborhood" ||
     viewState.stop === "plan"
   ) {
     return null;

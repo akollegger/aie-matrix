@@ -4,12 +4,12 @@ import type { HumanPairing } from "../types/ghost.js";
 import type { PickTarget, ViewNavigation } from "../types/navigation.js";
 
 export const STOP_SEQUENCE: CameraStop[] = [
-  "global", "regional", "neighborhood",
+  "global", "regional",
   "plan", "room", "situational", "personal",
 ];
 
 export function isExteriorStop(stop: CameraStop): boolean {
-  return stop === "global" || stop === "regional" || stop === "neighborhood";
+  return stop === "global" || stop === "regional";
 }
 
 function nextStopInSequence(current: CameraStop, hasPairing: boolean): CameraStop | null {

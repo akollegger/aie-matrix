@@ -1,57 +1,57 @@
 import { useEffect, useMemo, useState } from "react";
 import { cellToLatLng, cellToParent, isValidCell } from "h3-js";
-import { zoomForCellsAcrossShortEdge, cellFitViewport } from "../utils/hexViewport.js";
-
-/** R0 through R5 — six levels of parent-cell zoom. */
-export const REGIONAL_DRILL_MAX = 5;
+import { zoomForCellsAcrossShortEdge, cellFitViewport, mapViewFromTileBounds, type MapViewport } from "../utils/hexViewport.js";
+import type { WorldTile } from "../types/worldTile.js";
 
 /**
- * ms between drill steps — matches the 500ms camera transition exactly so the
- * next level fires as soon as the previous animation completes. Total R0→R5: 2.5s.
+ * Total drill levels:
+ *   0–5  parent-ring drill  (R0 globe → R5 city-region)
+ *   6    pan to venueR10    (board's R10 cell fills screen)
+ *   7    zoom to venueR12   (R12 mesh appears)
+ *   8    board tiles        (R15 tiles with minimal extrusion)
  */
+export const REGIONAL_DRILL_MAX = 8;
+
+/** Last level of the parent-ring phase before venue zoom begins. */
+export const PARENT_DRILL_MAX = 5;
+
+/** ms per step — matches transition duration so next fires as soon as animation completes. */
 const STEP_DELAY_MS = 500;
 
-/**
- * CPV (cells per viewport short edge) for each resolution level.
- * Lower = more context visible; higher = tighter on the cell.
- */
-const CPV_PER_LEVEL = [2, 2, 2.5, 2.5, 3, 3] as const;
+/** CPV for parent-ring levels 0–4 (level 5 uses cellFitViewport). */
+const CPV_PER_LEVEL = [2, 2, 2.5, 2.5, 3] as const;
 
 export interface RegionalDrillState {
-  /** Current drill resolution level (0 = R0 visible, 5 = R5 visible). */
   readonly drillLevel: number;
-  /** Camera target for the current drill level, or null if not yet ready. */
-  readonly drillViewport: { readonly longitude: number; readonly latitude: number; readonly zoom: number } | null;
-  /** The H3 parent cells to show, indexed 0..drillLevel. */
+  readonly drillViewport: MapViewport | null;
+  /** R0..min(drillLevel,5) parent cells for nested ring layers. */
   readonly parentCells: readonly string[];
+  /** R10 parent of the board — available from drillLevel ≥ 6. */
+  readonly venueR10: string | null;
+  /** R12 parent of the board — available from drillLevel ≥ 7. */
+  readonly venueR12: string | null;
   /**
-   * Easing function for the current step's camera transition:
-   *   step 0 → ease-in  (first entry, camera starts from rest)
-   *   steps 1–4 → linear (maintain momentum through the drill)
-   *   step 5 → ease-out (final arrival, settle at R5)
+   * Easing per step:
+   *   0 → ease-in  (entering from rest)
+   *   1–7 → linear (continuous momentum)
+   *   8 → ease-out (settle at board)
    */
   readonly drillEasing: (t: number) => number;
 }
 
-/**
- * Drives the Global → Regional progressive drill-down animation.
- * Advances one parent-resolution level per STEP_DELAY_MS while `isActive`.
- * Resets to level 0 on deactivation so the animation replays on re-entry.
- */
 export function useRegionalDrill(
   boardH3: string | null,
+  tiles: ReadonlyMap<string, WorldTile>,
   isActive: boolean,
   vpW: number,
   vpH: number,
 ): RegionalDrillState {
   const [drillLevel, setDrillLevel] = useState(0);
 
-  // Reset when leaving Regional.
   useEffect(() => {
     if (!isActive) setDrillLevel(0);
   }, [isActive]);
 
-  // Advance one level at a time until DRILL_MAX.
   useEffect(() => {
     if (!isActive || drillLevel >= REGIONAL_DRILL_MAX) return;
     const t = setTimeout(() => setDrillLevel((l) => l + 1), STEP_DELAY_MS);
@@ -59,36 +59,52 @@ export function useRegionalDrill(
   }, [isActive, drillLevel]);
 
   const drillEasing = useMemo((): ((t: number) => number) => {
-    if (drillLevel === 0) return (t) => t * t * t;                  // ease-in
+    if (drillLevel === 0) return (t) => t * t * t;                       // ease-in
     if (drillLevel >= REGIONAL_DRILL_MAX) return (t) => 1 - Math.pow(1 - t, 3); // ease-out
-    return (t) => t;                                                 // linear
+    return (t) => t;                                                      // linear
   }, [drillLevel]);
 
-  const { drillViewport, parentCells } = useMemo(() => {
+  const result = useMemo(() => {
     if (!boardH3 || !isActive || !isValidCell(boardH3)) {
-      return { drillViewport: null, parentCells: [] };
+      return { drillViewport: null, parentCells: [], venueR10: null, venueR12: null };
     }
-    const cells: string[] = [];
-    for (let r = 0; r <= drillLevel; r++) {
-      cells.push(cellToParent(boardH3, r));
-    }
-    const currentCell = cells[cells.length - 1]!;
-    // Final step: fit the cell's bounding box to the full viewport (fills width correctly).
-    // Intermediate steps: CPV-based zoom keeps each level visually consistent.
-    const drillViewport =
-      drillLevel >= REGIONAL_DRILL_MAX
-        ? cellFitViewport(currentCell, vpW, vpH, 24)
-        : (() => {
-            const [lat, lng] = cellToLatLng(currentCell);
-            const cpv = CPV_PER_LEVEL[drillLevel] ?? 3;
-            const zoom = zoomForCellsAcrossShortEdge(currentCell, cpv, vpW, vpH);
-            return { longitude: lng, latitude: lat, zoom };
-          })();
-    return {
-      drillViewport,
-      parentCells: cells,
-    };
-  }, [boardH3, drillLevel, isActive, vpW, vpH]);
 
-  return { drillLevel, drillViewport, parentCells, drillEasing };
+    // Parent cells R0..min(drillLevel, PARENT_DRILL_MAX)
+    const parentCells: string[] = [];
+    for (let r = 0; r <= Math.min(drillLevel, PARENT_DRILL_MAX); r++) {
+      parentCells.push(cellToParent(boardH3, r));
+    }
+
+    // Venue cells for levels 6+
+    const venueR10 = drillLevel >= 6 ? cellToParent(boardH3, 10) : null;
+    const venueR12 = drillLevel >= 7 ? cellToParent(boardH3, 12) : null;
+
+    // Camera viewport per level
+    let drillViewport: MapViewport | null = null;
+
+    if (drillLevel <= PARENT_DRILL_MAX) {
+      const cell = parentCells[drillLevel] ?? parentCells[parentCells.length - 1]!;
+      if (drillLevel === PARENT_DRILL_MAX) {
+        drillViewport = cellFitViewport(cell, vpW, vpH, 24);
+      } else {
+        const cpv = CPV_PER_LEVEL[drillLevel] ?? 3;
+        const [lat, lng] = cellToLatLng(cell);
+        const zoom = zoomForCellsAcrossShortEdge(cell, cpv, vpW, vpH);
+        drillViewport = { longitude: lng, latitude: lat, zoom };
+      }
+    } else if (drillLevel === 6 && venueR10) {
+      drillViewport = cellFitViewport(venueR10, vpW, vpH, 24);
+    } else if (drillLevel === 7 && venueR12) {
+      drillViewport = cellFitViewport(venueR12, vpW, vpH, 24);
+    } else if (drillLevel >= 8) {
+      drillViewport = mapViewFromTileBounds(tiles, vpW, vpH);
+      if (!drillViewport && venueR12) {
+        drillViewport = cellFitViewport(venueR12, vpW, vpH, 24);
+      }
+    }
+
+    return { drillViewport, parentCells, venueR10, venueR12 };
+  }, [boardH3, drillLevel, isActive, tiles, vpW, vpH]);
+
+  return { drillLevel, drillEasing, ...result };
 }

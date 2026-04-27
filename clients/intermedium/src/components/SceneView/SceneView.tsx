@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import DeckGL from "@deck.gl/react";
-import { MapView, type MapViewState, MapController, LinearInterpolator, _GlobeView } from "deck.gl";
+import { type MapViewState, MapController, LinearInterpolator, _GlobeView } from "deck.gl";
 import { useClientState } from "../../context/ClientState.js";
 import {
   createH3WireframeLayer,
@@ -39,6 +39,7 @@ import {
   STOP_PITCH,
 } from "../../utils/hexViewport.js";
 import { getRes0Cells, cellToChildren, cellToParent, latLngToCell, isValidCell } from "h3-js";
+import { PARENT_DRILL_MAX } from "../../hooks/useRegionalDrill.js";
 import { H3HexagonLayer } from "@deck.gl/geo-layers";
 import { useRegionalDrill, REGIONAL_DRILL_MAX } from "../../hooks/useRegionalDrill.js";
 import type { GhostPosition } from "../../types/ghostPosition.js";
@@ -143,10 +144,6 @@ function computeMapCamera(
     const v = regionalView(tiles);
     return { ...v, pitch, bearing: 0 };
   }
-  if (vs.stop === "neighborhood") {
-    const m = mapViewFromTileBounds(tiles, w, h);
-    if (m) return { ...m, pitch, bearing: 0 };
-  }
   // Interior stops
   if (vs.stop === "plan") {
     const m = mapViewFromTileBounds(tiles, w, h);
@@ -188,8 +185,9 @@ export function SceneView() {
     () => tiles.values().next().value?.h3Index ?? null,
     [tiles],
   );
-  const { drillLevel, drillViewport, parentCells, drillEasing } = useRegionalDrill(
+  const { drillLevel, drillViewport, parentCells, venueR10, venueR12, drillEasing } = useRegionalDrill(
     firstBoardH3,
+    tiles,
     viewState.stop === "regional",
     vp.w,
     vp.h,
@@ -210,11 +208,6 @@ export function SceneView() {
       transitionEasing: drillEasing,
     }));
   }, [drillLevel, drillViewport, drillEasing, viewState.stop]);
-
-  // Track view-type changes (GlobeView ↔ MapView) to hard-cut instead of interpolate.
-  // Global + Regional both use _GlobeView; hard cut happens at Regional → Neighborhood.
-  const isGlobe = viewState.stop === "global" || viewState.stop === "regional";
-  const prevIsGlobeRef = useRef(isGlobe);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -245,31 +238,10 @@ export function SceneView() {
     [viewState.stop, viewState.focus, tiles, ghosts, situationalGhostH3, vp.w, vp.h],
   );
 
-  // LOD hard-cut: tracks whether layers render extruded (exterior) or flat (interior).
-  // Switches immediately to extruded; delays switch to flat by TRANSITION_DURATION/2 (FR-028).
-  const [lodExtruded, setLodExtruded] = useState(() =>
-    viewState.stop === "global" || viewState.stop === "regional" || viewState.stop === "neighborhood",
-  );
-  const prevStopRef = useRef(viewState.stop);
-  useEffect(() => {
-    const wasExtruded =
-      prevStopRef.current === "global" ||
-      prevStopRef.current === "regional" ||
-      prevStopRef.current === "neighborhood";
-    const willBeExtruded =
-      viewState.stop === "global" ||
-      viewState.stop === "regional" ||
-      viewState.stop === "neighborhood";
-    prevStopRef.current = viewState.stop;
-    if (wasExtruded === willBeExtruded) return;
-    if (willBeExtruded) {
-      setLodExtruded(true);
-      return undefined;
-    } else {
-      const t = setTimeout(() => setLodExtruded(false), TRANSITION_DURATION / 2);
-      return () => clearTimeout(t);
-    }
-  }, [viewState.stop]);
+  // LOD: Regional drill level 8 shows board tiles (flat interior mode).
+  // All other exterior stops and early Regional levels show extruded geometry.
+  const lodExtruded = !(viewState.stop === "plan" || viewState.stop === "room" || viewState.stop === "situational" ||
+    (viewState.stop === "regional" && drillLevel >= REGIONAL_DRILL_MAX));
 
   const [deckVS, setDeckVS] = useState<DeckViewState>({
     longitude: target.longitude,
@@ -280,10 +252,6 @@ export function SceneView() {
   });
 
   useEffect(() => {
-    const nowGlobe = viewState.stop === "global" || viewState.stop === "regional";
-    const crossingViewTypes = nowGlobe !== prevIsGlobeRef.current;
-    prevIsGlobeRef.current = nowGlobe;
-
     lockedZoomRef.current = target.zoom;
     setDeckVS((v) => ({
       ...v,
@@ -292,12 +260,11 @@ export function SceneView() {
       zoom: target.zoom,
       pitch: target.pitch,
       bearing: 0,
-      // Hard-cut when switching between GlobeView and MapView; interpolate within same type.
-      transitionDuration: crossingViewTypes ? 0 : TRANSITION_DURATION,
-      transitionInterpolator: crossingViewTypes ? undefined : TRANSITION_INTERPOLATOR,
-      transitionEasing: crossingViewTypes ? undefined : cubicInOut,
+      transitionDuration: TRANSITION_DURATION,
+      transitionInterpolator: TRANSITION_INTERPOLATOR,
+      transitionEasing: cubicInOut,
     }));
-  }, [centerKey, target, tiles.size, viewState.stop]);
+  }, [centerKey, target, tiles.size]);
 
   const voidH3 = useMemo(() => voidNeighborH3s(tiles), [tiles]);
 
@@ -327,69 +294,75 @@ export function SceneView() {
       return [globeLayer, boardLayer];
     }
 
-    // ── Regional: progressive R0→R5 drill + R9 grid + landmark markers ──────────
+    // ── Regional: full drill (R0→R5 parent rings + R10→R12→board venue zoom) ───
     if (s === "regional") {
       const globeLayer = createH3WireframeLayer(getRes0Cells(), "regional-globe", false, 0.18);
-      const drillLayers = parentCells.map((cell, idx) => {
-        const opacity = 0.3 + (idx / Math.max(REGIONAL_DRILL_MAX, 1)) * 0.6;
-        return createH3WireframeLayer([cell], `regional-drill-r${idx}`, false, opacity);
-      });
+      const r5Cell = firstBoardH3 && isValidCell(firstBoardH3) ? cellToParent(firstBoardH3, 5) : null;
 
-      // At the final drill level: add R9 context grid + extruded landmark markers.
-      if (drillLevel >= REGIONAL_DRILL_MAX && firstBoardH3 && isValidCell(firstBoardH3)) {
-        const r5Cell = cellToParent(firstBoardH3, 5);
-
-        // Layer 1: all 2401 R9 cells within the R5 hex as wireframe context grid.
-        const r9Cells = cellToChildren(r5Cell, 9);
-        const gridLayer = createH3WireframeLayer(r9Cells, "regional-r9-grid", false, 0.35);
-
-        // Layer 2: venue R9 cell + placeholder landmark R9 cells, extruded.
-        type MarkerDatum = { readonly h3Index: string; readonly isVenue: boolean };
-        const venueR9 = cellToParent(firstBoardH3, 9);
-        const landmarkR9s = PLACEHOLDER_LANDMARKS
-          .map(({ lat, lng }) => latLngToCell(lat, lng, 9))
-          .filter((h) => h !== venueR9);
-        const markerData: MarkerDatum[] = [
-          { h3Index: venueR9, isVenue: true },
-          ...landmarkR9s.map((h3Index) => ({ h3Index, isVenue: false })),
-        ];
-        const markersLayer = new H3HexagonLayer<MarkerDatum>({
-          id: "regional-landmarks",
-          data: markerData,
-          pickable: false,
-          extruded: true,
-          elevationScale: 1,
-          getElevation: () => 800,
-          getHexagon: (d) => d.h3Index,
-          filled: true,
-          getFillColor: (d) =>
-            d.isVenue
-              ? [0, 210, 220, 240]
-              : [255, 160, 50, 210],
-          stroked: false,
+      // Levels 0–PARENT_DRILL_MAX: nested parent ring drill
+      if (drillLevel <= PARENT_DRILL_MAX) {
+        const drillLayers = parentCells.map((cell, idx) => {
+          const opacity = 0.3 + (idx / Math.max(PARENT_DRILL_MAX, 1)) * 0.6;
+          return createH3WireframeLayer([cell], `regional-drill-r${idx}`, false, opacity);
         });
-
-        return [globeLayer, ...drillLayers, gridLayer, markersLayer];
+        // At level 5: add R9 grid + extruded landmark markers
+        if (drillLevel === PARENT_DRILL_MAX && firstBoardH3 && isValidCell(firstBoardH3) && r5Cell) {
+          const r9Cells = cellToChildren(r5Cell, 9);
+          const gridLayer = createH3WireframeLayer(r9Cells, "regional-r9-grid", false, 0.35);
+          type MarkerDatum = { readonly h3Index: string; readonly isVenue: boolean };
+          const venueR9 = cellToParent(firstBoardH3, 9);
+          const landmarkR9s = PLACEHOLDER_LANDMARKS
+            .map(({ lat, lng }) => latLngToCell(lat, lng, 9))
+            .filter((h) => h !== venueR9);
+          const markerData: MarkerDatum[] = [
+            { h3Index: venueR9, isVenue: true },
+            ...landmarkR9s.map((h3Index) => ({ h3Index, isVenue: false })),
+          ];
+          const markersLayer = new H3HexagonLayer<MarkerDatum>({
+            id: "regional-landmarks",
+            data: markerData,
+            pickable: false,
+            extruded: true,
+            elevationScale: 1,
+            getElevation: () => 800,
+            getHexagon: (d) => d.h3Index,
+            filled: true,
+            getFillColor: (d) => d.isVenue ? [0, 210, 220, 240] : [255, 160, 50, 210],
+            stroked: false,
+          });
+          return [globeLayer, ...drillLayers, gridLayer, markersLayer];
+        }
+        return [globeLayer, ...drillLayers];
       }
 
-      return [globeLayer, ...drillLayers];
-    }
+      // Levels 6–8: venue zoom
+      if (drillLevel === 6 && venueR10 && r5Cell) {
+        const r9Grid = createH3WireframeLayer(cellToChildren(r5Cell, 9), "r9-grid", false, 0.22);
+        const r10Outline = createH3WireframeLayer([venueR10], "r10-focus", false, 0.9);
+        return [globeLayer, r9Grid, r10Outline];
+      }
 
-    // ── Neighborhood: extruded board + floor platter, no ghosts ──────────────
-    if (s === "neighborhood") {
-      const vLayer =
-        voidH3.length > 0
-          ? [createH3WireframeLayer(voidH3, "nbhd-platter", false, 0.45)]
-          : [];
-      return [
-        ...vLayer,
-        createHexGridLayer(tiles, {
+      if (drillLevel === 7 && venueR10 && venueR12) {
+        const r12Cells = cellToChildren(venueR10, 12);
+        const r10Faint = createH3WireframeLayer([venueR10], "r10-faint", false, 0.25);
+        const r12Grid = createH3WireframeLayer(r12Cells, "r12-grid", false, 0.5);
+        return [globeLayer, r10Faint, r12Grid];
+      }
+
+      if (drillLevel >= 8 && venueR10) {
+        const r12Cells = cellToChildren(venueR10, 12);
+        const r12Bg = createH3WireframeLayer(r12Cells, "r12-bg", false, 0.18);
+        const boardLayer = createHexGridLayer(tiles, {
           pickable: false,
-          id: "nbhd-board",
+          id: "regional-board",
           extruded: true,
-          elevation: 10,
-        }),
-      ];
+          elevation: 3,
+          opacity: 0.95,
+        });
+        return [r12Bg, boardLayer];
+      }
+
+      return [globeLayer];
     }
 
     if (s === "plan") {
@@ -480,7 +453,7 @@ export function SceneView() {
       createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
       createGhostPointCloudLayer(ghosts),
     ];
-  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded, parentCells]);
+  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded, parentCells, venueR10, venueR12, drillLevel, firstBoardH3]);
 
   const onHover = useCallback(
     (info: { object?: unknown; x: number; y: number }) => {
@@ -542,9 +515,7 @@ export function SceneView() {
       style={{ position: "absolute", top: "0", left: "0", right: "0", bottom: "0", minHeight: 0 }}
     >
       <DeckGL
-        views={isGlobe
-          ? new _GlobeView({ id: "globe" })
-          : new MapView({ id: "map" })}
+        views={new _GlobeView({ id: "globe" })}
         viewState={deckVS}
         onViewStateChange={({ viewState: vsIn }) => {
           // All user interactions are disabled; this fires only during deck.gl transitions.

@@ -4,7 +4,7 @@
  */
 
 /** Exterior stops: deck.gl, extruded board, ghosts invisible. */
-export type ExteriorStop = "global" | "regional" | "neighborhood";
+export type ExteriorStop = "global" | "regional";
 
 /** Interior stops: deck.gl, flat tiles, ghosts visible. */
 export type InteriorStop = "plan" | "room" | "situational";
