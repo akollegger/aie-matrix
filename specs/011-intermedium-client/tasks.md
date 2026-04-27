@@ -203,13 +203,13 @@ New work starts at **Phase 9**.
 
 **Purpose**: Produce the three missing exterior-stop mockups and a revised stop-transition diagram reflecting the 7-stop model. The existing five interior-stop mockups (T010–T014) remain valid and are not replaced.
 
-- [ ] T076 [P] Produce `specs/011-intermedium-client/mockups/07-global-stop.pdf` (or `.svg`) — extruded board tiny in a dark void, overhead 0°; no ghosts
-- [ ] T077 [P] Produce `specs/011-intermedium-client/mockups/08-regional-stop.pdf` (or `.svg`) — board visible as a landmark, overhead 0°; no ghosts; floor platter begins to show
-- [ ] T078 [P] Produce `specs/011-intermedium-client/mockups/09-neighborhood-stop.pdf` (or `.svg`) — board fills frame at 45°, extruded, floor platter visible; no ghosts
-- [ ] T079 Produce `specs/011-intermedium-client/mockups/00-stop-transitions.pdf` (or `.svg`) — revised composite: 7-stop ladder, exterior/interior split, pitch per stop, LOD flip timing at Neighborhood→Plan, deck.gl↔R3F fade at Personal
-- [ ] T080 Commit T076–T079 and request author approval — **Phases 10–12 blocked until approved**
+- [X] T076 [P] Produce `specs/011-intermedium-client/mockups/07-global-stop.pdf` — R0 globe wireframe; extruded board tiny in center; overhead 0°; no ghosts
+- [X] T077 [P] Produce `specs/011-intermedium-client/mockups/08-regional-stop.pdf` — R4–R5; board visible as landmark rectangle; overhead 0°; no ghosts
+- [X] T078 [P] Produce `specs/011-intermedium-client/mockups/09-neighborhood-stop.pdf` — R15; board fills frame at 45°; extruded; floor platter visible; no ghosts
+- [X] T079 Produce `specs/011-intermedium-client/mockups/00-stop-transitions.pdf` — 7-stop ladder with exterior/interior split, pitch per stop, resolution per stop
+- [X] T080 Author approved mockups 2026-04-27 with clarifications: Regional=R4–R5; Plan card label fix; Personal pitch=~80° deck.gl; Personal has single floor tile under ghost (FR-030)
 
-**Checkpoint**: ⚠️ 4 new SVG files committed; author has approved exterior-stop and transition design direction.
+**Checkpoint**: ✅ All stop mockups committed and approved. Phases 10–13 unblocked.
 
 ---
 
@@ -256,7 +256,7 @@ New work starts at **Phase 9**.
 **Purpose**: Personal stop — the non-geospatial ghost-presence view. React Three Fiber scene for the ghost figure; conversation thread and ghost interiority in the panel overlay. Requires pairing (FR-013, FR-029).
 
 - [ ] T092 Add `@react-three/fiber` and `three` to `clients/intermedium/package.json`; verify build (ADR-0006)
-- [ ] T093 Implement `clients/intermedium/src/components/PersonalScene/PersonalScene.tsx` — R3F `Canvas`: dark void background, ghost point-cloud figure (`Points`), ghost interiority annotation scaffold (inventory/goal/memories as floating labels), orbit disabled (ghost stays centred) (FR-029, FR-002)
+- [ ] T093 Implement `clients/intermedium/src/components/PersonalScene/PersonalScene.tsx` — R3F `Canvas`: dark void background, single flat floor tile under ghost (FR-030), ghost point-cloud figure (`Points`), ghost interiority annotation scaffold (inventory/goal/memories as floating labels), orbit disabled (ghost stays centred) (FR-029, FR-002, FR-030)
 - [ ] T094 [P] Implement `clients/intermedium/src/components/PanelView/PersonalPanel.tsx` — ~80% overlay: `GhostStatusWidget` (tile type + last move direction) + `ConversationThread` + `MessageInput` + `GhostInteriority` stub; no separate mini-map (FR-009)
 - [ ] T095 [P] Implement `useA2AConversation` hook in `clients/intermedium/src/hooks/useA2AConversation.ts` — polls `GET /conversation/:ghostId/messages`; `isAvailable: false` on 404/error; optimistic append on send (IC-002, FR-011)
 - [ ] T096 [P] Implement `ConversationThread` in `clients/intermedium/src/components/ConversationThread/ConversationThread.tsx` and `MessageInput` in `…/MessageInput.tsx` — ordered message list; disabled input with tooltip when `!isAvailable` (FR-010, FR-011)
