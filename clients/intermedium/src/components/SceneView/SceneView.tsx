@@ -35,6 +35,7 @@ import {
   neighborView,
   globalView,
   regionalView,
+  cellFitViewport,
   voidNeighborH3s,
   STOP_PITCH,
 } from "../../utils/hexViewport.js";
@@ -209,6 +210,60 @@ export function SceneView() {
     }));
   }, [drillLevel, drillViewport, drillEasing, viewState.stop]);
 
+  // ── Venue zoom: plays during Regional → Plan transition (levels 6–8) ────────
+  // 0 = inactive; 6/7/8 = animating.
+  const prevStopRef = useRef(viewState.stop);
+  const [venueZoomLevel, setVenueZoomLevel] = useState(0);
+
+  useEffect(() => {
+    const prev = prevStopRef.current;
+    prevStopRef.current = viewState.stop;
+    if (prev === "regional" && viewState.stop === "plan") {
+      setVenueZoomLevel(6); // kick off venue zoom on Regional→Plan
+    } else if (viewState.stop !== "plan") {
+      setVenueZoomLevel(0); // reset when leaving Plan
+    }
+  }, [viewState.stop]);
+
+  useEffect(() => {
+    if (venueZoomLevel === 0 || venueZoomLevel >= 8) return;
+    const t = setTimeout(() => setVenueZoomLevel((l) => l + 1), 500);
+    return () => clearTimeout(t);
+  }, [venueZoomLevel]);
+
+  // Venue zoom camera — fires after the centerKey effect so it overrides it.
+  useEffect(() => {
+    if (viewState.stop !== "plan" || venueZoomLevel === 0) return;
+    if (!firstBoardH3 || !isValidCell(firstBoardH3)) return;
+
+    let viewport: { longitude: number; latitude: number; zoom: number } | null = null;
+    if (venueZoomLevel === 6 && venueR10) {
+      viewport = cellFitViewport(venueR10, vp.w, vp.h, 24);
+    } else if (venueZoomLevel === 7 && venueR12) {
+      viewport = cellFitViewport(venueR12, vp.w, vp.h, 24);
+    } else if (venueZoomLevel >= 8) {
+      viewport = mapViewFromTileBounds(tiles, vp.w, vp.h);
+    }
+    if (!viewport) return;
+
+    const easing: (t: number) => number =
+      venueZoomLevel === 6 ? (t) => t * t * t :
+      venueZoomLevel >= 8 ? (t) => 1 - Math.pow(1 - t, 3) :
+      (t) => t;
+
+    setDeckVS((v) => ({
+      ...v,
+      longitude: viewport!.longitude,
+      latitude: viewport!.latitude,
+      zoom: viewport!.zoom,
+      pitch: 0,
+      bearing: 0,
+      transitionDuration: 500,
+      transitionInterpolator: TRANSITION_INTERPOLATOR,
+      transitionEasing: easing,
+    }));
+  }, [venueZoomLevel, viewState.stop, firstBoardH3, venueR10, venueR12, tiles, vp.w, vp.h]);
+
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (el === null) return;
@@ -366,6 +421,22 @@ export function SceneView() {
     }
 
     if (s === "plan") {
+      // During venue zoom transition (levels 6–7) show the zoom layers; level 8 falls through.
+      const r5Cell = firstBoardH3 && isValidCell(firstBoardH3) ? cellToParent(firstBoardH3, 5) : null;
+      if (venueZoomLevel === 6 && venueR10 && r5Cell) {
+        const globeLayer = createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.1);
+        const r9Grid = createH3WireframeLayer(cellToChildren(r5Cell, 9), "vz-r9", false, 0.22);
+        const r10Outline = createH3WireframeLayer([venueR10], "vz-r10", false, 0.9);
+        return [globeLayer, r9Grid, r10Outline];
+      }
+      if (venueZoomLevel === 7 && venueR10 && venueR12) {
+        const globeLayer = createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.1);
+        const r12Cells = cellToChildren(venueR10, 12);
+        const r10Faint = createH3WireframeLayer([venueR10], "vz-r10f", false, 0.25);
+        const r12Grid = createH3WireframeLayer(r12Cells, "vz-r12", false, 0.5);
+        return [globeLayer, r10Faint, r12Grid];
+      }
+      // Level 8 or normal Plan: floor platter + board tiles + ghosts.
       const vLayer =
         voidH3.length > 0
           ? [createH3WireframeLayer(voidH3, "plan-platter", false, 0.45)]
@@ -453,7 +524,7 @@ export function SceneView() {
       createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
       createGhostPointCloudLayer(ghosts),
     ];
-  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded, parentCells, venueR10, venueR12, drillLevel, firstBoardH3]);
+  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded, parentCells, venueR10, venueR12, drillLevel, venueZoomLevel, firstBoardH3]);
 
   const onHover = useCallback(
     (info: { object?: unknown; x: number; y: number }) => {
