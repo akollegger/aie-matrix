@@ -38,7 +38,7 @@ import {
   voidNeighborH3s,
   STOP_PITCH,
 } from "../../utils/hexViewport.js";
-import { getRes0Cells, cellToParent, gridDisk, isValidCell } from "h3-js";
+import { getRes0Cells, cellToParent, isValidCell } from "h3-js";
 import type { GhostPosition } from "../../types/ghostPosition.js";
 import type { WorldTile } from "../../types/worldTile.js";
 import type { ViewState } from "../../types/viewState.js";
@@ -168,7 +168,9 @@ export function SceneView() {
   const [vp, setVp] = useState({ w: 1024, h: 768 });
   const lockedZoomRef = useRef(12);
   // Track view-type changes (GlobeView ↔ MapView) to hard-cut instead of interpolate.
-  const prevIsGlobeRef = useRef(viewState.stop === "global");
+  // Global + Regional both use _GlobeView; hard cut happens at Regional → Neighborhood.
+  const isGlobe = viewState.stop === "global" || viewState.stop === "regional";
+  const prevIsGlobeRef = useRef(isGlobe);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -234,9 +236,9 @@ export function SceneView() {
   });
 
   useEffect(() => {
-    const isGlobe = viewState.stop === "global";
-    const crossingViewTypes = isGlobe !== prevIsGlobeRef.current;
-    prevIsGlobeRef.current = isGlobe;
+    const nowGlobe = viewState.stop === "global" || viewState.stop === "regional";
+    const crossingViewTypes = nowGlobe !== prevIsGlobeRef.current;
+    prevIsGlobeRef.current = nowGlobe;
 
     lockedZoomRef.current = target.zoom;
     setDeckVS((v) => ({
@@ -281,26 +283,17 @@ export function SceneView() {
       return [globeLayer, boardLayer];
     }
 
-    // ── Regional: R5 context grid + extruded board ────────────────────────────
+    // ── Regional: _GlobeView zoomed to R0 parent; highlight that R0 cell ───────
     if (s === "regional") {
-      // Get the R5 parent of the first board tile and a 4-ring disk around it.
+      const r0Cells = getRes0Cells();
+      const globeLayer = createH3WireframeLayer(r0Cells, "regional-r0", false, 0.25);
+      // Highlight the R0 cell that contains the map with a brighter wireframe.
       const firstH3 = tiles.values().next().value?.h3Index;
-      const r5Cells: string[] = [];
-      if (firstH3 && isValidCell(firstH3)) {
-        const r5Center = cellToParent(firstH3, 5);
-        gridDisk(r5Center, 4).forEach((c) => r5Cells.push(c));
-      }
-      const contextLayer = r5Cells.length > 0
-        ? createH3WireframeLayer(r5Cells, "regional-r5", false, 0.25)
+      const mapR0 = firstH3 && isValidCell(firstH3) ? cellToParent(firstH3, 0) : null;
+      const highlightLayer = mapR0
+        ? createH3WireframeLayer([mapR0], "regional-r0-highlight", false, 0.85)
         : null;
-      const boardLayer = createHexGridLayer(tiles, {
-        pickable: false,
-        id: "regional-board",
-        extruded: true,
-        elevation: 10,
-        opacity: 0.85,
-      });
-      return [...(contextLayer ? [contextLayer] : []), boardLayer];
+      return [globeLayer, ...(highlightLayer ? [highlightLayer] : [])];
     }
 
     // ── Neighborhood: extruded board + floor platter, no ghosts ──────────────
@@ -470,7 +463,7 @@ export function SceneView() {
       style={{ position: "absolute", top: "0", left: "0", right: "0", bottom: "0", minHeight: 0 }}
     >
       <DeckGL
-        views={viewState.stop === "global"
+        views={isGlobe
           ? new _GlobeView({ id: "globe" })
           : new MapView({ id: "map" })}
         viewState={deckVS}

@@ -2,6 +2,7 @@ import { fitBounds } from "@math.gl/web-mercator";
 import {
   type H3IndexInput,
   cellToLatLng,
+  cellToParent,
   latLngToCell,
   getHexagonEdgeLengthAvg,
   getResolution,
@@ -121,14 +122,24 @@ export function globalView(
 }
 
 /**
- * “Regional” stop: board visible as a small rectangle; zoom targets R4–R5 cell scale
- * so surrounding context cells are legible (FR-026).
+ * “Regional” stop: stays in _GlobeView — zooms into the R0 cell that contains the map.
+ * Centers on that cell's centroid at zoom ~2.5 so the R0 cell fills the globe view
+ * with some surrounding context visible. The board itself is sub-pixel at this zoom.
  */
 export function regionalView(
   tiles: ReadonlyMap<string, WorldTile>,
 ): MapViewport {
+  const firstH3 = tiles.values().next().value?.h3Index;
+  if (firstH3 && isValidCell(firstH3)) {
+    const r0Cell = cellToParent(firstH3, 0);
+    if (r0Cell) {
+      const [lat, lng] = cellToLatLng(r0Cell);
+      return { longitude: lng, latitude: lat, zoom: 2.5 };
+    }
+  }
+  // Fallback: centroid at globe scale
   const center = tileCentroid(tiles);
-  return { longitude: center[1], latitude: center[0], zoom: 7 };
+  return { longitude: center[1], latitude: center[0], zoom: 2.5 };
 }
 
 /** Mean lat/lng of all tile centroids. Falls back to (0,0) for empty maps. */
