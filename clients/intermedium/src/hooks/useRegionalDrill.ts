@@ -6,10 +6,10 @@ import { zoomForCellsAcrossShortEdge } from "../utils/hexViewport.js";
 export const REGIONAL_DRILL_MAX = 5;
 
 /**
- * ms between drill steps: 500ms camera animation + 200ms pause before next reveal.
- * Total R0→R5: 5 × 700ms = 3.5 seconds.
+ * ms between drill steps — matches the 500ms camera transition exactly so the
+ * next level fires as soon as the previous animation completes. Total R0→R5: 2.5s.
  */
-const STEP_DELAY_MS = 700;
+const STEP_DELAY_MS = 500;
 
 /**
  * CPV (cells per viewport short edge) for each resolution level.
