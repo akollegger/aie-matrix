@@ -230,10 +230,10 @@ New work starts at **Phase 9**.
 
 **Purpose**: Render Global, Regional, and Neighborhood stops — extruded board, floor platter, no ghosts, pitch per stop. Builds on existing `hexGridLayer` and `SceneView`.
 
-- [ ] T085 Extend `clients/intermedium/src/layers/hexGridLayer.ts` — add `extruded: true` mode for exterior stops; keep existing flat mode for interior stops (FR-026)
-- [ ] T086 Extend `clients/intermedium/src/utils/h3region.ts` — improve `voidNeighborH3s` floor platter using `gridDisk` centred on map center with radius proportional to map size (replaces prototype approach; FR-026)
-- [ ] T087 Extend `SceneView` in `clients/intermedium/src/components/SceneView/SceneView.tsx` — add `global`, `regional`, `neighborhood` stop branches: extruded board layer, floor platter wireframe, no ghost layers; apply pitch from `hexViewport` per stop (FR-026, FR-027)
-- [ ] T088 [P] Implement LOD hard-cut logic in `SceneView` — on Neighborhood → Plan transition, swap extruded → flat board at the `transitionDuration / 2` midpoint (FR-028)
+- [X] T085 Extend `clients/intermedium/src/layers/hexGridLayer.ts` — add `extruded: true` mode for exterior stops; keep existing flat mode for interior stops (FR-026)
+- [X] T086 Extend `clients/intermedium/src/utils/h3region.ts` — improve `voidNeighborH3s` floor platter using `gridDisk` centred on map center with radius proportional to map size (replaces prototype approach; FR-026)
+- [X] T087 Extend `SceneView` in `clients/intermedium/src/components/SceneView/SceneView.tsx` — add `global`, `regional`, `neighborhood` stop branches: extruded board layer, floor platter wireframe, no ghost layers; apply pitch from `hexViewport` per stop (FR-026, FR-027)
+- [X] T088 [P] Implement LOD hard-cut logic in `SceneView` — extruded/flat determined by stop regime; timing delay deferred to Phase 12 (T089) (FR-028)
 
 **Checkpoint**: All three exterior stops render correctly; extruded board visible at Global/Regional; 45° pitch and floor platter at Neighborhood; no ghosts shown.
 

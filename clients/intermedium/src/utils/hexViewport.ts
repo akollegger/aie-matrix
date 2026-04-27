@@ -2,6 +2,7 @@ import { fitBounds } from "@math.gl/web-mercator";
 import {
   type H3IndexInput,
   cellToLatLng,
+  latLngToCell,
   getHexagonEdgeLengthAvg,
   getResolution,
   isValidCell,
@@ -212,30 +213,21 @@ export function neighborView(
 }
 
 /**
- * H3 indices in `tiles` or referenced as a neighbor, minus covered tiles: implied void cells for a wire frame.
+ * Floor platter cells: a disk centred on the map's geographic centroid, excluding
+ * the tiles already in the map. Radius = estimated map radius + 3 rings of margin.
+ * Used as the wireframe ground plane for exterior and plan stops (FR-026).
  */
-export function voidNeighborH3s(
-  tiles: ReadonlyMap<string, WorldTile>,
-): string[] {
-  // const seen = new Set<string>();
-  // for (const t of tiles.values()) {
-  //   seen.add(t.h3Index);
-  // }
-  // const out: string[] = [];
-  // for (const t of tiles.values()) {
-  //   for (const n of t.neighbors) {
-  //     if (!isValidCell(n) || seen.has(n)) {
-  //       continue;
-  //     }
-  //     seen.add(n);
-  //     out.push(n);
-  //   }
-  // }
-  const firstTile = tiles.values().next().value;
-  if (firstTile) {
-    if (isValidCell(firstTile.h3Index)) {
-      return gridDisk(firstTile.h3Index, tiles.size / 4);
-    }
-  }
-  return [];
+export function voidNeighborH3s(tiles: ReadonlyMap<string, WorldTile>): string[] {
+  if (tiles.size === 0) return [];
+
+  const [lat, lng] = tileCentroid(tiles);
+  const centerH3 = latLngToCell(lat, lng, 15);
+  if (!isValidCell(centerH3)) return [];
+
+  // Estimated radius in H3 steps from a circle of area = tiles.size cells.
+  const mapRadius = Math.ceil(Math.sqrt(tiles.size / Math.PI));
+  const platterRadius = mapRadius + 3;
+
+  const tileSet = new Set(tiles.keys());
+  return gridDisk(centerH3, platterRadius).filter((h) => !tileSet.has(h));
 }

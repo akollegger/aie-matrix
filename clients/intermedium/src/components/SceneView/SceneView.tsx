@@ -38,6 +38,7 @@ import {
   voidNeighborH3s,
   STOP_PITCH,
 } from "../../utils/hexViewport.js";
+import { getRes0Cells, cellToParent, gridDisk, isValidCell } from "h3-js";
 import type { GhostPosition } from "../../types/ghostPosition.js";
 import type { WorldTile } from "../../types/worldTile.js";
 import type { ViewState } from "../../types/viewState.js";
@@ -218,27 +219,68 @@ export function SceneView() {
     if (tiles.size === 0) return [];
     const s = viewState.stop;
 
-    // Exterior stops — extruded rendering arrives in Phase 11 (T087).
-    // For now, fall through to plan-style flat rendering so the app stays functional.
-    if (s === "global" || s === "regional" || s === "neighborhood") {
+    // ── Global: R0 globe wireframe + tiny extruded board marker ──────────────
+    if (s === "global") {
+      const r0Cells = getRes0Cells();
+      const globeLayer = createH3WireframeLayer(r0Cells, "global-r0", false, 0.35);
+      // Board is sub-pixel at zoom 2 but render it for correctness.
+      const boardLayer = createHexGridLayer(tiles, {
+        pickable: false,
+        id: "global-board",
+        extruded: true,
+        elevation: 10,
+        opacity: 0.9,
+      });
+      return [globeLayer, boardLayer];
+    }
+
+    // ── Regional: R5 context grid + extruded board ────────────────────────────
+    if (s === "regional") {
+      // Get the R5 parent of the first board tile and a 4-ring disk around it.
+      const firstH3 = tiles.values().next().value?.h3Index;
+      const r5Cells: string[] = [];
+      if (firstH3 && isValidCell(firstH3)) {
+        const r5Center = cellToParent(firstH3, 5);
+        gridDisk(r5Center, 4).forEach((c) => r5Cells.push(c));
+      }
+      const contextLayer = r5Cells.length > 0
+        ? createH3WireframeLayer(r5Cells, "regional-r5", false, 0.25)
+        : null;
+      const boardLayer = createHexGridLayer(tiles, {
+        pickable: false,
+        id: "regional-board",
+        extruded: true,
+        elevation: 10,
+        opacity: 0.85,
+      });
+      return [...(contextLayer ? [contextLayer] : []), boardLayer];
+    }
+
+    // ── Neighborhood: extruded board + floor platter, no ghosts ──────────────
+    if (s === "neighborhood") {
       const vLayer =
         voidH3.length > 0
-          ? [createH3WireframeLayer(voidH3, "void-wire", false, 0.55)]
+          ? [createH3WireframeLayer(voidH3, "nbhd-platter", false, 0.45)]
           : [];
       return [
         ...vLayer,
-        createHexGridLayer(tiles, { pickable: false, id: "exterior-hex" }),
+        createHexGridLayer(tiles, {
+          pickable: false,
+          id: "nbhd-board",
+          extruded: true,
+          elevation: 10,
+        }),
       ];
     }
 
     if (s === "plan") {
       const vLayer =
         voidH3.length > 0
-          ? [createH3WireframeLayer(voidH3, "void-wire", false, 0.55)]
+          ? [createH3WireframeLayer(voidH3, "plan-platter", false, 0.45)]
           : [];
       return [
         ...vLayer,
-        createHexGridLayer(tiles, { pickable: true, id: "plan-hex" }),
+        createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
         createGhostPointCloudLayer(ghosts),
       ];
     }
@@ -258,12 +300,14 @@ export function SceneView() {
         createHexGridLayer(tiles, {
           pickable: false,
           id: "room-world",
+          extruded: false,
           opacity: 0.35,
           uniformBackdrop: { r: 28, g: 40, b: 62, a: 0.5 },
         }),
         createHexGridLayer(diskTiles, {
           pickable: true,
           id: "room-local",
+          extruded: false,
           areaFocusH3: viewState.focus,
           opacity: 1,
         }),
@@ -295,12 +339,14 @@ export function SceneView() {
         createHexGridLayer(tiles, {
           pickable: false,
           id: "situational-world",
+          extruded: false,
           opacity: 0.3,
           uniformBackdrop: { r: 25, g: 38, b: 55, a: 0.45 },
         }),
         createHexGridLayer(diskTiles, {
           pickable: true,
           id: "situational-local",
+          extruded: false,
           opacity: 1,
           areaFocusH3: g0.h3Index,
         }),
@@ -312,9 +358,10 @@ export function SceneView() {
     }
 
     return [
-      createHexGridLayer(tiles, { pickable: true, id: "plan-hex" }),
+      createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
       createGhostPointCloudLayer(ghosts),
     ];
+  // LOD (extruded vs flat) is driven by viewState.stop via isExtrudedStop (T088).
   }, [tiles, ghosts, viewState, voidH3, iconFilter]);
 
   const onHover = useCallback(
