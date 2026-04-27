@@ -3,6 +3,7 @@ import {
   type H3IndexInput,
   cellToLatLng,
   cellToParent,
+  cellToBoundary,
   latLngToCell,
   getHexagonEdgeLengthAvg,
   getResolution,
@@ -140,6 +141,37 @@ export function regionalView(
   // Fallback: centroid at globe scale
   const center = tileCentroid(tiles);
   return { longitude: center[1], latitude: center[0], zoom: 2.5 };
+}
+
+/**
+ * Zoom + center to fit the exact bounding box of a single H3 cell into the viewport.
+ * More accurate than CPV-based zoom for large cells where aspect ratio matters.
+ */
+export function cellFitViewport(
+  h3Index: H3IndexInput,
+  widthPx: number,
+  heightPx: number,
+  padding = 20,
+): MapViewport {
+  const boundary = cellToBoundary(String(h3Index)); // [[lat, lng], ...]
+  const lngs = boundary.map(([, lng]) => lng);
+  const lats = boundary.map(([lat]) => lat);
+  const minLng = Math.min(...lngs);
+  const maxLng = Math.max(...lngs);
+  const minLat = Math.min(...lats);
+  const maxLat = Math.max(...lats);
+  const w = Math.max(64, widthPx);
+  const h = Math.max(64, heightPx);
+  return fitBounds({
+    width: w,
+    height: h,
+    bounds: [
+      [minLng, minLat],
+      [maxLng, maxLat],
+    ],
+    padding,
+    maxZoom: 24,
+  });
 }
 
 /** Mean lat/lng of all tile centroids. Falls back to (0,0) for empty maps. */

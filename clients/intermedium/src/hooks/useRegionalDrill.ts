@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { cellToLatLng, cellToParent, isValidCell } from "h3-js";
-import { zoomForCellsAcrossShortEdge } from "../utils/hexViewport.js";
+import { zoomForCellsAcrossShortEdge, cellFitViewport } from "../utils/hexViewport.js";
 
 /** R0 through R5 — six levels of parent-cell zoom. */
 export const REGIONAL_DRILL_MAX = 5;
@@ -73,11 +73,19 @@ export function useRegionalDrill(
       cells.push(cellToParent(boardH3, r));
     }
     const currentCell = cells[cells.length - 1]!;
-    const [lat, lng] = cellToLatLng(currentCell);
-    const cpv = CPV_PER_LEVEL[drillLevel] ?? 3;
-    const zoom = zoomForCellsAcrossShortEdge(currentCell, cpv, vpW, vpH);
+    // Final step: fit the cell's bounding box to the full viewport (fills width correctly).
+    // Intermediate steps: CPV-based zoom keeps each level visually consistent.
+    const drillViewport =
+      drillLevel >= REGIONAL_DRILL_MAX
+        ? cellFitViewport(currentCell, vpW, vpH, 24)
+        : (() => {
+            const [lat, lng] = cellToLatLng(currentCell);
+            const cpv = CPV_PER_LEVEL[drillLevel] ?? 3;
+            const zoom = zoomForCellsAcrossShortEdge(currentCell, cpv, vpW, vpH);
+            return { longitude: lng, latitude: lat, zoom };
+          })();
     return {
-      drillViewport: { longitude: lng, latitude: lat, zoom },
+      drillViewport,
       parentCells: cells,
     };
   }, [boardH3, drillLevel, isActive, vpW, vpH]);
