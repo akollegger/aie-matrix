@@ -39,7 +39,7 @@ import {
   voidNeighborH3s,
   STOP_PITCH,
 } from "../../utils/hexViewport.js";
-import { getRes0Cells, cellToChildren, cellToParent, latLngToCell, isValidCell } from "h3-js";
+import { getRes0Cells, cellToChildren, cellToParent, cellToLatLng, latLngToCell, isValidCell } from "h3-js";
 import { PARENT_DRILL_MAX } from "../../hooks/useRegionalDrill.js";
 import { H3HexagonLayer } from "@deck.gl/geo-layers";
 import { useRegionalDrill, REGIONAL_DRILL_MAX } from "../../hooks/useRegionalDrill.js";
@@ -251,38 +251,50 @@ export function SceneView() {
     return () => clearTimeout(t);
   }, [venueZoomLevel]);
 
-  // Camera per level — fires on each venueZoomLevel change.
+  // Camera per level — strictly one motion per step.
   useEffect(() => {
     if (venueZoomLevel === 0 || viewState.stop !== "plan") return;
     if (!firstBoardH3 || !isValidCell(firstBoardH3)) return;
 
-    let vport: { longitude: number; latitude: number; zoom: number } | null = null;
+    // Step 6: PAN ONLY — move center to R10, keep the R5-fit zoom unchanged.
     if (venueZoomLevel === 6 && venueCellR10) {
-      vport = cellFitViewport(venueCellR10, vp.w, vp.h, 24);
-    } else if (venueZoomLevel === 7 && venueCellR12) {
-      vport = cellFitViewport(venueCellR12, vp.w, vp.h, 24);
-    } else if (venueZoomLevel >= 8) {
-      vport = mapViewFromTileBounds(tiles, vp.w, vp.h);
+      const r5Cell = cellToParent(firstBoardH3, 5);
+      const r5Zoom = cellFitViewport(r5Cell, vp.w, vp.h, 24).zoom;
+      const [r10Lat, r10Lng] = cellToLatLng(venueCellR10);
+      setDeckVS((v) => ({
+        ...v,
+        longitude: r10Lng,
+        latitude: r10Lat,
+        zoom: r5Zoom,            // zoom unchanged — pan only
+        pitch: 0,
+        bearing: 0,
+        transitionDuration: 500,
+        transitionInterpolator: TRANSITION_INTERPOLATOR,
+        transitionEasing: (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+      }));
+      return;
     }
-    if (!vport) return;
 
-    const easing: (t: number) => number =
-      venueZoomLevel >= 8
-        ? (t) => 1 - Math.pow(1 - t, 3)                        // ease-out: settle at board
-        : (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // cubicInOut: pan
+    // Step 7: ZOOM ONLY — fit R12 into the viewport.
+    if (venueZoomLevel === 7 && venueCellR12) {
+      const vport = cellFitViewport(venueCellR12, vp.w, vp.h, 24);
+      setDeckVS((v) => ({
+        ...v,
+        longitude: vport.longitude,
+        latitude: vport.latitude,
+        zoom: vport.zoom,
+        pitch: 0,
+        bearing: 0,
+        transitionDuration: 500,
+        transitionInterpolator: TRANSITION_INTERPOLATOR,
+        transitionEasing: (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+      }));
+      return;
+    }
 
-    setDeckVS((v) => ({
-      ...v,
-      longitude: vport!.longitude,
-      latitude: vport!.latitude,
-      zoom: vport!.zoom,
-      pitch: 0,
-      bearing: 0,
-      transitionDuration: 500,
-      transitionInterpolator: TRANSITION_INTERPOLATOR,
-      transitionEasing: easing,
-    }));
-  }, [venueZoomLevel, viewState.stop, firstBoardH3, venueCellR10, venueCellR12, tiles, vp.w, vp.h]);
+    // Step 8: NO CAMERA CHANGE — layers snap to R15 mesh + extruded board.
+    // Camera stays at R12 zoom; venueZoomActiveRef is cleared by the timer effect.
+  }, [venueZoomLevel, viewState.stop, firstBoardH3, venueCellR10, venueCellR12, vp.w, vp.h]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -444,34 +456,34 @@ export function SceneView() {
     if (s === "plan") {
       const r5Cell = firstBoardH3 && isValidCell(firstBoardH3) ? cellToParent(firstBoardH3, 5) : null;
 
-      // Level 6: pan to R10 — show faint R9 grid + bright R10 spotlight
+      // Step 6: panning to R10 — keep regional context visible during pan
       if (venueZoomLevel === 6 && venueCellR10 && r5Cell) {
-        const globeLayer = createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.08);
         const r9Grid = createH3WireframeLayer(cellToChildren(r5Cell, 9), "vz-r9", false, 0.22);
-        const r10Outline = createH3WireframeLayer([venueCellR10], "vz-r10", false, 0.9);
-        return [globeLayer, r9Grid, r10Outline];
+        const r10Spotlight = createH3WireframeLayer([venueCellR10], "vz-r10", false, 0.9);
+        return [createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.08), r9Grid, r10Spotlight];
       }
 
-      // Level 7: zoom to R12 — 49-cell mesh inside venueR10
-      if (venueZoomLevel === 7 && venueCellR10 && venueCellR12) {
+      // Step 7: zooming to R12 — show R12 wireframe, R9 context falls away
+      if (venueZoomLevel === 7 && venueCellR10) {
         const r12Cells = cellToChildren(venueCellR10, 12);
         const r10Faint = createH3WireframeLayer([venueCellR10], "vz-r10f", false, 0.2);
         const r12Grid = createH3WireframeLayer(r12Cells, "vz-r12", false, 0.5);
         return [r10Faint, r12Grid];
       }
 
-      // Level 8: board arrives — R12 context + R15 wireframe mesh + R15 extruded 0.5m + ghosts
+      // Step 8: camera stopped — R15 mesh fills R12 + board tiles extruded 0.5m
       if (venueZoomLevel >= 8 && venueCellR12) {
-        const r12Outline = createH3WireframeLayer([venueCellR12], "vz-r12-ctx", false, 0.22);
-        const r15Mesh = createH3WireframeLayer(Array.from(tiles.keys()), "vz-r15-mesh", false, 0.5);
-        const r15Board = createHexGridLayer(tiles, {
+        // All 343 R15 cells in R12 as flat wireframe mesh
+        const r15Grid = createH3WireframeLayer(cellToChildren(venueCellR12, 15), "vz-r15-mesh", false, 0.4);
+        // Board tiles extruded 0.5m (ready for tilt later)
+        const boardLayer = createHexGridLayer(tiles, {
           pickable: false,
-          id: "vz-r15-board",
+          id: "vz-board",
           extruded: true,
           elevation: 0.5,
           opacity: 0.95,
         });
-        return [r12Outline, r15Mesh, r15Board, createGhostPointCloudLayer(ghosts)];
+        return [r15Grid, boardLayer, createGhostPointCloudLayer(ghosts)];
       }
 
       // Normal Plan — no active venue zoom
