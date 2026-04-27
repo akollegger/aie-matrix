@@ -210,59 +210,79 @@ export function SceneView() {
     }));
   }, [drillLevel, drillViewport, drillEasing, viewState.stop]);
 
-  // ── Venue zoom: plays during Regional → Plan transition (levels 6–8) ────────
-  // 0 = inactive; 6/7/8 = animating.
-  const prevStopRef = useRef(viewState.stop);
+  // ── Venue zoom: Regional → Plan transition (levels 6–8) ─────────────────────
+  // Venue cells computed directly — drill stops at level 5, hook venueR10/R12 are null there.
+  const venueCellR10 = useMemo(
+    () => firstBoardH3 && isValidCell(firstBoardH3) ? cellToParent(firstBoardH3, 10) : null,
+    [firstBoardH3],
+  );
+  const venueCellR12 = useMemo(
+    () => firstBoardH3 && isValidCell(firstBoardH3) ? cellToParent(firstBoardH3, 12) : null,
+    [firstBoardH3],
+  );
+
+  // venueZoomActiveRef is set synchronously in the activation effect (defined before
+  // the centerKey camera effect) so the centerKey effect can see it in the same render.
+  const venueZoomActiveRef = useRef(false);
+  const vzPrevStopRef = useRef(viewState.stop);
   const [venueZoomLevel, setVenueZoomLevel] = useState(0);
 
+  // Activation — MUST be defined before the centerKey camera effect.
   useEffect(() => {
-    const prev = prevStopRef.current;
-    prevStopRef.current = viewState.stop;
+    const prev = vzPrevStopRef.current;
+    vzPrevStopRef.current = viewState.stop;
     if (prev === "regional" && viewState.stop === "plan") {
-      setVenueZoomLevel(6); // kick off venue zoom on Regional→Plan
+      venueZoomActiveRef.current = true; // synchronous — blocks centerKey camera below
+      setVenueZoomLevel(6);
     } else if (viewState.stop !== "plan") {
-      setVenueZoomLevel(0); // reset when leaving Plan
+      venueZoomActiveRef.current = false;
+      setVenueZoomLevel(0);
     }
   }, [viewState.stop]);
 
+  // Timer — advance 6→7→8 at 500ms each; clear active flag when done.
   useEffect(() => {
-    if (venueZoomLevel === 0 || venueZoomLevel >= 8) return;
+    if (venueZoomLevel === 0) return;
+    if (venueZoomLevel >= 8) {
+      venueZoomActiveRef.current = false;
+      return;
+    }
     const t = setTimeout(() => setVenueZoomLevel((l) => l + 1), 500);
     return () => clearTimeout(t);
   }, [venueZoomLevel]);
 
-  // Venue zoom camera — fires after the centerKey effect so it overrides it.
+  // Camera per level — fires on each venueZoomLevel change.
   useEffect(() => {
-    if (viewState.stop !== "plan" || venueZoomLevel === 0) return;
+    if (venueZoomLevel === 0 || viewState.stop !== "plan") return;
     if (!firstBoardH3 || !isValidCell(firstBoardH3)) return;
 
-    let viewport: { longitude: number; latitude: number; zoom: number } | null = null;
-    if (venueZoomLevel === 6 && venueR10) {
-      viewport = cellFitViewport(venueR10, vp.w, vp.h, 24);
-    } else if (venueZoomLevel === 7 && venueR12) {
-      viewport = cellFitViewport(venueR12, vp.w, vp.h, 24);
+    let vport: { longitude: number; latitude: number; zoom: number } | null = null;
+    if (venueZoomLevel === 6 && venueCellR10) {
+      vport = cellFitViewport(venueCellR10, vp.w, vp.h, 24);
+    } else if (venueZoomLevel === 7 && venueCellR12) {
+      vport = cellFitViewport(venueCellR12, vp.w, vp.h, 24);
     } else if (venueZoomLevel >= 8) {
-      viewport = mapViewFromTileBounds(tiles, vp.w, vp.h);
+      vport = mapViewFromTileBounds(tiles, vp.w, vp.h);
     }
-    if (!viewport) return;
+    if (!vport) return;
 
     const easing: (t: number) => number =
-      venueZoomLevel === 6 ? (t) => t * t * t :
-      venueZoomLevel >= 8 ? (t) => 1 - Math.pow(1 - t, 3) :
-      (t) => t;
+      venueZoomLevel >= 8
+        ? (t) => 1 - Math.pow(1 - t, 3)                        // ease-out: settle at board
+        : (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; // cubicInOut: pan
 
     setDeckVS((v) => ({
       ...v,
-      longitude: viewport!.longitude,
-      latitude: viewport!.latitude,
-      zoom: viewport!.zoom,
+      longitude: vport!.longitude,
+      latitude: vport!.latitude,
+      zoom: vport!.zoom,
       pitch: 0,
       bearing: 0,
       transitionDuration: 500,
       transitionInterpolator: TRANSITION_INTERPOLATOR,
       transitionEasing: easing,
     }));
-  }, [venueZoomLevel, viewState.stop, firstBoardH3, venueR10, venueR12, tiles, vp.w, vp.h]);
+  }, [venueZoomLevel, viewState.stop, firstBoardH3, venueCellR10, venueCellR12, tiles, vp.w, vp.h]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -307,6 +327,7 @@ export function SceneView() {
   });
 
   useEffect(() => {
+    if (venueZoomActiveRef.current) return; // venue zoom controls camera during transition
     lockedZoomRef.current = target.zoom;
     setDeckVS((v) => ({
       ...v,
@@ -421,26 +442,42 @@ export function SceneView() {
     }
 
     if (s === "plan") {
-      // During venue zoom transition (levels 6–7) show the zoom layers; level 8 falls through.
       const r5Cell = firstBoardH3 && isValidCell(firstBoardH3) ? cellToParent(firstBoardH3, 5) : null;
-      if (venueZoomLevel === 6 && venueR10 && r5Cell) {
-        const globeLayer = createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.1);
+
+      // Level 6: pan to R10 — show faint R9 grid + bright R10 spotlight
+      if (venueZoomLevel === 6 && venueCellR10 && r5Cell) {
+        const globeLayer = createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.08);
         const r9Grid = createH3WireframeLayer(cellToChildren(r5Cell, 9), "vz-r9", false, 0.22);
-        const r10Outline = createH3WireframeLayer([venueR10], "vz-r10", false, 0.9);
+        const r10Outline = createH3WireframeLayer([venueCellR10], "vz-r10", false, 0.9);
         return [globeLayer, r9Grid, r10Outline];
       }
-      if (venueZoomLevel === 7 && venueR10 && venueR12) {
-        const globeLayer = createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.1);
-        const r12Cells = cellToChildren(venueR10, 12);
-        const r10Faint = createH3WireframeLayer([venueR10], "vz-r10f", false, 0.25);
+
+      // Level 7: zoom to R12 — 49-cell mesh inside venueR10
+      if (venueZoomLevel === 7 && venueCellR10 && venueCellR12) {
+        const r12Cells = cellToChildren(venueCellR10, 12);
+        const r10Faint = createH3WireframeLayer([venueCellR10], "vz-r10f", false, 0.2);
         const r12Grid = createH3WireframeLayer(r12Cells, "vz-r12", false, 0.5);
-        return [globeLayer, r10Faint, r12Grid];
+        return [r10Faint, r12Grid];
       }
-      // Level 8 or normal Plan: floor platter + board tiles + ghosts.
-      const vLayer =
-        voidH3.length > 0
-          ? [createH3WireframeLayer(voidH3, "plan-platter", false, 0.45)]
-          : [];
+
+      // Level 8: board arrives — R12 context + R15 wireframe mesh + R15 extruded 0.5m + ghosts
+      if (venueZoomLevel >= 8 && venueCellR12) {
+        const r12Outline = createH3WireframeLayer([venueCellR12], "vz-r12-ctx", false, 0.22);
+        const r15Mesh = createH3WireframeLayer(Array.from(tiles.keys()), "vz-r15-mesh", false, 0.5);
+        const r15Board = createHexGridLayer(tiles, {
+          pickable: false,
+          id: "vz-r15-board",
+          extruded: true,
+          elevation: 0.5,
+          opacity: 0.95,
+        });
+        return [r12Outline, r15Mesh, r15Board, createGhostPointCloudLayer(ghosts)];
+      }
+
+      // Normal Plan — no active venue zoom
+      const vLayer = voidH3.length > 0
+        ? [createH3WireframeLayer(voidH3, "plan-platter", false, 0.45)]
+        : [];
       return [
         ...vLayer,
         createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: lodExtruded }),
@@ -524,7 +561,7 @@ export function SceneView() {
       createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
       createGhostPointCloudLayer(ghosts),
     ];
-  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded, parentCells, venueR10, venueR12, drillLevel, venueZoomLevel, firstBoardH3]);
+  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded, parentCells, venueCellR10, venueCellR12, drillLevel, venueZoomLevel, firstBoardH3]);
 
   const onHover = useCallback(
     (info: { object?: unknown; x: number; y: number }) => {
