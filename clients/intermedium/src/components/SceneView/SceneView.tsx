@@ -382,6 +382,46 @@ export function SceneView() {
       return [globeLayer, boardLayer];
     }
 
+    // ── Shared helper: Regional-end layers (drillLevel=5 content, stable IDs) ──
+    // Called by both Regional(drillLevel=5) and Plan(venueZoomLevel=6) so that
+    // deck.gl sees the same layer IDs on both sides of the stop boundary —
+    // no visual change, just the camera panning.
+    type MarkerDatum = { readonly h3Index: string; readonly isVenue: boolean };
+    const buildRegionalEndLayers = (): ReturnType<typeof createH3WireframeLayer>[] => {
+      if (!firstBoardH3 || !isValidCell(firstBoardH3)) return [];
+      const r5Cell = cellToParent(firstBoardH3, 5);
+      const globe = createH3WireframeLayer(getRes0Cells(), "regional-globe", false, 0.18);
+      const rings = Array.from({ length: PARENT_DRILL_MAX + 1 }, (_, r) => {
+        const cell = cellToParent(firstBoardH3, r);
+        const opacity = 0.3 + (r / Math.max(PARENT_DRILL_MAX, 1)) * 0.6;
+        return createH3WireframeLayer([cell], `regional-drill-r${r}`, false, opacity);
+      });
+      const r9Grid = createH3WireframeLayer(
+        cellToChildren(r5Cell, 9), "regional-r9-grid", false, 0.35,
+      );
+      const venueR9 = cellToParent(firstBoardH3, 9);
+      const landmarkR9s = PLACEHOLDER_LANDMARKS
+        .map(({ lat, lng }) => latLngToCell(lat, lng, 9))
+        .filter((h) => h !== venueR9);
+      const markerData: MarkerDatum[] = [
+        { h3Index: venueR9, isVenue: true },
+        ...landmarkR9s.map((h3Index) => ({ h3Index, isVenue: false })),
+      ];
+      const markers = new H3HexagonLayer<MarkerDatum>({
+        id: "regional-landmarks",
+        data: markerData,
+        pickable: false,
+        extruded: true,
+        elevationScale: 1,
+        getElevation: () => 800,
+        getHexagon: (d) => d.h3Index,
+        filled: true,
+        getFillColor: (d) => d.isVenue ? [0, 210, 220, 240] : [255, 160, 50, 210],
+        stroked: false,
+      });
+      return [globe, ...rings, r9Grid, markers] as ReturnType<typeof createH3WireframeLayer>[];
+    };
+
     // ── Regional: full drill (R0→R5 parent rings + R10→R12→board venue zoom) ───
     if (s === "regional") {
       const globeLayer = createH3WireframeLayer(getRes0Cells(), "regional-globe", false, 0.18);
@@ -393,32 +433,8 @@ export function SceneView() {
           const opacity = 0.3 + (idx / Math.max(PARENT_DRILL_MAX, 1)) * 0.6;
           return createH3WireframeLayer([cell], `regional-drill-r${idx}`, false, opacity);
         });
-        // At level 5: add R9 grid + extruded landmark markers
-        if (drillLevel === PARENT_DRILL_MAX && firstBoardH3 && isValidCell(firstBoardH3) && r5Cell) {
-          const r9Cells = cellToChildren(r5Cell, 9);
-          const gridLayer = createH3WireframeLayer(r9Cells, "regional-r9-grid", false, 0.35);
-          type MarkerDatum = { readonly h3Index: string; readonly isVenue: boolean };
-          const venueR9 = cellToParent(firstBoardH3, 9);
-          const landmarkR9s = PLACEHOLDER_LANDMARKS
-            .map(({ lat, lng }) => latLngToCell(lat, lng, 9))
-            .filter((h) => h !== venueR9);
-          const markerData: MarkerDatum[] = [
-            { h3Index: venueR9, isVenue: true },
-            ...landmarkR9s.map((h3Index) => ({ h3Index, isVenue: false })),
-          ];
-          const markersLayer = new H3HexagonLayer<MarkerDatum>({
-            id: "regional-landmarks",
-            data: markerData,
-            pickable: false,
-            extruded: true,
-            elevationScale: 1,
-            getElevation: () => 800,
-            getHexagon: (d) => d.h3Index,
-            filled: true,
-            getFillColor: (d) => d.isVenue ? [0, 210, 220, 240] : [255, 160, 50, 210],
-            stroked: false,
-          });
-          return [globeLayer, ...drillLayers, gridLayer, markersLayer];
+        if (drillLevel === PARENT_DRILL_MAX) {
+          return buildRegionalEndLayers();
         }
         return [globeLayer, ...drillLayers];
       }
@@ -454,13 +470,10 @@ export function SceneView() {
     }
 
     if (s === "plan") {
-      const r5Cell = firstBoardH3 && isValidCell(firstBoardH3) ? cellToParent(firstBoardH3, 5) : null;
-
-      // Step 6: panning to R10 — keep regional context visible during pan
-      if (venueZoomLevel === 6 && venueCellR10 && r5Cell) {
-        const r9Grid = createH3WireframeLayer(cellToChildren(r5Cell, 9), "vz-r9", false, 0.22);
-        const r10Spotlight = createH3WireframeLayer([venueCellR10], "vz-r10", false, 0.9);
-        return [createH3WireframeLayer(getRes0Cells(), "vz-globe", false, 0.08), r9Grid, r10Spotlight];
+      // Step 6: pan only — identical layers to Regional end-state so deck.gl
+      // sees no visual change; only the camera moves.
+      if (venueZoomLevel === 6) {
+        return buildRegionalEndLayers();
       }
 
       // Step 7: zooming to R12 — show R12 wireframe, R9 context falls away
