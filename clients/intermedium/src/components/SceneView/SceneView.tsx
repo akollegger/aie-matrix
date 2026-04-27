@@ -7,7 +7,7 @@ import {
   useState,
 } from "react";
 import DeckGL from "@deck.gl/react";
-import { MapView, type MapViewState, MapController } from "deck.gl";
+import { MapView, type MapViewState, MapController, LinearInterpolator } from "deck.gl";
 import { useClientState } from "../../context/ClientState.js";
 import {
   createH3WireframeLayer,
@@ -93,7 +93,21 @@ function ghostPickInDisk(
   });
 }
 
-type DeckViewState = MapViewState & { transitionDuration?: number };
+/** Transition duration in ms (FR-028). LOD flip fires at midpoint (TRANSITION_DURATION / 2). */
+const TRANSITION_DURATION = 400;
+
+/** Cubic-in-out easing for smooth stop transitions (FR-028). */
+function cubicInOut(t: number): number {
+  return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+}
+
+const TRANSITION_INTERPOLATOR = new LinearInterpolator(["longitude", "latitude", "zoom", "pitch", "bearing"]);
+
+type DeckViewState = MapViewState & {
+  transitionDuration?: number;
+  transitionInterpolator?: LinearInterpolator;
+  transitionEasing?: (t: number) => number;
+};
 
 function computeMapCamera(
   vs: ViewState,
@@ -183,6 +197,32 @@ export function SceneView() {
     [viewState.stop, viewState.focus, tiles, ghosts, situationalGhostH3, vp.w, vp.h],
   );
 
+  // LOD hard-cut: tracks whether layers render extruded (exterior) or flat (interior).
+  // Switches immediately to extruded; delays switch to flat by TRANSITION_DURATION/2 (FR-028).
+  const [lodExtruded, setLodExtruded] = useState(() =>
+    viewState.stop === "global" || viewState.stop === "regional" || viewState.stop === "neighborhood",
+  );
+  const prevStopRef = useRef(viewState.stop);
+  useEffect(() => {
+    const wasExtruded =
+      prevStopRef.current === "global" ||
+      prevStopRef.current === "regional" ||
+      prevStopRef.current === "neighborhood";
+    const willBeExtruded =
+      viewState.stop === "global" ||
+      viewState.stop === "regional" ||
+      viewState.stop === "neighborhood";
+    prevStopRef.current = viewState.stop;
+    if (wasExtruded === willBeExtruded) return;
+    if (willBeExtruded) {
+      setLodExtruded(true);
+      return undefined;
+    } else {
+      const t = setTimeout(() => setLodExtruded(false), TRANSITION_DURATION / 2);
+      return () => clearTimeout(t);
+    }
+  }, [viewState.stop]);
+
   const [deckVS, setDeckVS] = useState<DeckViewState>({
     longitude: target.longitude,
     latitude: target.latitude,
@@ -202,7 +242,9 @@ export function SceneView() {
       bearing: 0,
       minZoom: target.zoom,
       maxZoom: target.zoom,
-      transitionDuration: 220,
+      transitionDuration: TRANSITION_DURATION,
+      transitionInterpolator: TRANSITION_INTERPOLATOR,
+      transitionEasing: cubicInOut,
     }));
   }, [centerKey, target, tiles.size]);
 
@@ -280,7 +322,7 @@ export function SceneView() {
           : [];
       return [
         ...vLayer,
-        createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
+        createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: lodExtruded }),
         createGhostPointCloudLayer(ghosts),
       ];
     }
@@ -361,8 +403,7 @@ export function SceneView() {
       createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
       createGhostPointCloudLayer(ghosts),
     ];
-  // LOD (extruded vs flat) is driven by viewState.stop via isExtrudedStop (T088).
-  }, [tiles, ghosts, viewState, voidH3, iconFilter]);
+  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded]);
 
   const onHover = useCallback(
     (info: { object?: unknown; x: number; y: number }) => {

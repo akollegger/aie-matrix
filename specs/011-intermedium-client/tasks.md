@@ -243,9 +243,9 @@ New work starts at **Phase 9**.
 
 **Purpose**: Smooth camera animation between all stops — simultaneous zoom + pitch + pan with easement curve; LOD hard cut at transition midpoint.
 
-- [ ] T089 Implement stop transition animator in `SceneView` — use `deck.gl` `LinearInterpolator` with `transitionProps: ['longitude','latitude','zoom','pitch']` and a cubic-in-out easing function; wire to stop changes from `useViewState` (FR-028)
-- [ ] T090 [P] Implement fade wrapper for deck.gl ↔ R3F renderer swap in `clients/intermedium/src/App.tsx` — CSS opacity transition: fade-out before `DeckGL` unmount, fade-in after `PersonalScene` mount; reverse on exit from Personal stop (FR-028, FR-029)
-- [ ] T091 Smoke test all 7 stop transitions: verify zoom + pitch animate simultaneously; LOD flip occurs at midpoint; no flash on Personal stop entry/exit
+- [X] T089 Implement stop transition animator in `SceneView` — use `deck.gl` `LinearInterpolator` with `transitionProps: ['longitude','latitude','zoom','pitch']` and a cubic-in-out easing function; wire to stop changes from `useViewState` (FR-028)
+- [X] T090 [P] Implement fade wrapper for deck.gl ↔ R3F renderer swap in `clients/intermedium/src/App.tsx` — CSS opacity transition: fade-out before `DeckGL` unmount, fade-in after `PersonalScene` mount; reverse on exit from Personal stop (FR-028, FR-029)
+- [X] T091 Smoke test all 7 stop transitions: verify zoom + pitch animate simultaneously; LOD flip occurs at midpoint; no flash on Personal stop entry/exit
 
 **Checkpoint**: All stop-to-stop transitions animate smoothly; deck.gl ↔ R3F swap is invisible behind the fade.
 
@@ -255,14 +255,14 @@ New work starts at **Phase 9**.
 
 **Purpose**: Personal stop — the non-geospatial ghost-presence view. React Three Fiber scene for the ghost figure; conversation thread and ghost interiority in the panel overlay. Requires pairing (FR-013, FR-029).
 
-- [ ] T092 Add `@react-three/fiber` and `three` to `clients/intermedium/package.json`; verify build (ADR-0006)
-- [ ] T093 Implement `clients/intermedium/src/components/PersonalScene/PersonalScene.tsx` — R3F `Canvas`: dark void background, single flat floor tile under ghost (FR-030), ghost point-cloud figure (`Points`), ghost interiority annotation scaffold (inventory/goal/memories as floating labels), orbit disabled (ghost stays centred) (FR-029, FR-002, FR-030)
-- [ ] T094 [P] Implement `clients/intermedium/src/components/PanelView/PersonalPanel.tsx` — ~80% overlay: `GhostStatusWidget` (tile type + last move direction) + `ConversationThread` + `MessageInput` + `GhostInteriority` stub; no separate mini-map (FR-009)
-- [ ] T095 [P] Implement `useA2AConversation` hook in `clients/intermedium/src/hooks/useA2AConversation.ts` — polls `GET /conversation/:ghostId/messages`; `isAvailable: false` on 404/error; optimistic append on send (IC-002, FR-011)
-- [ ] T096 [P] Implement `ConversationThread` in `clients/intermedium/src/components/ConversationThread/ConversationThread.tsx` and `MessageInput` in `…/MessageInput.tsx` — ordered message list; disabled input with tooltip when `!isAvailable` (FR-010, FR-011)
-- [ ] T097 [P] Implement `GhostInteriority` annotation component in `clients/intermedium/src/components/PersonalScene/GhostInteriority.tsx` — three stubs (inventory, active goal, memories); `isAvailable: false` note; observability-first copy (FR-012); no game-quest phrasing
-- [ ] T098 Wire Personal stop in `clients/intermedium/src/App.tsx` — mount `PersonalScene` + `PersonalPanel` when `stop === "personal"`; `PairingGate` blocks navigation without pairing (FR-013)
-- [ ] T099 Smoke test Personal stop with mock `?ghost=`: R3F scene renders ghost figure; conversation stub visible; interiority stubs visible; back control returns to Situational
+- [X] T092 Add `@react-three/fiber` and `three` to `clients/intermedium/package.json`; verify build (ADR-0006)
+- [X] T093 Implement `clients/intermedium/src/components/PersonalScene/PersonalScene.tsx` — R3F `Canvas`: dark void background, single flat floor tile under ghost (FR-030), ghost point-cloud figure (`Points`), ghost interiority annotation scaffold (inventory/goal/memories as floating labels), orbit disabled (ghost stays centred) (FR-029, FR-002, FR-030)
+- [X] T094 [P] Implement `clients/intermedium/src/components/PanelView/PersonalPanel.tsx` — ~80% overlay: `GhostStatusWidget` (tile type + last move direction) + `ConversationThread` + `MessageInput` + `GhostInteriority` stub; no separate mini-map (FR-009)
+- [X] T095 [P] Implement `useA2AConversation` hook in `clients/intermedium/src/hooks/useA2AConversation.ts` — polls `GET /conversation/:ghostId/messages`; `isAvailable: false` on 404/error; optimistic append on send (IC-002, FR-011)
+- [X] T096 [P] Implement `ConversationThread` in `clients/intermedium/src/components/ConversationThread/ConversationThread.tsx` and `MessageInput` in `…/MessageInput.tsx` — ordered message list; disabled input with tooltip when `!isAvailable` (FR-010, FR-011)
+- [X] T097 [P] Implement `GhostInteriority` annotation component in `clients/intermedium/src/components/PersonalScene/GhostInteriority.tsx` — three stubs (inventory, active goal, memories); `isAvailable: false` note; observability-first copy (FR-012); no game-quest phrasing
+- [X] T098 Wire Personal stop in `clients/intermedium/src/App.tsx` — mount `PersonalScene` + `PersonalPanel` when `stop === "personal"`; `PairingGate` blocks navigation without pairing (FR-013)
+- [X] T099 Smoke test Personal stop with mock `?ghost=`: R3F scene renders ghost figure; conversation stub visible; interiority stubs visible; back control returns to Situational
 
 **Checkpoint**: All 4 revised user stories functional. Ghost world legible at all 7 stops.
 

@@ -2,7 +2,7 @@ import type { ViewState } from "../../types/viewState.js";
 import type { HumanPairing } from "../../types/ghost.js";
 import { AreaPanel } from "./AreaPanel.js";
 import { NeighborPanel } from "./NeighborPanel.js";
-import { PartnerPanel } from "./PartnerPanel.js";
+import { PersonalPanel } from "./PersonalPanel.js";
 
 export interface PanelViewProps {
   readonly viewState: ViewState;
@@ -31,7 +31,7 @@ export function PanelView({ viewState, pairing }: PanelViewProps) {
   }
   if (viewState.stop === "personal") {
     if (pairing === null) return null;
-    return <PartnerPanel />;
+    return <PersonalPanel />;
   }
   return null;
 }
