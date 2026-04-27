@@ -8,7 +8,7 @@ import { GhostCard } from "../GhostCard/GhostCard.js";
  */
 export function NeighborPanel() {
   const { viewState, tiles, ghosts, identities, pairing } = useClientState();
-  const focusGid = viewState.scale === "neighbor" && viewState.focus ? viewState.focus : null;
+  const focusGid = viewState.stop === "situational" && viewState.focus ? viewState.focus : null;
   const focusGhost = focusGid ? ghosts.get(focusGid) : undefined;
 
   const disk = useMemo(

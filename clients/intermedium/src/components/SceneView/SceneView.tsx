@@ -33,7 +33,10 @@ import {
   mapViewFromTileBounds,
   areaViewFromFocus,
   neighborView,
+  globalView,
+  regionalView,
   voidNeighborH3s,
+  STOP_PITCH,
 } from "../../utils/hexViewport.js";
 import type { GhostPosition } from "../../types/ghostPosition.js";
 import type { WorldTile } from "../../types/worldTile.js";
@@ -73,12 +76,8 @@ function isGhostPickPoint(o: unknown): o is GhostPickPoint {
 }
 
 function pickId(o: unknown): string {
-  if (isWorldTile(o)) {
-    return `h3:${o.h3Index}`;
-  }
-  if (isGhostPickPoint(o)) {
-    return `g:${o.ghostId}`;
-  }
+  if (isWorldTile(o)) return `h3:${o.h3Index}`;
+  if (isGhostPickPoint(o)) return `g:${o.ghostId}`;
   return `x:${String(o)}`;
 }
 
@@ -99,43 +98,48 @@ function computeMapCamera(
   vs: ViewState,
   tiles: ReadonlyMap<string, WorldTile>,
   ghosts: ReadonlyMap<string, GhostPosition>,
-  neighborH3: string | undefined,
+  situationalH3: string | undefined,
   w: number,
   h: number,
-): {
-  longitude: number;
-  latitude: number;
-  zoom: number;
-  pitch: number;
-  bearing: number;
-} {
-  if (vs.scale === "map") {
+): { longitude: number; latitude: number; zoom: number; pitch: number; bearing: number } {
+  const pitch = STOP_PITCH[vs.stop];
+  // Exterior stops — Phase 11 will add distinct rendering; for now use coarse zooms.
+  if (vs.stop === "global") {
+    const v = globalView(tiles);
+    return { ...v, pitch, bearing: 0 };
+  }
+  if (vs.stop === "regional") {
+    const v = regionalView(tiles);
+    return { ...v, pitch, bearing: 0 };
+  }
+  if (vs.stop === "neighborhood") {
     const m = mapViewFromTileBounds(tiles, w, h);
-    if (m) {
-      return { ...m, pitch: 0, bearing: 0 };
-    }
+    if (m) return { ...m, pitch, bearing: 0 };
   }
-  if (vs.scale === "area" && vs.focus) {
+  // Interior stops
+  if (vs.stop === "plan") {
+    const m = mapViewFromTileBounds(tiles, w, h);
+    if (m) return { ...m, pitch, bearing: 0 };
+  }
+  if (vs.stop === "room" && vs.focus) {
     const a = areaViewFromFocus(vs.focus, w, h);
-    return { ...a, pitch: 0, bearing: 0 };
+    return { ...a, pitch, bearing: 0 };
   }
-  if (vs.scale === "neighbor" && vs.focus) {
-    const h3 = neighborH3 ?? ghosts.get(vs.focus)?.h3Index;
+  if (vs.stop === "situational" && vs.focus) {
+    const h3 = situationalH3 ?? ghosts.get(vs.focus)?.h3Index;
     if (h3) {
       const n = neighborView(h3, w, h);
-      return { ...n, pitch: 0, bearing: 0 };
+      return { ...n, pitch, bearing: 0 };
     }
   }
-  const m = mapViewFromTileBounds(tiles, w, h) ?? {
-    longitude: 0,
-    latitude: 20,
-    zoom: 2,
-  };
+  const m = mapViewFromTileBounds(tiles, w, h) ?? { longitude: 0, latitude: 20, zoom: 2 };
   return { ...m, pitch: 0, bearing: 0 };
 }
 
 /**
- * US1+US2: overhead Map / Area / Neighbor; fixed “CPV” zoom per scale, pan only; drill-down + ghost pick.
+ * US1+US2: 7-stop spatial scene rendered via deck.gl (geospatial stops only).
+ * Personal stop is handled in App.tsx via PersonalScene (ADR-0006).
+ * Exterior stop rendering (extruded board) arrives in Phase 11 (T087).
  */
 export function SceneView() {
   const { tiles, ghosts, viewState, nav } = useClientState();
@@ -151,9 +155,7 @@ export function SceneView() {
 
   useLayoutEffect(() => {
     const el = containerRef.current;
-    if (el === null) {
-      return;
-    }
+    if (el === null) return;
     const ro = new ResizeObserver((entries) => {
       for (const e of entries) {
         const { width, height } = e.contentRect;
@@ -164,27 +166,27 @@ export function SceneView() {
     return () => ro.disconnect();
   }, []);
 
-  const focusGhostH3 =
-    viewState.scale === "neighbor" && viewState.focus
+  const situationalGhostH3 =
+    viewState.stop === "situational" && viewState.focus
       ? ghosts.get(viewState.focus)?.h3Index
       : undefined;
 
   const centerKey = useMemo(
     () =>
-      `${viewState.scale}:${viewState.focus ?? ""}:${viewState.scale === "neighbor" ? (focusGhostH3 ?? "") : ""}:${vp.w}x${vp.h}`,
-    [viewState, focusGhostH3, vp.w, vp.h],
+      `${viewState.stop}:${viewState.focus ?? ""}:${viewState.stop === "situational" ? (situationalGhostH3 ?? "") : ""}:${vp.w}x${vp.h}`,
+    [viewState, situationalGhostH3, vp.w, vp.h],
   );
 
   const target = useMemo(
-    () => computeMapCamera(viewState, tiles, ghosts, focusGhostH3, vp.w, vp.h),
-    [viewState.scale, viewState.focus, tiles, focusGhostH3, vp.w, vp.h],
+    () => computeMapCamera(viewState, tiles, ghosts, situationalGhostH3, vp.w, vp.h),
+    [viewState.stop, viewState.focus, tiles, ghosts, situationalGhostH3, vp.w, vp.h],
   );
 
   const [deckVS, setDeckVS] = useState<DeckViewState>({
     longitude: target.longitude,
     latitude: target.latitude,
     zoom: target.zoom,
-    pitch: 0,
+    pitch: target.pitch,
     bearing: 0,
   });
 
@@ -195,10 +197,10 @@ export function SceneView() {
       longitude: target.longitude,
       latitude: target.latitude,
       zoom: target.zoom,
+      pitch: target.pitch,
+      bearing: 0,
       minZoom: target.zoom,
       maxZoom: target.zoom,
-      pitch: 0,
-      bearing: 0,
       transitionDuration: 220,
     }));
   }, [centerKey, target, tiles.size]);
@@ -213,26 +215,37 @@ export function SceneView() {
   );
 
   const layers = useMemo(() => {
-    if (tiles.size === 0) {
-      return [];
-    }
-    const s = viewState.scale;
-    if (s === "map") {
+    if (tiles.size === 0) return [];
+    const s = viewState.stop;
+
+    // Exterior stops — extruded rendering arrives in Phase 11 (T087).
+    // For now, fall through to plan-style flat rendering so the app stays functional.
+    if (s === "global" || s === "regional" || s === "neighborhood") {
       const vLayer =
         voidH3.length > 0
           ? [createH3WireframeLayer(voidH3, "void-wire", false, 0.55)]
           : [];
       return [
         ...vLayer,
-        createHexGridLayer(tiles, { pickable: true, id: "map-hex" }),
+        createHexGridLayer(tiles, { pickable: false, id: "exterior-hex" }),
+      ];
+    }
+
+    if (s === "plan") {
+      const vLayer =
+        voidH3.length > 0
+          ? [createH3WireframeLayer(voidH3, "void-wire", false, 0.55)]
+          : [];
+      return [
+        ...vLayer,
+        createHexGridLayer(tiles, { pickable: true, id: "plan-hex" }),
         createGhostPointCloudLayer(ghosts),
       ];
     }
-    if (s === "area" && viewState.focus) {
+
+    if (s === "room" && viewState.focus) {
       const disk = cellDisk(viewState.focus, AREA_DISK_K);
-      const diskTiles = Array.from(tiles.values()).filter((t) =>
-        disk.has(t.h3Index),
-      );
+      const diskTiles = Array.from(tiles.values()).filter((t) => disk.has(t.h3Index));
       const diskMap: Map<string, WorldTile> = new Map(
         diskTiles.map((t) => [t.h3Index, t] as const),
       );
@@ -244,33 +257,32 @@ export function SceneView() {
       return [
         createHexGridLayer(tiles, {
           pickable: false,
-          id: "area-world",
+          id: "room-world",
           opacity: 0.35,
           uniformBackdrop: { r: 28, g: 40, b: 62, a: 0.5 },
         }),
         createHexGridLayer(diskTiles, {
           pickable: true,
-          id: "area-local",
+          id: "room-local",
           areaFocusH3: viewState.focus,
           opacity: 1,
         }),
-        createTileIconLayer(iconData, "area-icons"),
+        createTileIconLayer(iconData, "room-icons"),
         createGhostPointCloudLayer(ghosts),
-        createGhostPickLayer(gpick, "area-ghost-pick", true),
+        createGhostPickLayer(gpick, "room-ghost-pick", true),
       ];
     }
-    if (s === "neighbor" && viewState.focus) {
+
+    if (s === "situational" && viewState.focus) {
       const g0 = ghosts.get(viewState.focus);
       if (!g0) {
         return [
-          createHexGridLayer(tiles, { pickable: true, id: "map-hex" }),
+          createHexGridLayer(tiles, { pickable: true, id: "plan-hex" }),
           createGhostPointCloudLayer(ghosts),
         ];
       }
       const disk = cellDisk(g0.h3Index, NEIGHBOR_DISK_K);
-      const diskTiles = Array.from(tiles.values()).filter((t) =>
-        disk.has(t.h3Index),
-      );
+      const diskTiles = Array.from(tiles.values()).filter((t) => disk.has(t.h3Index));
       const diskMap: Map<string, WorldTile> = new Map(
         diskTiles.map((t) => [t.h3Index, t] as const),
       );
@@ -282,24 +294,25 @@ export function SceneView() {
       return [
         createHexGridLayer(tiles, {
           pickable: false,
-          id: "neighbor-world",
+          id: "situational-world",
           opacity: 0.3,
           uniformBackdrop: { r: 25, g: 38, b: 55, a: 0.45 },
         }),
         createHexGridLayer(diskTiles, {
           pickable: true,
-          id: "neighbor-local",
+          id: "situational-local",
           opacity: 1,
           areaFocusH3: g0.h3Index,
         }),
-        createSelectionH3Layer([...disk], tiles, { id: "neighbor-ring" }),
-        createTileIconLayer(iconData, "neighbor-icons"),
+        createSelectionH3Layer([...disk], tiles, { id: "situational-ring" }),
+        createTileIconLayer(iconData, "situational-icons"),
         createGhostPointCloudLayer(ghosts),
-        createGhostPickLayer(gpick, "neighbor-ghost-pick", true),
+        createGhostPickLayer(gpick, "situational-ghost-pick", true),
       ];
     }
+
     return [
-      createHexGridLayer(tiles, { pickable: true, id: "map-hex" }),
+      createHexGridLayer(tiles, { pickable: true, id: "plan-hex" }),
       createGhostPointCloudLayer(ghosts),
     ];
   }, [tiles, ghosts, viewState, voidH3, iconFilter]);
@@ -314,9 +327,9 @@ export function SceneView() {
       }
       if (isWorldTile(o) && o.tileType !== "void") {
         if (
-          viewState.scale === "map" ||
-          viewState.scale === "area" ||
-          viewState.scale === "neighbor"
+          viewState.stop === "plan" ||
+          viewState.stop === "room" ||
+          viewState.stop === "situational"
         ) {
           nav.setPickTarget({ type: "tile", h3: o.h3Index });
         }
@@ -324,7 +337,7 @@ export function SceneView() {
         return;
       }
       if (isGhostPickPoint(o)) {
-        if (viewState.scale === "area" || viewState.scale === "neighbor") {
+        if (viewState.stop === "room" || viewState.stop === "situational") {
           nav.setPickTarget({ type: "ghost", ghostId: o.ghostId });
         }
         setHover(null);
@@ -332,62 +345,46 @@ export function SceneView() {
       }
       setHover(null);
     },
-    [nav, viewState.scale],
+    [nav, viewState.stop],
   );
 
   const onClick = useCallback(
     (info: { object?: unknown }) => {
       const o = info.object;
-      if (!o) {
-        return;
-      }
-      if (isWorldTile(o) && o.tileType === "void") {
-        return;
-      }
+      if (!o) return;
+      if (isWorldTile(o) && o.tileType === "void") return;
       const id = pickId(o);
       const now = Date.now();
-      if (
-        lastClick.current &&
-        lastClick.current.id === id &&
-        now - lastClick.current.t < 600
-      ) {
-        if (viewState.scale === "map" && isWorldTile(o)) {
-          nav.zoomInFromMapTile(o.h3Index);
-        } else if (viewState.scale === "area" && isGhostPickPoint(o)) {
-          nav.zoomInFromAreaGhost(o.ghostId);
+      if (lastClick.current && lastClick.current.id === id && now - lastClick.current.t < 600) {
+        if ((viewState.stop === "plan" || viewState.stop === "room") && isWorldTile(o)) {
+          nav.zoomInFromTile(o.h3Index);
+        } else if (viewState.stop === "situational" && isGhostPickPoint(o)) {
+          nav.zoomInFromGhost(o.ghostId);
         }
         lastClick.current = null;
       } else {
         lastClick.current = { t: now, id };
       }
     },
-    [viewState.scale, nav],
+    [viewState.stop, nav],
   );
 
-  if (tiles.size === 0) {
-    return null;
-  }
+  if (tiles.size === 0) return null;
 
   return (
     <div
       ref={containerRef}
-      style={{
-        position: "absolute",
-        top: "0",
-        left: "0",
-        right: "0",
-        bottom: "0",
-        minHeight: 0,
-      }}
+      style={{ position: "absolute", top: "0", left: "0", right: "0", bottom: "0", minHeight: 0 }}
     >
       <DeckGL
         views={new MapView({ id: "map" })}
         viewState={deckVS}
         onViewStateChange={({ viewState: vsIn }) => {
           const z = lockedZoomRef.current;
+          const p = STOP_PITCH[viewState.stop];
           setDeckVS({
             ...(vsIn as MapViewState),
-            pitch: 0,
+            pitch: p,
             bearing: 0,
             zoom: z,
             minZoom: z,
@@ -398,13 +395,7 @@ export function SceneView() {
         layers={layers}
         onHover={onHover}
         onClick={onClick}
-        style={{
-          position: "absolute",
-          top: "0",
-          left: "0",
-          right: "0",
-          bottom: "0",
-        }}
+        style={{ position: "absolute", top: "0", left: "0", right: "0", bottom: "0" }}
       />
       {hover ? <TileTooltip tile={hover.tile} x={hover.x} y={hover.y} /> : null}
     </div>

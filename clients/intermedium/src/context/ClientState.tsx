@@ -18,7 +18,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
   const { identities, refresh } = useGhostIdentity(import.meta.env.VITE_GHOST_HOUSE_URL ?? "");
   const { status: mapGramStatus, tiles, error: mapGramError, retry: retryMapLoad } = useMapGram();
   const { ghosts, connectionState: colyseusLinkState } = useColyseus();
-  const { viewState, nav } = useViewState();
+  const { viewState, nav } = useViewState(pairing);
   const [thread] = useState<ClientState["thread"]>(null);
   const [interiority] = useState<ClientState["interiority"]>(null);
 

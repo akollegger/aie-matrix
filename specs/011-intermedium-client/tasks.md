@@ -217,10 +217,10 @@ New work starts at **Phase 9**.
 
 **Purpose**: Extend the existing `useViewState` and `hexViewport` to support all seven stops, keyboard cycling, and pitch-aware camera placement. Builds on the `{ scale, focus }` foundation from T018/T041 without removing it.
 
-- [ ] T081 Extend `clients/intermedium/src/types/viewState.ts` — add `CameraStop` union type (`"global" | "regional" | "neighborhood" | "plan" | "room" | "situational" | "personal"`); extend `ViewState` to `{ stop: CameraStop; focus: string | null }` (FR-004 revised)
-- [ ] T082 Extend `useViewState` in `clients/intermedium/src/hooks/useViewState.ts` — implement 7-stop ordered sequence; zoom-in / zoom-out key cycling; `Personal` stop requires `pairing !== null`; preserve existing `Escape` and double-click behaviour (FR-014 revised)
-- [ ] T083 [P] Extend `clients/intermedium/src/utils/hexViewport.ts` — add pitch constant per stop (0° Global/Regional/Plan/Room; 45° Neighborhood/Situational); add `globalView`, `regionalView` viewport calculations (FR-027)
-- [ ] T084 [P] Update `ClientState.tsx` context — thread new `stop` type through; ensure `nav` actions expose `cycleTo(stop)` alongside existing `zoomInFrom…` helpers
+- [X] T081 Extend `clients/intermedium/src/types/viewState.ts` — add `CameraStop` union type (`"global" | "regional" | "neighborhood" | "plan" | "room" | "situational" | "personal"`); extend `ViewState` to `{ stop: CameraStop; focus: string | null }` (FR-004 revised)
+- [X] T082 Extend `useViewState` in `clients/intermedium/src/hooks/useViewState.ts` — implement 7-stop ordered sequence; zoom-in / zoom-out key cycling; `Personal` stop requires `pairing !== null`; preserve existing `Escape` and double-click behaviour (FR-014 revised)
+- [X] T083 [P] Extend `clients/intermedium/src/utils/hexViewport.ts` — add pitch constant per stop (0° Global/Regional/Plan/Room; 45° Neighborhood/Situational); add `globalView`, `regionalView` viewport calculations (FR-027)
+- [X] T084 [P] Update `ClientState.tsx` context — thread new `stop` type through; ensure `nav` actions expose `cycleTo(stop)` alongside existing `zoomInFrom…` helpers
 
 **Checkpoint**: `useViewState` cycles through all 7 stops via keyboard; pitch values are correct per stop; type system enforces `CameraStop` throughout.
 

@@ -17,7 +17,7 @@ function AppInner() {
   }
 
   return (
-    <div className="app-root" data-scale={state.viewState.scale} aria-label="intermedium">
+    <div className="app-root" data-stop={state.viewState.stop} aria-label="intermedium">
       <div
         style={{
           position: "relative",

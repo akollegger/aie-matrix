@@ -3,7 +3,6 @@ import type { HumanPairing } from "../../types/ghost.js";
 import { AreaPanel } from "./AreaPanel.js";
 import { NeighborPanel } from "./NeighborPanel.js";
 import { PartnerPanel } from "./PartnerPanel.js";
-import { GhostPanel } from "./GhostPanel.js";
 
 export interface PanelViewProps {
   readonly viewState: ViewState;
@@ -11,30 +10,28 @@ export interface PanelViewProps {
 }
 
 /**
- * Overlay panes for scales below `map` (FR-003). The deck.gl world stays full-bleed behind; this
- * is only the panel side — not a resizable flex column.
+ * Overlay panes per stop (FR-003). The deck.gl world stays full-bleed behind;
+ * this is only the panel side — not a resizable flex column.
  */
 export function PanelView({ viewState, pairing }: PanelViewProps) {
-  if (viewState.scale === "map") {
+  // Exterior stops and Plan have no panel.
+  if (
+    viewState.stop === "global" ||
+    viewState.stop === "regional" ||
+    viewState.stop === "neighborhood" ||
+    viewState.stop === "plan"
+  ) {
     return null;
   }
-  if (viewState.scale === "area") {
+  if (viewState.stop === "room") {
     return <AreaPanel />;
   }
-  if (viewState.scale === "neighbor") {
+  if (viewState.stop === "situational") {
     return <NeighborPanel />;
   }
-  if (viewState.scale === "partner") {
-    if (pairing === null) {
-      return null;
-    }
+  if (viewState.stop === "personal") {
+    if (pairing === null) return null;
     return <PartnerPanel />;
-  }
-  if (viewState.scale === "ghost") {
-    if (pairing === null) {
-      return null;
-    }
-    return <GhostPanel />;
   }
   return null;
 }

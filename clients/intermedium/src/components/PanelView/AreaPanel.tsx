@@ -8,7 +8,7 @@ import { GhostCard } from "../GhostCard/GhostCard.js";
  */
 export function AreaPanel() {
   const { viewState, tiles, ghosts, identities } = useClientState();
-  const h3 = viewState.scale === "area" && viewState.focus ? viewState.focus : null;
+  const h3 = viewState.stop === "room" && viewState.focus ? viewState.focus : null;
 
   const disk = useMemo(() => (h3 ? cellDisk(h3, AREA_DISK_K) : new Set<string>()), [h3]);
 

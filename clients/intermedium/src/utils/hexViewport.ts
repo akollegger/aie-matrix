@@ -7,6 +7,7 @@ import {
   isValidCell,
   gridDisk,
 } from "h3-js";
+import type { CameraStop } from "../types/viewState.js";
 import type { WorldTile } from "../types/worldTile.js";
 
 /**
@@ -93,8 +94,57 @@ export type MapViewport = {
 };
 
 /**
- * “Map” scale: fit full tile set in the window, then clamp zoom to CPV bounds; map is always
- * at least `MAP_VS_AREA_CPV ×` as wide in cell count as the area scale (approximate).
+ * Camera pitch (deck.gl degrees) per stop (FR-027).
+ * Personal stop is R3F and does not use this value.
+ */
+export const STOP_PITCH: Readonly<Record<CameraStop, number>> = {
+  global: 0,
+  regional: 0,
+  neighborhood: 45,
+  plan: 0,
+  room: 0,
+  situational: 45,
+  personal: 80, // reference only; Personal stop uses R3F, not deck.gl
+};
+
+/**
+ * “Global” stop: board visible as a tiny landmark; zoom fixed to show ~earth scale.
+ * Center on the board's geographic centroid (FR-026).
+ */
+export function globalView(
+  tiles: ReadonlyMap<string, WorldTile>,
+): MapViewport {
+  const center = tileCentroid(tiles);
+  return { longitude: center[1], latitude: center[0], zoom: 2 };
+}
+
+/**
+ * “Regional” stop: board visible as a small rectangle; zoom targets R4–R5 cell scale
+ * so surrounding context cells are legible (FR-026).
+ */
+export function regionalView(
+  tiles: ReadonlyMap<string, WorldTile>,
+): MapViewport {
+  const center = tileCentroid(tiles);
+  return { longitude: center[1], latitude: center[0], zoom: 7 };
+}
+
+/** Mean lat/lng of all tile centroids. Falls back to (0,0) for empty maps. */
+function tileCentroid(tiles: ReadonlyMap<string, WorldTile>): [number, number] {
+  if (tiles.size === 0) return [0, 0];
+  let sumLat = 0;
+  let sumLng = 0;
+  for (const t of tiles.values()) {
+    const [la, lo] = cellToLatLng(t.h3Index);
+    sumLat += la;
+    sumLng += lo;
+  }
+  return [sumLat / tiles.size, sumLng / tiles.size];
+}
+
+/**
+ * “Plan” stop (was “Map” scale): fit full tile set in the window, then clamp zoom to CPV
+ * bounds; plan is always at least `MAP_VS_AREA_CPV ×` as wide in cell count as Room.
  */
 export function mapViewFromTileBounds(
   tiles: ReadonlyMap<string, WorldTile>,
@@ -130,7 +180,7 @@ export function mapViewFromTileBounds(
 }
 
 /**
- * “Area” scale: fixed CPV on the focused H3, overhead.
+ * “Room” stop (was “Area” scale): fixed CPV on the focused H3, overhead.
  */
 export function areaViewFromFocus(
   focusH3: string,
@@ -146,7 +196,7 @@ export function areaViewFromFocus(
 }
 
 /**
- * “Neighbor” scale: tighter fixed CPV on the ghost’s cell.
+ * “Situational” stop (was “Neighbor” scale): tighter fixed CPV on the ghost’s cell.
  */
 export function neighborView(
   h3: string,
