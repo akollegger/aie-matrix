@@ -38,7 +38,8 @@ import {
   voidNeighborH3s,
   STOP_PITCH,
 } from "../../utils/hexViewport.js";
-import { getRes0Cells, cellToParent, isValidCell } from "h3-js";
+import { getRes0Cells } from "h3-js";
+import { useRegionalDrill, REGIONAL_DRILL_MAX } from "../../hooks/useRegionalDrill.js";
 import type { GhostPosition } from "../../types/ghostPosition.js";
 import type { WorldTile } from "../../types/worldTile.js";
 import type { ViewState } from "../../types/viewState.js";
@@ -167,6 +168,34 @@ export function SceneView() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [vp, setVp] = useState({ w: 1024, h: 768 });
   const lockedZoomRef = useRef(12);
+  // Regional drill-down animation: R0 → R5 parent hex reveal.
+  const firstBoardH3 = useMemo(
+    () => tiles.values().next().value?.h3Index ?? null,
+    [tiles],
+  );
+  const { drillLevel, drillViewport, parentCells } = useRegionalDrill(
+    firstBoardH3,
+    viewState.stop === "regional",
+    vp.w,
+    vp.h,
+  );
+
+  // Drive camera for each drill step (separate from the centerKey effect).
+  useEffect(() => {
+    if (viewState.stop !== "regional" || !drillViewport) return;
+    setDeckVS((v) => ({
+      ...v,
+      longitude: drillViewport.longitude,
+      latitude: drillViewport.latitude,
+      zoom: drillViewport.zoom,
+      pitch: 0,
+      bearing: 0,
+      transitionDuration: 500,
+      transitionInterpolator: TRANSITION_INTERPOLATOR,
+      transitionEasing: cubicInOut,
+    }));
+  }, [drillLevel, drillViewport, viewState.stop]);
+
   // Track view-type changes (GlobeView ↔ MapView) to hard-cut instead of interpolate.
   // Global + Regional both use _GlobeView; hard cut happens at Regional → Neighborhood.
   const isGlobe = viewState.stop === "global" || viewState.stop === "regional";
@@ -283,17 +312,16 @@ export function SceneView() {
       return [globeLayer, boardLayer];
     }
 
-    // ── Regional: _GlobeView zoomed to R0 parent; highlight that R0 cell ───────
+    // ── Regional: progressive R0→R5 parent-hex drill (useRegionalDrill) ─────────
     if (s === "regional") {
-      const r0Cells = getRes0Cells();
-      const globeLayer = createH3WireframeLayer(r0Cells, "regional-r0", false, 0.25);
-      // Highlight the R0 cell that contains the map with a brighter wireframe.
-      const firstH3 = tiles.values().next().value?.h3Index;
-      const mapR0 = firstH3 && isValidCell(firstH3) ? cellToParent(firstH3, 0) : null;
-      const highlightLayer = mapR0
-        ? createH3WireframeLayer([mapR0], "regional-r0-highlight", false, 0.85)
-        : null;
-      return [globeLayer, ...(highlightLayer ? [highlightLayer] : [])];
+      // Full globe wireframe as context backdrop.
+      const globeLayer = createH3WireframeLayer(getRes0Cells(), "regional-globe", false, 0.18);
+      // Stack parent-cell wireframes R0..drillLevel; outer rings fade, innermost is brightest.
+      const drillLayers = parentCells.map((cell, idx) => {
+        const opacity = 0.3 + (idx / Math.max(REGIONAL_DRILL_MAX, 1)) * 0.6;
+        return createH3WireframeLayer([cell], `regional-drill-r${idx}`, false, opacity);
+      });
+      return [globeLayer, ...drillLayers];
     }
 
     // ── Neighborhood: extruded board + floor platter, no ghosts ──────────────
@@ -401,7 +429,7 @@ export function SceneView() {
       createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false }),
       createGhostPointCloudLayer(ghosts),
     ];
-  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded]);
+  }, [tiles, ghosts, viewState, voidH3, iconFilter, lodExtruded, parentCells]);
 
   const onHover = useCallback(
     (info: { object?: unknown; x: number; y: number }) => {
