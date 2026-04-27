@@ -468,16 +468,9 @@ export function SceneView() {
         views={new MapView({ id: "map" })}
         viewState={deckVS}
         onViewStateChange={({ viewState: vsIn }) => {
-          const z = lockedZoomRef.current;
-          const p = STOP_PITCH[viewState.stop];
-          setDeckVS({
-            ...(vsIn as MapViewState),
-            pitch: p,
-            bearing: 0,
-            zoom: z,
-            minZoom: z,
-            maxZoom: z,
-          } as DeckViewState);
+          // All user interactions are disabled; this fires only during deck.gl transitions.
+          // Pass intermediate values through unchanged so animations complete correctly.
+          setDeckVS(vsIn as DeckViewState);
         }}
         controller={MAP_CONTROLLER}
         layers={layers}

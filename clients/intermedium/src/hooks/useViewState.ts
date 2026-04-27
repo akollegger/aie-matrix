@@ -20,17 +20,20 @@ function nextStopInSequence(current: CameraStop, hasPairing: boolean): CameraSto
   return next;
 }
 
+function prevStopInSequence(current: CameraStop): CameraStop | null {
+  const idx = STOP_SEQUENCE.indexOf(current);
+  if (idx <= 0) return null;
+  return STOP_SEQUENCE[idx - 1]!;
+}
+
 /**
- * US2: 7-stop navigation; zoom-in/out key cycling; Escape pops history;
+ * US2: 7-stop navigation; +/= cycles forward, - cycles backward, Escape pops history;
  * double-click / Enter jumps to next meaningful stop (FR-014).
- *
- * TODO Phase 11: change `initial` to `"global"` once exterior-stop rendering lands.
  */
 export function useViewState(
   pairing: HumanPairing | null,
 ): { readonly viewState: ViewState; readonly nav: ViewNavigation } {
-  // Start at "plan" — exterior stops render in Phase 11.
-  const initial: ViewState = { stop: "plan", focus: null };
+  const initial: ViewState = { stop: "global", focus: null };
   const [stack, setStack] = useState<ViewState[]>([initial]);
   const [pickTarget, setPickTarget] = useState<PickTarget | null>(null);
 
@@ -64,6 +67,17 @@ export function useViewState(
     });
   }, [hasPairing]);
 
+  // Cycle one stop backward in the sequence (- key).
+  const cycleOut = useCallback(() => {
+    setStack((s) => {
+      const current = s[s.length - 1]!;
+      const prev = prevStopInSequence(current.stop);
+      if (prev === null) return s;
+      return [...s, { stop: prev, focus: null }];
+    });
+  }, []);
+
+  // Return to the previous stop in history (Escape / back button).
   const zoomOut = useCallback(() => {
     setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
   }, []);
@@ -94,12 +108,12 @@ export function useViewState(
       }
       if (e.key === "-" && !e.repeat) {
         e.preventDefault();
-        zoomOut();
+        cycleOut();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomOut, triggerEnterZoom, cycleIn]);
+  }, [zoomOut, triggerEnterZoom, cycleIn, cycleOut]);
 
   const nav: ViewNavigation = {
     pickTarget,
