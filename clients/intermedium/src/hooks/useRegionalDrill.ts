@@ -5,12 +5,15 @@ import type { WorldTile } from "../types/worldTile.js";
 
 /**
  * Total drill levels:
- *   0–5  parent-ring drill  (R0 globe → R5 city-region)
- *   6    pan to venueR10    (board's R10 cell fills screen)
- *   7    zoom to venueR12   (R12 mesh appears)
- *   8    board tiles        (R15 tiles with minimal extrusion)
+ *   0–5  parent-ring drill  (R0 globe → R5 city-region) ← automatic, stops here
+ *   6    pan to venueR10    (reserved — venue zoom transition, not yet wired)
+ *   7    zoom to venueR12   (reserved)
+ *   8    board tiles        (reserved)
+ *
+ * REGIONAL_DRILL_MAX controls the automatic pause point. Levels 6–8 exist for
+ * the future Regional→Plan transition animation but are not triggered automatically.
  */
-export const REGIONAL_DRILL_MAX = 8;
+export const REGIONAL_DRILL_MAX = 5;
 
 /** Last level of the parent-ring phase before venue zoom begins. */
 export const PARENT_DRILL_MAX = 5;
@@ -59,9 +62,9 @@ export function useRegionalDrill(
   }, [isActive, drillLevel]);
 
   const drillEasing = useMemo((): ((t: number) => number) => {
-    if (drillLevel === 0) return (t) => t * t * t;                       // ease-in
-    if (drillLevel >= REGIONAL_DRILL_MAX) return (t) => 1 - Math.pow(1 - t, 3); // ease-out
-    return (t) => t;                                                      // linear
+    if (drillLevel === 0) return (t) => t * t * t;                             // ease-in
+    if (drillLevel >= PARENT_DRILL_MAX) return (t) => 1 - Math.pow(1 - t, 3); // ease-out at R5 landing
+    return (t) => t;                                                            // linear
   }, [drillLevel]);
 
   const result = useMemo(() => {
