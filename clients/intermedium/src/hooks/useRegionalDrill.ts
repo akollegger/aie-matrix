@@ -24,6 +24,13 @@ export interface RegionalDrillState {
   readonly drillViewport: { readonly longitude: number; readonly latitude: number; readonly zoom: number } | null;
   /** The H3 parent cells to show, indexed 0..drillLevel. */
   readonly parentCells: readonly string[];
+  /**
+   * Easing function for the current step's camera transition:
+   *   step 0 → ease-in  (first entry, camera starts from rest)
+   *   steps 1–4 → linear (maintain momentum through the drill)
+   *   step 5 → ease-out (final arrival, settle at R5)
+   */
+  readonly drillEasing: (t: number) => number;
 }
 
 /**
@@ -51,6 +58,12 @@ export function useRegionalDrill(
     return () => clearTimeout(t);
   }, [isActive, drillLevel]);
 
+  const drillEasing = useMemo((): ((t: number) => number) => {
+    if (drillLevel === 0) return (t) => t * t * t;                  // ease-in
+    if (drillLevel >= REGIONAL_DRILL_MAX) return (t) => 1 - Math.pow(1 - t, 3); // ease-out
+    return (t) => t;                                                 // linear
+  }, [drillLevel]);
+
   const { drillViewport, parentCells } = useMemo(() => {
     if (!boardH3 || !isActive || !isValidCell(boardH3)) {
       return { drillViewport: null, parentCells: [] };
@@ -69,5 +82,5 @@ export function useRegionalDrill(
     };
   }, [boardH3, drillLevel, isActive, vpW, vpH]);
 
-  return { drillLevel, drillViewport, parentCells };
+  return { drillLevel, drillViewport, parentCells, drillEasing };
 }

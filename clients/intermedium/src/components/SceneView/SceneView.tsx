@@ -173,7 +173,7 @@ export function SceneView() {
     () => tiles.values().next().value?.h3Index ?? null,
     [tiles],
   );
-  const { drillLevel, drillViewport, parentCells } = useRegionalDrill(
+  const { drillLevel, drillViewport, parentCells, drillEasing } = useRegionalDrill(
     firstBoardH3,
     viewState.stop === "regional",
     vp.w,
@@ -192,9 +192,9 @@ export function SceneView() {
       bearing: 0,
       transitionDuration: 500,
       transitionInterpolator: TRANSITION_INTERPOLATOR,
-      transitionEasing: cubicInOut,
+      transitionEasing: drillEasing,
     }));
-  }, [drillLevel, drillViewport, viewState.stop]);
+  }, [drillLevel, drillViewport, drillEasing, viewState.stop]);
 
   // Track view-type changes (GlobeView ↔ MapView) to hard-cut instead of interpolate.
   // Global + Regional both use _GlobeView; hard cut happens at Regional → Neighborhood.
