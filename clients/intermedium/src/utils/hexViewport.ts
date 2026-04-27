@@ -1,5 +1,12 @@
 import { fitBounds } from "@math.gl/web-mercator";
-import { type H3IndexInput, cellToLatLng, getHexagonEdgeLengthAvg, getResolution, isValidCell } from "h3-js";
+import {
+  type H3IndexInput,
+  cellToLatLng,
+  getHexagonEdgeLengthAvg,
+  getResolution,
+  isValidCell,
+  gridDisk,
+} from "h3-js";
 import type { WorldTile } from "../types/worldTile.js";
 
 /**
@@ -100,7 +107,13 @@ export function mapViewFromTileBounds(
   }
   const w = Math.max(64, widthPx);
   const h = Math.max(64, heightPx);
-  const fit = fitBounds({ width: w, height: h, bounds: b, padding: 20, maxZoom: 24 });
+  const fit = fitBounds({
+    width: w,
+    height: h,
+    bounds: b,
+    padding: 20,
+    maxZoom: 24,
+  });
   const f = tiles.values().next();
   const sampleH3 = f.done ? null : f.value.h3Index;
   if (!sampleH3) {
@@ -151,20 +164,28 @@ export function neighborView(
 /**
  * H3 indices in `tiles` or referenced as a neighbor, minus covered tiles: implied void cells for a wire frame.
  */
-export function voidNeighborH3s(tiles: ReadonlyMap<string, WorldTile>): string[] {
-  const seen = new Set<string>();
-  for (const t of tiles.values()) {
-    seen.add(t.h3Index);
-  }
-  const out: string[] = [];
-  for (const t of tiles.values()) {
-    for (const n of t.neighbors) {
-      if (!isValidCell(n) || seen.has(n)) {
-        continue;
-      }
-      seen.add(n);
-      out.push(n);
+export function voidNeighborH3s(
+  tiles: ReadonlyMap<string, WorldTile>,
+): string[] {
+  // const seen = new Set<string>();
+  // for (const t of tiles.values()) {
+  //   seen.add(t.h3Index);
+  // }
+  // const out: string[] = [];
+  // for (const t of tiles.values()) {
+  //   for (const n of t.neighbors) {
+  //     if (!isValidCell(n) || seen.has(n)) {
+  //       continue;
+  //     }
+  //     seen.add(n);
+  //     out.push(n);
+  //   }
+  // }
+  const firstTile = tiles.values().next().value;
+  if (firstTile) {
+    if (isValidCell(firstTile.h3Index)) {
+      return gridDisk(firstTile.h3Index, tiles.size / 4);
     }
   }
-  return out;
+  return [];
 }

@@ -22,7 +22,12 @@ function lineColor(tileType: string): [number, number, number, number] {
     return [100, 140, 200, 160] as [number, number, number, number];
   }
   const [r, g, b, _] = tileTypeColor(tileType);
-  return [Math.min(255, r + 60), Math.min(255, g + 60), Math.min(255, b + 80), 255];
+  return [
+    Math.min(255, r + 60),
+    Math.min(255, g + 60),
+    Math.min(255, b + 80),
+    255,
+  ];
 }
 
 /** “Freeplay”-like area: steel blue field, one red focus hex (matrix-editor-style emphasis). */
@@ -30,16 +35,39 @@ function areaPalette(
   d: WorldTile,
   op: number,
   areaFocusH3: string,
-): { fill: [number, number, number, number]; line: [number, number, number, number] } {
+): {
+  fill: [number, number, number, number];
+  line: [number, number, number, number];
+} {
   if (d.h3Index === areaFocusH3) {
     return {
-      fill: [200, 55, 60, Math.floor(245 * op)] as [number, number, number, number],
-      line: [255, 200, 200, Math.floor(255 * op)] as [number, number, number, number],
+      fill: [200, 55, 60, Math.floor(245 * op)] as [
+        number,
+        number,
+        number,
+        number,
+      ],
+      line: [255, 200, 200, Math.floor(255 * op)] as [
+        number,
+        number,
+        number,
+        number,
+      ],
     };
   }
   return {
-    fill: [60, 95, 150, Math.floor(210 * op)] as [number, number, number, number],
-    line: [110, 150, 200, Math.floor(255 * op)] as [number, number, number, number],
+    fill: [60, 95, 150, Math.floor(210 * op)] as [
+      number,
+      number,
+      number,
+      number,
+    ],
+    line: [110, 150, 200, Math.floor(255 * op)] as [
+      number,
+      number,
+      number,
+      number,
+    ],
   };
 }
 
@@ -60,18 +88,22 @@ export function createHexGridLayer(
 ): H3HexagonLayer<WorldTile> {
   const data = Array.isArray(tiles) ? tiles : Array.from(tiles.values());
   const op = options.opacity ?? 1;
-  const areaFocusH3 = options.areaFocusH3;
+  const areaFocusH3 = undefined; // options.areaFocusH3;
   const backdrop = options.uniformBackdrop;
   return new H3HexagonLayer<WorldTile>({
     id: options.id ?? "hex-grid",
     data,
     pickable: options.pickable ?? true,
     highPrecision: true,
-    coverage: 1,
-    extruded: false,
+    coverage: 1, // 1
+    extruded: true,
+    wireframe: true,
+    lineWidthUnits: "pixels",
     getHexagon: (d) => d.h3Index,
-    stroked: true,
+    stroked: false,
     filled: true,
+    elevationScale: 1,
+    getElevation: (_) => 10, // this keeps the tiles flat. large numbers make them into towers
     getFillColor: (d) => {
       if (backdrop !== undefined) {
         return [
@@ -131,9 +163,21 @@ export function createH3WireframeLayer(
     coverage: 1,
     extruded: false,
     getHexagon: (d) => d.h3Index,
-    filled: false,
+    filled: true,
     stroked: true,
-    getLineColor: [100, 140, 195, Math.floor(255 * opacity)] as [number, number, number, number],
+    getLineColor: [100, 140, 195, Math.floor(255 * opacity)] as [
+      number,
+      number,
+      number,
+      number,
+    ],
+    getFillColor: [30, 30, 40, Math.floor(255 * 1)] as [
+      number,
+      number,
+      number,
+      number,
+    ],
+    lineWidthUnits: "pixels",
     getLineWidth: 1.2,
     lineWidthMinPixels: 1,
   });
