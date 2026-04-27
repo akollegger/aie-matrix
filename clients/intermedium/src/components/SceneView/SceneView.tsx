@@ -38,7 +38,8 @@ import {
   voidNeighborH3s,
   STOP_PITCH,
 } from "../../utils/hexViewport.js";
-import { getRes0Cells } from "h3-js";
+import { getRes0Cells, cellToChildren, cellToParent, latLngToCell, isValidCell } from "h3-js";
+import { H3HexagonLayer } from "@deck.gl/geo-layers";
 import { useRegionalDrill, REGIONAL_DRILL_MAX } from "../../hooks/useRegionalDrill.js";
 import type { GhostPosition } from "../../types/ghostPosition.js";
 import type { WorldTile } from "../../types/worldTile.js";
@@ -103,6 +104,20 @@ function cubicInOut(t: number): number {
 }
 
 const TRANSITION_INTERPOLATOR = new LinearInterpolator(["longitude", "latitude", "zoom", "pitch", "bearing"]);
+
+/**
+ * Placeholder SF landmarks for Regional stop orientation layer.
+ * Replace with real venue data before launch.
+ */
+const PLACEHOLDER_LANDMARKS: ReadonlyArray<{ readonly lat: number; readonly lng: number }> = [
+  { lat: 37.7955, lng: -122.3937 }, // Ferry Building
+  { lat: 37.7879, lng: -122.4074 }, // Union Square
+  { lat: 37.7763, lng: -122.3942 }, // Caltrain Station
+  { lat: 37.7792, lng: -122.4191 }, // City Hall
+  { lat: 37.8080, lng: -122.4177 }, // Fisherman's Wharf
+  { lat: 37.7694, lng: -122.4534 }, // Golden Gate Park (east)
+  { lat: 37.7786, lng: -122.3893 }, // Oracle Park
+];
 
 type DeckViewState = MapViewState & {
   transitionDuration?: number;
@@ -312,15 +327,51 @@ export function SceneView() {
       return [globeLayer, boardLayer];
     }
 
-    // ── Regional: progressive R0→R5 parent-hex drill (useRegionalDrill) ─────────
+    // ── Regional: progressive R0→R5 drill + R9 grid + landmark markers ──────────
     if (s === "regional") {
-      // Full globe wireframe as context backdrop.
       const globeLayer = createH3WireframeLayer(getRes0Cells(), "regional-globe", false, 0.18);
-      // Stack parent-cell wireframes R0..drillLevel; outer rings fade, innermost is brightest.
       const drillLayers = parentCells.map((cell, idx) => {
         const opacity = 0.3 + (idx / Math.max(REGIONAL_DRILL_MAX, 1)) * 0.6;
         return createH3WireframeLayer([cell], `regional-drill-r${idx}`, false, opacity);
       });
+
+      // At the final drill level: add R9 context grid + extruded landmark markers.
+      if (drillLevel >= REGIONAL_DRILL_MAX && firstBoardH3 && isValidCell(firstBoardH3)) {
+        const r5Cell = cellToParent(firstBoardH3, 5);
+
+        // Layer 1: all 2401 R9 cells within the R5 hex as wireframe context grid.
+        const r9Cells = cellToChildren(r5Cell, 9);
+        const gridLayer = createH3WireframeLayer(r9Cells, "regional-r9-grid", false, 0.35);
+
+        // Layer 2: venue R9 cell + placeholder landmark R9 cells, extruded.
+        type MarkerDatum = { readonly h3Index: string; readonly isVenue: boolean };
+        const venueR9 = cellToParent(firstBoardH3, 9);
+        const landmarkR9s = PLACEHOLDER_LANDMARKS
+          .map(({ lat, lng }) => latLngToCell(lat, lng, 9))
+          .filter((h) => h !== venueR9);
+        const markerData: MarkerDatum[] = [
+          { h3Index: venueR9, isVenue: true },
+          ...landmarkR9s.map((h3Index) => ({ h3Index, isVenue: false })),
+        ];
+        const markersLayer = new H3HexagonLayer<MarkerDatum>({
+          id: "regional-landmarks",
+          data: markerData,
+          pickable: false,
+          extruded: true,
+          elevationScale: 1,
+          getElevation: () => 800,
+          getHexagon: (d) => d.h3Index,
+          filled: true,
+          getFillColor: (d) =>
+            d.isVenue
+              ? [0, 210, 220, 240]
+              : [255, 160, 50, 210],
+          stroked: false,
+        });
+
+        return [globeLayer, ...drillLayers, gridLayer, markersLayer];
+      }
+
       return [globeLayer, ...drillLayers];
     }
 
