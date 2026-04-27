@@ -186,12 +186,12 @@ New work starts at **Phase 9**.
 
 **Purpose**: Documentation updates, cross-cutting verification, and final smoke test.
 
-- [ ] T066 [P] Update `docs/architecture.md` — add `clients/` directory structure diagram; add intermedium entry alongside debugger
-- [ ] T067 [P] Update `docs/project-overview.md` — introduce intermedium as the primary conference attendee interface; describe its role relative to the debugger
-- [ ] T068 [P] Update `clients/debugger/README.md` — note rename from `client/`; clarify developer-tool audience, not attendee interface
-- [ ] T069 Create `clients/intermedium/README.md` — purpose, target audience (conference attendees + observability engineers), local run instructions, environment variables, smoke test steps
-- [ ] T070 [P] Update `CONTRIBUTING.md` — replace all references to `client/` with `clients/`; add intermedium to the client inventory
-- [ ] T071 Run full smoke test sequence from `quickstart.md`; verify all 6 acceptance scenarios across all 4 user stories; record results
+- [X] T066 [P] Update `docs/architecture.md` — add `clients/` directory structure diagram; add intermedium entry alongside debugger
+- [X] T067 [P] Update `docs/project-overview.md` — introduce intermedium as the primary conference attendee interface; describe its role relative to the debugger
+- [X] T068 [P] Update `clients/debugger/README.md` — note rename from `client/`; clarify developer-tool audience, not attendee interface
+- [X] T069 Create `clients/intermedium/README.md` — purpose, target audience (conference attendees + observability engineers), local run instructions, environment variables, smoke test steps
+- [X] T070 [P] Update `CONTRIBUTING.md` — replace all references to `client/` with `clients/`; add intermedium to the client inventory
+- [X] T071 Run full smoke test sequence from `quickstart.md`; verify all 6 acceptance scenarios across all 4 user stories; record results
 
 **Checkpoint**: All documentation consistent; smoke test passes; feature ready for demo.
 
@@ -272,9 +272,9 @@ New work starts at **Phase 9**.
 
 **Purpose**: Documentation updates required by the camera stop redesign, beyond those already listed in Phase 8.
 
-- [ ] T100 [P] Update `docs/architecture.md` — add React Three Fiber alongside deck.gl in the "Human spectator client" row (per RFC-0008, ADR-0006)
-- [ ] T101 [P] Update `clients/intermedium/README.md` — document 7-stop model, exterior/interior distinction, two-renderer architecture (deck.gl + R3F)
-- [ ] T102 Run complete 7-stop smoke test sequence — verify all stops, all transitions, conversation panel, interiority stubs; record results against spec acceptance scenarios
+- [X] T100 [P] Update `docs/architecture.md` — add React Three Fiber alongside deck.gl in the "Human spectator client" row (per RFC-0008, ADR-0006)
+- [X] T101 [P] Update `clients/intermedium/README.md` — document 7-stop model, exterior/interior distinction, two-renderer architecture (deck.gl + R3F)
+- [X] T102 Run complete 7-stop smoke test sequence — verify all stops, all transitions, conversation panel, interiority stubs; record results against spec acceptance scenarios
 
 **Checkpoint**: All documentation consistent with 7-stop model; smoke test passes across all stops.
 

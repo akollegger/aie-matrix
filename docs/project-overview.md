@@ -163,7 +163,8 @@ Push notification delivery (web push, mobile) is a natural extension requiring m
 
 The initial stack is:
 
-- **Phaser** — 2D hex-tile game client, rendered in browser and mobile web
+- **Intermedium** (`clients/intermedium/`) — the primary conference attendee interface. A React + deck.gl web client that renders the ghost world as H3 hex geometry across a 7-stop camera model (Global → Regional → Neighborhood → Plan → Room → Situational → Personal). The Personal stop uses React Three Fiber for a non-geospatial ghost presence view. Attendees read and send messages to their paired ghost here.
+- **Phaser debugger** (`clients/debugger/`) — 2D hex-tile developer tool for verifying game mechanics; not the attendee interface.
 - **Colyseus** — authoritative multiplayer server; handles real-time state sync, room management, and targeted notification delivery
 - **Neo4j** — world graph: tiles, connectivity, ghost positions, goal state, social graph, quest progress; hex-tile proximity and pathfinding are natural graph traversals
 

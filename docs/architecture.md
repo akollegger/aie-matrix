@@ -12,8 +12,8 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 
 | Component | Technology | Role |
 |---|---|---|
-| Game client | [Phaser](https://phaser.io/) | Hex-tile world rendering, debugger (developer) UI — `clients/debugger/phaser` |
-| Human spectator client | React, [deck.gl](https://deck.gl/), Vite | `clients/intermedium` — H3 world **full-bleed**; **panels as overlays**; goals/memories (not quest RPG copy); see [RFC-0008](../proposals/rfc/0008-human-spectator-client.md) |
+| Game client (debugger) | [Phaser](https://phaser.io/) | Hex-tile world rendering, developer debug UI — `clients/debugger/phaser` |
+| Human spectator client | React, [deck.gl](https://deck.gl/) (geospatial stops), [React Three Fiber](https://docs.pmnd.rs/react-three-fiber/) (Personal stop), Vite | `clients/intermedium` — 7-stop camera model (Global→Personal); H3 world full-bleed; panels as overlays; deck.gl for geospatial stops, R3F for Personal stop ([ADR-0006](../proposals/adr/0006-personal-stop-renderer.md)); see [RFC-0008](../proposals/rfc/0008-human-spectator-client.md) |
 | Realtime server | [Colyseus](https://colyseus.io/) | Authoritative world state, WebSocket connections, room management |
 | Server orchestration | [Effect-ts](https://effect.website/) | Dependency injection, typed error handling, structured concurrency, observability |
 | Horizontal scaling | [Redis](https://redis.io/) (`RedisPresence` + `RedisDriver`) | Colyseus multi-process pub/sub and matchmaking |
