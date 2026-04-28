@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" role="img" aria-label="Area: world grid plus zoomed region grid">
+  <title>Area (80:20): two grid levels - world context and zoomed region</title>
+  <defs>
+    <pattern id="hexFine" width="28" height="24" patternUnits="userSpaceOnUse">
+      <path d="M14 1 L25 7 L25 16 L14 22 L1 16 L1 7 Z" fill="none" stroke="#2a3544" stroke-width="0.6" />
+    </pattern>
+    <pattern id="hexRegion" width="80" height="70" patternUnits="userSpaceOnUse">
+      <path d="M40 4 L70 24 L70 50 L40 70 L4 50 L4 24 Z" fill="none" stroke="#5c6b7d" stroke-width="1.2" />
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="#0b0d10" />
+  <rect x="0" y="0" width="1200" height="700" fill="url(#hexFine)" opacity="0.45" />
+  <rect x="0" y="0" width="1200" height="700" fill="url(#hexRegion)" opacity="0.9" />
+  <rect x="200" y="100" width="200" height="120" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="6 4" opacity="0.6" />
+  <text x="220" y="95" fill="#38bdf8" font-family="system-ui,sans-serif" font-size="10">region bounds (on world grid)</text>
+  <g stroke="#3d4a5c" fill="none" stroke-width="1.2">
+    <path d="M280 320 L340 360 L340 420 L280 450 L220 420 L220 360 Z" />
+    <path d="M400 300 L460 340 L460 400 L400 430 L340 400 L340 340 Z" />
+  </g>
+  <circle cx="310" cy="380" r="4" fill="#6ee7b7" />
+  <circle cx="400" cy="360" r="4" fill="#6ee7b7" />
+  <rect x="16" y="12" width="400" height="50" rx="6" fill="#0b0d10" fill-opacity="0.82" stroke="#2a3544" />
+  <text x="28" y="34" fill="#8b9cb3" font-family="system-ui,sans-serif" font-size="15" font-weight="600">Area (80:20) - region zoom</text>
+  <text x="28" y="52" fill="#5c6b7d" font-family="system-ui,sans-serif" font-size="9">Faint = world-scale grid; bold = same scene zoomed to browsable cell size. Both visible.</text>
+  <rect x="20" y="600" width="200" height="80" fill="#0b0d10" fill-opacity="0.75" stroke="#334155" />
+  <rect x="28" y="610" width="100" height="50" fill="url(#hexFine)" opacity="0.5" />
+  <text x="32" y="678" fill="#5c6b7d" font-size="8" font-family="system-ui,sans-serif">inset: world (tiny)</text>
+  <text x="140" y="640" fill="#94a3b8" font-size="9" font-family="system-ui,sans-serif">= map context</text>
+  <rect x="920" y="0" width="280" height="700" fill="#141a22" fill-opacity="0.88" stroke="#38bdf8" stroke-opacity="0.35" />
+  <text x="940" y="40" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="13" font-weight="600">Area panel (overlay)</text>
+  <rect x="940" y="60" width="240" height="80" rx="4" fill="#1a222c" stroke="#334155" />
+  <text x="952" y="90" fill="#e2e8f0" font-size="12" font-family="system-ui,sans-serif">Ghost cards ...</text>
+</svg>

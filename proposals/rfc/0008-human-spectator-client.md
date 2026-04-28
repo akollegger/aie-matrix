@@ -1,22 +1,24 @@
 # RFC-0008: Intermedium — Human Spectator Client
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-04-25  
 **Authors:** @akollegger  
 **Related:** [RFC-0004](0004-h3-geospatial-coordinate-system.md) (H3 coordinate system),
 [RFC-0005](0005-ghost-conversation-model.md) (ghost conversation model),
 [RFC-0007](0007-ghost-house-architecture.md) (ghost house architecture),
-[ADR-0005](../adr/0005-h3-native-map-format.md) (H3-native map format)
+[ADR-0005](../adr/0005-h3-native-map-format.md) (H3-native map format),
+[ADR-0006](../adr/0006-personal-stop-renderer.md) (Personal-stop rendering stack)
 
 ## Summary
 
 Introduce a React-based conference attendee client — `clients/intermedium/` —
 as the human-facing interface to the ghost world. The intermedium renders the
-ghost world as wireframe hex geometry and point-cloud ghost representations
-using deck.gl, and provides a paired-ghost conversation panel. Navigation
-between five discrete zoom scales — Map, Area, Neighbor, Partner, and Ghost —
-determines how much of the display is devoted to the spatial view versus the
-interaction panel. This RFC also proposes renaming the top-level `client/`
+ghost world as hex geometry and point-cloud ghost representations using deck.gl
+(and React Three Fiber for the Personal stop), and provides a paired-ghost
+conversation panel. Navigation across **seven discrete camera stops** — three
+exterior (Global, Regional, Neighborhood) and four interior (Plan, Room,
+Situational, Personal) — with the hex world always filling the viewport and UI
+panels as overlays. This RFC also proposes renaming the top-level `client/`
 directory to `clients/` and the existing Phaser client to `clients/debugger/`,
 establishing a two-client structure with distinct audiences.
 
@@ -28,14 +30,17 @@ interacting in a distributed system. The conference setting and the ghost
 narrative are the medium; the message is that multi-agent systems at scale are
 observable, navigable, and human-legible — if you design for it.
 
-The intermedium is the observability interface for that system. Its five zoom
-scales are not UX conveniences — they are observability levels:
+The intermedium is the observability interface for that system. Its camera
+stops are not UX conveniences — they are observability levels:
 
-- **Map scale**: fleet view — the entire agent population at a glance
-- **Area scale**: cluster view — activity density and movement patterns in a region
-- **Neighbor scale**: interaction view — the 7-agent proximity radius where behavior emerges
-- **Partner scale**: agent view — one agent's communication thread
-- **Ghost scale**: interiority view — one agent's memory, goals, and state
+- **Global → Regional**: fleet view — the entire agent population as a
+  landmark in the world
+- **Neighborhood → Plan**: establishing view — the board as physical object,
+  then as playable surface
+- **Room → Situational**: cluster view — activity density and the 7-agent
+  proximity radius where behavior emerges
+- **Personal**: agent view — one ghost's communication thread and inner state
+  (goals, memories)
 
 This is a pattern anyone building enterprise multi-agent systems will recognise.
 The intermedium makes it tangible and demonstrable at AIEWF 2026.
@@ -72,31 +77,58 @@ itself is evidence that the protocol boundaries hold under real use.
 
 ### Navigation Model
 
-The client maintains a top-level view state `{ scale, focus }`:
+The client navigates through **seven discrete camera stops** organised into two
+rendering regimes. Navigation is triggered by keyboard (zoom-in / zoom-out keys
+cycle through stops) or explicit UI interaction. Each stop-to-stop transition
+animates zoom, pitch, and pan simultaneously using deck.gl's
+`LinearInterpolator` with an easement curve. Level-of-detail changes
+(extruded ↔ flat board) are hard cuts timed at the transition midpoint.
 
-- `scale` is one of: `map | area | neighbor | partner | ghost`
-- `focus` is `null` at map scale, a region identifier at area scale, or a
-  ghost ID at neighbor/partner/ghost scale
+The client view state is `{ stop, focus }`:
 
-Navigation is **discrete** — each scale is a named mode with its own layout
-and data subscriptions, not a continuous zoom level. Transitions are animated
-but MVP may treat them as instant cuts. Navigation is triggered by explicit
-user interaction (double-click on a ghost or tile cluster to zoom in;
-back-control or keyboard shortcut to zoom out).
+- `stop` is one of the seven named stops below
+- `focus` is `null` for fixed-center stops, or a tile H3 index / ghost ID for
+  Situational and Personal
 
-The five scales accumulate both spatial intimacy and information access:
+#### Exterior stops — deck.gl, extruded board, ghosts invisible
 
-| Scale | Spatial focus | Scene:Panel | Info access | Requires pairing |
-|---|---|---|---|---|
-| Map | Entire world | 100:0 | Public tile metadata (hover) | No |
-| Area | Browsable section | 80:20 | Public + ghost identity | No |
-| Neighbor | 7-hex cluster | 50:50 | Public interactions + paired thread | Partial |
-| Partner | None (status only) | 20:80 | Private conversation | Yes |
-| Ghost | Ghost interiority | 0:100 | Inventory, quest, memories | Yes |
+The board is rendered as an extruded `H3HexagonLayer`, giving it physical
+presence in the world. Ghosts are not shown. Camera points at the board center
+for all three stops.
 
-`focus` transitions drive data subscriptions: entering neighbor scale for a
-ghost subscribes to that ghost's 7-hex proximity events; entering partner scale
-subscribes to the paired conversation thread.
+| Stop | Pitch | Zoom scope |
+|---|---|---|
+| Global | 0° | Entire world in frame |
+| Regional | 0° | Board visible as landmark |
+| Neighborhood | 45° | Board fills frame; floor platter visible |
+
+#### Interior stops — deck.gl, flat tiles, ghosts visible
+
+The board switches to flat `H3HexagonLayer`. Ghosts emerge and gain
+representation detail as the stop zooms in. Camera points at the board center
+for Plan and Room; at the focus target for Situational.
+
+| Stop | Pitch | Ghost repr | Requires pairing |
+|---|---|---|---|
+| Plan | 0° | Flat circles | No |
+| Room | 0° | Flat circles | No |
+| Situational | 45° | Point clouds | No |
+
+#### Personal stop — React Three Fiber, non-geospatial
+
+Personal breaks from the geospatial model entirely. A single ghost is framed as
+a 3D subject — no H3 grid, no map coordinates. The renderer switches from
+deck.gl to React Three Fiber (see [ADR-0006](../adr/0006-personal-stop-renderer.md)).
+Ghost interiority (goals, memories, inventory) is displayed as ambient
+annotation around the point-cloud figure.
+
+| Stop | Pitch | Ghost repr | Requires pairing |
+|---|---|---|---|
+| Personal | ~80° / R3F scene | 3D point cloud | Yes |
+
+`focus` transitions drive data subscriptions: entering Situational subscribes
+to proximity events for the focused tile or ghost; entering Personal subscribes
+to the paired ghost's interiority stream.
 
 ### Rendering Stack
 
@@ -113,45 +145,86 @@ ecosystem), chosen because:
 - react-map-gl provides optional MapLibre integration if a building-footprint
   basemap is later desired
 
-**Layer composition** at full scene visibility:
+**Exterior vs interior rendering distinction.** Exterior stops (Global,
+Regional, Neighborhood) render the board as an extruded `H3HexagonLayer`
+(`extruded: true`) so the map reads as a physical object in the world — a
+landmark rather than a flat diagram. Interior stops (Plan through Situational)
+switch to flat tiles (`extruded: false`) for gameplay legibility: individual
+cells, items, and ghost positions become the focus. This flip is a hard cut
+timed at the midpoint of the Neighborhood → Plan transition.
 
-1. `H3HexagonLayer` — wireframe hex grid, `filled: false`, coloured by tile
-   type. Filled variant for tiles with semantic content (vendor booth, session
-   room, etc.)
-2. `PointCloudLayer` — one point cluster per ghost, positioned at H3 cell
-   centroid, size scaled by proximity to focus
-3. Marker overlays — items on tiles rendered as simple icon sprites via
-   `IconLayer`
-4. Selection highlight — active ghost or cluster outlined via `H3HexagonLayer`
-   with distinct stroke
+**Layer composition** at full scene visibility (geospatial stops):
 
-At area scale and below, the deck.gl viewport responds to pan gestures. At
-neighbor scale and above, the viewport lazily follows the focused ghost,
-keeping it within the central third of the visible area.
+1. `H3HexagonLayer` — board tiles, coloured by tile type. `extruded: true` for
+   exterior stops; `extruded: false`, `filled: true` for interior stops.
+2. `H3HexagonLayer` (floor platter) — void cells surrounding the board,
+   wireframe only, providing ground context so the board does not float in
+   emptiness.
+3. `PointCloudLayer` — ghost positions. Invisible at exterior stops; flat
+   circles at Plan/Room; volumetric point clusters at Situational.
+4. `IconLayer` — item markers on tiles with semantic content (vendor booth,
+   session room, etc.)
+5. Selection highlight — active tile or ghost outlined via `H3HexagonLayer`
+   with a distinct stroke.
 
-### Interaction Panel
+**Personal stop (React Three Fiber).** The Personal stop unmounts the deck.gl
+`DeckGL` component and mounts an R3F `Canvas` in its place. The R3F scene owns
+its own camera, lighting, and scene graph. No geospatial coordinate system is
+involved. See [ADR-0006](../adr/0006-personal-stop-renderer.md) for the
+rationale and component boundary definition.
 
-The panel is the right or bottom portion of the display, sized by scale ratio.
-It is absent at map scale. Its content is scale-dependent:
+At interior stops the deck.gl viewport responds to pan gestures. At
+Situational the viewport follows the focused tile or ghost, keeping it within
+the central third of the visible area.
 
-- **Area**: Public info about hovered or selected ghost (name, class, current
-  tile type). No conversation.
-- **Neighbor**: Public activity feed for the 7-hex cluster. If a paired ghost
-  is within the cluster, their conversation thread is appended below.
-- **Partner**: Full conversation thread with the paired ghost. Ghost location
-  rendered as a minimal ambient status widget (current tile type, last move
-  direction) rather than a map view.
-- **Ghost**: Interiority view — inventory list, active quest summary, memory
-  log. No map. No conversation input (read-only at this scale).
+The `docs/architecture.md` "Human spectator client" row must be updated to
+list **React Three Fiber** alongside deck.gl once this RFC is accepted.
 
-### Ghost Interiority (Ghost Scale)
+### Dual-grid context and Situational ghost behaviour
 
-The ghost scale is the only scale with no hex grid. It presents the ghost's
-inner state as a structured document: what it carries, what it is trying to do,
-what it remembers. The data source is the ghost's MCP state, surfaced via the
-ghost house API. This is the most speculative component — the exact data model
-depends on RFC-0007 ghost house implementation. It is scoped here as a
-placeholder and deferred to a follow-up spec.
+Interior stops at Room and Situational present **two** legible levels
+simultaneously: a **world-scale** context layer (faint, background) and a
+**local-scale** grid at the zoom of that stop. The attendee can always relate
+the zoomed view to the whole-world grid.
+
+At the **Situational** stop, when the focused ghost’s `h3Index` changes, the
+ghost’s point-cloud representation does **not** translate across the map like a
+sliding sprite — it remains visually anchored while the **floor cell under the
+ghost** re-targets to the new H3 index. The cloud stays fixed; the terrain
+advances beneath it.
+
+### Interaction panels (overlays)
+
+**Layout rule:** the deck.gl scene is **full width and full height** at all
+geospatial stops. **Panels float on top** (anchored right, semi-opaque) — they
+do **not** reallocate space away from the world the way a two-column layout
+would. Exterior stops and Plan have no panel overlay. Overlay footprint grows
+as stops zoom in:
+
+| Stop | Approx. overlay footprint | Panel content |
+|---|---|---|
+| Global / Regional / Neighborhood / Plan | none | — |
+| Room | ~20% | Public tile metadata on hover |
+| Situational | ~50% | Ghost identity, current tile, proximity list; paired ghost thread if in cluster |
+| Personal | ~80% (R3F scene fills remainder) | Full paired conversation thread; ghost location status readout (tile type, last move direction) **inside** the overlay — no separate mini-map column |
+
+At Personal stop the R3F scene occupies the portion of the viewport not covered
+by the overlay. Ghost interiority (goals, memories, inventory) appears as
+ambient annotation within the R3F scene itself, not in the panel.
+
+**Copy rule:** avoid “quest” / “quest log” / “memory log” in any user-facing
+text. The aesthetic is **game-inspired**; the product is **not** a game.
+
+### Ghost Interiority (Personal Stop)
+
+The Personal stop is the only stop with no hex grid. The R3F scene presents
+the ghost as a 3D subject; ghost interiority — what it carries, what it is
+trying to accomplish (**goals**), and what it **remembers** — appears as ambient
+annotation around the point-cloud figure, framed for **observability of an
+agent**, not a player-inventory screen. The data source is the ghost's MCP
+state, surfaced via the ghost house API. This is the most speculative component
+— the exact data model depends on RFC-0007 ghost house implementation. It is
+scoped here as a placeholder and deferred to a follow-up spec.
 
 ### Repository Structure
 
@@ -225,32 +298,35 @@ showcase at AIEWF 2026.
    non-agent consumers. This contract gap should be resolved with the ghost
    house team before the interaction panel is implemented.
 
-3. **Basemap or void?** At area and neighbor scale, should the hex grid float
-   in a dark void, or sit over a minimal building-footprint basemap from
-   MapLibre? The void is more atmospheric; the basemap aids physical
+3. **Basemap or void?** At interior stops, should the hex grid float in a dark
+   void, or sit over a minimal building-footprint basemap from MapLibre? The void is more atmospheric; the basemap aids physical
    orientation for attendees on the conference floor. This is an experience
    design decision, not an architecture decision — both are straightforward
    with deck.gl. Deferred to implementation iteration.
 
-4. **Ghost interiority data contract.** The Ghost scale requires a read API for
-   ghost inventory, quest state, and memories. This is not yet defined in
-   RFC-0007. Ghost scale is in scope for this RFC as a navigation destination
-   but its content is blocked on a follow-up contract with the ghost house.
+4. **Ghost interiority data contract.** The Personal stop requires a read API
+   for ghost inventory, **goal** state, and **memories**. This is not yet
+   defined in RFC-0007. The Personal stop is in scope for this RFC as a
+   navigation destination but its content is blocked on a follow-up contract
+   with the ghost house.
 
 5. **Pairing flow.** How does a human establish a paired ghost? Sign-up and
    pairing are mentioned in the project overview but not yet specified in an
    RFC. The intermedium needs a pairing state to gate partner/ghost scale
    access and to identify which conversation thread to subscribe to.
 
-6. **Transition animation budget.** Are animated scale transitions in scope for
-   MVP? The mechanics (discrete state changes) are defined; whether transitions
-   are instant cuts or smooth morphs is an implementation choice. Suggested
-   default: instant for MVP, animated in follow-up.
+6. ~~**Transition animation budget.**~~ **Resolved during implementation.**
+   Animated stop transitions are in scope. Camera properties (zoom, pitch, pan)
+   animate simultaneously via deck.gl `LinearInterpolator` with an easement
+   curve. Level-of-detail changes (extruded ↔ flat) are hard cuts at the
+   transition midpoint. The Personal stop transition uses a fade-out / fade-in
+   to mask the deck.gl unmount and R3F mount.
 
-7. **Mobile layout.** The scene:panel ratio model is described for desktop.
-   On mobile (phone), the Pokémon Go framing suggests the spatial view should
-   dominate more aggressively, with the panel as a pull-up drawer rather than
-   a side column. Deferred — MVP targets desktop/tablet.
+7. **Mobile layout.** The overlay footprint model is described for desktop. On
+   mobile (phone), the spatial view should **dominate more aggressively**, with
+   interaction UI as a pull-up drawer. Deferred — MVP targets desktop/tablet;
+   same **full-bleed world** principle: panels overlay, they do not shrink the
+   map canvas.
 
 ## Alternatives
 
@@ -266,11 +342,12 @@ that conflicts with the ghost-world register. It is retained as a developer
 tool; the intermedium serves the different audience rather than replacing it.
 
 **Three.js / React Three Fiber.** Strong for custom 3D wireframe aesthetics.
-Would require building a geocoding bridge from H3 indices to scene coordinates,
-and has no native H3 layer primitive. The additional flexibility is not needed
-and the H3 integration cost is not justified given deck.gl's native support.
-Remains a viable option if the visual aesthetic requires 3D depth effects not
-achievable in deck.gl.
+Would require building a geocoding bridge from H3 indices to scene coordinates
+for geospatial stops, and has no native H3 layer primitive — the H3 integration
+cost is not justified for the six stops that are geospatial. However, R3F
+**is adopted** for the Personal stop, where the geospatial model is intentionally
+absent and full 3D scene-graph control is required. See
+[ADR-0006](../adr/0006-personal-stop-renderer.md).
 
 **kepler.gl.** Sits on top of deck.gl and provides a complete geospatial
 exploration application. Too opinionated — its UI is designed for analysts, not

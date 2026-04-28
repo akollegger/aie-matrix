@@ -11,5 +11,4 @@ export { JsonlStore, MemoryStore, type ConversationStore, type MessageRecord } f
 export {
   createConversationRouter,
   type ConversationRouterDeps,
-  type ConversationRouterRegistry,
 } from "./router.js";

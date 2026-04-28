@@ -57,7 +57,7 @@ This adds a `Signed-off-by` line certifying that you have the right to submit th
 | `pnpm run test:e2e` | Playwright (CI-friendly autostart; needs Chromium via Playwright install); `pnpm run test:e2e:autostart` is equivalent |
 | `pnpm run test:tck` | Minimal `ghosts/tck` smoke — **start the server first** |
 
-Details: root [`README.md`](README.md), [`specs/001-minimal-poc/quickstart.md`](specs/001-minimal-poc/quickstart.md), and per-package READMEs under `server/`, `client/phaser/`, `ghosts/*/`.
+Details: root [`README.md`](README.md), [`specs/001-minimal-poc/quickstart.md`](specs/001-minimal-poc/quickstart.md), and per-package READMEs under `server/`, `clients/debugger/`, `clients/intermedium/`, `ghosts/*/`.
 
 ### Ghost agents (A2A ghost house)
 

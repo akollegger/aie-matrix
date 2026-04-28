@@ -1,9 +1,9 @@
-import { localIjToCell } from "h3-js";
 import type { MapContext } from "./map-context.js";
 import type { TmjDocument, TmjLayer } from "./parse-tmj.js";
 import type { TilesetSlice } from "./parse-tsx.js";
 import { resolveGidToTypeLabel } from "./parse-tsx.js";
 import type { TileAreaPolygon } from "./tile-area.js";
+import { hexRenderParams, makeTileToH3 } from "./tiled-hex-grid.js";
 
 const LAYER_CLASS_LAYOUT = "layout";
 
@@ -44,6 +44,11 @@ export function emitLayoutCells(
     throw new Error("Layout layer size does not match map dimensions");
   }
 
+  const hexP = hexRenderParams(ctx.tilewidth, ctx.tileheight, ctx.hexsidelength, ctx.staggeraxis, ctx.staggerindex);
+  if (hexP === undefined) {
+    throw new Error(`Unsupported staggeraxis "${ctx.staggeraxis}" — only "x" is supported`);
+  }
+  const tileToH3 = makeTileToH3(hexP, ctx.h3Anchor, tmj.width, tmj.height);
   const staged: { h3: string; typeLabel: string }[] = [];
 
   for (let row = 0; row < tmj.height; row++) {
@@ -53,16 +58,13 @@ export function emitLayoutCells(
         continue;
       }
       const info = resolveGidToTypeLabel(tilesets, gid);
-      let typeLabel: string;
       if (!info) {
         warn(`[warn] layout layer cell at (${col},${row}) uses unknown gid ${gid} — skipping cell`);
         continue;
       }
-      typeLabel = info.typeLabel;
-      let h3: string;
-      try {
-        h3 = localIjToCell(ctx.h3Anchor, { i: col, j: row });
-      } catch {
+      const typeLabel = info.typeLabel;
+      const h3 = tileToH3(col, row);
+      if (h3 === null) {
         warn(`[warn] layout layer cell at (${col},${row}) could not be projected to H3 — skipping`);
         continue;
       }

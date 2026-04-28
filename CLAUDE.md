@@ -12,6 +12,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` per ADR-0004 / RFC-0007; minimal additional npm deps only where the SDK does not cover HTTP serving (spike-local choice — document in `research.md` if changed) (008-a2a-ghost-house-spike)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` 0.3.13+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `effect` v3+, `zod` 3, `ulid` (event IDs), `@aie-matrix/root-env` (shared env loading) (009-ghost-house-a2a)
 - File-backed JSON (`catalog.json`) for agent registration; in-memory `Map` for active agent sessions (009-ghost-house-a2a)
+- TypeScript 5.7 (browser target), React 18, Node.js 24 (build/dev only) + deck.gl ≥ 9 (H3HexagonLayer, PointCloudLayer, IconLayer), `h3-js` ≥ 4, `colyseus.js` (matches `@colyseus/core` 0.15.57), `@relateby/pattern` (gram parsing, per IC-002 consumer note in spec-010), `@aie-matrix/shared-types` (existing workspace package) (011-intermedium-client) — **full-bleed** H3 scene; **overlay** panels; interiority = inventory / **goals** / **memories** (observability copy, not RPG-quest; RFC-0008)
+- None — stateless client; reads from Colyseus (live positions), HTTP (map topology at startup), A2A (conversation stream) (011-intermedium-client)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -59,6 +61,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 011-intermedium-client: Added TypeScript 5.7 (browser target), React 18, Node.js 24 (build/dev only) + deck.gl ≥ 9 (H3HexagonLayer, PointCloudLayer, IconLayer), `h3-js` ≥ 4, `colyseus.js` (matches `@colyseus/core` 0.15.57), `@relateby/pattern` (gram parsing, per IC-002 consumer note in spec-010), `@aie-matrix/shared-types` (existing workspace package); UI model: full-viewport world + **overlay** panels; Ghost copy: goals/memories (not quest/memory-log; RFC-0008 / `specs/011-intermedium-client/spec.md`)
 - 009-ghost-house-a2a: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` 0.3.13+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `effect` v3+, `zod` 3, `ulid` (event IDs), `@aie-matrix/root-env` (shared env loading)
 - 008-a2a-ghost-house-spike: Throwaway A2A spike sandbox under `spikes/a2a-ghost-agent-protocol/` (not in pnpm workspace). TypeScript 5.7 / Node.js 24 (ESM) + `@a2a-js/sdk` for SDK maturity and contributor-model exercises per `specs/008-a2a-ghost-house-spike/`.
-- 006-ghost-conversation: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `ulid` (new — message IDs)

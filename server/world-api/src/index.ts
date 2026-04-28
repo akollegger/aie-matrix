@@ -89,7 +89,17 @@ export {
   type MapIndexEntry,
   type MapServiceOps,
 } from "./map/MapService.js";
-export { handleMapAssetGet, parseMapsPath, tryHandleMapAssetGet } from "./map/MapRoutes.js";
+export {
+  handleMapAssetGet,
+  handleMapList,
+  isMapsCollectionPathname,
+  parseMapsPath,
+  publicRequestRoot,
+  tryHandleMapGet,
+  tryHandleMapAssetGet,
+  type MapListItem,
+  type MapListResponse,
+} from "./map/MapRoutes.js";
 export { handleGhostMcpEffect } from "./mcp-server.js";
 export {
   ItemService,

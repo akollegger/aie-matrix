@@ -12,7 +12,8 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 
 | Component | Technology | Role |
 |---|---|---|
-| Game client | [Phaser](https://phaser.io/) | Hex-tile world rendering, spectator and attendee UI |
+| Game client (debugger) | [Phaser](https://phaser.io/) | Hex-tile world rendering, developer debug UI — `clients/debugger/phaser` |
+| Human spectator client | React, [deck.gl](https://deck.gl/) (geospatial stops), [React Three Fiber](https://docs.pmnd.rs/react-three-fiber/) (Personal stop), Vite | `clients/intermedium` — 7-stop camera model (Global→Personal); H3 world full-bleed; panels as overlays; deck.gl for geospatial stops, R3F for Personal stop ([ADR-0006](../proposals/adr/0006-personal-stop-renderer.md)); see [RFC-0008](../proposals/rfc/0008-human-spectator-client.md) |
 | Realtime server | [Colyseus](https://colyseus.io/) | Authoritative world state, WebSocket connections, room management |
 | Server orchestration | [Effect-ts](https://effect.website/) | Dependency injection, typed error handling, structured concurrency, observability |
 | Horizontal scaling | [Redis](https://redis.io/) (`RedisPresence` + `RedisDriver`) | Colyseus multi-process pub/sub and matchmaking |
@@ -206,13 +207,13 @@ The [Minimal PoC](../specs/001-minimal-poc/) combines several packages in **one 
 
 | Concern | PoC owner (code) | Notes |
 |--------|-------------------|--------|
-| **Spectator state** (read-only Colyseus schema, `ghostTiles` / `tileCoords`) | `server/colyseus/` (`room-schema.ts`, `MatrixRoom.ts`) | IC-004; consumed by `client/phaser` via `colyseus.js`. |
+| **Spectator state** (read-only Colyseus schema, `ghostTiles` / `tileCoords`) | `server/colyseus/` (`room-schema.ts`, `MatrixRoom.ts`) | IC-004; consumed by `clients/debugger/phaser` and `clients/intermedium` via `colyseus.js`. |
 | **Movement & MCP tools** (`go`, `exits`, validation) | `server/world-api/` (`mcp-server.ts`, `movement.ts`, `auth-context.ts`) | Ghosts talk MCP only; no direct Colyseus from browser or ghost SDK. |
 | **World ↔ room bridge** | `server/world-api/src/colyseus-bridge.ts` | In-process calls into Colyseus mutators (PoC only). |
 | **Registry & adoption** | `server/registry/` | REST `/registry/*`; in-memory store + session guard (IC-002). |
 | **Ghost credentials** | `server/auth/` | Dev JWT mint/verify for adopted ghosts. |
 | **Contracts & shared types** | `shared/types/`, `specs/001-minimal-poc/contracts/` | Source of truth for REST/MCP shapes; keep docs and code aligned. |
-| **Phaser spectator** | `client/phaser/` | Loads `maps/` assets; **no** move RPC. |
+| **Phaser debugger (spectator)** | `clients/debugger/phaser/` | Loads `maps/` assets; **no** move RPC. |
 | **Ghost house (A2A) + reference Wanderer** | `ghosts/ghost-house/`, `ghosts/random-agent/` | Canonical house: catalog, MCP proxy, Colyseus bridge, A2A supervisor. Reference agent serves an A2A card and movement loop. Legacy `ghosts/ghost-random-house/` remains for older PoC flows; new work targets `009` packages. |
 
 ---

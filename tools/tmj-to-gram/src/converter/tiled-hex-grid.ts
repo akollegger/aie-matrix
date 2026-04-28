@@ -3,6 +3,8 @@
  * pixel ↔ tile math for `staggeraxis: "x"` hex maps (pointy-top staggered columns).
  */
 
+import { cellToLatLng, gridRing } from "h3-js";
+
 export interface HexRenderParams {
   readonly staggerEven: boolean;
   readonly sideLengthX: number;
@@ -183,4 +185,108 @@ export function resolvePixelToColRow(
   }
   nearHits.sort((a, b) => (a.col !== b.col ? a.col - b.col : a.row - b.row));
   return nearHits[0]!;
+}
+
+/**
+ * Pre-builds and returns a lookup: Tiled (col, row) → H3 index at resolution 15.
+ *
+ * Establishes a pixel-direction → H3-ring-index mapping once from the anchor cell
+ * (using only `cellToLatLng` and `gridRing`, no `latLngToCell`), then traverses the
+ * grid in row-major order with pure `gridRing` neighbour lookups.  Because each step
+ * always moves to an adjacent H3 cell there are no metric-scale collisions.
+ */
+export function makeTileToH3(
+  hexP: HexRenderParams,
+  h3Anchor: string,
+  mapWidth: number,
+  mapHeight: number,
+): (col: number, row: number) => string | null {
+  // Build pixel-direction → ring-index map from the anchor's 6 neighbours.
+  // gridRing returns neighbours in consistent IJ order within a face; the same
+  // index therefore names the same geographic direction for every cell in the grid.
+  const ring = gridRing(h3Anchor, 1);
+  const [anchorLat, anchorLng] = cellToLatLng(h3Anchor);
+  const cosLat = Math.cos((anchorLat * Math.PI) / 180);
+
+  const dirToRingIdx = new Map<string, number>();
+  for (let i = 0; i < ring.length; i++) {
+    const [nLat, nLng] = cellToLatLng(ring[i]!);
+    // Screen-space direction: x = east (+lng), y = south (-lat)
+    const sx = (nLng - anchorLng) * cosLat;
+    const sy = anchorLat - nLat;
+    const mag = Math.hypot(sx, sy);
+
+    // Match to one of the 6 Tiled pixel-step directions
+    const candidates: [number, number][] = [
+      [hexP.columnWidth, hexP.rowHeight],
+      [hexP.columnWidth, -hexP.rowHeight],
+      [-hexP.columnWidth, hexP.rowHeight],
+      [-hexP.columnWidth, -hexP.rowHeight],
+      [0, hexP.tileHeight],
+      [0, -hexP.tileHeight],
+    ];
+    let bestKey = "";
+    let bestCos = -Infinity;
+    for (const [dx, dy] of candidates) {
+      const cos = (sx * dx + sy * dy) / (mag * Math.hypot(dx, dy));
+      if (cos > bestCos) {
+        bestCos = cos;
+        bestKey = `${dx},${dy}`;
+      }
+    }
+    if (bestKey && !dirToRingIdx.has(bestKey)) {
+      dirToRingIdx.set(bestKey, i);
+    }
+  }
+
+  // Traverse in row-major order: each tile steps from its left (or top) neighbour
+  // using the ring index that corresponds to that pixel direction.
+  const lookup = new Map<string, string>();
+  lookup.set("0,0", h3Anchor);
+
+  for (let row = 0; row < mapHeight; row++) {
+    for (let col = 0; col < mapWidth; col++) {
+      if (col === 0 && row === 0) continue;
+
+      const [prevCol, prevRow] = col > 0 ? [col - 1, row] : [0, row - 1];
+      const prevH3 = lookup.get(`${prevCol},${prevRow}`);
+      if (prevH3 === undefined) continue;
+
+      const prevOrigin = tileToScreenOrigin(prevCol, prevRow, hexP);
+      const curOrigin = tileToScreenOrigin(col, row, hexP);
+      const dx = curOrigin.x - prevOrigin.x;
+      const dy = curOrigin.y - prevOrigin.y;
+
+      const ringIdx = dirToRingIdx.get(`${dx},${dy}`);
+      if (ringIdx === undefined) continue;
+
+      const next = gridRing(prevH3, 1)[ringIdx];
+      if (next !== undefined) {
+        lookup.set(`${col},${row}`, next);
+      }
+    }
+  }
+
+  return (col, row) => lookup.get(`${col},${row}`) ?? null;
+}
+
+/**
+ * Pre-builds a reverse lookup: H3 index → Tiled (col, row) for every tile in the map.
+ * Used by renderers that need to position items back in screen space.
+ */
+export function makeH3ToTile(
+  hexP: HexRenderParams,
+  h3Anchor: string,
+  mapWidth: number,
+  mapHeight: number,
+): (h3: string) => { readonly col: number; readonly row: number } | null {
+  const tileToH3 = makeTileToH3(hexP, h3Anchor, mapWidth, mapHeight);
+  const lookup = new Map<string, { col: number; row: number }>();
+  for (let row = 0; row < mapHeight; row++) {
+    for (let col = 0; col < mapWidth; col++) {
+      const h3 = tileToH3(col, row);
+      if (h3 !== null) lookup.set(h3, { col, row });
+    }
+  }
+  return (h3) => lookup.get(h3) ?? null;
 }

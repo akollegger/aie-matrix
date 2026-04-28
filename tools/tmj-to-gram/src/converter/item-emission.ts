@@ -1,9 +1,9 @@
 import { readFile } from "node:fs/promises";
-import { localIjToCell } from "h3-js";
 import type { MapContext } from "./map-context.js";
 import type { TmjDocument, TmjLayer } from "./parse-tmj.js";
 import type { TilesetSlice } from "./parse-tsx.js";
 import { resolveGidToTypeLabel } from "./parse-tsx.js";
+import { hexRenderParams, makeTileToH3 } from "./tiled-hex-grid.js";
 
 const LAYER_CLASS_ITEM_PLACEMENT = "item-placement";
 
@@ -98,6 +98,11 @@ export function emitItemInstances(
   const layers = collectItemPlacementLayers(tmj.layers);
   const out: ItemInstanceEmission[] = [];
 
+  const hexP = hexRenderParams(ctx.tilewidth, ctx.tileheight, ctx.hexsidelength, ctx.staggeraxis, ctx.staggerindex);
+  if (hexP === undefined) {
+    throw new Error(`Unsupported staggeraxis "${ctx.staggeraxis}" — only "x" is supported`);
+  }
+  const tileToH3 = makeTileToH3(hexP, ctx.h3Anchor, tmj.width, tmj.height);
   for (const placementLayer of layers) {
     if (placementLayer.width !== tmj.width || placementLayer.height !== tmj.height) {
       warn(
@@ -124,13 +129,8 @@ export function emitItemInstances(
           );
           continue;
         }
-        let h3Index: string;
-        try {
-          h3Index = localIjToCell(ctx.h3Anchor, { i: col, j: row });
-        } catch {
-          continue;
-        }
-        if (!layoutH3.has(h3Index)) {
+        const h3Index = tileToH3(col, row);
+        if (h3Index === null || !layoutH3.has(h3Index)) {
           continue;
         }
         out.push({

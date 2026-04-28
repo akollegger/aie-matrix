@@ -24,7 +24,7 @@ export class JsonlStore implements ConversationStore {
 
   async list(
     thread_id: string,
-    options?: { after?: string; limit?: number },
+    options?: { after?: string; since?: string; limit?: number },
   ): Promise<MessageRecord[]> {
     const path = this.filePath(thread_id);
     let raw: string;
@@ -40,9 +40,12 @@ export class JsonlStore implements ConversationStore {
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     let records: MessageRecord[] = lines.map((l) => JSON.parse(l) as MessageRecord);
 
-    const { after, limit = 50 } = options ?? {};
+    const { after, since, limit = 50 } = options ?? {};
     if (after !== undefined && after !== "") {
       records = records.filter((r) => r.message_id > after);
+    }
+    if (since !== undefined && since !== "") {
+      records = records.filter((r) => r.timestamp > since);
     }
 
     return records.slice(0, limit);
@@ -65,12 +68,15 @@ export class MemoryStore implements ConversationStore {
 
   async list(
     thread_id: string,
-    options?: { after?: string; limit?: number },
+    options?: { after?: string; since?: string; limit?: number },
   ): Promise<MessageRecord[]> {
     let thread = this.records.get(thread_id) ?? [];
-    const { after, limit = 50 } = options ?? {};
+    const { after, since, limit = 50 } = options ?? {};
     if (after !== undefined && after !== "") {
       thread = thread.filter((r) => r.message_id > after);
+    }
+    if (since !== undefined && since !== "") {
+      thread = thread.filter((r) => r.timestamp > since);
     }
     return thread.slice(0, limit);
   }

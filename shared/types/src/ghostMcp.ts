@@ -144,6 +144,8 @@ export type GoResult = GoSuccess | GoFailure;
 
 export interface SayArgs {
   content: string;
+  /** Ghost-id for directed delivery. When omitted, broadcasts to all nearby ghosts. */
+  to?: string;
 }
 
 export interface SayResult {

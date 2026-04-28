@@ -506,13 +506,14 @@ function goEffect(
 function sayEffect(
   content: string,
   extra: McpToolExtra,
+  to?: string,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
   return Effect.gen(function* () {
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const conversation = yield* ConversationService;
     const bridge = yield* WorldBridgeService;
-    const result = yield* (conversation.say(ghostId, content).pipe(
+    const result = yield* (conversation.say(ghostId, content, to).pipe(
       Effect.mapError((e) => {
         if (e instanceof ConversationGhostNoPosition) {
           return new WorldApiNoPosition({ ghostId: e.ghostId }) as WorldApiError;
@@ -520,6 +521,7 @@ function sayEffect(
         return new WorldApiMovementBlocked({ message: e.message, code: "STORE_UNAVAILABLE" }) as WorldApiError;
       }),
     ) as Effect.Effect<SayResult, WorldApiError, never>);
+    const priority = to != null ? "DIRECT" : "NEAR";
     for (const lid of result.mx_listeners) {
       bridge.fanoutWorldV1({
         t: "message.new",
@@ -527,7 +529,7 @@ function sayEffect(
         payload: {
           from: ghostId,
           role: "ghost",
-          priority: "NEAR",
+          priority,
           text: content,
         },
       });
@@ -827,16 +829,20 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     "say",
     {
       description:
-        "Broadcast a message to all ghosts in your 7-cell H3 cluster. Enters conversational mode. Movement is blocked until you issue 'bye'.",
+        "Broadcast a message to all ghosts in your 7-cell H3 cluster. Enters conversational mode. Movement is blocked until you issue 'bye'. Optionally send to a specific ghost with 'to'.",
       inputSchema: {
         content: z
           .string()
           .min(1)
           .max(2000)
           .describe("The message text to broadcast."),
+        to: z
+          .string()
+          .optional()
+          .describe("Ghost-id of the intended recipient. When set, delivers only to that ghost with DIRECT priority."),
       },
     },
-    async ({ content }, extra) => runTool("say", { content }, sayEffect(content, extra), extra),
+    async ({ content, to }, extra) => runTool("say", { content, to }, sayEffect(content, extra, to), extra),
   );
 
   server.registerTool(

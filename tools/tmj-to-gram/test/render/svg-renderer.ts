@@ -1,6 +1,5 @@
-import { cellToLocalIj, localIjToCell } from "h3-js";
 import { PNG } from "pngjs";
-import { hexRenderParams, tileToScreenPolygon } from "../../src/converter/tiled-hex-grid.js";
+import { hexRenderParams, makeH3ToTile, makeTileToH3, tileToScreenPolygon } from "../../src/converter/tiled-hex-grid.js";
 import type { HexRenderParams } from "../../src/converter/tiled-hex-grid.js";
 import { itemMarkerRgba, tileFillHex } from "./fallbacks.js";
 import type { HexMapFrame, ParityRenderModel } from "./render-model.js";
@@ -150,17 +149,15 @@ export function renderSvg(model: ParityRenderModel): string {
   const { frame, terrain, items, tileColorsFromGram } = model;
   const { width, height, offsetX, offsetY, hexP } = computeCanvasLayout(frame);
   const { mapWidth, mapHeight, ctx } = frame;
+  const tileToH3 = makeTileToH3(hexP, ctx.h3Anchor, mapWidth, mapHeight);
+  const h3ToTile = makeH3ToTile(hexP, ctx.h3Anchor, mapWidth, mapHeight);
   const pieces: string[] = [];
 
   const cells: Array<{ col: number; row: number; type: string }> = [];
   for (let row = 0; row < mapHeight; row++) {
     for (let col = 0; col < mapWidth; col++) {
-      let h3: string;
-      try {
-        h3 = localIjToCell(ctx.h3Anchor, { i: col, j: row });
-      } catch {
-        continue;
-      }
+      const h3 = tileToH3(col, row);
+      if (h3 === null) continue;
       const t = terrain.get(h3);
       if (t === undefined) {
         continue;
@@ -178,13 +175,9 @@ export function renderSvg(model: ParityRenderModel): string {
   }
 
   for (const it of items) {
-    let ij: { i: number; j: number };
-    try {
-      ij = cellToLocalIj(ctx.h3Anchor, it.h3);
-    } catch {
-      continue;
-    }
-    const poly = shiftPoly([...tileToScreenPolygon(ij.i, ij.j, hexP)], offsetX, offsetY);
+    const tile = h3ToTile(it.h3);
+    if (tile === null) continue;
+    const poly = shiftPoly([...tileToScreenPolygon(tile.col, tile.row, hexP)], offsetX, offsetY);
     const c = centroid(poly);
     const rgba = itemMarkerRgba(it.itemClass);
     const fill = `rgb(${rgba[0]},${rgba[1]},${rgba[2]})`;
@@ -201,18 +194,16 @@ export function renderParityPng(model: ParityRenderModel): Buffer {
   const { frame, terrain, items, tileColorsFromGram } = model;
   const { width, height, offsetX, offsetY, hexP } = computeCanvasLayout(frame);
   const { mapWidth, mapHeight, ctx } = frame;
+  const tileToH3 = makeTileToH3(hexP, ctx.h3Anchor, mapWidth, mapHeight);
+  const h3ToTile = makeH3ToTile(hexP, ctx.h3Anchor, mapWidth, mapHeight);
   const data = new Uint8ClampedArray(width * height * 4);
   data.fill(255);
 
   const cells: Array<{ col: number; row: number; type: string }> = [];
   for (let row = 0; row < mapHeight; row++) {
     for (let col = 0; col < mapWidth; col++) {
-      let h3: string;
-      try {
-        h3 = localIjToCell(ctx.h3Anchor, { i: col, j: row });
-      } catch {
-        continue;
-      }
+      const h3 = tileToH3(col, row);
+      if (h3 === null) continue;
       const t = terrain.get(h3);
       if (t === undefined) {
         continue;
@@ -230,13 +221,9 @@ export function renderParityPng(model: ParityRenderModel): Buffer {
   }
 
   for (const it of items) {
-    let ij: { i: number; j: number };
-    try {
-      ij = cellToLocalIj(ctx.h3Anchor, it.h3);
-    } catch {
-      continue;
-    }
-    const poly = shiftPoly([...tileToScreenPolygon(ij.i, ij.j, hexP)], offsetX, offsetY);
+    const tile = h3ToTile(it.h3);
+    if (tile === null) continue;
+    const poly = shiftPoly([...tileToScreenPolygon(tile.col, tile.row, hexP)], offsetX, offsetY);
     const c = centroid(poly);
     fillRectRgba(data, width, height, c.x, c.y, 3.5, [...itemMarkerRgba(it.itemClass)] as [number, number, number, number]);
   }

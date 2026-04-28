@@ -28,7 +28,7 @@ Contributions welcome from every vendor, sponsor, speaker, and attendee.
 
 ## Development (PoC monorepo)
 
-The minimal PoC uses **pnpm** workspaces for TypeScript packages under `server/`, `client/phaser/`, `shared/types/`, and selected `ghosts/*` packages (see `pnpm-workspace.yaml`). Install dependencies from the repo root:
+The minimal PoC uses **pnpm** workspaces for TypeScript packages under `server/`, `clients/debugger/`, `clients/intermedium/`, `shared/types/`, and selected `ghosts/*` packages (see `pnpm-workspace.yaml`). Install dependencies from the repo root:
 
 ```bash
 corepack enable   # optional; lets Node honor the packageManager field in package.json
@@ -56,7 +56,7 @@ One terminal; **Ctrl+C** stops server, spectator, ghost house, and random-agent 
    - `color-set.tsx` — tileset metadata referenced by the TMJ
    - `rainbow-hexes.png` — tileset image referenced by the TSX  
    If these are missing or inconsistent, the combined server fails at startup with an explicit map error rather than silent bad behavior.
-2. **Environment** — Optional: copy [`.env.example`](.env.example) to `.env` at the repo root for non-default ports or URLs. The `@aie-matrix/root-env` workspace package (`shared/root-env/`) loads `.env` for Node processes; Vite reads the same file for `VITE_*` keys (see `client/phaser/README.md`).
+2. **Environment** — Optional: copy [`.env.example`](.env.example) to `.env` at the repo root for non-default ports or URLs. The `@aie-matrix/root-env` workspace package (`shared/root-env/`) loads `.env` for Node processes; Vite reads the same file for `VITE_*` keys (see `clients/debugger/phaser/README.md` and `clients/intermedium/.env.example`).
 3. **Tooling** — Node **≥24** (see `engines`, [`.nvmrc`](.nvmrc), and [`.tool-versions`](.tool-versions); contributors use **24.14.1**); **pnpm `10.29.3`** from the root `packageManager` field. `corepack enable` (once per machine) lets Node install that pnpm version automatically.
 
 ### Typical commands (repo root)

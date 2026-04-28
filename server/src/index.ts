@@ -29,7 +29,7 @@ import {
   ItemServiceImpl,
   runWithRequestTrace,
   seedNeo4jGraphArtifacts,
-  tryHandleMapAssetGet,
+  tryHandleMapGet,
   type MovementRulesService,
   type RegistryStoreService,
   type WorldBridgeService,
@@ -286,6 +286,8 @@ async function main(): Promise<void> {
     registry: store,
     corsHeaders,
     spectatorToken: process.env.SPECTATOR_DEBUG_TOKEN,
+    fanout: (ghostId, payload) =>
+      bridge.fanoutWorldV1({ t: "message.new", targetGhostId: ghostId, payload }),
   });
 
   const loadedMap = colyseusBridge.getLoadedMap();
@@ -356,9 +358,13 @@ async function main(): Promise<void> {
         const p = url.pathname;
         if (
           p === "/spectator/room" ||
+          p === "/maps" ||
+          p === "/maps/" ||
           p.startsWith("/maps/") ||
           p.startsWith("/registry") ||
           p.startsWith("/threads") ||
+          p.startsWith("/ghosts") ||
+          p.startsWith("/humans") ||
           p === "/mcp" ||
           p === "/internal/world-fanout"
         ) {
@@ -371,7 +377,7 @@ async function main(): Promise<void> {
       if (req.method === "GET") {
         const traceId = randomUUID();
         const mapHandled = await runWithRequestTrace(traceId, () =>
-          runtime.runPromise(tryHandleMapAssetGet(req, res, url, corsHeaders)),
+          runtime.runPromise(tryHandleMapGet(req, res, url, corsHeaders)),
         );
         if (mapHandled) {
           return;
@@ -380,11 +386,46 @@ async function main(): Promise<void> {
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
         return;
       }
+      if (url.pathname === "/humans/join" && req.method === "POST") {
+        const buf = await readRequestBody(req);
+        let humanId: string;
+        try {
+          const body = JSON.parse(buf.toString("utf8") || "{}") as { humanId?: string };
+          humanId = typeof body.humanId === "string" && body.humanId.trim().length > 0
+            ? body.humanId.trim()
+            : randomUUID();
+        } catch {
+          humanId = randomUUID();
+        }
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ humanId }));
+        return;
+      }
       if (url.pathname.startsWith("/threads")) {
         const handled = await handleConversationThreads(req, res, url);
         if (handled) {
           return;
         }
+      }
+      const ghostInventoryMatch = req.method === "GET"
+        && url.pathname.match(/^\/ghosts\/([^/]+)\/inventory$/);
+      if (ghostInventoryMatch) {
+        let ghostId: string;
+        try {
+          ghostId = decodeURIComponent(ghostInventoryMatch[1]!);
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "invalid ghost id encoding" }));
+          return;
+        }
+        const sidecar = itemServiceImpl.getSidecar();
+        const items = itemServiceImpl.getGhostInventory(ghostId).map((itemRef) => ({
+          itemRef,
+          name: sidecar.get(itemRef)?.name ?? itemRef,
+        }));
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ ghostId, items }));
+        return;
       }
       if (url.pathname.startsWith("/registry")) {
         await registryListener(req, res);
@@ -508,6 +549,9 @@ async function main(): Promise<void> {
   }
   console.log(`  Conversation threads: GET http://127.0.0.1:${httpPort}/threads/:ghostId`);
   console.log(`  Map assets (dev): GET http://127.0.0.1:${httpPort}/maps/...`);
+  console.log(
+    `  Map index: GET http://127.0.0.1:${httpPort}/maps  (JSON; links to each /maps/<mapId>)`,
+  );
   console.log(
     `  Map gram/tmj (MapService): GET http://127.0.0.1:${httpPort}/maps/<mapId>?format=gram|tmj`,
   );

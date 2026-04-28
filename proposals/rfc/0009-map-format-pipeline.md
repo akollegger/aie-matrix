@@ -1,6 +1,6 @@
 # RFC-0009: Map Format Pipeline (.tmj → .map.gram → HTTP)
 
-**Status:** draft  
+**Status:** implemented  
 **Date:** 2026-04-25  
 **Authors:** @akollegger  
 **Related:** [ADR-0005](../adr/0005-h3-native-map-format.md) (H3-native map format),
@@ -194,15 +194,15 @@ The `golden/` directory holds reference PNGs from the TMJ path. Regenerate with 
 
 3. ~~**Polygon support timing.**~~ **Resolved.** Polygon and rectangle `tile-area` objects are in scope for this RFC; see *Tile area translation* in Design. The sandbox fixture `maps/sandbox/map-with-polygons.tmj` exercises every shape and edge case the conversion must handle.
 
-4. **`mapId` namespacing.** The MapService keys on the gram's `name` metadata field. With multiple scenes, two maps could share a name. Should `mapId` collision be a startup error (chosen here for simplicity), or should `mapId` be `<scene>/<name>` to prefix-namespace? Suggested: error for now; reopen when multi-scene production maps land.
+4. ~~**`mapId` namespacing.**~~ **Resolved.** `mapId` collision is a startup error. `MapIdCollisionError` is a typed startup failure in `MapService`; the server refuses to start rather than silently shadowing a map. Reopen when multi-scene production maps land and `<scene>/<name>` namespacing is needed.
 
-5. **Where the gram parser lives.** `MapService.validate()` consumes `@relateby/pattern` directly, alongside the existing `server/world-api/src/rules/gram-rules.ts`. Should there be a shared `server/world-api/src/gram/` module, or do the two consumers stay independent? Suggested: independent for now; abstract when a third consumer appears.
+5. ~~**Where the gram parser lives.**~~ **Resolved.** The two consumers (`MapService.validate()` and `server/world-api/src/rules/gram-rules.ts`) remain independent. No shared `gram/` module was introduced. Revisit when a third consumer appears.
 
-6. **Visual hint authoring (color, glyph).** ADR-0005 names `color` and `glyph` as rendering hints but the current `.tsx` tilesets do not carry them. The conversion will leave them blank in the gram for now. Authoring path is unspecified — Tiled tile properties? a sibling `*.style.json`? hand-edits after conversion? Suggested: leave blank in this RFC; intermedium tolerates absence; a follow-up adds an authoring convention once the intermedium has a concrete rendering need.
+6. ~~**Visual hint authoring (color, glyph).**~~ **Resolved.** Visual hints are left blank in the gram for now. The Layer 3 test renderer uses a static fallback table in `tools/tmj-to-gram/test/render/fallbacks.ts` (test-only; does not influence runtime). Authoring convention deferred to a follow-up once the intermedium has a concrete rendering need.
 
-7. **Round-trip back to `.tmj`.** Is `.map.gram → .tmj` ever needed (e.g., to round-trip from gram back to Tiled for re-editing)? Out of scope for this RFC — `.tmj` is the source of truth; the gram is derived. Flagged so reviewers know the question was considered and answered.
+7. ~~**Round-trip back to `.tmj`.**~~ **Resolved.** No round-trip is implemented or needed. `.tmj` remains the source of truth; the gram is a derived artifact. The question was considered and closed.
 
-8. **Reference renderer fallback table.** The Layer 3 visual-parity renderer needs a deterministic color-and-glyph mapping for tile types and item types that lack visual hints in their definitions (current `.tsx` tilesets do not carry `color`; sidecars may omit `glyph`). Options: a checked-in table indexed by type label; a hash-based palette derived from the label; pull from a future shared `*.style.json`. Suggested: a small checked-in table in `tools/tmj-to-gram/test/render/fallbacks.ts` covering the sandbox fixtures, with a documented "add an entry when you add a fixture" rule. The table is test-only and does not influence runtime rendering.
+8. ~~**Reference renderer fallback table.**~~ **Resolved.** Implemented as a static checked-in table in `tools/tmj-to-gram/test/render/fallbacks.ts` covering the sandbox tile types (`Blue`, `Cyan`, `Green`, `Yellow`, `Red`, `Purple`). Test-only; does not affect runtime rendering. Convention: add a row when adding a new sandbox fixture.
 
 9. ~~**Polygon-to-cells provider.**~~ **Resolved.** Use `h3.polygonToCells` on `[lat, lng]` rings derived from each Tiled vertex (grid cell → `h3.localIjToCell(anchor, { i, j })` → `h3.cellToLatLng`, then pass vertices at resolution 15). Flood-fill in pure hex-grid space remains a documented fallback if projection precision ever fails at venue scale. Recorded in `specs/010-tmj-to-gram/research.md` (OQ-9).
 

@@ -67,6 +67,14 @@ function getBearerValue(req: Request): string | null {
 
 const app = express();
 
+app.use((_req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept");
+  next();
+});
+app.options("*", (_req, res) => res.status(204).end());
+
 const handleMcpEffect = (req: Request, res: Response) =>
   Effect.gen(function* () {
     const mcp = yield* McpProxyService;
@@ -182,10 +190,9 @@ app.get("/.well-known/agent-card.json", (_req, res) => {
     .send(JSON.stringify(buildHouseAgentCard(publicBase), null, 2) + "\n");
 });
 
-app.get("/v1/catalog", (req, res) => {
+app.get("/v1/catalog", (_req, res) => {
   void runtime.runPromise(
     Effect.gen(function* () {
-      yield* requireBearer(req);
       const catalog = yield* CatalogService;
       const list = yield* catalog.list();
       res.status(200).json({ agents: list });
@@ -200,10 +207,18 @@ app.get("/v1/catalog", (req, res) => {
   );
 });
 
+app.get("/v1/sessions", (_req, res) => {
+  void runtime.runPromise(
+    Effect.gen(function* () {
+      const supervisor = yield* AgentSupervisor;
+      res.status(200).json({ sessions: supervisor.listSessions() });
+    }),
+  );
+});
+
 app.get("/v1/catalog/:agentId", (req, res) => {
   void runtime.runPromise(
     Effect.gen(function* () {
-      yield* requireBearer(req);
       const catalog = yield* CatalogService;
       const entry = yield* catalog.get(req.params.agentId!);
       res.status(200).type("json").send(JSON.stringify(entry.agentCard, null, 2) + "\n");

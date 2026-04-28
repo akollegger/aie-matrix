@@ -23,8 +23,8 @@ The browser client resolves the Colyseus room with:
 
 then connects read-only with `colyseus.js` (`joinById`). There is **no** move RPC from the browser.
 
-Map tiles and the tileset image are served from the game server via `GET /maps/...` (repository `maps/` directory) when the browser talks to `:8787` directly (for example production builds or tooling). In **Vite dev**, map assets are same-origin from the client after `copy-map-assets` (under `public/maps/`); only `/spectator` is proxied to `:8787` (see `client/phaser/vite.config.ts`). PoC HTTP responses include permissive `Access-Control-Allow-*` headers for browser dev.
+Map tiles and the tileset image are served from the game server via `GET /maps/...` (repository `maps/` directory) when the browser talks to `:8787` directly (for example production builds or tooling). In **Vite dev**, map assets are same-origin from the client after `copy-map-assets` (under `public/maps/`); only `/spectator` is proxied to `:8787` (see `clients/debugger/phaser/vite.config.ts`). PoC HTTP responses include permissive `Access-Control-Allow-*` headers for browser dev.
 
 **Colyseus matchmake + credentials:** the official browser client always sends cookies (`withCredentials`), so `Access-Control-Allow-Origin` cannot be `*` on `/matchmake/*`. The combined server patches `matchMaker.controller.getCorsHeaders` to echo the request `Origin` and set `Access-Control-Allow-Credentials: true` (see `server/src/colyseus-cors-patch.ts`).
 
-Configure the Phaser dev server target with `VITE_SERVER_HTTP` (see `client/phaser/README.md`).
+Configure the Phaser dev server target with `VITE_SERVER_HTTP` (see `clients/debugger/phaser/README.md`).

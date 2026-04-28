@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+    /* ── Surfaces ─────────────────────────────────────── */
+    --color-void: #04080e; /* deepest background */
+    --color-surface: #070d18; /* panel / overlay base */
+    --color-surface-raised: #0d1525; /* card / input background */
+    --color-surface-hover: #162035; /* hover / selected state */
+
+    /* ── Borders ──────────────────────────────────────── */
+    --color-border: rgb(100 140 180 / 0.2);
+    --color-border-bright: rgb(100 140 180 / 0.4);
+
+    /* ── Text ─────────────────────────────────────────── */
+    --color-text: rgb(210 225 245 / 0.9); /* primary */
+    --color-text-dim: rgb(180 200 230 / 0.75); /* secondary */
+    --color-text-muted: rgb(140 170 210 / 0.55); /* labels / captions */
+    --color-text-faint: rgb(120 150 190 / 0.4); /* timestamps / hints */
+
+    /* ── Accents ──────────────────────────────────────── */
+    --color-human: rgb(80 130 220 / 0.8); /* human sender, prompt glyph */
+    --color-human-bg: rgb(60 100 160 / 0.25); /* human message track */
+    --color-ghost: rgb(100 190 130 / 0.8); /* ghost sender */
+    --color-ghost-bg: rgb(40 110 70 / 0.2); /* ghost message track */
+    --color-online: rgb(80 200 120 / 0.8); /* presence dot — active */
+    --color-offline: rgb(140 140 160 / 0.35); /* presence dot — inactive */
+
+    /* ── Fonts ────────────────────────────────────────── */
+    --font-sans: ui-sans-serif, system-ui, sans-serif;
+    --font-mono: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+
+    /* ── Letter spacing ───────────────────────────────── */
+    --tracking-label: 0.07em;
+}
+
+/* ── Base reset (keep existing layout rules) ──────────── */
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+.app-root {
+    margin: 0;
+    min-height: 100%;
+    width: 100%;
+}
+
+.app-root {
+    min-height: 100vh;
+    background: var(--color-void);
+}

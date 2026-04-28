@@ -89,9 +89,11 @@ When you establish a new pattern that other contributors will need to follow, up
 When you make an architectural decision, record it as an ADR. When you remove a guide because the technology was replaced, remove it — stale guides cause more harm than no guide.
 
 ## Recent Changes
+- 011-intermedium-client: TypeScript 5.7 (browser) + React 18, deck.gl, Vite; `clients/intermedium` — full-bleed H3 scene, **overlay** UI, goals/memories wording (RFC-0008, `specs/011-intermedium-client/`)
 - 010-tmj-to-gram: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@effect/cli`, `@effect/platform-node`, `h3-js`, `@relateby/pattern`, `fast-xml-parser`, `pixelmatch` (Layer 3 test only), `pngjs` (Layer 3 test only)
 - 007-world-objects: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `fast-xml-parser` (existing — tileset parsing)
 
 ## Active Technologies
+- TypeScript 5.7 (browser target), React 18, Node.js 24 (build/dev) + deck.gl, `h3-js`, `colyseus.js`, `@relateby/pattern`, `@aie-matrix/shared-types` (011-intermedium-client)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@effect/cli`, `@effect/platform-node`, `h3-js`, `@relateby/pattern`, `fast-xml-parser`, `pixelmatch` (Layer 3 test only), `pngjs` (Layer 3 test only) (010-tmj-to-gram)
 - On-disk `.map.gram` and `.tmj` files under `maps/`; in-memory `Map<mapId, MapIndexEntry>` in `MapService` (010-tmj-to-gram)

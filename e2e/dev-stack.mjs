@@ -82,7 +82,7 @@ if (await tryOk("http://127.0.0.1:5179/")) {
       stdio: "inherit",
     },
   );
-  await waitUrl("http://127.0.0.1:5179/", "Vite preview (client/phaser dist)");
+  await waitUrl("http://127.0.0.1:5179/", "Vite preview (clients/debugger/phaser dist)");
 }
 
 function shutdown() {

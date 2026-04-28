@@ -1,5 +1,5 @@
 import { dirname, isAbsolute, join } from "node:path";
-import { localIjToCell } from "h3-js";
+import { hexRenderParams, makeTileToH3 } from "../../src/converter/tiled-hex-grid.js";
 import { emitLayoutCells } from "../../src/converter/cell-emission.js";
 import { extractMapContext } from "../../src/converter/map-context.js";
 import { emitItemInstances, loadItemSidecar, type ItemSidecar } from "../../src/converter/item-emission.js";
@@ -49,6 +49,9 @@ export function mergeTerrainFromTmj(
   if (!layer) {
     throw new Error("No layout tile layer found");
   }
+  const hexP = hexRenderParams(ctx.tilewidth, ctx.tileheight, ctx.hexsidelength, ctx.staggeraxis, ctx.staggerindex);
+  if (!hexP) throw new Error(`Unsupported staggeraxis "${ctx.staggeraxis}"`);
+  const tileToH3 = makeTileToH3(hexP, ctx.h3Anchor, tmj.width, tmj.height);
   for (let row = 0; row < tmj.height; row++) {
     for (let col = 0; col < tmj.width; col++) {
       const gid = gidAt(layer, col, row);
@@ -60,12 +63,8 @@ export function mergeTerrainFromTmj(
         warn(`[warn] layout unknown gid ${gid} at (${col},${row}) — skipped in parity merge`);
         continue;
       }
-      let h3: string;
-      try {
-        h3 = localIjToCell(ctx.h3Anchor, { i: col, j: row });
-      } catch {
-        continue;
-      }
+      const h3 = tileToH3(col, row);
+      if (h3 === null) continue;
       merged.set(h3, info.typeLabel);
     }
   }

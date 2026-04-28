@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" role="img" aria-label="Fail whale, point cloud globe on void">
+  <title>Full-screen error, point-cloud globe (fail whale)</title>
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#1e3a4a" stop-opacity="0.4" />
+      <stop offset="100%" stop-color="#0b0d10" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="100%" height="100%" fill="#0b0d10" />
+  <ellipse cx="600" cy="380" rx="220" ry="200" fill="url(#glow)" />
+  <g fill="#38bdf8" opacity="0.85">
+    <circle cx="500" cy="300" r="2.5" />
+    <circle cx="520" cy="290" r="2" />
+    <circle cx="640" cy="320" r="2.5" />
+    <circle cx="460" cy="360" r="2" />
+    <circle cx="600" cy="250" r="2.5" />
+    <circle cx="720" cy="300" r="2" />
+    <circle cx="400" cy="400" r="2" />
+    <circle cx="500" cy="400" r="2.2" />
+    <circle cx="600" cy="400" r="2.5" />
+    <circle cx="700" cy="400" r="2.2" />
+    <circle cx="800" cy="400" r="2" />
+    <circle cx="450" cy="450" r="2" />
+    <circle cx="550" cy="450" r="2.2" />
+    <circle cx="650" cy="450" r="2.2" />
+    <circle cx="750" cy="450" r="2" />
+    <circle cx="500" cy="200" r="1.5" />
+    <circle cx="600" cy="180" r="1.5" />
+    <circle cx="700" cy="200" r="1.5" />
+    <circle cx="400" cy="500" r="1.5" />
+    <circle cx="800" cy="500" r="1.5" />
+    <circle cx="360" cy="350" r="1.5" />
+    <circle cx="840" cy="360" r="1.5" />
+    <circle cx="600" cy="500" r="1.5" />
+  </g>
+  <path d="M420 400 Q600 200 780 400 Q600 600 420 400" fill="none" stroke="#3d4a5c" stroke-width="0.5" stroke-dasharray="4 4" opacity="0.4" />
+  <text x="500" y="200" fill="#5c6b7d" font-size="10" font-family="system-ui,sans-serif" transform="rotate(-8 600 200)">rotation (slow) - implementation</text>
+  <text x="420" y="600" fill="#5c6b7d" font-size="10" font-family="system-ui,sans-serif" transform="rotate(6 500 600)">breathing pulse 1.0-1.03 - implementation</text>
+  <text x="24" y="64" fill="#8b9cb3" font-family="system-ui,sans-serif" font-size="20" font-weight="600">Something went wrong</text>
+  <text x="24" y="96" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="14">Map load failed. Full-screen void and PointCloudLayer sphere (FR-023)</text>
+  <rect x="24" y="120" width="120" height="40" rx="6" fill="#1e3a4a" stroke="#38bdf8" />
+  <text x="44" y="145" fill="#7dd3fc" font-size="14" font-family="system-ui,sans-serif">Retry</text>
+  <text x="24" y="640" fill="#3d4a5c" font-size="10" font-family="system-ui,sans-serif" font-style="italic">Mockup: FR-023. Implement with deck.gl and requestAnimationFrame for motion.</text>
+</svg>

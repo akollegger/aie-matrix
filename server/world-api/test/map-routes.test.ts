@@ -8,7 +8,7 @@ import test from "node:test";
 import { Effect, ManagedRuntime } from "effect";
 import { Gram } from "@relateby/pattern";
 import { makeMapServiceLayer } from "../src/map/MapService.js";
-import { parseMapsPath, tryHandleMapAssetGet } from "../src/map/MapRoutes.js";
+import { parseMapsPath, tryHandleMapGet } from "../src/map/MapRoutes.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -90,7 +90,7 @@ test("GET /maps/freeplay → 200 text/plain; charset=utf-8", async () => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
       void runtime
-        .runPromise(tryHandleMapAssetGet(req, res, url, {}))
+        .runPromise(tryHandleMapGet(req, res, url, {}))
         .then((handled) => {
           if (!handled && !res.headersSent) {
             res.writeHead(404).end();
@@ -121,7 +121,7 @@ test("GET /maps/freeplay?format=gram → 200 same content-type", async () => {
   try {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
-      void runtime.runPromise(tryHandleMapAssetGet(req, res, url, {})).catch(() => {
+      void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
         if (!res.headersSent) {
           res.writeHead(500).end();
         }
@@ -144,7 +144,7 @@ test("GET /maps/nonexistent → 404 JSON", async () => {
   try {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
-      void runtime.runPromise(tryHandleMapAssetGet(req, res, url, {})).catch(() => {
+      void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
         if (!res.headersSent) {
           res.writeHead(500).end();
         }
@@ -170,7 +170,7 @@ test("GET /maps/freeplay?format=unknown → 400 JSON", async () => {
   try {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
-      void runtime.runPromise(tryHandleMapAssetGet(req, res, url, {})).catch(() => {
+      void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
         if (!res.headersSent) {
           res.writeHead(500).end();
         }
@@ -196,7 +196,7 @@ test("US3: GET /maps/freeplay?format=tmj — 200, application/json, byte-identic
   try {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", "http://127.0.0.1");
-      void runtime.runPromise(tryHandleMapAssetGet(req, res, url, {})).catch(() => {
+      void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
         if (!res.headersSent) {
           res.writeHead(500).end();
         }
@@ -212,6 +212,40 @@ test("US3: GET /maps/freeplay?format=tmj — 200, application/json, byte-identic
     assert.ok(r.body.equals(onDisk), "response body must match source .tmj bytes exactly");
     assertTmjJsonShape(JSON.parse(r.body.toString("utf8")));
   } finally {
+    await runtime.dispose();
+  }
+});
+
+test("GET /maps → 200 application/json; lists known map ids with links", async () => {
+  const layer = makeMapServiceLayer(repoRoot);
+  const runtime = ManagedRuntime.make(layer);
+  const server = http.createServer((req, res) => {
+    const url = new URL(req.url ?? "/", "http://127.0.0.1");
+    void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
+      if (!res.headersSent) {
+        res.writeHead(500).end();
+      }
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, resolve));
+  const { port } = server.address() as AddressInfo;
+  try {
+    for (const path of ["/maps", "/maps/"] as const) {
+      const r = await httpGet(`http://127.0.0.1:${port}${path}`);
+      assert.equal(r.status, 200);
+      assert.equal(r.headers["content-type"], "application/json; charset=utf-8");
+      const j = JSON.parse(r.body) as { maps: { id: string; links: { self: string; gram: string; tmj: string } }[] };
+      assert.ok(Array.isArray(j.maps), "body.maps must be an array");
+      assert.ok(j.maps.length > 0, "repo must index at least one map pair");
+      const freeplay = j.maps.find((m) => m.id === "freeplay");
+      assert.ok(freeplay, "expected freeplay in index");
+      const base = `http://127.0.0.1:${port}`;
+      assert.equal(freeplay!.links.self, `${base}/maps/freeplay`);
+      assert.equal(freeplay!.links.gram, `${base}/maps/freeplay?format=gram`);
+      assert.equal(freeplay!.links.tmj, `${base}/maps/freeplay?format=tmj`);
+    }
+  } finally {
+    await new Promise<void>((resolve) => server.close(() => resolve()));
     await runtime.dispose();
   }
 });

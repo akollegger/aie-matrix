@@ -4,7 +4,7 @@ RFCs propose new features, components, or game mechanics before implementation b
 
 ## When to Write an RFC
 
-- Proposing a new subsystem or module (e.g., a memory module implementation, a new ghost class, a quest type)
+- Proposing a new subsystem or module (e.g., a memory module implementation, a new ghost class, a new human-facing client)
 - Significant changes to existing game mechanics or APIs
 - Vendor contributions that introduce new interfaces or behaviors
 

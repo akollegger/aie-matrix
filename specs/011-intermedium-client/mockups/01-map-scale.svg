@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 700" width="1200" height="700" role="img" aria-label="Map scale: world zoom, overhead">
+  <title>Map (100:0): full world, most zoomed-out; overhead camera</title>
+  <defs>
+    <pattern id="hex" width="56" height="48" patternUnits="userSpaceOnUse">
+      <path d="M28 2 L50 15 L50 33 L28 46 L4 33 L4 15 Z" fill="none" stroke="#3d4a5c" stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="100%" height="100%" fill="#0b0d10" />
+  <rect x="0" y="0" width="1200" height="700" fill="url(#hex)" opacity="0.85" />
+  <g fill="#6ee7b7" opacity="0.9">
+    <circle cx="320" cy="280" r="4" />
+    <circle cx="410" cy="340" r="4" />
+    <circle cx="520" cy="300" r="4" />
+    <circle cx="680" cy="380" r="4" />
+    <circle cx="780" cy="320" r="4" />
+    <circle cx="900" cy="400" r="4" />
+  </g>
+  <g stroke="#38bdf8" stroke-width="1.5" fill="none" opacity="0.5">
+    <line x1="520" y1="300" x2="600" y2="200" />
+    <line x1="600" y1="200" x2="640" y2="180" />
+  </g>
+  <rect x="16" y="12" width="300" height="56" rx="6" fill="#0b0d10" fill-opacity="0.8" stroke="#2a3544" />
+  <text x="32" y="38" fill="#8b9cb3" font-family="system-ui,sans-serif" font-size="16" font-weight="600">Map (100:0) - world / fleet zoom</text>
+  <text x="32" y="58" fill="#5c6b7d" font-family="system-ui,sans-serif" font-size="10">Densest hex pattern = furthest out; full viewport, overhead</text>
+  <rect x="600" y="150" width="200" height="64" rx="6" fill="#1a222c" fill-opacity="0.92" stroke="#3d4a5c" />
+  <text x="612" y="176" fill="#e2e8f0" font-family="system-ui,sans-serif" font-size="13" font-weight="600">Tile hover</text>
+  <text x="612" y="198" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="12">tileType: vendor_booth</text>
+  <rect x="0" y="666" width="1200" height="34" fill="#0b0d10" fill-opacity="0.6" />
+  <text x="16" y="686" fill="#5c6b7d" font-family="system-ui,sans-serif" font-size="10">Deeper scales zoom IN (same full canvas); see 02-04 for dual-level grid</text>
+</svg>
