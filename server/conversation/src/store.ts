@@ -24,7 +24,7 @@ export class JsonlStore implements ConversationStore {
 
   async list(
     thread_id: string,
-    options?: { after?: string; limit?: number },
+    options?: { after?: string; since?: string; limit?: number },
   ): Promise<MessageRecord[]> {
     const path = this.filePath(thread_id);
     let raw: string;
@@ -40,7 +40,7 @@ export class JsonlStore implements ConversationStore {
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     let records: MessageRecord[] = lines.map((l) => JSON.parse(l) as MessageRecord);
 
-    const { after, since, limit = 50 } = (options ?? {}) as { after?: string; since?: string; limit?: number };
+    const { after, since, limit = 50 } = options ?? {};
     if (after !== undefined && after !== "") {
       records = records.filter((r) => r.message_id > after);
     }
@@ -68,10 +68,10 @@ export class MemoryStore implements ConversationStore {
 
   async list(
     thread_id: string,
-    options?: { after?: string; limit?: number },
+    options?: { after?: string; since?: string; limit?: number },
   ): Promise<MessageRecord[]> {
     let thread = this.records.get(thread_id) ?? [];
-    const { after, since, limit = 50 } = (options ?? {}) as { after?: string; since?: string; limit?: number };
+    const { after, since, limit = 50 } = options ?? {};
     if (after !== undefined && after !== "") {
       thread = thread.filter((r) => r.message_id > after);
     }

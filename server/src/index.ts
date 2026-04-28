@@ -387,11 +387,10 @@ async function main(): Promise<void> {
         return;
       }
       if (url.pathname === "/humans/join" && req.method === "POST") {
-        const chunks: Buffer[] = [];
-        await new Promise<void>((resolve) => { req.on("data", (c: Buffer) => chunks.push(c)); req.on("end", resolve); });
+        const buf = await readRequestBody(req);
         let humanId: string;
         try {
-          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { humanId?: string };
+          const body = JSON.parse(buf.toString("utf8") || "{}") as { humanId?: string };
           humanId = typeof body.humanId === "string" && body.humanId.trim().length > 0
             ? body.humanId.trim()
             : randomUUID();
@@ -411,7 +410,14 @@ async function main(): Promise<void> {
       const ghostInventoryMatch = req.method === "GET"
         && url.pathname.match(/^\/ghosts\/([^/]+)\/inventory$/);
       if (ghostInventoryMatch) {
-        const ghostId = decodeURIComponent(ghostInventoryMatch[1]!);
+        let ghostId: string;
+        try {
+          ghostId = decodeURIComponent(ghostInventoryMatch[1]!);
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "invalid ghost id encoding" }));
+          return;
+        }
         const sidecar = itemServiceImpl.getSidecar();
         const items = itemServiceImpl.getGhostInventory(ghostId).map((itemRef) => ({
           itemRef,
