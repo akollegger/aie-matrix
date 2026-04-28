@@ -1,51 +1,66 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ConversationMessage, ConversationThread } from "../types/conversation.js";
+import type { ConversationMessage } from "../types/conversation.js";
+import type { MessageRecord } from "@aie-matrix/shared-types";
 
 const POLL_INTERVAL_MS = 5000;
 
 interface A2AConversationState {
-  readonly thread: Omit<ConversationThread, "ghostId"> & { ghostId: string | null };
+  readonly thread: Omit<import("../types/conversation.js").ConversationThread, "ghostId"> & { ghostId: string | null };
   readonly sendMessage: (text: string) => Promise<void>;
 }
 
+function toConversationMessage(r: MessageRecord): ConversationMessage {
+  return {
+    messageId: r.message_id,
+    sender: r.role === "partner" ? "human" : "ghost",
+    content: r.content,
+    timestamp: r.timestamp,
+  };
+}
+
 async function fetchMessages(
-  baseUrl: string,
+  worldApiUrl: string,
   ghostId: string,
   since?: string,
 ): Promise<ConversationMessage[]> {
-  const url = `${baseUrl}/conversation/${encodeURIComponent(ghostId)}/messages${since ? `?since=${encodeURIComponent(since)}` : ""}`;
+  const params = new URLSearchParams();
+  if (since) params.set("since", since);
+  const url = `${worldApiUrl}/threads/${encodeURIComponent(ghostId)}?${params.toString()}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const data = (await res.json()) as unknown;
-  return Array.isArray(data) ? (data as ConversationMessage[]) : [];
+  const data = (await res.json()) as { messages?: MessageRecord[] };
+  return (data.messages ?? []).map(toConversationMessage);
 }
 
 async function postMessage(
-  baseUrl: string,
+  worldApiUrl: string,
+  humanId: string,
   ghostId: string,
   text: string,
 ): Promise<void> {
-  await fetch(`${baseUrl}/conversation/${encodeURIComponent(ghostId)}/messages`, {
+  await fetch(`${worldApiUrl}/threads/${encodeURIComponent(ghostId)}/human-say`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ humanId, text }),
   });
 }
 
 /**
- * Polls the ghost house A2A conversation endpoint (IC-002, FR-011).
- * Returns `isAvailable: false` on 404/network error so UI can stub gracefully.
+ * Polls the world server's /threads/:ghostId endpoint for a human↔ghost conversation.
+ * Uses the world API URL (VITE_WORLD_API_URL), not the ghost-house URL.
  */
 export function useA2AConversation(
   ghostId: string | null,
-  baseUrl: string,
+  worldApiUrl: string,
+  humanId: string,
 ): A2AConversationState {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isAvailable, setIsAvailable] = useState(false);
   const sinceRef = useRef<string | undefined>(undefined);
+  const pollRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
-    if (!ghostId || !baseUrl) {
+    if (!ghostId || !worldApiUrl) {
       setIsAvailable(false);
       return;
     }
@@ -53,7 +68,7 @@ export function useA2AConversation(
 
     const poll = async () => {
       try {
-        const fetched = await fetchMessages(baseUrl, ghostId, sinceRef.current);
+        const fetched = await fetchMessages(worldApiUrl, ghostId, sinceRef.current);
         if (cancelled) return;
         if (fetched.length > 0) {
           const last = fetched[fetched.length - 1];
@@ -66,32 +81,28 @@ export function useA2AConversation(
       }
     };
 
+    pollRef.current = poll;
     void poll();
     const id = setInterval(() => void poll(), POLL_INTERVAL_MS);
     return () => {
       cancelled = true;
+      pollRef.current = null;
       clearInterval(id);
     };
-  }, [ghostId, baseUrl]);
+  }, [ghostId, worldApiUrl]);
 
   const sendMessage = useCallback(
     async (text: string) => {
-      if (!ghostId || !baseUrl) return;
-      // Optimistic append (FR-011)
-      const optimistic: ConversationMessage = {
-        messageId: `opt-${Date.now()}`,
-        sender: "human",
-        content: text,
-        timestamp: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, optimistic]);
+      if (!ghostId || !worldApiUrl) return;
       try {
-        await postMessage(baseUrl, ghostId, text);
+        await postMessage(worldApiUrl, humanId, ghostId, text);
+        // Immediate poll so the sent message appears without waiting for the next interval.
+        void pollRef.current?.();
       } catch {
-        // Optimistic message stays; real message arrives on next poll.
+        // Silently ignore; next poll will surface the message if the POST eventually landed.
       }
     },
-    [ghostId, baseUrl],
+    [ghostId, worldApiUrl, humanId],
   );
 
   return {

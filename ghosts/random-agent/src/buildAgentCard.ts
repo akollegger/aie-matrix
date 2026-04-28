@@ -8,26 +8,27 @@ export function buildWandererAgentCard(publicBase: string): AgentCard {
   const jsonRpc = `${base}/a2a/jsonrpc`;
   return {
     name: "random-agent",
-    description: "Reference Wanderer agent: random movement, no memory, no speech.",
+    description: "Wanderer ghost that moves at random and echoes messages from human partners.",
     protocolVersion: "0.3.0",
-    version: "0.1.0",
+    version: "0.2.0",
     url: jsonRpc,
     skills: [
       { id: "wander", name: "Wander", description: "Move to a random adjacent cell each tick" },
+      { id: "partner-reply", name: "Partner Reply", description: "Echo messages from a human partner" },
     ],
-    capabilities: { streaming: true, pushNotifications: false },
+    capabilities: { streaming: true, pushNotifications: true },
     defaultInputModes: ["text"],
     defaultOutputModes: ["text"],
     additionalInterfaces: [{ url: jsonRpc, transport: "JSONRPC" }],
     matrix: {
       schemaVersion: 1,
-      tier: "wanderer",
+      tier: "social",
       ghostClasses: ["any"],
-      requiredTools: ["whereami", "exits", "go"],
+      requiredTools: ["whereami", "exits", "go", "say"],
       capabilitiesRequired: [],
       memoryKind: "none",
       llmProvider: "none",
-      profile: { about: "The simplest possible ghost. Moves at random, never speaks, never listens." },
+      profile: { about: "Moves at random and echoes messages from human partners." },
       authors: ["@akollegger"],
     },
   } as unknown as AgentCard;

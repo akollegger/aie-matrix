@@ -28,6 +28,7 @@ export interface ConversationServiceShape {
   say(
     ghostId: string,
     content: string,
+    to?: string,
   ): Effect.Effect<SayResult, ConversationStoreUnavailable | ConversationGhostNoPosition>;
   bye(ghostId: string): Effect.Effect<ByeResult>;
   inbox(ghostId: string): Effect.Effect<InboxResult>;
@@ -54,7 +55,7 @@ function makeConversationService(
   }
 
   return {
-    say(ghostId, content) {
+    say(ghostId, content, to?: string) {
       return Effect.gen(function* () {
         const message_id = ulid();
         const timestamp = new Date().toISOString();
@@ -64,18 +65,23 @@ function makeConversationService(
           return yield* Effect.fail(new ConversationGhostNoPosition({ ghostId }));
         }
         const ghostCell = rawCell;
-        const clusterCells = gridDisk(ghostCell, 1);
 
-        const listenerSet = new Set<string>();
-        for (const cellId of clusterCells) {
-          const occupants = bridge.listOccupantsOnCell(cellId);
-          for (const id of occupants) {
-            if (id !== ghostId) {
-              listenerSet.add(id);
+        let mx_listeners: string[];
+        if (to != null) {
+          mx_listeners = [to];
+        } else {
+          const clusterCells = gridDisk(ghostCell, 1);
+          const listenerSet = new Set<string>();
+          for (const cellId of clusterCells) {
+            const occupants = bridge.listOccupantsOnCell(cellId);
+            for (const id of occupants) {
+              if (id !== ghostId) {
+                listenerSet.add(id);
+              }
             }
           }
+          mx_listeners = Array.from(listenerSet);
         }
-        const mx_listeners = Array.from(listenerSet);
 
         const record = {
           thread_id: ghostId,

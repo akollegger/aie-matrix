@@ -286,6 +286,8 @@ async function main(): Promise<void> {
     registry: store,
     corsHeaders,
     spectatorToken: process.env.SPECTATOR_DEBUG_TOKEN,
+    fanout: (ghostId, payload) =>
+      bridge.fanoutWorldV1({ t: "message.new", targetGhostId: ghostId, payload }),
   });
 
   const loadedMap = colyseusBridge.getLoadedMap();
@@ -361,6 +363,8 @@ async function main(): Promise<void> {
           p.startsWith("/maps/") ||
           p.startsWith("/registry") ||
           p.startsWith("/threads") ||
+          p.startsWith("/ghosts") ||
+          p.startsWith("/humans") ||
           p === "/mcp" ||
           p === "/internal/world-fanout"
         ) {
@@ -382,11 +386,40 @@ async function main(): Promise<void> {
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
         return;
       }
+      if (url.pathname === "/humans/join" && req.method === "POST") {
+        const chunks: Buffer[] = [];
+        await new Promise<void>((resolve) => { req.on("data", (c: Buffer) => chunks.push(c)); req.on("end", resolve); });
+        let humanId: string;
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") as { humanId?: string };
+          humanId = typeof body.humanId === "string" && body.humanId.trim().length > 0
+            ? body.humanId.trim()
+            : randomUUID();
+        } catch {
+          humanId = randomUUID();
+        }
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ humanId }));
+        return;
+      }
       if (url.pathname.startsWith("/threads")) {
         const handled = await handleConversationThreads(req, res, url);
         if (handled) {
           return;
         }
+      }
+      const ghostInventoryMatch = req.method === "GET"
+        && url.pathname.match(/^\/ghosts\/([^/]+)\/inventory$/);
+      if (ghostInventoryMatch) {
+        const ghostId = decodeURIComponent(ghostInventoryMatch[1]!);
+        const sidecar = itemServiceImpl.getSidecar();
+        const items = itemServiceImpl.getGhostInventory(ghostId).map((itemRef) => ({
+          itemRef,
+          name: sidecar.get(itemRef)?.name ?? itemRef,
+        }));
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ ghostId, items }));
+        return;
       }
       if (url.pathname.startsWith("/registry")) {
         await registryListener(req, res);

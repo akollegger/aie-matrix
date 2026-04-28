@@ -1,5 +1,6 @@
 import { useClientState } from "../../context/ClientState.js";
 import { useA2AConversation } from "../../hooks/useA2AConversation.js";
+import { useHumanSession } from "../../hooks/useHumanSession.js";
 import { ConversationThread } from "../ConversationThread/ConversationThread.js";
 import { MessageInput } from "../ConversationThread/MessageInput.js";
 import { GhostCard } from "../GhostCard/GhostCard.js";
@@ -15,10 +16,12 @@ export function PersonalPanel() {
   const identity = ghostId ? (identities.get(ghostId) ?? null) : null;
   const tile = ghost ? (tiles.get(ghost.h3Index) ?? null) : null;
 
-  const baseUrl = import.meta.env.VITE_GHOST_HOUSE_URL ?? "";
+  const worldApiUrl = import.meta.env.VITE_WORLD_API_URL ?? "";
+  const humanId = useHumanSession();
   const { thread: rawThread, sendMessage } = useA2AConversation(
     viewState.stop === "personal" ? ghostId : null,
-    baseUrl,
+    worldApiUrl,
+    humanId,
   );
   const thread = { ...rawThread, ghostId: rawThread.ghostId ?? "" };
 

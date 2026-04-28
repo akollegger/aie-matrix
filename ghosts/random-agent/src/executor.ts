@@ -8,11 +8,15 @@ import { randomUUID } from "node:crypto";
 import { getResolution, isValidCell } from "h3-js";
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import type { SpawnContext } from "./spawn-types.js";
+import type { WorldEvent } from "./world-event.js";
 
 type MoveLoop = { cancel: () => void };
 
 /** One movement loop per `ghostId`; parallel distinct `ghostId`s. */
 const loopsByGhostId = new Map<string, MoveLoop>();
+
+/** Active MCP client per ghostId — used by event handlers to call say. */
+const mcpByGhostId = new Map<string, GhostMcpClient>();
 
 /** Latest spawn task id per ghost (IC-006); used to drop stale task metadata on re-spawn. */
 const ghostIdToTaskId = new Map<string, string>();
@@ -75,6 +79,7 @@ async function startMovementFromSpawn(
     token: ctx.token,
   });
   await mcp.connect();
+  mcpByGhostId.set(ghostId, mcp);
   const moveMs = Math.max(200, parseInt(getMoveIntervalMs() ?? "2000", 10) || 2000);
   let go = true;
   const handle: MoveLoop = { cancel: () => { go = false; } };
@@ -126,6 +131,9 @@ async function startMovementFromSpawn(
     if (loopsByGhostId.get(ghostId) === handle) {
       loopsByGhostId.delete(ghostId);
     }
+    if (mcpByGhostId.get(ghostId) === mcp) {
+      mcpByGhostId.delete(ghostId);
+    }
     await mcp.disconnect().catch(() => {});
   }
 }
@@ -165,17 +173,47 @@ export class RandomWandererExecutor implements AgentExecutor {
       void startMovementFromSpawn(this.getMoveInterval, sp).catch((e) =>
         console.error(`[random-agent] movement ghostId=${sp.ghostId}`, e),
       );
-      const done: TaskStatusUpdateEvent = {
-        kind: "status-update",
-        taskId: t.id,
-        contextId: contextId ?? t.contextId,
-        final: true,
-        status: { state: "completed", timestamp: new Date().toISOString() },
-      };
-      eventBus.publish(done);
+      // Wanderer tier: sendSpawnContext polls for terminal state, so we must complete.
+      // Social/listener tier: startPushSpawnContext uses blocking:false and keeps the task
+      // open for future sendWorldEvent deliveries — publishing "completed" would close it.
+      if (sp.ghostCard.class === "wanderer") {
+        const done: TaskStatusUpdateEvent = {
+          kind: "status-update",
+          taskId: t.id,
+          contextId: contextId ?? t.contextId,
+          final: true,
+          status: { state: "completed", timestamp: new Date().toISOString() },
+        };
+        eventBus.publish(done);
+      }
       eventBus.finished();
       return;
     }
+    const ev = asWorldEvent(userMessage);
+    if (ev?.kind === "world.message.new") {
+      const pl = ev.payload as { text?: string; priority?: string; from?: string };
+      if (pl.priority === "PARTNER" && typeof pl.from === "string" && typeof pl.text === "string") {
+        const mcp = mcpByGhostId.get(ev.ghostId);
+        if (mcp) {
+          void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e) => {
+            console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
+          });
+        }
+      }
+      if (taskId) {
+        const done: TaskStatusUpdateEvent = {
+          kind: "status-update",
+          taskId,
+          contextId: contextId ?? "",
+          final: true,
+          status: { state: "completed", timestamp: new Date().toISOString() },
+        };
+        eventBus.publish(done);
+      }
+      eventBus.finished();
+      return;
+    }
+
     if (userMessage && userText(userMessage).toLowerCase() === "healthcheck") {
       const reply: Message = {
         kind: "message",
@@ -228,4 +266,16 @@ function userText(userMessage: Message | undefined): string {
     }
   }
   return "";
+}
+
+function asWorldEvent(msg: Message | undefined): WorldEvent | null {
+  for (const p of msg?.parts ?? []) {
+    if (p.kind === "data" && "data" in p) {
+      const d = p.data as Record<string, unknown>;
+      if (d.schema === "aie-matrix.world-event.v1") {
+        return d as unknown as WorldEvent;
+      }
+    }
+  }
+  return null;
 }

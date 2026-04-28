@@ -3,16 +3,17 @@ import type { GhostIdentity } from "../types/ghost.js";
 
 const empty = new Map<string, GhostIdentity>();
 
-function toIdentity(row: { agentId: string; tier: string; about: string }): GhostIdentity {
-  return {
-    ghostId: row.agentId,
-    name: row.about?.trim() ? String(row.about).trim().slice(0, 200) : row.agentId,
-    ghostClass: row.tier && String(row.tier).length > 0 ? String(row.tier) : "agent",
-  };
+type AgentMeta = { tier: string; about: string };
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json() as Promise<T>;
 }
 
 /**
- * `GET {ghostHouseUrl}/v1/catalog` (spec-009). Fails open with an empty map.
+ * Joins GET /v1/sessions (one entry per ghost instance) with GET /v1/catalog
+ * (one entry per agent type) to produce a GhostIdentity map keyed by ghostId.
  */
 export function useGhostIdentity(ghostHouseUrl: string) {
   const [identities, setIdentities] = useState<ReadonlyMap<string, GhostIdentity>>(empty);
@@ -24,25 +25,32 @@ export function useGhostIdentity(ghostHouseUrl: string) {
       setIsLoading(false);
       return;
     }
+    const base = ghostHouseUrl.endsWith("/") ? ghostHouseUrl : `${ghostHouseUrl}/`;
     setIsLoading(true);
-    const headers: Record<string, string> = { Accept: "application/json" };
-    const t = import.meta.env.VITE_GHOST_HOUSE_BEARER;
-    if (t && t.length > 0) {
-      headers.Authorization = `Bearer ${t}`;
-    }
     try {
-      const res = await fetch(
-        new URL("v1/catalog", ghostHouseUrl.endsWith("/") ? ghostHouseUrl : `${ghostHouseUrl}/`),
-        { headers },
-      );
-      if (!res.ok) {
-        setIdentities(empty);
-        return;
+      const [sessionsData, catalogData] = await Promise.all([
+        fetchJson<{ sessions: { ghostId: string; agentId: string; status: string }[] }>(
+          new URL("v1/sessions", base).toString(),
+        ),
+        fetchJson<{ agents: { agentId: string; tier: string; about: string }[] }>(
+          new URL("v1/catalog", base).toString(),
+        ),
+      ]);
+
+      const agentMeta = new Map<string, AgentMeta>();
+      for (const a of catalogData.agents ?? []) {
+        agentMeta.set(a.agentId, { tier: a.tier ?? "agent", about: a.about ?? "" });
       }
-      const data = (await res.json()) as { agents?: { agentId: string; tier: string; about: string }[] };
+
       const m = new Map<string, GhostIdentity>();
-      for (const a of data.agents ?? []) {
-        m.set(a.agentId, toIdentity(a));
+      for (const s of sessionsData.sessions ?? []) {
+        const meta = agentMeta.get(s.agentId);
+        m.set(s.ghostId, {
+          ghostId: s.ghostId,
+          agentId: s.agentId,
+          name: meta?.about?.trim() ? meta.about.trim().slice(0, 200) : s.ghostId.slice(0, 12),
+          ghostClass: meta?.tier && meta.tier.length > 0 ? meta.tier : "agent",
+        });
       }
       setIdentities(m);
     } catch {

@@ -4,7 +4,7 @@ import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import type { Client } from "@a2a-js/sdk/client";
 import { CatalogService, type ICatalogService } from "../catalog/CatalogService.js";
 import { A2AHostService, type IA2AHostService } from "../a2a-host/A2AHostService.js";
-import type { AgentSession, SpawnContext, WorldCredential, WorldEvent } from "../types.js";
+import type { AgentSession, AgentSessionStatus, SpawnContext, WorldCredential, WorldEvent } from "../types.js";
 import { CapabilityUnmet, SessionNotFound, SpawnFailed, SpawnTimeout } from "../errors.js";
 import { getResolution, isValidCell } from "h3-js";
 
@@ -273,6 +273,7 @@ export interface IAgentSupervisor {
   readonly getSession: (sessionId: string) => AgentSession | undefined;
   readonly getByMcpToken: (mcpToken: string) => AgentSession | undefined;
   readonly listSessionIdsByAgent: (agentId: string) => string[];
+  readonly listSessions: () => ReadonlyArray<{ ghostId: string; agentId: string; status: AgentSessionStatus }>;
   /** Routes IC-004 world events to the A2A push session for the target ghost, if any. */
   readonly deliverWorldEvent: (event: WorldEvent) => Effect.Effect<void>;
 }
@@ -375,6 +376,16 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         };
         const houseAgentPushIngest = `${houseBase}/v1/internal/a2a-agent-push`;
 
+        // Register token before sending spawn context — agent may call MCP immediately on receipt
+        // (e.g. social-tier movement loop starts before startPushSpawnContext returns).
+        state.sessions.set(sessionId, session);
+        state.mcpToSession.set(mcpToken, sessionId);
+        state.byGhostId.set(input.ghostId, sessionId);
+        if (!state.byAgent.has(input.agentId)) {
+          state.byAgent.set(input.agentId, new Set());
+        }
+        state.byAgent.get(input.agentId)!.add(sessionId);
+
         const spawnResult = yield* pipe(
           Effect.gen(function* () {
             const client = yield* a2a.createClient(entry.baseUrl);
@@ -388,7 +399,15 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
               : a2a.sendSpawnContext(client, spawnContext, { timeoutMs: 30_000 }));
             return r;
           }),
-          Effect.tapError(() => Effect.sync(() => (session.status = "failed"))),
+          Effect.tapError(() =>
+            Effect.sync(() => {
+              session.status = "failed";
+              state.sessions.delete(sessionId);
+              state.mcpToSession.delete(mcpToken);
+              state.byGhostId.delete(input.ghostId);
+              state.byAgent.get(input.agentId)?.delete(sessionId);
+            }),
+          ),
         );
 
         session.currentTaskId = spawnResult.taskId;
@@ -397,14 +416,6 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         }
         session.status = "running";
         session.lastSpawnContext = spawnContext;
-
-        state.sessions.set(sessionId, session);
-        state.mcpToSession.set(mcpToken, sessionId);
-        state.byGhostId.set(input.ghostId, sessionId);
-        if (!state.byAgent.has(input.agentId)) {
-          state.byAgent.set(input.agentId, new Set());
-        }
-        state.byAgent.get(input.agentId)!.add(sessionId);
 
         yield* startHealth(state, session, a2a, catalog, getConfig, publicHouseBaseUrl);
         return session;
@@ -457,6 +468,13 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
     },
 
     listSessionIdsByAgent: (agentId) => [...(state.byAgent.get(agentId) ?? [])],
+
+    listSessions: () =>
+      Array.from(state.sessions.values()).map((s) => ({
+        ghostId: s.ghostId,
+        agentId: s.agentId,
+        status: s.status,
+      })),
 
     deliverWorldEvent: (event) =>
       Effect.gen(function* () {

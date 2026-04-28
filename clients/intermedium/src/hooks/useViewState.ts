@@ -98,6 +98,8 @@ export function useViewState(
         zoomOut();
       }
       if (e.key === "Enter" && !e.repeat) {
+        const tag = (e.target as HTMLElement | null)?.tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA") return;
         e.preventDefault();
         triggerEnterZoom();
       }

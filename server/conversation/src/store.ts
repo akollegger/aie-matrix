@@ -40,9 +40,12 @@ export class JsonlStore implements ConversationStore {
     const lines = raw.split("\n").filter((l) => l.trim() !== "");
     let records: MessageRecord[] = lines.map((l) => JSON.parse(l) as MessageRecord);
 
-    const { after, limit = 50 } = options ?? {};
+    const { after, since, limit = 50 } = (options ?? {}) as { after?: string; since?: string; limit?: number };
     if (after !== undefined && after !== "") {
       records = records.filter((r) => r.message_id > after);
+    }
+    if (since !== undefined && since !== "") {
+      records = records.filter((r) => r.timestamp > since);
     }
 
     return records.slice(0, limit);
@@ -68,9 +71,12 @@ export class MemoryStore implements ConversationStore {
     options?: { after?: string; limit?: number },
   ): Promise<MessageRecord[]> {
     let thread = this.records.get(thread_id) ?? [];
-    const { after, limit = 50 } = options ?? {};
+    const { after, since, limit = 50 } = (options ?? {}) as { after?: string; since?: string; limit?: number };
     if (after !== undefined && after !== "") {
       thread = thread.filter((r) => r.message_id > after);
+    }
+    if (since !== undefined && since !== "") {
+      thread = thread.filter((r) => r.timestamp > since);
     }
     return thread.slice(0, limit);
   }

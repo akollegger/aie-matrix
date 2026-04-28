@@ -5,6 +5,7 @@
 
 export interface GhostIdentity {
   readonly ghostId: string;
+  readonly agentId: string;
   readonly name: string;
   readonly ghostClass: string;
 }

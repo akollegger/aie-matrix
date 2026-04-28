@@ -8,6 +8,7 @@ import { PersonalScene } from "./components/PersonalScene/PersonalScene.js";
 import { FailWhale } from "./components/FailWhale.js";
 import { GhostArrivalOverlay } from "./components/GhostArrivalOverlay.js";
 import { ReconnectingBanner } from "./components/ReconnectingBanner.js";
+import { ChatPanel } from "./components/ChatPanel/ChatPanel.js";
 
 /** Fade duration in ms for the deck.gl ↔ R3F renderer swap (FR-028, T090). */
 const FADE_MS = 200;
@@ -24,6 +25,7 @@ function AppInner() {
   const [showPersonal, setShowPersonal] = useState(stop === "personal");
   const [fadeOpacity, setFadeOpacity] = useState(1);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     const wantPersonal = stop === "personal";
@@ -41,6 +43,18 @@ function AppInner() {
       if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
     };
   }, [stop, showPersonal]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement | null)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA") return;
+      if ((e.key === "c" || e.key === "C") && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        setChatOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   // Find the focused ghost for the Personal scene (FR-029).
   const personalGhostId =
@@ -98,7 +112,36 @@ function AppInner() {
         )}
 
         <ReconnectingBanner visible={state.colyseusLinkState === "reconnecting"} />
+
+        {/* Chat toggle button — bottom-right corner */}
+        <button
+          type="button"
+          onClick={() => setChatOpen((o) => !o)}
+          aria-label="Toggle ghost chat (C)"
+          title="Ghost Chat [C]"
+          style={{
+            position: "absolute",
+            bottom: 20,
+            right: 20,
+            zIndex: 10,
+            background: chatOpen ? "rgba(60, 100, 160, 0.6)" : "rgba(20, 30, 50, 0.7)",
+            border: "1px solid rgba(100, 140, 180, 0.4)",
+            borderRadius: 6,
+            color: "rgba(180, 210, 255, 0.9)",
+            fontSize: 11,
+            padding: "6px 12px",
+            cursor: "pointer",
+            fontFamily: "monospace",
+            letterSpacing: "0.06em",
+            textTransform: "uppercase",
+          }}
+        >
+          Chat [C]
+        </button>
       </div>
+
+      {/* Full-screen chat overlay */}
+      {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
     </div>
   );
 }
