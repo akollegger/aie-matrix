@@ -275,9 +275,9 @@ export function SceneView() {
       return;
     }
 
-    // Step 7: ZOOM ONLY — fit R12 into the viewport.
-    if (venueZoomLevel === 7 && venueCellR12) {
-      const vport = cellFitViewport(venueCellR12, vp.w, vp.h, 24);
+    // Step 7: ZOOM to R10 fit — layers unchanged (still regional-end layers).
+    if (venueZoomLevel === 7 && venueCellR10) {
+      const vport = cellFitViewport(venueCellR10, vp.w, vp.h, 24);
       setDeckVS((v) => ({
         ...v,
         longitude: vport.longitude,
@@ -292,8 +292,22 @@ export function SceneView() {
       return;
     }
 
-    // Step 8: NO CAMERA CHANGE — layers snap to R15 mesh + extruded board.
-    // Camera stays at R12 zoom; venueZoomActiveRef is cleared by the timer effect.
+    // Step 8: ZOOM to R12 fit + layers snap simultaneously.
+    if (venueZoomLevel >= 8 && venueCellR12) {
+      const vport = cellFitViewport(venueCellR12, vp.w, vp.h, 24);
+      setDeckVS((v) => ({
+        ...v,
+        longitude: vport.longitude,
+        latitude: vport.latitude,
+        zoom: vport.zoom,
+        pitch: 0,
+        bearing: 0,
+        transitionDuration: 500,
+        transitionInterpolator: TRANSITION_INTERPOLATOR,
+        transitionEasing: (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2,
+      }));
+      return;
+    }
   }, [venueZoomLevel, viewState.stop, firstBoardH3, venueCellR10, venueCellR12, vp.w, vp.h]);
 
   useLayoutEffect(() => {
@@ -476,12 +490,9 @@ export function SceneView() {
         return buildRegionalEndLayers();
       }
 
-      // Step 7: zooming to R12 — show R12 wireframe, R9 context falls away
-      if (venueZoomLevel === 7 && venueCellR10) {
-        const r12Cells = cellToChildren(venueCellR10, 12);
-        const r10Faint = createH3WireframeLayer([venueCellR10], "vz-r10f", false, 0.2);
-        const r12Grid = createH3WireframeLayer(r12Cells, "vz-r12", false, 0.5);
-        return [r10Faint, r12Grid];
+      // Step 7: zooming to R10 fit — layers unchanged (same as step 6, pure zoom).
+      if (venueZoomLevel === 7) {
+        return buildRegionalEndLayers();
       }
 
       // Step 8: camera stopped — R15 mesh fills R12 + board tiles extruded 0.5m
