@@ -146,39 +146,31 @@ New work starts at **Phase 9**.
 
 ---
 
-## Phase 6: User Story 3 — Paired Conversation at Partner Scale (P2)
+## ~~Phase 6: User Story 3 — Paired Conversation at Partner Scale (P2)~~ *(superseded by Phase 13)*
 
-**Goal**: A paired attendee reads and sends messages to their ghost at Partner scale (20:80 **effective** overlay; full-bleed world underneath, no mini-map strip, FR-009). Partner/Ghost scale unavailable to unpaired attendees.
+> **Superseded 2026-04-27.** The five-scale model was replaced by the seven-stop camera model. Conversation and pairing are now implemented at the Personal stop (Phase 13, T094–T099). Tasks preserved as history.
 
-**Independent Test**: Append `?ghost=<id>` to URL; navigate to Partner scale; conversation stub ("unavailable") renders; message input present (disabled). With live ghost house endpoint: messages load and send.
-
-- [ ] T052 [US3] Implement `useA2AConversation` hook — polls `GET /conversation/:ghostId/messages`; sets `isAvailable: false` on 404/error; optimistic append on send (IC-002, FR-011) in `clients/intermedium/src/hooks/useA2AConversation.ts`
-- [ ] T053 [US3] Implement `MessageInput` component — text input + submit button; disabled with tooltip when `!isAvailable` (FR-010) in `clients/intermedium/src/components/ConversationThread/MessageInput.tsx`
-- [ ] T054 [US3] Implement `ConversationThread` component — ordered `ConversationMessage` list; "conversation not yet available" placeholder when `!isAvailable` (FR-009, FR-011) in `clients/intermedium/src/components/ConversationThread/ConversationThread.tsx`
-- [ ] T055 [US3] Implement `GhostStatusWidget` — minimal ambient widget showing ghost's current tile type and movement direction (derived from `previousH3Index` → `h3Index` bearing; "stationary" when absent) (FR-009) in `clients/intermedium/src/components/ConversationThread/GhostStatusWidget.tsx`
-- [ ] T056 [US3] Implement `PartnerPanel` — **overlay** with ~80% width footprint: `GhostStatusWidget` (top) + `ConversationThread` + `MessageInput` in `clients/intermedium/src/components/PanelView/PartnerPanel.tsx` (no separate mini-map column; FR-009)
-- [ ] T057 [US3] Implement pairing gate in `clients/intermedium/src/components/PairingGate.tsx` — blocks navigation to Partner/Ghost scale when `pairing === null`; renders clear unavailability message (FR-013)
-- [ ] T058 [US3] Wire Partner scale into `App.tsx` — `PartnerPanel` at 20:80 split; `PairingGate` wrapping Partner/Ghost nav controls
-- [ ] T059 [US3] Smoke test per `quickstart.md` "Paired Ghost Test": Partner scale renders with mock `?ghost=` token; conversation stub visible (SC-005)
-
-**Checkpoint**: User Stories 1, 2, and 3 functional. Full companion experience demonstrable with a pairing token.
+- [-] T052 [US3] ~~Implement `useA2AConversation` hook~~ — superseded by T095
+- [-] T053 [US3] ~~Implement `MessageInput` component~~ — superseded by T096
+- [-] T054 [US3] ~~Implement `ConversationThread` component~~ — superseded by T096
+- [-] T055 [US3] ~~Implement `GhostStatusWidget`~~ — superseded by T094
+- [-] T056 [US3] ~~Implement `PartnerPanel`~~ — superseded by T094
+- [-] T057 [US3] ~~Implement pairing gate in `PairingGate.tsx`~~ — superseded by T098
+- [-] T058 [US3] ~~Wire Partner scale into `App.tsx`~~ — superseded by T098
+- [-] T059 [US3] ~~Smoke test "Paired Ghost Test"~~ — superseded by T099
 
 ---
 
-## Phase 7: User Story 4 — Ghost Interiority at Ghost Scale (P3)
+## ~~Phase 7: User Story 4 — Ghost Interiority at Ghost Scale (P3)~~ *(superseded by Phase 13)*
 
-**Goal**: A paired attendee views their ghost's inventory, active goal, and memories at Ghost scale (0:100). Content is stubbed; `isAvailable: false` until IC-003 is resolved. **Copy**: observability-first, not game-quest diction (see `spec.md` US4 / FR-012).
+> **Superseded 2026-04-27.** Ghost interiority is rendered as floating annotations in the R3F Personal stop (Phase 13, T093/T097). The standalone `GhostInteriority` container, `InventoryList`, `GoalSummary`, and `Memories` components were not built; their responsibilities are handled by `PersonalScene/GhostInteriority.tsx`. Tasks preserved as history.
 
-**Independent Test**: With `?ghost=<id>`, navigate Partner → Ghost scale; `GhostInteriority` renders placeholder sections for inventory, active goal, memories; back control returns to Partner.
-
-- [ ] T060 [P] [US4] Implement `InventoryList` stub — renders "loading…" placeholder (IC-003 gap) in `clients/intermedium/src/components/GhostInteriority/InventoryList.tsx`
-- [ ] T061 [P] [US4] Implement `GoalSummary` stub — renders "loading…" placeholder in `clients/intermedium/src/components/GhostInteriority/GoalSummary.tsx`
-- [ ] T062 [P] [US4] Implement `Memories` stub — renders "loading…" placeholder in `clients/intermedium/src/components/GhostInteriority/Memories.tsx`
-- [ ] T063 [US4] Implement `GhostInteriority` container — assembles `InventoryList`, `GoalSummary`, `Memories`; `isAvailable: false` state note inline (FR-012) in `clients/intermedium/src/components/GhostInteriority/GhostInteriority.tsx`
-- [ ] T064 [US4] Implement `GhostPanel` — 100% panel: full-height `GhostInteriority`; no map; no message input (FR-012) in `clients/intermedium/src/components/PanelView/GhostPanel.tsx`
-- [ ] T065 [US4] Wire Ghost scale into `App.tsx` — `GhostPanel` at 0:100; Escape returns to Partner scale (FR-014)
-
-**Checkpoint**: All 4 user stories functional. Ghost scale renders placeholder interiority; navigation complete.
+- [-] T060 [P] [US4] ~~Implement `InventoryList` stub~~ — superseded by T097
+- [-] T061 [P] [US4] ~~Implement `GoalSummary` stub~~ — superseded by T097
+- [-] T062 [P] [US4] ~~Implement `Memories` stub~~ — superseded by T097
+- [-] T063 [US4] ~~Implement `GhostInteriority` container~~ — superseded by T097
+- [-] T064 [US4] ~~Implement `GhostPanel`~~ — superseded by T094/T098
+- [-] T065 [US4] ~~Wire Ghost scale into `App.tsx`~~ — superseded by T098
 
 ---
 

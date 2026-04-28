@@ -1,6 +1,6 @@
 # ADR-0006: Personal-Stop Rendering Stack
 
-**Status:** proposed  
+**Status:** accepted  
 **Date:** 2026-04-27  
 **Authors:** @akollegger
 

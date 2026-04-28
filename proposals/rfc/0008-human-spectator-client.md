@@ -1,6 +1,6 @@
 # RFC-0008: Intermedium — Human Spectator Client
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-04-25  
 **Authors:** @akollegger  
 **Related:** [RFC-0004](0004-h3-geospatial-coordinate-system.md) (H3 coordinate system),
