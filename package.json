@@ -21,6 +21,8 @@
     "server:dev": "pnpm --filter @aie-matrix/server dev",
     "spectator": "pnpm --filter @aie-matrix/client-phaser dev",
     "ghost:house": "pnpm --filter @aie-matrix/ghost-house dev",
+    "ghost:peppers-agent": "pnpm --filter @aie-matrix/ghost-peppers-agent run start",
+    "peppers:demo": "node ghosts/peppers-agent/scripts/peppers-demo.mjs",
     "ghost:register": "node scripts/register-ghost.mjs",
     "ghost:cli": "pnpm --filter @aie-matrix/ghost-cli start",
     "demo": "node scripts/demo.mjs",
