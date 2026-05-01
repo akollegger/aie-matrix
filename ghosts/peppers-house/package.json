@@ -1,0 +1,32 @@
+{
+  "name": "@aie-matrix/ghost-peppers-house",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/ghost-ts-client run build && pnpm --filter @aie-matrix/ghost-peppers-inner run build && pnpm --filter @aie-matrix/ghost-peppers-mem run build",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node --import tsx src/peppers-house-cli.ts"
+  },
+  "dependencies": {
+    "@aie-matrix/ghost-peppers-inner": "workspace:*",
+    "@aie-matrix/ghost-peppers-mem": "workspace:*",
+    "@aie-matrix/ghost-ts-client": "workspace:*",
+    "@aie-matrix/root-env": "workspace:*",
+    "openai": "^4.85.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "tsx": "^4.21.0",
+    "typescript": "~5.7.3"
+  }
+}

@@ -13,4 +13,7 @@ packages:
   - ghosts/random-house
   - ghosts/ghost-cli
   - ghosts/tck
+  - ghosts/peppers-inner
+  - ghosts/peppers-mem
+  - ghosts/peppers-house
   - e2e

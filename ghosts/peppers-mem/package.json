@@ -1,0 +1,35 @@
+{
+  "name": "@aie-matrix/ghost-peppers-mem",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "prebuild": "pnpm --filter @aie-matrix/root-env run build && pnpm --filter @aie-matrix/ghost-peppers-inner run build",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "smoke": "node --import tsx src/smoke.ts",
+    "smoke:cascade": "node --import tsx src/persist-smoke.ts",
+    "inspect:tools": "node --import tsx src/inspect-tools.ts",
+    "inspect:graph": "node --import tsx src/inspect-graph.ts",
+    "inspect:cascade": "node --import tsx src/inspect-cascade.ts",
+    "smoke:retrieve": "node --import tsx src/retrieve-smoke.ts"
+  },
+  "dependencies": {
+    "@aie-matrix/ghost-peppers-inner": "workspace:*",
+    "@aie-matrix/root-env": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.29.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "tsx": "^4.21.0",
+    "typescript": "~5.7.3"
+  }
+}

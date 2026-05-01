@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Peppers Ghost — Overlay</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --bg-card: #161b22;
+      --bg-card-hi: #1c2129;
+      --border: #30363d;
+      --text: #e6edf3;
+      --text-dim: #8b949e;
+      --accent: #58a6ff;
+      --warm: #f78166;
+      --cool: #79c0ff;
+      --ok: #3fb950;
+      --bad: #f85149;
+      --gold: #d29922;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+    body { padding: 16px; }
+    header {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 0 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+    }
+    header h1 {
+      font-size: 14px; margin: 0; letter-spacing: 0.05em; font-weight: 600;
+    }
+    header .ghost-id {
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 11px; color: var(--text-dim);
+    }
+    .status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+    .status .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-dim);
+    }
+    .status.live .dot { background: var(--ok); animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .card.wide { grid-column: 1 / -1; }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: var(--text-dim);
+      font-weight: 600;
+    }
+
+    /* Objective */
+    .obj-line { padding: 8px 0; }
+    .obj-line + .obj-line { border-top: 1px solid var(--border); }
+    .obj-label {
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--text-dim); margin-bottom: 4px;
+    }
+    .obj-text { font-size: 13px; line-height: 1.5; }
+    .obj-text.super { color: var(--gold); font-weight: 500; font-style: italic; }
+
+    /* Environment */
+    .env-row { display: flex; padding: 6px 0; border-bottom: 1px dashed transparent; }
+    .env-row + .env-row { border-top: 1px dashed var(--border); }
+    .env-label {
+      font-size: 11px; color: var(--text-dim); width: 110px; flex: 0 0 110px;
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .env-value {
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 12px; word-break: break-word; color: var(--text);
+    }
+    .env-value.dim { color: var(--text-dim); font-style: italic; }
+
+    /* Ghost head */
+    .head-super {
+      display: inline-block; padding: 4px 10px; border-radius: 12px;
+      background: rgba(210, 153, 34, 0.15); color: var(--gold);
+      font-size: 12px; font-style: italic; margin-bottom: 12px;
+    }
+    .monologue {
+      padding: 12px 14px;
+      background: rgba(88, 166, 255, 0.08);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      font-style: italic;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+    .action {
+      margin-top: 12px;
+      padding: 8px 12px;
+      background: var(--bg-card-hi);
+      border-radius: 4px;
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 12px;
+      color: var(--cool);
+      word-break: break-word;
+    }
+    .outcome {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    }
+    .outcome.fail { color: var(--bad); }
+    .adjustments {
+      margin-top: 12px;
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    .adj-row {
+      font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+      font-size: 11px; color: var(--text-dim);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .adj-row .arrow.up { color: var(--ok); }
+    .adj-row .arrow.down { color: var(--warm); }
+
+    /* Personality */
+    .facet { padding: 6px 0; }
+    .facet + .facet { border-top: 1px dashed var(--border); }
+    .facet-name { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+    .bar-row { display: flex; align-items: center; gap: 8px; margin: 2px 0; }
+    .bar-axis {
+      font-size: 9px; width: 14px; flex: 0 0 14px;
+      font-family: ui-monospace, monospace; font-weight: 600;
+    }
+    .bar-axis.i { color: var(--accent); }
+    .bar-axis.e { color: var(--warm); }
+    .bar {
+      flex: 1; height: 6px; background: #21262d; border-radius: 3px;
+      overflow: hidden; position: relative;
+    }
+    .bar > div { height: 100%; border-radius: 3px; transition: width 0.25s ease; }
+    .bar > div.i { background: var(--accent); }
+    .bar > div.e { background: var(--warm); }
+    .bar-val {
+      font-size: 10px; color: var(--text-dim); width: 32px; flex: 0 0 32px;
+      text-align: right; font-family: ui-monospace, monospace;
+    }
+
+    /* Chats */
+    .chat-empty { color: var(--text-dim); font-style: italic; font-size: 13px; }
+    .chat-line {
+      padding: 8px 12px; margin: 6px 0; border-radius: 6px;
+      max-width: 92%;
+    }
+    .chat-line.in { background: rgba(121, 192, 255, 0.1); align-self: flex-start; }
+    .chat-line.out { background: rgba(63, 185, 80, 0.12); margin-left: 8%; }
+    .chat-from { font-size: 10px; color: var(--text-dim); margin-bottom: 4px; }
+    .chat-text { font-size: 13px; color: var(--text); }
+    .chats-scroll { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; }
+
+    /* Cascade index */
+    .cascade-tag {
+      display: inline-block; padding: 2px 8px; border-radius: 10px;
+      background: var(--bg-card-hi); color: var(--text-dim); font-size: 10px;
+      letter-spacing: 0.05em; text-transform: uppercase;
+    }
+
+    /* Footer / meta */
+    footer {
+      margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-dim); text-align: center;
+      font-family: ui-monospace, monospace;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>PEPPERS GHOST · OVERLAY</h1>
+    <span class="ghost-id" id="ghost-id">—</span>
+    <div class="status" id="status"><span class="dot"></span><span id="status-text">connecting…</span></div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Objective</h2>
+      <div id="objective-card">
+        <div class="obj-line"><div class="obj-label">Surface (world job)</div><div class="obj-text" id="obj-surface">—</div></div>
+        <div class="obj-line"><div class="obj-label">Id super-objective (current)</div><div class="obj-text super" id="obj-super">—</div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Environment</h2>
+      <div id="environment-card">—</div>
+    </div>
+
+    <div class="card wide">
+      <h2>Ghost's Head <span class="cascade-tag" id="cascade-tag">—</span></h2>
+      <div id="head-card">
+        <div class="chat-empty">Waiting for first cascade…</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Personality</h2>
+      <div id="personality-card">—</div>
+    </div>
+
+    <div class="card">
+      <h2>Chats</h2>
+      <div id="chats-card" class="chats-scroll"><div class="chat-empty">No utterances yet.</div></div>
+    </div>
+  </div>
+
+  <footer><span id="meta">—</span></footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const status = $('status');
+    const statusText = $('status-text');
+
+    let ghostId = null;
+    let chats = [];
+    let cascadeCount = 0;
+
+    const setStatus = (text, live = false) => {
+      statusText.textContent = text;
+      status.classList.toggle('live', live);
+    };
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+
+    const formatInventory = (refs) => {
+      if (!refs || refs.length === 0) return '(nothing)';
+      const counts = {};
+      for (const r of refs) counts[r] = (counts[r] || 0) + 1;
+      return Object.entries(counts).map(([r, n]) => n === 1 ? r : `${r} × ${n}`).join(', ');
+    };
+
+    const renderObjective = (objective, superObjective) => {
+      $('obj-surface').textContent = objective || '(none set)';
+      if (superObjective) $('obj-super').textContent = superObjective;
+    };
+
+    const renderEnvironment = (ctx, tileClass) => {
+      const rows = [];
+      const row = (label, value, dim = false) =>
+        `<div class="env-row"><div class="env-label">${esc(label)}</div><div class="env-value${dim ? ' dim' : ''}">${esc(value)}</div></div>`;
+      if (tileClass) rows.push(row('Tile', tileClass));
+      if (ctx) {
+        if (ctx.exits !== undefined)
+          rows.push(row('Exits', (ctx.exits && ctx.exits.length) ? ctx.exits.join(', ') : '(none)', !ctx.exits || ctx.exits.length === 0));
+        if (ctx.nearbyGhosts !== undefined)
+          rows.push(row('Ghosts here', (ctx.nearbyGhosts && ctx.nearbyGhosts.length) ? ctx.nearbyGhosts.join(', ') : '(alone)', !ctx.nearbyGhosts || ctx.nearbyGhosts.length === 0));
+        if (ctx.itemsHere !== undefined)
+          rows.push(row('On the floor', (ctx.itemsHere && ctx.itemsHere.length) ? ctx.itemsHere.join(', ') : '(empty)', !ctx.itemsHere || ctx.itemsHere.length === 0));
+        if (ctx.inventory !== undefined)
+          rows.push(row('Carrying', formatInventory(ctx.inventory), !ctx.inventory || ctx.inventory.length === 0));
+      }
+      $('environment-card').innerHTML = rows.join('') || '—';
+    };
+
+    const renderHead = (record) => {
+      const adjLines = (record.adjustments || []).map(a => {
+        const arrow = a.direction === 'up' ? '↑' : '↓';
+        const cls = a.direction;
+        return `<div class="adj-row"><span class="arrow ${cls}">${arrow}</span><span>${esc(a.facet)}.${esc(a.axis)}</span><span style="margin-left:auto">${a.beforeDisplay.toFixed(2)} → ${a.afterDisplay.toFixed(2)}</span></div>`;
+      }).join('');
+      const failClass = record.outcome && !record.outcome.ok ? ' fail' : '';
+      $('head-card').innerHTML = `
+        <span class="head-super">⚙ ${esc(record.superObjective)}</span>
+        <div class="monologue">${esc(record.monologue)}</div>
+        <div class="action">${esc(JSON.stringify(record.action))}</div>
+        <div class="outcome${failClass}">${esc(formatOutcome(record.outcome))}</div>
+        ${adjLines ? `<div class="adjustments">${adjLines}</div>` : ''}
+      `;
+    };
+
+    const formatOutcome = (o) => {
+      if (!o) return '';
+      if (o.ok) return 'ok';
+      return `DENIED ${o.code || 'ERROR'}${o.reason ? ' — ' + o.reason : ''}`;
+    };
+
+    const renderPersonality = (facets) => {
+      if (!facets || facets.length === 0) {
+        $('personality-card').innerHTML = '—';
+        return;
+      }
+      $('personality-card').innerHTML = facets.map(f => `
+        <div class="facet">
+          <div class="facet-name">${esc(f.facet)}</div>
+          <div class="bar-row">
+            <span class="bar-axis i">I</span>
+            <div class="bar"><div class="i" style="width: ${(f.internal / 10 * 100).toFixed(1)}%"></div></div>
+            <span class="bar-val">${f.internal.toFixed(2)}</span>
+          </div>
+          <div class="bar-row">
+            <span class="bar-axis e">E</span>
+            <div class="bar"><div class="e" style="width: ${(f.external / 10 * 100).toFixed(1)}%"></div></div>
+            <span class="bar-val">${f.external.toFixed(2)}</span>
+          </div>
+        </div>
+      `).join('');
+    };
+
+    const renderChats = () => {
+      const node = $('chats-card');
+      if (chats.length === 0) {
+        node.innerHTML = '<div class="chat-empty">No utterances yet.</div>';
+        return;
+      }
+      node.innerHTML = chats.slice(-20).map(c => `
+        <div class="chat-line ${c.direction}">
+          <div class="chat-from">${esc(c.from)}</div>
+          <div class="chat-text">${esc(c.text)}</div>
+        </div>
+      `).join('');
+      node.scrollTop = node.scrollHeight;
+    };
+
+    const trackChats = (record) => {
+      if (record.stimulus && record.stimulus.kind === 'utterance') {
+        chats.push({ from: record.stimulus.from, text: record.stimulus.text, direction: 'in' });
+      }
+      if (record.action && record.action.kind === 'say' && record.outcome && record.outcome.ok) {
+        chats.push({ from: ghostId ? ghostId.slice(0, 8) : 'me', text: record.action.text, direction: 'out' });
+      }
+      renderChats();
+    };
+
+    const handleInit = (data) => {
+      ghostId = data.ghostId || null;
+      $('ghost-id').textContent = ghostId ? ghostId.slice(0, 8) + '…' : '—';
+      setStatus('live', true);
+      renderObjective(data.objective, null);
+      renderPersonality(data.personality);
+      $('meta').textContent = `seed ${data.birthSeed ?? '—'} · started ${data.startedAt ?? '—'}`;
+    };
+
+    const handleCascade = (record) => {
+      cascadeCount++;
+      $('cascade-tag').textContent = `cascade #${cascadeCount}`;
+      renderObjective(record.objective, record.superObjective);
+      renderEnvironment(record.worldContext, record.tileClass);
+      renderHead(record);
+      renderPersonality(record.personality);
+      trackChats(record);
+    };
+
+    const connect = () => {
+      const es = new EventSource('/events');
+      es.addEventListener('init', e => { try { handleInit(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('cascade', e => { try { handleCascade(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('error', () => {
+        setStatus('disconnected — retrying…', false);
+        es.close();
+        setTimeout(connect, 2000);
+      });
+    };
+    connect();
+  </script>
+</body>
+</html>
