@@ -1,48 +1,14 @@
-// canonical map format example
-{
-    kind: "matrix-map",
-    name: "canonical-example",
-    elevation: 0
-}
+{ kind: "matrix-map", name: "canonical-example", description: "Reference map showing every .map.gram construct", elevation: 0 }
 
-(carpetedFloor:TileType:CarpetedFloor {
-    name: "big-room",
-    color: css`gray` // styling of these type of tiles
-})
+(floor:TileType:Floor { name: "Floor", description: "Open walkable area", capacity: 4, style: css`background: #c8b89a` })
+(pillar:TileType:Pillar { name: "Pillar", description: "Impassable column", capacity: 0, style: css`background: #555` })
 
-// the bounding polygon for the map, defined by an ordered sequence of tiles which form a closed shape
-[lobby:Polygon:CarpetedFloor | // maps will have multiple Polygons that are implicitly filled with tiles matching the named TileType, here `CarpetedFloor`
-    topLeft, // these are example IDs for tile nodes. the actual IDs will be opaque rather than semantic
-    topRight,
-    bottomRight,
-    bottomLeft
-]
+(brassKey:ItemType:BrassKey { name: "Brass Key", description: "Opens the north door", glyph: char`🔑`, takeable: true, capacityCost: 1 })
 
-(topLeft:CarpetedFloor { // the `topLeft` identifier is illustrative, not normative
-    location: h3`0x8f2800000000195` // an h3 coordinate is a 64-bit hex string
-    // other properties as needed
-})
+[ground:Layer {kind: "polygon", name: "Ground"} | (:Polygon:Floor { geometry: [h3`8f2800000000195`, h3`8f2800000000012`, h3`8f2800000000015`, h3`8f2800000000198`] })]
+[overrides:Layer {kind: "tile", name: "Overrides"} | (:Tile:Pillar { geometry: [h3`8f2800000000012`] }), (:Portal { geometry: [h3`8f2800000000195`, h3`8f2800000000015`], mode: "Door" })]
+[collectibles:Layer {kind: "items", name: "Collectibles"} | (:Item:BrassKey { geometry: [h3`8f2800000000015`] })]
 
-(pillar:TileType:Pillar {
-    name: "pillar"
-})
+[layers:LayerStack | ground, overrides, collectibles]
 
-(pillar1:Pillar {
-    location: h3`8f2800000000012` // a tile instance may be inside a Polygon, overriding the tile type at that location
-})
-
-
-// h3-adjacent hex tiles are implicitly connected to avoid exhaustively enumerating every navigable path
-
-
-// items have a type definition
-(brassKey:ItemType:BrassKey { // `brassKey` is normative. `ItemType` sets this apart from instances of `BrassKey`
-    name: "brass key",
-    color: css`red`,
-    glyph: "🔑"
-})
-
-// an instance of placed item
-(key1:BrassKey { // `BrassKey` without the `ItemType` qualifier.
-    location: h3`8f2800000000015`
-})
+[rules:Rules | (floor)-[:GO]->(floor), (floor)-[:GO]->(pillar)]

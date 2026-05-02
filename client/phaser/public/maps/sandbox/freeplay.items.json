@@ -1,0 +1,44 @@
+{
+  "sign-welcome": {
+    "name": "Welcome Board",
+    "itemClass": "Sign",
+    "carriable": false,
+    "capacityCost": 0,
+    "glyph": "🪧",
+    "description": "A large board listing the day's sessions and booth locations."
+  },
+  "key-brass": {
+    "name": "Brass Key",
+    "itemClass": "Key",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "🔑",
+    "description": "A small brass key. It might open something nearby.",
+    "attrs": {
+      "material": "brass"
+    }
+  },
+  "obstacle-statue": {
+    "name": "Stone Statue",
+    "itemClass": "Obstacle",
+    "carriable": false,
+    "capacityCost": 1,
+    "glyph": "🗿",
+    "description": "A heavy stone statue. It takes up considerable space.",
+    "attrs": {
+      "material": "stone",
+      "weight": 200
+    }
+  },
+  "badge-sponsor": {
+    "name": "Sponsor Badge",
+    "itemClass": "Badge",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "🎫",
+    "description": "A sponsor-tier conference badge. Shows you mean business.",
+    "attrs": {
+      "tier": "sponsor"
+    }
+  }
+}

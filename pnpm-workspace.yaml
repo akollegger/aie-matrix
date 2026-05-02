@@ -1,5 +1,6 @@
 packages:
   - tools/tmj-to-gram
+  - tools/map-editor
   - server
   - server/colyseus
   - server/conversation
