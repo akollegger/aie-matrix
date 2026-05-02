@@ -1,4 +1,5 @@
 import { cellToBoundary } from "h3-js"
+import type { CSSProperties, ReactNode } from "react"
 import { useEditor } from "../state/editor-context"
 import type { ItemsLayerState, PolygonLayerState, TileLayerState } from "../state/editor-state"
 import { h3Index as brandH3 } from "../types/map-gram"
@@ -35,7 +36,7 @@ function computeBoundingBox(state: ReturnType<typeof useEditor>["state"]): strin
 // Input helpers
 // ---------------------------------------------------------------------------
 
-const fieldStyle: React.CSSProperties = {
+const fieldStyle: CSSProperties = {
   width: "100%",
   background: "#0f1117",
   border: "1px solid #2a2a3e",
@@ -47,14 +48,14 @@ const fieldStyle: React.CSSProperties = {
   boxSizing: "border-box",
 }
 
-const labelStyle: React.CSSProperties = {
+const labelStyle: CSSProperties = {
   fontSize: 11,
   color: "#777",
   marginBottom: 2,
   display: "block",
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div style={{ marginBottom: 10 }}>
       <span style={labelStyle}>{label}</span>
@@ -215,9 +216,7 @@ function PolygonProperties({ layerId, id }: { layerId: string; id: string }) {
         <select
           style={{ ...fieldStyle, cursor: "pointer" }}
           value={poly.typeName}
-          onChange={e => {
-            void e
-          }}
+          onChange={e => dispatch({ type: "UPDATE_POLYGON_TYPE", layerId, id: poly.id, typeName: e.target.value })}
         >
           {state.tileTypes.map(t => (
             <option key={t.id} value={t.typeName}>{t.name}</option>

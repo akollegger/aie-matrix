@@ -1,10 +1,11 @@
 import { createContext, useContext } from "react"
+import type { Dispatch } from "react"
 import type { MapEditorState } from "./editor-state"
 import type { EditorAction } from "./editor-reducer"
 
 export interface EditorContextValue {
   state: MapEditorState
-  dispatch: React.Dispatch<EditorAction>
+  dispatch: Dispatch<EditorAction>
 }
 
 export const EditorContext = createContext<EditorContextValue | null>(null)

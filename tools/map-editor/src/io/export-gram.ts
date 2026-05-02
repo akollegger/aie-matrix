@@ -8,6 +8,10 @@ function esc(s: string): string {
   return JSON.stringify(s)
 }
 
+function escTagged(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/`/g, "\\`")
+}
+
 function slugId(s: string): string {
   return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
 }
@@ -34,7 +38,7 @@ function tileTypeSection(state: MapEditorState): string {
       const parts: string[] = [`name: ${esc(t.name)}`]
       if (t.description) parts.push(`description: ${esc(t.description)}`)
       if (t.capacity !== undefined) parts.push(`capacity: ${t.capacity}`)
-      if (t.style) parts.push(`style: css\`${t.style}\``)
+      if (t.style) parts.push(`style: css\`${escTagged(t.style)}\``)
       return `(${id}:TileType:${t.typeName} { ${parts.join(", ")} })`
     })
     .join("\n")
@@ -47,10 +51,10 @@ function itemTypeSection(state: MapEditorState): string {
       const id = slugId(t.id)
       const parts: string[] = [`name: ${esc(t.name)}`]
       if (t.description) parts.push(`description: ${esc(t.description)}`)
-      if (t.glyph) parts.push(`glyph: char\`${t.glyph}\``)
+      if (t.glyph) parts.push(`glyph: char\`${escTagged(t.glyph)}\``)
       parts.push(`takeable: ${t.takeable}`)
       if (t.capacityCost !== undefined) parts.push(`capacityCost: ${t.capacityCost}`)
-      if (t.style) parts.push(`style: css\`${t.style}\``)
+      if (t.style) parts.push(`style: css\`${escTagged(t.style)}\``)
       return `(${id}:ItemType:${t.typeName} { ${parts.join(", ")} })`
     })
     .join("\n")

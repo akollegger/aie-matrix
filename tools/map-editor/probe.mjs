@@ -7,7 +7,7 @@ import { chromium } from "@playwright/test"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 
-const PROBE_URL = process.env.PROBE_URL ?? "http://localhost:5182/"
+const PROBE_URL = process.env.PROBE_URL ?? "http://localhost:5181/"
 const WAIT_MS = parseInt(process.env.PROBE_WAIT ?? "8000", 10)
 
 const browser = await chromium.launch({ headless: true })

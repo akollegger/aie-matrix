@@ -1,4 +1,5 @@
 import { useState } from "react"
+import type { CSSProperties } from "react"
 import { useEditor } from "../state/editor-context"
 import type { MapLayer } from "../state/editor-state"
 
@@ -22,7 +23,7 @@ function LockIcon({ locked }: { locked: boolean }) {
   return <span style={{ opacity: locked ? 1 : 0.35, fontSize: 13, lineHeight: 1 }}>{locked ? "🔒" : "🔓"}</span>
 }
 
-const iconButton: React.CSSProperties = {
+const iconButton: CSSProperties = {
   background: "none",
   border: "none",
   cursor: "pointer",

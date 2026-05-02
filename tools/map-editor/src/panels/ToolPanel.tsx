@@ -1,4 +1,5 @@
 import { useRef } from "react"
+import type { ChangeEvent, CSSProperties } from "react"
 import { exportGram } from "../io/export-gram"
 import { importGram } from "../io/import-gram"
 import { useEditor } from "../state/editor-context"
@@ -34,7 +35,7 @@ export function ToolPanel() {
     downloadFile(gram, filename)
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
@@ -51,7 +52,7 @@ export function ToolPanel() {
     e.target.value = ""
   }
 
-  const toolBtn = (active: boolean): React.CSSProperties => ({
+  const toolBtn = (active: boolean): CSSProperties => ({
     background: active ? "#2255aa" : "#1c1c30",
     color: active ? "#ddf" : "#888",
     border: `1px solid ${active ? "#3366cc" : "#2a2a3e"}`,
@@ -62,7 +63,7 @@ export function ToolPanel() {
     lineHeight: 1,
   })
 
-  const actionBtn: React.CSSProperties = {
+  const actionBtn: CSSProperties = {
     background: "#1c1c30",
     color: "#aaa",
     border: "1px solid #2a2a3e",

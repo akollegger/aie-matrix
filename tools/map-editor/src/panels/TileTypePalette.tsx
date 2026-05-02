@@ -1,9 +1,15 @@
 import { useState } from "react"
+import type { CSSProperties } from "react"
 import { useEditor } from "../state/editor-context"
 import { BUILTIN_FLOOR_ID } from "../state/editor-reducer"
 import type { TileType } from "../types/map-gram"
 
-const rowStyle = (active: boolean): React.CSSProperties => ({
+function toLabelSafe(name: string): string {
+  return name.trim().split(/[^a-zA-Z0-9]+/).filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("") || "Type"
+}
+
+const rowStyle = (active: boolean): CSSProperties => ({
   display: "flex",
   alignItems: "center",
   gap: 6,
@@ -47,7 +53,7 @@ function TileTypeRow({
     setEditing(false)
     const trimmed = draftName.trim()
     if (trimmed && trimmed !== tileType.name) {
-      dispatch({ type: "UPDATE_TILE_TYPE", id: tileType.id, patch: { name: trimmed, typeName: trimmed } })
+      dispatch({ type: "UPDATE_TILE_TYPE", id: tileType.id, patch: { name: trimmed, typeName: toLabelSafe(trimmed) } })
     } else {
       setDraftName(tileType.name)
     }

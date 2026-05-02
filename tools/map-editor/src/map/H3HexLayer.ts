@@ -44,17 +44,17 @@ const LAYER = {
 function cellsToFeatureCollection(cells: string[]): GeoJSON.FeatureCollection {
   return {
     type: "FeatureCollection",
-    features: cells.map(cell => ({
-      type: "Feature",
-      properties: { cell },
-      geometry: {
-        type: "Polygon",
-        coordinates: [
-          [...cellToBoundary(cell).map(([lat, lng]) => [lng, lat] as [number, number]),
-          cellToBoundary(cell).map(([lat, lng]) => [lng, lat] as [number, number])[0]],
-        ],
-      },
-    })),
+    features: cells.map(cell => {
+      const boundary = cellToBoundary(cell).map(([lat, lng]) => [lng, lat] as [number, number])
+      return {
+        type: "Feature",
+        properties: { cell },
+        geometry: {
+          type: "Polygon",
+          coordinates: [[...boundary, boundary[0]!]],
+        },
+      }
+    }),
   }
 }
 

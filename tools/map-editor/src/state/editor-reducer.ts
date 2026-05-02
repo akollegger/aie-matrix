@@ -40,6 +40,14 @@ function uid(): string {
   return Math.random().toString(36).slice(2, 9)
 }
 
+function hasTileAt(state: MapEditorState, cell: H3Index): boolean {
+  return state.layers.some(l => {
+    if (l.kind === "tile") return l.tiles.has(cell)
+    if (l.kind === "polygon") return l.committed.some(p => (p.cells as H3Index[]).includes(cell))
+    return false
+  })
+}
+
 function defaultTool(kind: MapLayer["kind"]): ActiveTool {
   if (kind === "polygon") return "polygon"
   if (kind === "items") return "place-item"
@@ -119,6 +127,7 @@ export type EditorAction =
   | { type: "CONFIRM_POLYGON" }
   | { type: "CANCEL_POLYGON" }
   | { type: "DELETE_POLYGON"; layerId: string; id: string }
+  | { type: "UPDATE_POLYGON_TYPE"; layerId: string; id: string; typeName: string }
   // Portals (active tile layer)
   | { type: "SELECT_PORTAL_FROM"; h3: H3Index }
   | { type: "CREATE_PORTAL"; h3: H3Index }
@@ -418,6 +427,16 @@ export function editorReducer(
         },
       }
 
+    case "UPDATE_POLYGON_TYPE":
+      return {
+        ...state,
+        layers: state.layers.map(l =>
+          l.id === action.layerId && l.kind === "polygon"
+            ? { ...l, committed: l.committed.map(p => p.id === action.id ? { ...p, typeName: action.typeName } : p) } as PolygonLayerState
+            : l
+        ),
+      }
+
     // --- Portals ---
     case "SELECT_PORTAL_FROM":
       return { ...state, ui: { ...state.ui, portalPendingFrom: action.h3 } }
@@ -427,6 +446,9 @@ export function editorReducer(
       if (!portalPendingFrom) return state
       const activeLayer = state.layers.find(l => l.id === state.ui.activeLayerId)
       if (!activeLayer || activeLayer.kind !== "tile") return state
+      if (!hasTileAt(state, portalPendingFrom) || !hasTileAt(state, action.h3)) {
+        return { ...state, ui: { ...state.ui, hint: "Portals can only connect existing tiles", portalPendingFrom: null } }
+      }
       const existing = activeLayer.portals.find(
         p => p.fromH3 === portalPendingFrom && p.toH3 === action.h3
       )
@@ -483,6 +505,9 @@ export function editorReducer(
     case "PLACE_ITEM": {
       const activeLayer = state.layers.find(l => l.id === state.ui.activeLayerId)
       if (!activeLayer || activeLayer.kind !== "items" || activeLayer.locked) return state
+      if (!hasTileAt(state, action.h3)) {
+        return { ...state, ui: { ...state.ui, hint: "Items can only be placed on existing tiles" } }
+      }
       const item: ItemInstance = { id: `item-${uid()}`, typeName: action.itemTypeName, h3Index: h3Index(action.h3) }
       return {
         ...state,

@@ -16,7 +16,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:5173` in Chrome or Firefox.
+Open `http://localhost:5181` in Chrome or Firefox.
 
 ## Smoke test: view (Story 1)
 
@@ -28,7 +28,7 @@ Open `http://localhost:5173` in Chrome or Firefox.
 ## Smoke test: paint tiles and export (Story 2)
 
 1. The **✏ paint** tool is active by default. Click several hex cells — they highlight.
-2. Click a painted cell again — it erases (toggle).
+2. Click a painted cell again — it selects it; the property panel shows its type. Use the **⌫ erase** tool to remove painted cells.
 3. Click **Export** — a `untitled-map.map.gram` file downloads.
 4. Open it in a text editor and confirm:
    - First line: `{ kind: "matrix-map", name: "untitled-map", elevation: 0 }`
