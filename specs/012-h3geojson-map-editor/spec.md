@@ -2,7 +2,7 @@
 
 **Feature Branch**: `012-h3geojson-map-editor`  
 **Created**: 2026-04-28  
-**Status**: Draft  
+**Status**: Implemented (MVP complete)  
 **Input**: User description: "a map editor to replace the use of Tiled, inspired by GeoJSON, and based on an existing h3-viewer as described in proposals/rfc/0010-h3geojson-map-editor.md"
 
 ## Proposal Context *(mandatory)*
@@ -156,34 +156,39 @@ A map author switches to the portal tool, selects two existing tile cells, and c
 ### Functional Requirements
 
 - **FR-001**: The editor MUST render H3 cells on a real-world map base (OpenStreetMap or equivalent) at the configured resolution.
-- **FR-002**: The polygon layer MUST allow authors to place vertices by clicking; each vertex MUST snap to the nearest H3 cell centroid.
-- **FR-003**: On polygon confirmation, the editor MUST commit the polygon shape and render its interior H3 cells as virtual tiles (derived on-the-fly via `h3.polygonToCells`); virtual tiles are NOT stored as individual tile instances.
+- **FR-002**: Polygon placement uses shape buttons (Triangle / Rectangle / Hexagon). One click on the map places a pre-computed polygon at that location. Vertex positions are pre-computed as anchor cells using `polygonAnchorCells`; they are the cells stored in `geometry`.
+- **FR-002a**: Polygons can alternatively be placed by clicking individual vertex cells one at a time (polygon tool, freeform mode) and confirming; this path also computes and stores vertex cells.
+- **FR-003**: A committed polygon's interior H3 cells (virtual tiles) are derived on-the-fly by the editor and by consumers using `h3.polygonToCellsExperimental` with `containmentOverlapping` mode. The full cell fill is **not stored** in the `.map.gram` file — only the N vertex cells appear in `geometry`.
 - **FR-004**: The editor MUST prevent polygon confirmation with fewer than 3 vertices and display an explanatory message.
+- **FR-004a**: Supported polygon shapes are triangle (3 vertices), rectangle (4 vertices), and hexagon (6 vertices). Pentagon is intentionally excluded.
 - **FR-005**: The tile layer MUST support individual cell painting (add explicit tile instance with selected type) and erasing (remove explicit tile instance). The erase tool has no effect on virtual tiles; to mask a cell inside a polygon, the author paints an explicit tile of a different type over it.
 - **FR-006**: Painting a cell that overlaps a virtual tile region creates an explicit tile instance at that cell, overriding the polygon's tile type at that location in both the editor and the export.
 - **FR-006a**: Deleting a polygon MUST remove all its virtual tiles from the rendered map; explicit tile instances that happen to overlap the polygon's region are unaffected.
-- **FR-007**: The editor MUST include one built-in tile type ("Floor") that is always present and cannot be deleted; it may be renamed. The tile type palette MUST allow authors to create, edit, and delete additional tile type definitions with: name (required), description (optional), capacity (optional integer), style (optional CSS expression).
+- **FR-006b**: A selected polygon can be dragged to a new location (hand tool). It can be double-clicked to enter vertex-edit mode, where individual vertex handles can be dragged to deform the shape.
+- **FR-007**: The editor MUST include one built-in tile type ("Floor") that is always present and cannot be deleted; it may be renamed. The tile type palette MUST allow authors to create, edit, and delete additional tile type definitions with: name (required), description (optional), capacity (optional integer), style (optional CSS expression). Creating a new tile type automatically adds a self-movement rule for it.
 - **FR-008**: The item type palette MUST allow authors to create, edit, and delete item type definitions with: name, description, glyph (Unicode character), takeable (boolean), capacityCost (integer), style (CSS expression).
-- **FR-009**: The item layer MUST allow authors to place item instances on existing tile cells; each instance references its item type and records its H3 location.
-- **FR-010**: The portal layer MUST allow authors to select two existing tile cells and create a typed directed Portal relationship between them; portal `mode` MUST be editable in the property editor.
-- **FR-011**: Portals MUST only connect cells that exist in the tile layer; attempting to portal to a non-tile cell MUST be prevented.
-- **FR-012**: The layer panel MUST support per-layer toggle of visibility and lock/unlock (edit-protection).
-- **FR-017**: A properties panel MUST be always visible in the editor sidebar. When no element is selected, it displays map properties: name (editable, pre-filled as `untitled-map`), description (editable), elevation (editable integer), and bounding box (read-only, derived from the geographic extent of all current tiles and polygons). When a tile, polygon, portal, or item is selected, the panel displays and allows editing of that element's properties.
-- **FR-013**: Multiple item layers MUST be supported; each is independently nameable, visible, and lockable.
-- **FR-014**: The editor MUST export the current map state to a `.map.gram` file conforming to the H3GeoJSON schema defined in RFC-0010.
-- **FR-015**: The editor MUST import a `.map.gram` file and restore all tile types, item types, tile instances, portals, and item instances exactly as authored.
+- **FR-009**: Items layers MUST allow authors to place item instances at any H3 cell; each instance references its item type and records its H3 location.
+- **FR-010**: The portal tool MUST allow authors to select two existing tile cells and create a typed directed Portal relationship between them; portal `mode` MUST be editable in the property editor.
+- **FR-011**: The layer panel MUST support per-layer toggle of visibility and lock/unlock (edit-protection). Layers can be added, removed, renamed, and reordered.
+- **FR-012**: All layer types (polygon, tile, items) are instances of a unified layer model. A map has one or more layers in an ordered stack; the active layer determines which tools are available and which element types receive edits.
+- **FR-013**: Multiple layers of any kind are supported; each is independently nameable, visible, and lockable.
+- **FR-014**: The editor MUST export the current map state to a `.map.gram` file. The format uses gram walks `[id:Layer {kind: "..."}| ...]` for layers and `[rules:Rules | ...]` for movement rules.
+- **FR-015**: The editor MUST import a `.map.gram` file and restore all tile types, item types, tile instances, portals, item instances, layers, and movement rules exactly as authored. On import, polygon cell fills are recomputed from stored vertex cells.
 - **FR-016**: The exported `.map.gram` MUST include the map header (`kind`, `name`, `description`, `elevation`). The bounding box is a derived display value and is NOT written to the gram file.
+- **FR-017**: A properties panel MUST be always visible in the editor sidebar. When no element is selected, it displays map properties: name (editable), description (editable), elevation (editable integer), bounding box (read-only), and movement rules (read-only list). When a tile, polygon, portal, or item is selected, the panel shows that element's properties. Clicking the 📄 icon in the toolbar always returns to map properties.
+- **FR-018**: The editor MUST serialise movement rules as `[rules:Rules | (fromId)-[:GO]->(toId), ...]` and restore them on import. The built-in initial rule is `Floor → Floor`.
 
 ### Key Entities
 
-- **TileType**: Named, styled classification for tile instances; attributes: name, description, capacity, style (CSS).
+- **TileType**: Named, styled classification for tile instances; attributes: name, description, capacity, style (CSS). `id` is the gram identifier; `typeName` is the gram label.
 - **ItemType**: Named classification for item instances; attributes: name, description, glyph, takeable, capacityCost, style (CSS).
-- **TileInstance**: An explicitly painted H3 cell assigned a tile type. Distinct from virtual tiles — only explicit instances are stored as gram nodes. An instance inside a polygon region overrides the polygon's tile type at that cell.
-- **VirtualTile**: An H3 cell rendered because it falls inside a committed PolygonShape. Not stored as a gram node; derived on-the-fly. Disappears if the polygon is deleted.
-- **PolygonShape**: An ordered list of H3 cell vertices defining a closed filled region and its tile type. The source of virtual tiles; stored as a polygon block in the gram file. Can be deleted, which removes all its virtual tiles.
-- **Portal**: A typed directed relationship between two tile instances; attributes: mode (string).
-- **ItemInstance**: A placed item of a given item type at a specific H3 cell location.
-- **Layer**: An independently visible/lockable authoring surface; types: Polygon (0–1), Tile (exactly 1), Portal (0–1), Item (0+).
+- **TileInstance**: An explicitly painted H3 cell assigned a tile type. Only explicit instances are stored in the gram tile layer. An instance inside a polygon region overrides the polygon's tile type at that cell.
+- **VirtualTile**: An H3 cell rendered because it falls inside a committed PolygonShape. Not stored; derived on-the-fly from polygon vertices. Disappears if the polygon is deleted.
+- **PolygonShape**: N vertex H3 cells defining a closed filled region and its tile type. Serialised as `geometry: [h3`...`]` in the gram file. The full cell fill is derived from vertices by consumers using `polygonToCellsExperimental(containmentOverlapping)`.
+- **Portal**: A typed directed relationship between two H3 cells in a tile layer; attributes: mode (string).
+- **ItemInstance**: A placed item of a given item type at a specific H3 cell.
+- **MovementRule**: A permitted traversal between two tile types, serialised as `(fromId)-[:GO]->(toId)` in the `[rules:Rules | ...]` walk.
+- **Layer**: An independently visible/lockable authoring surface. All layers share a unified model (`MapLayer` union). Kind determines valid tools and element types: `"polygon"` | `"tile"` | `"items"`.
 
 ### Interface Contracts
 
@@ -219,6 +224,15 @@ A map author switches to the portal tool, selects two existing tile cells, and c
 - Q: What happens when the erase tool is used on a virtual tile inside a polygon? → A: No effect. Erase only removes explicit tile instances. To mask a virtual tile, paint it with a different type to create an explicit override.
 - Q: What tile type do painted cells use before any types are defined? → A: A built-in "Floor" type is always present and cannot be deleted (though it may be renamed). It is the default selection in the palette and appears in the exported `.map.gram` as a real TileType definition.
 - Q: How does the author set the map name and other header properties? → A: A properties sidebar panel is always visible. When nothing is selected, it shows map properties: name (editable, pre-filled `untitled-map`), description, elevation, and a read-only derived bounding box. When an element is selected, the panel shows that element's properties instead.
+
+### Session 2026-05-02 (implementation review)
+
+- Q: Should polygon shapes include pentagons? → A: No. Pentagon H3 cells are special (12 per resolution, irregular geometry). Supported shapes: triangle (3), rectangle (4), hexagon (6).
+- Q: What does `geometry` store for a Polygon — the vertex cells or all fill cells? → A: Vertex cells only. The full fill is always derived by consumers using `polygonToCellsExperimental` with `containmentOverlapping`. This keeps files compact and makes vertex-drag editing the canonical editing operation.
+- Q: Does the gram format need a `sides` property on polygons? → A: No — `sides` is `geometry.length`. It was removed from the serialised format; the editor derives it on import.
+- Q: Where do portals live in the layer model? → A: Portals live inside tile layers, not in a separate portal layer. A tile layer walk can contain both `:Tile` and `:Portal` elements.
+- Q: Should the editor support movement rules? → A: Yes. Rules are serialised as `[rules:Rules | (fromId)-[:GO]->(toId), ...]`. Variable identifiers are global within the file, so tile type node ids can be reused directly in rules. The editor generates a self-rule for every tile type automatically and displays all rules read-only in the map properties panel.
+- Q: What layer model does the implementation use? → A: A unified `layers: MapLayer[]` array (bottom to top) replaces the original proposal's separate `tileLayer`, `polygonLayer`, `portalLayer`, `itemLayers[]` fields. All layer kinds share `id`, `name`, `visible`, `locked`.
 
 ## Documentation Impact *(mandatory)*
 

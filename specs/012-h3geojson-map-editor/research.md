@@ -22,7 +22,7 @@
 
 ## 3. h3-viewer Fork Strategy
 
-**Decision**: Copy the core H3 cell rendering and selection logic from JosephChotard/h3-viewer as a starting point, then evolve it inside `clients/map-editor/src/map/`. Do not use a git submodule.  
+**Decision**: Copy the core H3 cell rendering and selection logic from JosephChotard/h3-viewer as a starting point, then evolve it inside `tools/map-editor/src/map/`. Do not use a git submodule.  
 **Rationale**: The h3-viewer provides the hard part (H3-on-map rendering + cell hit-test). A direct copy into the monorepo means we can use pnpm workspace tooling and TypeScript compilation without submodule friction. The h3-viewer codebase is small; copying is cheaper than submodule maintenance.  
 **What to take from h3-viewer**:
 - Viewport-relative H3 cell enumeration (cells visible in current bounds at resolution 15)

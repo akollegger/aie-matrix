@@ -1,100 +1,138 @@
-# Contract: `.map.gram` Format (IC-001 / IC-002)
+# Contract: `.map.gram` Format
 
 **Feature**: `012-h3geojson-map-editor`  
-**Consumers**: game engine (server-side map loader), `tmj-to-gram` output compatibility  
+**Consumers**: map editor (save/load), game engine (map loader), world server (save/serve maps)  
 **Version**: RFC-0010
 
-A `.map.gram` file is valid UTF-8 text in gram syntax. Sections appear in order: header, tile type definitions, item type definitions, tile/polygon instances, portal relationships, item instances.
+A `.map.gram` file is valid UTF-8 gram notation. The format is GeoJSON-inspired: all spatial elements carry a `geometry` property holding a non-empty array of H3 cell indices, and the array length encodes the element's spatial semantics. Elements live as anonymous inline patterns inside named Layer walks.
+
+Sections appear in order: header, type definitions, layers, layer stack.
 
 ---
 
 ## 1. Header (required)
 
 ```gram
-{
-    kind: "matrix-map",
-    name: "<identifier>",
-    description: "<human-readable>",   // optional
-    elevation: <integer>               // 0 = ground floor
-}
+{ kind: "matrix-map", name: "<identifier>", elevation: <integer> }
 ```
 
-- `kind` MUST be the literal string `"matrix-map"`
-- `name` MUST be a valid gram identifier (alphanumeric + hyphens, no spaces)
-- `elevation` defaults to `0` if omitted on import
+- `kind` MUST be `"matrix-map"`
+- `name` MUST be a gram identifier (alphanumeric + hyphens, no spaces)
+- `description` optional string
+- `elevation` integer; defaults to `0` if omitted on import
 
-## 2. Tile Type Definitions (zero or more)
+---
+
+## 2. Type Definitions (zero or more)
+
+Named standalone nodes defining the types used by spatial elements.
+
+### Tile Type
 
 ```gram
-(<id>:TileType:<TypeName> {
-    name: "<display name>",
-    description: "<text>",       // optional
-    capacity: <integer>,         // optional; omit for unlimited
-    style: css`<css-expression>` // optional
-})
+(<id>:TileType:<TypeName> { name: "<display name>", style: css`<css-expression>` })
 ```
 
-- `<id>` is a gram-local identifier (e.g. `carpetedFloor`)
-- `<TypeName>` is the label used on tile instances (e.g. `CarpetedFloor`)
-- `TileType` MUST appear as the first label after the id
+- `TileType` MUST appear as the first label after id; `<TypeName>` is used in tile and polygon elements
+- `style`, `description`, `capacity` are optional
 
-## 3. Item Type Definitions (zero or more)
+### Item Type
 
 ```gram
-(<id>:ItemType:<TypeName> {
-    name: "<display name>",
-    description: "<text>",          // optional
-    glyph: char`<unicode-char>`,
-    takeable: <boolean>,
-    capacityCost: <integer>,        // optional
-    style: css`<css-expression>`    // optional
-})
+(<id>:ItemType:<TypeName> { name: "<display name>", glyph: char`<char>`, takeable: <bool> })
 ```
 
-## 4. Tile Instances — Point (single cell)
+- `glyph`, `description`, `capacityCost`, `style` are optional
+
+---
+
+## 3. Layers (zero or more)
+
+Each layer is a named walk with a `kind` property and a sequence of anonymous inline element patterns:
 
 ```gram
-(cell-<h3index>:<TypeName> { location: h3`<h3index>` })
+[<id>:Layer {kind: "<kind>"} | <elem1>, <elem2>, ...]
 ```
 
-- Node id is `cell-` prefixed with the H3 index
-- `<TypeName>` MUST reference a `TileType` defined in this file
-- `location` value uses the `h3` tagged string literal
+Layer `kind` values: `"polygon"`, `"tile"`, `"items"`.
 
-## 5. Tile Instances — Polygon (filled region)
+### Spatial Elements
+
+All elements use the `geometry` property — a non-empty array of H3 cell indices. The array length encodes the spatial semantics:
+
+| Array length | Element label | Meaning |
+|---|---|---|
+| 1 | `Tile` or `Item` | point in space |
+| 2 | `Portal` | directed connection (from → to) |
+| ≥ 3 | `Polygon` | filled region boundary |
+
+Label convention: category label first (`Tile`, `Polygon`, `Item`), then type label (`Floor`, `BrassKey`, …).
+
+#### Tile (point, explicit single cell)
+```gram
+(:Tile:<TypeName> { geometry: [h3`<h3index>`] })
+```
+
+#### Polygon (filled region, minimum 3 vertices)
+```gram
+(:Polygon:<TypeName> { geometry: [h3`<v0>`, h3`<v1>`, h3`<v2>`] })
+```
+Interior cells derived by consumer via `h3.polygonToCells`. Override tiles in the same region are separate `Tile` elements, typically in a higher-priority layer.
+
+#### Portal (directed connection)
+```gram
+(:Portal { geometry: [h3`<from>`, h3`<to>`], mode: "<mode>" })
+```
+`mode` suggested values: `"Door"`, `"Elevator"`, `"Stairs"`, `"Teleporter"`.  
+`geometry[0]` is the source cell, `geometry[1]` is the target cell.
+
+#### Item (placed item instance)
+```gram
+(:Item:<TypeName> { geometry: [h3`<h3index>`] })
+```
+
+### Layer kinds
+
+- `"polygon"` layers hold `Polygon` elements defining filled regions.
+- `"tile"` layers hold explicit `Tile` overrides and `Portal` connections.
+- `"items"` layers hold `Item` instances.
+
+Multiple layers of the same kind are allowed. Layer ordering (see §4) determines rendering priority: **the topmost layer that defines a cell is the effective tile at that location**.
+
+---
+
+## 4. Layer Stack (zero or one)
 
 ```gram
-[<id>:Polygon:<TypeName> |
-    h3`<vertex-1>`,
-    h3`<vertex-2>`,
-    h3`<vertex-3>`
-]
+[layers:LayerStack | <layer-id-1>, <layer-id-2>, ...]
 ```
 
-- Minimum 3 vertices; order defines the boundary
-- The interior cell set is derived by the consumer via `h3.polygonToCells`
-- Interior cells MUST NOT be individually listed unless they override `<TypeName>`
-- Override cells appear as Point instances after the polygon block
+- Identity MUST be `layers`
+- Elements are references to Layer walk identities, ordered **bottom to top**
+- The topmost layer (last in the list) has the highest rendering priority
+- Consumers use this ordering to resolve `resolveTileAt(h3)` queries
+- This ordering is **normative for graph construction**, not just a rendering hint — the world server applies the same rule when expanding polygons into cell nodes and assigning tile types before pathfinding
 
-## 6. Portal Relationships (zero or more)
+---
+
+## Full Example
 
 ```gram
-(<fromRef>)-[:Portal { mode: "<mode>" }]->(<toRef>)
+{ kind: "matrix-map", name: "example", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor", style: css`background: #c8b89a` })
+(carpet:TileType:Carpet { name: "Carpet", style: css`background: #8b4513` })
+(brassKey:ItemType:BrassKey { name: "Brass Key", glyph: char`🔑`, takeable: true })
+
+[ground:Layer {kind: "polygon"} | (:Polygon:Floor { geometry: [h3`8f283082aa20c00`, h3`8f283082aa20c01`, h3`8f283082aa20c02`] })]
+[carpet:Layer {kind: "polygon"} | (:Polygon:Carpet { geometry: [h3`8f283082aa20c01`, h3`8f283082aa20c02`, h3`8f283082aa20c03`] })]
+[tiles:Layer {kind: "tile"} | (:Portal { geometry: [h3`8f283082aa20c00`, h3`8f283082aa20c01`], mode: "Door" })]
+[collectibles:Layer {kind: "items"} | (:Item:BrassKey { geometry: [h3`8f283082aa20c00`] })]
+
+[layers:LayerStack | ground, carpet, tiles, collectibles]
 ```
 
-- `<fromRef>` and `<toRef>` MUST resolve to existing tile instance node ids
-- `mode` is an open-ended string; suggested values: `"Elevator"`, `"Stairs"`, `"Door"`, `"Teleporter"`
-- Portals MAY reference the `cell-<h3index>` id form directly
-
-## 7. Item Instances (zero or more)
-
-```gram
-(<id>:<TypeName> { location: h3`<h3index>` })
-```
-
-- `<id>` is unique within the file
-- `<TypeName>` MUST reference an `ItemType` defined in this file
-- `location` cell MUST exist in the tile layer
+In this example, cells `8f283082aa20c01` and `8f283082aa20c02` appear in both `ground` and `carpet`. Because `carpet` is higher in the LayerStack, those cells render as Carpet.
 
 ---
 
@@ -104,14 +142,5 @@ A `.map.gram` file is valid UTF-8 text in gram syntax. Sections appear in order:
 |---|---|---|
 | `h3\`...\`` | H3 cell index (resolution 15) | `h3\`8f283082aa20c00\`` |
 | `css\`...\`` | CSS expression | `css\`background: #c8b89a\`` |
-| `url\`...\`` | File or resource path | `url\`maps/moscone/west.map.gram\`` |
 | `char\`...\`` | Single Unicode character | `char\`🔑\`` |
-
----
-
-## Compatibility Notes (IC-002)
-
-Files produced by `tmj-to-gram` are valid import targets. Known divergences:
-- `tmj-to-gram` output does not include polygon shape blocks; all cells are Point instances — this is valid and imports correctly
-- `tmj-to-gram` may emit `color:` instead of `style:` on type definitions — import SHOULD treat `color: css\`...\`` as equivalent to `style: css\`...\``
-- Unrecognised properties on any node MUST be preserved as-is through a round-trip and reported as a warning to the author
+| `url\`...\`` | Resource path | `url\`maps/moscone/west.map.gram\`` |

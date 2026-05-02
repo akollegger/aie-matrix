@@ -1,0 +1,9 @@
+{ kind: "matrix-map", name: "rectangle", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor" })
+
+[ground:Layer {kind: "tile", name: "Ground"}]
+[lyrdx04yyk:Layer {kind: "polygon", name: "Polygon"} | (:Polygon:Floor { geometry: [h3`8f283082a16da2d`, h3`8f283082a16d144`, h3`8f283082a16d81d`, h3`8f283082ab9e4f2`] })]
+[layers:LayerStack | ground, lyrdx04yyk]
+
+[rules:Rules | (floor)-[:GO]->(floor)]
