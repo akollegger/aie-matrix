@@ -551,7 +551,8 @@ test("explicit itemsPath that does not exist throws MapLoadError", async () => {
 
 import { loadHexMap as loadGramHexMap } from "./mapLoader.js";
 
-const CANONICAL_GRAM_PATH = new URL("../../../maps/sandbox/canonical.map.gram", import.meta.url).pathname;
+import { fileURLToPath as _fileURLToPath } from "node:url";
+const CANONICAL_GRAM_PATH = _fileURLToPath(new URL("../../../maps/sandbox/canonical.map.gram", import.meta.url));
 
 test("loadHexMap loads canonical.map.gram with cells and portals", async () => {
   const map = await loadGramHexMap(CANONICAL_GRAM_PATH);
