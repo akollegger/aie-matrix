@@ -55,7 +55,9 @@ export function useMapGram(): {
         if (attempt < RETRIES - 1) {
           await sleep(BACKOFF_MS);
         } else {
-          setError(e instanceof Error ? e.message : "Map load failed");
+          const msg = e instanceof Error ? e.message : "Map load failed";
+          console.error(`[intermedium] map load failed (${mapUrl(base, mapId)}):`, e);
+          setError(msg);
           setStatus("error");
         }
       }

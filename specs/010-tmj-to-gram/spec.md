@@ -2,7 +2,7 @@
 
 **Feature Branch**: `010-tmj-to-gram`  
 **Created**: 2026-04-25  
-**Status**: Draft  
+**Status**: Superseded by `013-gram-format-migration`  
 **Input**: Map format pipeline as described in RFC-0009
 
 ## Proposal Context *(mandatory)*
@@ -154,11 +154,12 @@ When the world-api starts, `MapService.validate()` parses each committed `.map.g
 
 ### Key Entities
 
-- **`.map.gram` artifact**: A committed, derived file produced by `tmj-to-gram`. Contains a document header record, `TileType` definitions, individual tile cell nodes, `Polygon` nodes for tile-area objects, `ItemType` definitions, and item instance nodes. The source of truth is always `.tmj`; the gram is re-derivable.
+- **`.map.gram` artifact**: A committed, derived file produced by `tmj-to-gram`. As of `013-gram-format-migration`, `tmj-to-gram` emits the layered format: `Layer` walks (polygon, tile, items), a `LayerStack`, and movement `Rules`. The flat-cell format (`cell-<h3>:TileType { location: ... }`) is superseded.
 - **`mapId`**: The `name` metadata field from the gram document header. Verified at startup against the filename stem. Used as the URL path segment in `GET /maps/:mapId`.
 - **`TileType` definition**: A gram node `(<typeId>:TileType:<TileTypeLabel> { name, color? })` emitted once per unique tile type in the source map.
 - **`ItemType` definition**: A gram node `(<itemId>:ItemType:<ItemTypeLabel> { name, color?, glyph? })` emitted once per sidecar entry.
-- **`Polygon` node**: A gram node `[<id>:Polygon:<TileTypeLabel> | v1, v2, ..., vN]` where vertices are H3 cell IDs derived from the tile-area shape.
+- **Polygon Layer**: `[polygons:Layer {kind: "polygon"} | (:Polygon:TypeName { geometry: [h3\`v0\`, ...] })]` — replaces the old `[poly-N:Polygon:Type | v0, v1, ...]` walk format.
+- **LayerStack**: `[layers:LayerStack | polygons, tiles, items]` — required in every valid `.map.gram` file.
 - **`MapService` index entry**: An in-memory record `{ tmj: string, gram: string }` mapping file paths, keyed by `mapId`.
 
 ### Interface Contracts *(mandatory)*

@@ -249,3 +249,68 @@ test("GET /maps → 200 application/json; lists known map ids with links", async
     await runtime.dispose();
   }
 });
+
+test("GET /maps/active → 200 with freeplay content when activeGramPath set", async () => {
+  const activeGramPath = join(repoRoot, "maps/sandbox/freeplay.map.gram");
+  const layer = makeMapServiceLayer(repoRoot, activeGramPath);
+  const runtime = ManagedRuntime.make(layer);
+  try {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
+        if (!res.headersSent) res.writeHead(500).end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const { port } = server.address() as AddressInfo;
+    const r = await httpGet(`http://127.0.0.1:${port}/maps/active`);
+    server.close();
+    assert.equal(r.status, 200);
+    assert.equal(r.headers["content-type"], "text/plain; charset=utf-8");
+    assert.ok(r.body.includes("freeplay"), "body should contain the freeplay map");
+  } finally {
+    await runtime.dispose();
+  }
+});
+
+test("GET /maps/active → 404 when no activeGramPath set", async () => {
+  const layer = makeMapServiceLayer(repoRoot);
+  const runtime = ManagedRuntime.make(layer);
+  try {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
+        if (!res.headersSent) res.writeHead(500).end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const { port } = server.address() as AddressInfo;
+    const r = await httpGet(`http://127.0.0.1:${port}/maps/active`);
+    server.close();
+    assert.equal(r.status, 404);
+  } finally {
+    await runtime.dispose();
+  }
+});
+
+test("GET /maps → body includes active field matching configured map", async () => {
+  const activeGramPath = join(repoRoot, "maps/sandbox/freeplay.map.gram");
+  const layer = makeMapServiceLayer(repoRoot, activeGramPath);
+  const runtime = ManagedRuntime.make(layer);
+  try {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url ?? "/", "http://127.0.0.1");
+      void runtime.runPromise(tryHandleMapGet(req, res, url, {})).catch(() => {
+        if (!res.headersSent) res.writeHead(500).end();
+      });
+    });
+    await new Promise<void>((resolve) => server.listen(0, resolve));
+    const { port } = server.address() as AddressInfo;
+    const r = await httpGet(`http://127.0.0.1:${port}/maps`);
+    server.close();
+    const j = JSON.parse(r.body) as { maps: unknown[]; active: string | null };
+    assert.equal(j.active, "freeplay");
+  } finally {
+    await runtime.dispose();
+  }
+});

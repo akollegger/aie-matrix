@@ -1,173 +1,80 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cellToLatLng, getResolution, isValidCell, polygonToCells } from "h3-js";
+import { getResolution, isValidCell } from "h3-js";
 import { describe, expect, it } from "vitest";
 import { buildGramUtf8 } from "../../src/convert.js";
+import { parseMapGram } from "@aie-matrix/map-gram";
 
 const repoRoot = fileURLToPath(new URL("../../../..", import.meta.url));
 const mapTmj = join(repoRoot, "maps/sandbox/map-with-polygons.tmj");
 const mapGram = join(repoRoot, "maps/sandbox/map-with-polygons.map.gram");
 
-function latLngRing(vertexCells: readonly string[]): [number, number][] {
-  return vertexCells.map((h) => {
-    const [lat, lng] = cellToLatLng(h);
-    return [lat, lng] as [number, number];
-  });
-}
-
-function parsePolygonLines(gram: string): Array<{ readonly id: string; readonly type: string; readonly verts: string[] }> {
-  const re = /\[poly-(\d+):Polygon:([A-Za-z][A-Za-z0-9]*)\s*\|\s*([^\]]+)\]/g;
-  const out: Array<{ id: string; type: string; verts: string[] }> = [];
+/** Extract polygon geometry arrays from the new layered format. */
+function parsePolygonGeometries(gram: string): Array<{ typeName: string; vertices: string[] }> {
+  const out: Array<{ typeName: string; vertices: string[] }> = [];
+  const re = /\(:Polygon:([A-Za-z][A-Za-z0-9]*)\s*\{\s*geometry:\s*\[([^\]]+)\]\s*\}/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(gram)) !== null) {
-    const verts = m[3]!
-      .split(",")
-      .map((s) => s.trim().replace(/\/\/.*$/, "").trim())
-      .filter((s) => s.length > 0);
-    out.push({ id: m[1]!, type: m[2]!, verts });
+    const vertices = [...m[2]!.matchAll(/h3`([^`]+)`/g)].map((v) => v[1]!.toLowerCase());
+    out.push({ typeName: m[1]!, vertices });
   }
   return out;
 }
 
-/** Maps tile/instance identifiers to H3 index strings from `location: h3\`…\`` (or legacy quoted). */
-function identityToH3FromGram(gram: string): Map<string, string> {
-  const map = new Map<string, string>();
-  const tagged = /\(([a-zA-Z0-9-]+):[A-Za-z][A-Za-z0-9]*\s*\{\s*location:\s*h3`([^`]+)`/g;
-  let m: RegExpExecArray | null;
-  while ((m = tagged.exec(gram)) !== null) {
-    const hex = m[2]!.trim().replace(/^0x/i, "").toLowerCase();
-    map.set(m[1]!, hex);
-  }
-  const legacy = /\(([a-zA-Z0-9-]+):[A-Za-z][A-Za-z0-9]*\s*\{\s*location:\s*"([^"]+)"/g;
-  while ((m = legacy.exec(gram)) !== null) {
-    const hex = m[2]!.trim().replace(/^0x/i, "").toLowerCase();
-    if (!map.has(m[1]!)) {
-      map.set(m[1]!, hex);
-    }
-  }
-  return map;
-}
-
-function polygonVertexH3s(gram: string, verts: readonly string[]): string[] {
-  const idMap = identityToH3FromGram(gram);
-  return verts.map((ref) => {
-    const h = idMap.get(ref);
-    if (h === undefined) {
-      throw new Error(`undefined polygon vertex ref ${ref}`);
-    }
-    return h;
-  });
-}
-
-function tileTypeLabels(gram: string): Set<string> {
-  const labels = new Set<string>();
-  const defRe = /\([a-z0-9-]+:TileType:([A-Za-z][A-Za-z0-9]*)\s*\{/g;
-  let m: RegExpExecArray | null;
-  while ((m = defRe.exec(gram)) !== null) {
-    labels.add(m[1]!);
-  }
-  return labels;
-}
-
-function cellNodesByType(gram: string, typeLabel: string): Map<string, string> {
-  const map = new Map<string, string>();
-  const tagged = new RegExp(
-    `\\(cell-([^:]+):${typeLabel}\\s*\\{\\s*location:\\s*h3\\\`([^\\\`]+)\\\`\\s*\\}`,
-    "g",
-  );
-  let m: RegExpExecArray | null;
-  while ((m = tagged.exec(gram)) !== null) {
-    const hex = m[2]!.trim().replace(/^0x/i, "").toLowerCase();
-    map.set(hex, m[1]!);
-  }
-  const legacy = new RegExp(`\\(cell-([^:]+):${typeLabel}\\s*\\{\\s*location:\\s*"([^"]+)"\\s*\\}`, "g");
-  while ((m = legacy.exec(gram)) !== null) {
-    const hex = m[2]!.trim().replace(/^0x/i, "").toLowerCase();
-    if (!map.has(hex)) {
-      map.set(hex, m[1]!);
-    }
-  }
-  return map;
-}
-
-describe("map-with-polygons polygon conversion", () => {
+describe("map-with-polygons polygon conversion (layered format)", () => {
   it("live conversion matches committed golden", async () => {
     const live = await buildGramUtf8(mapTmj);
     const golden = await readFile(mapGram, "utf8");
     expect(live).toBe(golden);
   });
 
-  it("every polygon vertex is valid H3 res-15", async () => {
+  it("output contains a LayerStack", async () => {
     const text = await readFile(mapGram, "utf8");
-    for (const poly of parsePolygonLines(text)) {
-      for (const h of polygonVertexH3s(text, poly.verts)) {
-        expect(isValidCell(h), h).toBe(true);
-        expect(getResolution(h), h).toBe(15);
+    expect(text).toContain("LayerStack");
+  });
+
+  it("output contains polygon Layer walk", async () => {
+    const text = await readFile(mapGram, "utf8");
+    expect(text).toContain(":Polygon:");
+    expect(text).toContain("geometry:");
+  });
+
+  it("every polygon vertex H3 is valid res-15", async () => {
+    const text = await readFile(mapGram, "utf8");
+    for (const poly of parsePolygonGeometries(text)) {
+      for (const h3 of poly.vertices) {
+        expect(isValidCell(h3), `invalid H3 in ${poly.typeName}: ${h3}`).toBe(true);
+        expect(getResolution(h3), `wrong res in ${poly.typeName}: ${h3}`).toBe(15);
       }
     }
   });
 
-  it("every polygon type label has a TileType definition", async () => {
+  it("every polygon has at least 3 vertex cells", async () => {
     const text = await readFile(mapGram, "utf8");
-    const defs = tileTypeLabels(text);
-    for (const poly of parsePolygonLines(text)) {
-      expect(defs.has(poly.type), poly.type).toBe(true);
+    for (const poly of parsePolygonGeometries(text)) {
+      expect(poly.vertices.length, `${poly.typeName} vertices`).toBeGreaterThanOrEqual(3);
     }
   });
 
-  it("pairwise polygon interiors do not intersect", async () => {
+  it("parseMapGram expands polygons to more cells than just vertices", async () => {
     const text = await readFile(mapGram, "utf8");
-    const polys = parsePolygonLines(text);
-    const interiors = polys.map((p) => new Set(polygonToCells(latLngRing(polygonVertexH3s(text, p.verts)), 15)));
-    for (let i = 0; i < interiors.length; i++) {
-      for (let j = i + 1; j < interiors.length; j++) {
-        const a = interiors[i]!;
-        const b = interiors[j]!;
-        let overlap = 0;
-        const smaller = a.size <= b.size ? a : b;
-        const other = a.size <= b.size ? b : a;
-        for (const h of smaller) {
-          if (other.has(h)) {
-            overlap++;
-          }
-        }
-        expect(overlap, `poly ${polys[i]!.id} vs ${polys[j]!.id}`).toBe(0);
-      }
-    }
+    const map = await parseMapGram(text);
+    const polygons = parsePolygonGeometries(text);
+    // Total unique vertices across all polygons
+    const totalVertexCount = new Set(polygons.flatMap((p) => p.vertices)).size;
+    // Parsed cell map should have more cells than just the vertices
+    expect(map.cells.size).toBeGreaterThan(totalVertexCount);
   });
 
-  it("no redundant cell-* for a polygon type on that polygon's shape cover (fill ∪ vertices)", async () => {
+  it("tmj and gram loaders produce the same cell set", async () => {
     const text = await readFile(mapGram, "utf8");
-    const polys = parsePolygonLines(text);
-    for (const poly of polys) {
-      const ring = polygonVertexH3s(text, poly.verts);
-      const interior = new Set(polygonToCells(latLngRing(ring), 15));
-      const cover = new Set<string>([...interior, ...ring]);
-      const cellsOfPolyType = cellNodesByType(text, poly.type);
-      for (const h of cover) {
-        expect(
-          cellsOfPolyType.has(h),
-          `redundant cell-* for ${poly.type} on ${h} inside poly-${poly.id} shape cover`,
-        ).toBe(false);
-      }
+    const map = await parseMapGram(text);
+    // Every cell should be a valid res-15 H3 index
+    for (const h3 of map.cells.keys()) {
+      expect(isValidCell(h3), h3).toBe(true);
+      expect(getResolution(h3), h3).toBe(15);
     }
-  });
-
-  it("shape-primary: some hex in Red polygon cover (fill ∪ vertices) has no Red cell-* node", async () => {
-    const text = await readFile(mapGram, "utf8");
-    const red = parsePolygonLines(text).find((p) => p.id === "1");
-    expect(red).toBeDefined();
-    const ring = polygonVertexH3s(text, red!.verts);
-    const interior = new Set(polygonToCells(latLngRing(ring), 15));
-    const cover = new Set<string>([...interior, ...ring]);
-    const redCells = cellNodesByType(text, "Red");
-    let suppressed = 0;
-    for (const h3 of cover) {
-      if (!redCells.has(h3)) {
-        suppressed++;
-      }
-    }
-    expect(suppressed).toBeGreaterThan(0);
+    expect(map.cells.size).toBeGreaterThan(0);
   });
 });

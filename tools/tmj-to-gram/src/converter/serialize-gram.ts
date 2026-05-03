@@ -1,6 +1,14 @@
 import type { CellEmission } from "./cell-emission.js";
 import type { ItemInstanceEmission, ItemTypeEntry } from "./item-emission.js";
 
+/** Minimal polygon area data needed by the serializer (subset of TileAreaPolygon). */
+interface TileAreaInput {
+  readonly id: number;
+  readonly typeLabel: string;
+  readonly vertexCells: readonly string[];
+  readonly layoutShapeHexes: ReadonlySet<string>;
+}
+
 export interface SerializeGramInput {
   readonly mapId: string;
   readonly elevation: number;
@@ -8,7 +16,9 @@ export interface SerializeGramInput {
   readonly tileTypeOrder: readonly string[];
   readonly tileMeta: ReadonlyMap<string, { readonly color?: string }>;
   readonly itemTypes: readonly ItemTypeEntry[];
-  readonly polygonLines: readonly string[];
+  /** Polygon tile areas from Tiled; each emitted as a Polygon element in the polygon Layer. */
+  readonly tileAreas: readonly TileAreaInput[];
+  /** Layout cells NOT implied by any polygon (cell.h3Index not in any tileArea.layoutShapeHexes). */
   readonly cells: readonly CellEmission[];
   readonly items: readonly ItemInstanceEmission[];
 }
@@ -52,12 +62,34 @@ function itemTypeLine(e: ItemTypeEntry): string {
   return `(${e.typeId}:ItemType:${e.label} { ${parts.join(", ")} })`;
 }
 
-function cellLine(c: CellEmission): string {
-  return `(${c.id}:${c.typeLabel} { location: ${formatH3LocationLiteral(c.h3Index)} })`;
+function polygonLayerSection(areas: readonly TileAreaInput[]): string {
+  const elements = areas.map((area) => {
+    const geom = area.vertexCells.map(formatH3LocationLiteral).join(", ");
+    return `(:Polygon:${area.typeLabel} { geometry: [${geom}] })`;
+  });
+  return `[polygons:Layer {kind: "polygon", name: "Polygons"} | ${elements.join(", ")}]`;
 }
 
-function itemInstLine(i: ItemInstanceEmission): string {
-  return `(${i.id}:${i.typeLabel} { location: ${formatH3LocationLiteral(i.h3Index)} })`;
+function tileLayerSection(cells: readonly CellEmission[]): string {
+  const elements = cells.map((c) => `(:Tile:${c.typeLabel} { geometry: [${formatH3LocationLiteral(c.h3Index)}] })`);
+  return `[tiles:Layer {kind: "tile", name: "Tiles"} | ${elements.join(", ")}]`;
+}
+
+function itemsLayerSection(items: readonly ItemInstanceEmission[]): string {
+  const elements = items.map((i) => `(:Item:${i.typeLabel} { geometry: [${formatH3LocationLiteral(i.h3Index)}] })`);
+  return `[items:Layer {kind: "items", name: "Items"} | ${elements.join(", ")}]`;
+}
+
+function layerStackSection(layerIds: readonly string[]): string {
+  return `[layers:LayerStack | ${layerIds.join(", ")}]`;
+}
+
+function rulesSection(tileTypeOrder: readonly string[]): string {
+  const ruleLines = tileTypeOrder.map((label) => {
+    const id = slugTypeId(label);
+    return `(${id})-[:GO]->(${id})`;
+  });
+  return `[rules:Rules | ${ruleLines.join(", ")}]`;
 }
 
 export function serializeGram(input: SerializeGramInput): string {
@@ -74,19 +106,37 @@ export function serializeGram(input: SerializeGramInput): string {
     sections.push(itLines.join("\n"));
   }
 
-  if (input.polygonLines.length > 0) {
-    sections.push(input.polygonLines.join("\n"));
+  // Collect all H3 cells implied by polygons (these are omitted from the tile layer)
+  const impliedByPolygon = new Set<string>();
+  for (const area of input.tileAreas) {
+    for (const h3 of area.layoutShapeHexes) {
+      impliedByPolygon.add(h3);
+    }
   }
 
-  const cellLines = [...input.cells].map(cellLine);
-  if (cellLines.length > 0) {
-    sections.push(cellLines.join("\n"));
+  // Determine which layout cells are NOT covered by any polygon
+  const standaloneCell = input.cells.filter((c) => !impliedByPolygon.has(c.h3Index));
+
+  // Build and collect layer IDs in order
+  const layerIds: string[] = [];
+
+  if (input.tileAreas.length > 0) {
+    sections.push(polygonLayerSection(input.tileAreas));
+    layerIds.push("polygons");
   }
 
-  const instLines = input.items.map(itemInstLine);
-  if (instLines.length > 0) {
-    sections.push(instLines.join("\n"));
+  if (standaloneCell.length > 0) {
+    sections.push(tileLayerSection(standaloneCell));
+    layerIds.push("tiles");
   }
+
+  if (input.items.length > 0) {
+    sections.push(itemsLayerSection(input.items));
+    layerIds.push("items");
+  }
+
+  sections.push(layerStackSection(layerIds));
+  sections.push(rulesSection(input.tileTypeOrder));
 
   return sections.join("\n\n") + "\n";
 }

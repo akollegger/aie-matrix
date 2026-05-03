@@ -2,4 +2,7 @@
 
 (blue:TileType:Blue { name: "Blue" })
 
-(cell-8f2800000000000:Blue { location: "8f2800000000000" })
+[tiles:Layer {kind: "tile"} | (:Tile:Blue { geometry: [h3`8f2800000000000`] })]
+[layers:LayerStack | tiles]
+
+[rules:Rules | (blue)-[:GO]->(blue)]

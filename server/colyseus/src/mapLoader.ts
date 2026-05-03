@@ -208,15 +208,30 @@ function parsedTileForGid(tilesets: LoadedTilesetSlice[], gid: number): ParsedTi
 }
 
 /**
- * Load a Tiled `.tmj` hex map + external `.tsx` tileset(s) and derive a compass-labeled graph
- * keyed by H3 res-15 indices. Optionally loads an `*.items.json` sidecar.
+ * Load a `.map.gram` hex map file into a compass-labeled graph keyed by H3 res-15 indices.
  *
- * **Layers**: the navigable grid is the single tile layer with Tiled **layer class** `"layout"`.
- * Zero or more tile layers with class `"item-placement"` (in file order) supply startup items.
- * Each painted item tile’s **tile type** (`type` in `.tsx`) must equal an `itemRef` in the sidecar.
- * Multiple `item-placement` layers and/or runtime mutations can stack several refs on one H3 cell.
+ * The `options` parameter is accepted for API compatibility but is unused — gram files
+ * include all map data (items, portals, rules) inline.
  */
 export async function loadHexMap(
+  gramAbsolutePath: string,
+  _options?: { itemsPath?: string },
+): Promise<LoadedMap> {
+  const gramText = await readFile(gramAbsolutePath, "utf8");
+  const { loadGramMap } = await import("./mapLoader.gram.js");
+  const { MapGramParseError } = await import("@aie-matrix/map-gram");
+  try {
+    return await loadGramMap(gramText);
+  } catch (e) {
+    if (e instanceof MapGramParseError) {
+      throw new MapLoadError(`${gramAbsolutePath}: ${e.detail ?? e.reason}`);
+    }
+    throw e;
+  }
+}
+
+/** @internal Legacy TMJ loader used by existing unit tests — not called at runtime. */
+export async function loadTmjMap(
   tmAbsolutePath: string,
   options?: { itemsPath?: string },
 ): Promise<LoadedMap> {

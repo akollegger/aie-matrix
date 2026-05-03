@@ -1,4 +1,5 @@
 packages:
+  - shared/map-gram
   - tools/tmj-to-gram
   - tools/map-editor
   - server
