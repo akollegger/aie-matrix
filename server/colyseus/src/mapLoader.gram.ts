@@ -16,6 +16,11 @@ export async function loadGramMap(gramText: string): Promise<LoadedMap> {
 
   // Build navigable cell set for neighbor filtering
   const allH3 = new Set(parsed.cells.keys());
+  // Index tileTypes by typeName once to avoid O(cells × tileTypes) lookups in the loop below
+  const tileTypeByName = new Map<string, import("@aie-matrix/map-gram").TileTypeDef>();
+  for (const def of parsed.tileTypes.values()) {
+    tileTypeByName.set(def.typeName, def);
+  }
   const graph = new Map<CellId, CellRecord>();
 
   for (const [h3Index, parsedCell] of parsed.cells) {
@@ -28,7 +33,7 @@ export async function loadGramMap(gramText: string): Promise<LoadedMap> {
       }
     }
 
-    const tileDef = [...parsed.tileTypes.values()].find((t) => t.typeName === parsedCell.tileType);
+    const tileDef = tileTypeByName.get(parsedCell.tileType);
     const cell: CellRecord = {
       col: 0,
       row: 0,
