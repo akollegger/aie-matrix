@@ -3,8 +3,12 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
+    "composite": true,
     "noEmit": false,
     "resolveJsonModule": true
   },
+  "references": [
+    { "path": "../../shared/map-gram" }
+  ],
   "include": ["src/**/*.ts"]
 }

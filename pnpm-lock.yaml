@@ -83,6 +83,9 @@ importers:
 
   clients/intermedium:
     dependencies:
+      '@aie-matrix/map-gram':
+        specifier: workspace:*
+        version: link:../../shared/map-gram
       '@aie-matrix/server-colyseus':
         specifier: workspace:*
         version: link:../../server/colyseus
@@ -162,6 +165,9 @@ importers:
       vite-plugin-wasm:
         specifier: ^3.6.0
         version: 3.6.0(vite@6.4.2(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.3))
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.3)
 
   e2e:
     devDependencies:
@@ -450,6 +456,9 @@ importers:
 
   server/colyseus:
     dependencies:
+      '@aie-matrix/map-gram':
+        specifier: workspace:*
+        version: link:../../shared/map-gram
       '@aie-matrix/root-env':
         specifier: workspace:*
         version: link:../../shared/root-env
@@ -553,6 +562,28 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
 
+  shared/map-gram:
+    dependencies:
+      '@relateby/pattern':
+        specifier: ^0.4.0
+        version: 0.4.2(effect@3.21.0)
+      effect:
+        specifier: ^3.21.0
+        version: 3.21.0
+      h3-js:
+        specifier: ^4.1.0
+        version: 4.4.0
+    devDependencies:
+      '@types/node':
+        specifier: ^24.12.2
+        version: 24.12.2
+      typescript:
+        specifier: ~5.7.3
+        version: 5.7.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(tsx@4.21.0)(yaml@2.8.3)
+
   shared/root-env:
     dependencies:
       dotenv:
@@ -612,6 +643,9 @@ importers:
 
   tools/tmj-to-gram:
     dependencies:
+      '@aie-matrix/map-gram':
+        specifier: workspace:*
+        version: link:../../shared/map-gram
       '@effect/cli':
         specifier: ^0.75.0
         version: 0.75.0(@effect/platform@0.96.0(effect@3.21.0))(@effect/printer-ansi@0.49.0(@effect/typeclass@0.40.0(effect@3.21.0))(effect@3.21.0))(@effect/printer@0.49.0(@effect/typeclass@0.40.0(effect@3.21.0))(effect@3.21.0))(effect@3.21.0)

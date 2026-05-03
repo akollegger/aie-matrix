@@ -1,6 +1,6 @@
 # ADR-0005: H3-Native Map Format (.map.gram)
 
-**Status:** proposed  
+**Status:** implemented — see `specs/013-gram-format-migration` <!-- implements specs/013-gram-format-migration -->
 **Date:** 2026-04-25  
 **Authors:** @akollegger  
 **Relates to:** [RFC-0004](../rfc/0004-h3-geospatial-coordinate-system.md) (H3 coordinate system),

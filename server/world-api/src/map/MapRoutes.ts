@@ -22,6 +22,8 @@ export interface MapListItem {
 
 export interface MapListResponse {
   readonly maps: readonly MapListItem[];
+  /** The mapId of the currently active Colyseus game map, or null if undetermined. */
+  readonly active: string | null;
 }
 
 /** True for collection resource paths (no :mapId segment). */
@@ -114,6 +116,7 @@ export function handleMapList(
     const publicRoot = publicRequestRoot(req, url);
     const body: MapListResponse = {
       maps: entries.map((e) => toMapListItem(publicRoot, e)),
+      active: map.activeMapId() ?? null,
     };
     const traceId = getRequestTraceId();
     yield* Effect.logInfo("map.list").pipe(
@@ -188,6 +191,18 @@ export function tryHandleMapGet(
   const mapId = parseMapsPath(url.pathname);
   if (mapId === undefined) {
     return Effect.succeed(false);
+  }
+  if (mapId === "active") {
+    return Effect.gen(function* () {
+      const map = yield* MapService;
+      const resolved = map.activeMapId();
+      if (resolved === undefined) {
+        res.writeHead(404, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ error: "NoActiveMap", message: "No active map configured (set AIE_MATRIX_MAP)." }));
+        return true as const;
+      }
+      return yield* pipeHandle(req, res, url, corsHeaders, resolved);
+    });
   }
   return pipeHandle(req, res, url, corsHeaders, mapId);
 }

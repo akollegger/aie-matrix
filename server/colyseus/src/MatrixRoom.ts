@@ -55,7 +55,7 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     const mapPath =
       options.mapPath ??
       process.env.AIE_MATRIX_MAP ??
-      join(process.cwd(), "maps/sandbox/freeplay.tmj");
+      join(process.cwd(), "maps/sandbox/freeplay.map.gram");
     const itemsPath = options.itemsPath ?? process.env.AIE_MATRIX_ITEMS;
     this.loadedMap = await loadHexMap(mapPath, { itemsPath });
     this.setState(new WorldSpectatorState());

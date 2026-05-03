@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/tmj-to-gram-parity-gallery.yml"
       - "tools/tmj-to-gram/**"
+      - "shared/map-gram/**"
       - "maps/sandbox/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -15,6 +16,7 @@ on:
     paths:
       - ".github/workflows/tmj-to-gram-parity-gallery.yml"
       - "tools/tmj-to-gram/**"
+      - "shared/map-gram/**"
       - "maps/sandbox/**"
       - "pnpm-lock.yaml"
       - "pnpm-workspace.yaml"
@@ -42,6 +44,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Build shared/map-gram
+        run: pnpm --filter @aie-matrix/map-gram build
 
       - name: Build TMJ vs gram SVG gallery
         run: pnpm --filter @aie-matrix/tmj-to-gram run gallery:parity

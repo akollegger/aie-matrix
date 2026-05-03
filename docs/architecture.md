@@ -71,14 +71,15 @@ Canonical cell identity for ghosts, Colyseus `ghostTiles`, and MCP tools is **H3
 
 ### Map formats: two readers during the transition (RFC-0009)
 
-Until a follow-up unifies loading, **two** code paths read the same authored maps from `maps/`:
+As of `specs/013-gram-format-migration`, **`.map.gram` is the sole runtime format** across all consumers:
 
 | Consumer | Format | Code |
 |----------|--------|------|
-| Colyseus room / Phaser | `.tmj` | `server/colyseus/` (`mapLoader.ts` and friends — unchanged by RFC-0009) |
-| HTTP `GET /maps/:mapId` (intermedium, debugger) | `.map.gram` or `.tmj` | `server/world-api/src/map/MapService.ts` — byte passthrough of committed artifacts |
+| Colyseus room | `.map.gram` (layered format) | `server/colyseus/src/mapLoader.ts` → `mapLoader.gram.ts` via `@aie-matrix/map-gram` |
+| Intermedium client | `.map.gram` (layered format) | `clients/intermedium/src/services/gramParser.ts` via `@aie-matrix/map-gram` |
+| HTTP `GET /maps/:mapId` | `.map.gram` or `.tmj` | `server/world-api/src/map/MapService.ts` — byte passthrough + LayerStack validation |
 
-The **`.map.gram`** file is produced offline by `tools/tmj-to-gram` and committed next to the `.tmj`. Startup validates every indexed gram (`@relateby/pattern` parse + `name` vs filename stem). Consolidating on a single load path (e.g. gram-only in Colyseus via the world bridge) is **out of scope** for RFC-0009 and belongs in a dedicated follow-up RFC so Colyseus internals stay off-limits per [AGENTS.md](../AGENTS.md).
+The **`.map.gram`** layered format is produced by `tools/tmj-to-gram` (from Tiled `.tmj` sources) or the native map editor. All sandbox maps are committed in the layered format. Shared parsing logic lives in `@aie-matrix/map-gram` (`shared/map-gram/`). Startup validation in world-api requires a `LayerStack` walk in addition to the `kind: "matrix-map"` header.
 
 ### World item state (PoC)
 

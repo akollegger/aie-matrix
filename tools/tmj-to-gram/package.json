@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc --build tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "cli": "node dist/main.js",
     "test": "pnpm run build && vitest run",
@@ -15,6 +15,7 @@
     "gallery:parity": "pnpm run build && tsx scripts/build-parity-gallery.ts"
   },
   "dependencies": {
+    "@aie-matrix/map-gram": "workspace:*",
     "@effect/cli": "^0.75.0",
     "@effect/platform-node": "^0.106.0",
     "@relateby/pattern": "^0.4.0",

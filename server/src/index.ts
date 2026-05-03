@@ -58,7 +58,7 @@ const httpPort = Number(process.env.AIE_MATRIX_HTTP_PORT ?? "8787");
 const mapPathRaw = process.env.AIE_MATRIX_MAP;
 const mapPath = mapPathRaw
   ? (isAbsolute(mapPathRaw) ? mapPathRaw : join(repoRoot, mapPathRaw))
-  : join(repoRoot, "maps/sandbox/freeplay.tmj");
+  : join(repoRoot, "maps/sandbox/freeplay.map.gram");
 const mapsRoot = normalize(join(repoRoot, "maps"));
 const conversationDataDir =
   process.env.CONVERSATION_DATA_DIR ?? join(process.cwd(), "data/conversations");
@@ -313,7 +313,7 @@ async function main(): Promise<void> {
     conversationLayer,
     neo4jGraphLayer,
     makeItemServiceLayer(itemServiceImpl),
-    makeMapServiceLayer(repoRoot),
+    makeMapServiceLayer(repoRoot, mapPath),
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);

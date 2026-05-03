@@ -7,9 +7,12 @@
     "dev": "vite",
     "build": "vite build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@aie-matrix/map-gram": "workspace:*",
     "@aie-matrix/server-colyseus": "workspace:*",
     "@aie-matrix/shared-types": "workspace:*",
     "@deck.gl/geo-layers": "^9.1.14",
@@ -28,6 +31,7 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",
+    "vitest": "^3.2.4",
     "@types/node": "^24.12.2",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",

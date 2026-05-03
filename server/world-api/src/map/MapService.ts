@@ -1,9 +1,9 @@
 import { glob, readFile } from "node:fs/promises";
-import { basename, dirname, join, relative } from "node:path";
+import { basename, dirname, join, normalize, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Gram, Pattern, Subject } from "@relateby/pattern";
 import type { GramParseError as RelatebyGramParseError } from "@relateby/pattern";
-import { Context, Effect, HashMap, Layer, Option, pipe } from "effect";
+import { Context, Effect, HashMap, HashSet, Layer, Option, pipe } from "effect";
 import {
   GramParseError,
   MapFileReadError,
@@ -14,7 +14,8 @@ import {
 
 export interface MapIndexEntry {
   readonly mapId: string;
-  readonly tmjPath: string;
+  /** Absent for maps authored natively (no Tiled source). */
+  readonly tmjPath?: string;
   readonly gramPath: string;
 }
 
@@ -29,6 +30,8 @@ export interface MapServiceOps {
     format: "gram" | "tmj",
   ) => Effect.Effect<Buffer, MapNotFoundError | MapFileReadError>;
   readonly validate: () => Effect.Effect<void, GramParseError | MapNameMismatchError | MapIdCollisionError>;
+  /** The mapId of the currently active Colyseus game map, or undefined if undetermined. */
+  readonly activeMapId: () => string | undefined;
 }
 
 export class MapService extends Context.Tag("aie-matrix/MapService")<MapService, MapServiceOps>() {}
@@ -50,6 +53,28 @@ function stemFromGramFilename(file: string): string | undefined {
 function pairingKey(repoRoot: string, absolutePath: string, stem: string): string {
   const dir = dirname(relative(repoRoot, absolutePath));
   return `${dir}\0${stem}`;
+}
+
+function hasLayerStack(patterns: ReadonlyArray<Pattern<Subject>>): boolean {
+  for (const p of patterns) {
+    if (!(p.value instanceof Subject)) continue;
+    if (HashSet.has(p.value.labels, "LayerStack")) return true;
+  }
+  return false;
+}
+
+function checkLayerStackPresent(
+  patterns: ReadonlyArray<Pattern<Subject>>,
+  gramPath: string,
+): Effect.Effect<void, GramParseError> {
+  return hasLayerStack(patterns)
+    ? Effect.void
+    : Effect.fail(
+        new GramParseError({
+          path: gramPath,
+          cause: "missing LayerStack — document must contain [layers:LayerStack | ...]",
+        }),
+      );
 }
 
 function extractMatrixMapName(
@@ -107,7 +132,8 @@ function validateGramFile(
         Effect.mapError((e) => mapRelatebyParseError(gramPath, e)),
         Effect.flatMap((patterns) =>
           pipe(
-            extractMatrixMapName(patterns, gramPath),
+            checkLayerStackPresent(patterns, gramPath),
+            Effect.flatMap(() => extractMatrixMapName(patterns, gramPath)),
             Effect.flatMap((nameFromGram) =>
               nameFromGram === expectedStem
                 ? Effect.void
@@ -173,8 +199,8 @@ function scanMapPairs(
 
     const byMapId = new Map<string, MapIndexEntry[]>();
     for (const v of partial.values()) {
-      if (v.tmjAbs === undefined || v.gramAbs === undefined) {
-        continue;
+      if (v.gramAbs === undefined) {
+        continue; // a .tmj with no .map.gram is not yet migrated; skip silently
       }
       const list = byMapId.get(v.stem) ?? [];
       list.push({ mapId: v.stem, tmjPath: v.tmjAbs, gramPath: v.gramAbs });
@@ -187,7 +213,7 @@ function scanMapPairs(
         return yield* Effect.fail(
           new MapIdCollisionError({
             mapId,
-            paths: entries.flatMap((e) => [e.gramPath, e.tmjPath]),
+            paths: entries.flatMap((e) => [e.gramPath, ...(e.tmjPath !== undefined ? [e.tmjPath] : [])]),
           }),
         );
       }
@@ -205,8 +231,26 @@ function validateAllGrams(
   });
 }
 
+/**
+ * Resolve an absolute `.map.gram` path to the `mapId` in the index.
+ * Returns `undefined` if the path is not indexed (e.g. outside `maps/`).
+ */
+function resolveActiveMapId(
+  index: Map<string, MapIndexEntry>,
+  activeGramPath: string | undefined,
+): string | undefined {
+  if (activeGramPath === undefined) return undefined;
+  const normalised = normalize(activeGramPath);
+  for (const entry of index.values()) {
+    if (normalize(entry.gramPath) === normalised) return entry.mapId;
+  }
+  return undefined;
+}
+
 export const makeMapServiceLayer = (
   repoRoot: string,
+  /** Absolute path to the active `.map.gram` file (typically from `AIE_MATRIX_MAP`). */
+  activeGramPath?: string,
 ): Layer.Layer<MapService, GramParseError | MapNameMismatchError | MapIdCollisionError> =>
   Layer.scoped(
     MapService,
@@ -214,6 +258,8 @@ export const makeMapServiceLayer = (
       Effect.gen(function* () {
         const index = yield* scanMapPairs(repoRoot);
         yield* validateAllGrams(index);
+
+        const resolvedActiveId = resolveActiveMapId(index, activeGramPath);
 
         const listSorted = () =>
           Effect.succeed(
@@ -225,12 +271,17 @@ export const makeMapServiceLayer = (
         const impl: MapServiceOps = {
           listEntries: listSorted,
           validate: () => Effect.void,
+          activeMapId: () => resolvedActiveId,
           raw: (mapId, format) => {
             const entry = index.get(mapId);
             if (entry === undefined) {
               return Effect.fail(new MapNotFoundError({ mapId }));
             }
             const path = format === "gram" ? entry.gramPath : entry.tmjPath;
+            if (path === undefined) {
+              // gram-only map: TMJ format not available
+              return Effect.fail(new MapNotFoundError({ mapId }));
+            }
             return Effect.tryPromise({
               try: () => readFile(path),
               catch: (e) =>

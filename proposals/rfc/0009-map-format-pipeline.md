@@ -1,6 +1,6 @@
 # RFC-0009: Map Format Pipeline (.tmj → .map.gram → HTTP)
 
-**Status:** implemented  
+**Status:** updated — see `specs/013-gram-format-migration` for layered format migration <!-- implements specs/013-gram-format-migration -->  
 **Date:** 2026-04-25  
 **Authors:** @akollegger  
 **Related:** [ADR-0005](../adr/0005-h3-native-map-format.md) (H3-native map format),
@@ -91,9 +91,9 @@ ADR-0005 Part 1 specifies the authoring conventions; this is the conversion algo
    - **Rectangle shapes** — synthesize four vertex points at the rect corners (`(x, y)`, `(x+w, y)`, `(x+w, y+h)`, `(x, y+h)`), in clockwise order.
    For each vertex, run point-in-hex resolution against the Tiled hex grid (`tilewidth`, `tileheight`, `hexsidelength`, `staggeraxis`, `staggerindex`) to find the `(col, row)` of the hex containing the point. Convert via `h3.localIjToCell(anchor, { i: col, j: row })`. ADR-0005's vertex-in-hex authoring rule guarantees each pixel lands inside exactly one hex; if a vertex falls in a gutter (no hex contains it), fail-closed with the offending object id, vertex index, and pixel coordinate.
 
-3. **Emit a gram polygon node.** `[<id>:Polygon:<TileTypeLabel> | ref1, ref2, ..., refN]` where each `refK` is a Gram identifier for a tile instance defined in the same file (`cell-<h3>` when that layout cell is emitted, or `poly-<id>-v<i>` vertex stubs when the shape implies that hex and layout does not emit a `cell-*`). Values match the H3 indices from step 2, in vertex order. Tiled rectangles and polygons both lower to the same gram form (the gram has no rectangle primitive — see ADR-0005 Part 2).
+3. **Emit a polygon Layer element.** In the layered output format (`specs/013-gram-format-migration`), polygon areas are emitted as `(:Polygon:TypeName { geometry: [h3\`v0\`, h3\`v1\`, ...] })` elements inside a `[polygons:Layer {kind: "polygon"} | ...]` walk. The vertex H3 cells are stored directly in the `geometry` array; no vertex stub nodes are emitted. Tiled rectangles and polygons both lower to this form.
 
-4. **Compute interior cell set.** Run `h3.polygonToCells` over the vertex list (or the equivalent — see Open Question 8). The result is the strict **fill interior**. It is *not* enumerated into the gram. It is used for **pairwise non-overlap checks** only (below).
+4. **Compute interior cell set.** Run `h3.polygonToCells` (centroid-containment) over the vertex list. The result is the strict **fill interior** — used only for **pairwise non-overlap checks** (below). The gram consumer expands the polygon using `h3.polygonToCellsExperimental(containmentOverlapping)` (matching the map editor) — see `@aie-matrix/map-gram`.
 
 5. **Shape cover vs `layout`.** Build **shape cover** = fill interior ∪ **every vertex hex** (defining corners are always treated as part of the authored shape, independent of `polygonToCells` boundary behavior). For each H3 in shape cover:
    - If the `layout` layer has no painted tile at that cell, do nothing (the polygon instantiates it implicitly).

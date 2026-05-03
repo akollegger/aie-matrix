@@ -5,9 +5,8 @@ import type { TmjLayer } from "./converter/parse-tmj.js";
 import { parseTmjFile } from "./converter/parse-tmj.js";
 import { parseTsxFile, type TilesetSlice } from "./converter/parse-tsx.js";
 import { extractMapContext } from "./converter/map-context.js";
-import type { CellEmission } from "./converter/cell-emission.js";
 import { emitLayoutCells, tileTypeEncounterOrder } from "./converter/cell-emission.js";
-import { buildTileAreas, formatPolygonGramLine } from "./converter/tile-area.js";
+import { buildTileAreas } from "./converter/tile-area.js";
 import {
   buildItemTypeEntries,
   emitItemInstances,
@@ -126,27 +125,7 @@ async function runConvertPipeline(
   const tileAreaTypesInIdOrder = tileAreas.map((a) => a.typeLabel);
   const tileMeta = buildTileMetaFromSlices(slices);
 
-  const cellByH3 = new Map(cells.map((c) => [c.h3Index, c] as const));
-  const vertexStubs: CellEmission[] = [];
-  const polygonLines: string[] = [];
-  for (const area of tileAreas) {
-    const vertexIds: string[] = [];
-    area.vertexCells.forEach((h3, vi) => {
-      if (cellByH3.has(h3)) {
-        vertexIds.push(`cell-${h3}`);
-        return;
-      }
-      const id = `poly-${area.id}-v${vi}`;
-      vertexIds.push(id);
-      vertexStubs.push({ id, typeLabel: area.typeLabel, h3Index: h3 });
-    });
-    polygonLines.push(formatPolygonGramLine(area, vertexIds));
-  }
-
-  const mergedCells = [...cells, ...vertexStubs].sort((a, b) =>
-    a.h3Index < b.h3Index ? -1 : a.h3Index > b.h3Index ? 1 : a.id.localeCompare(b.id),
-  );
-  // TileType definition order: layout `cell-*` encounters only (IC-001), then tile-area types by object id.
+  // TileType definition order: layout cell encounters first (IC-001), then tile-area types by object id.
   const tileOrder = tileTypeEncounterOrder(cells, tileAreaTypesInIdOrder);
 
   const text = serializeGram({
@@ -155,8 +134,8 @@ async function runConvertPipeline(
     tileTypeOrder: tileOrder,
     tileMeta,
     itemTypes,
-    polygonLines,
-    cells: mergedCells,
+    tileAreas,
+    cells,
     items,
   });
 

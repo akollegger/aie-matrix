@@ -8,7 +8,8 @@
   },
   "references": [
     { "path": "../../shared/root-env" },
-    { "path": "../../shared/types" }
+    { "path": "../../shared/types" },
+    { "path": "../../shared/map-gram" }
   ],
   "include": ["src/**/*.ts"]
 }

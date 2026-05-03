@@ -1,4 +1,5 @@
 import { cellToLatLng, polygonToCells } from "h3-js";
+import { computeCellsFromVertices } from "@aie-matrix/map-gram";
 import type { MapContext } from "./map-context.js";
 import type { TmjDocument, TmjLayer, TmjObject } from "./parse-tmj.js";
 import type { TilesetSlice } from "./parse-tsx.js";
@@ -159,6 +160,7 @@ export function buildTileAreas(
 
     let interior: Set<string>;
     try {
+      // Centroid-containment fill used for overlap detection only (no shared boundary cells).
       interior = new Set(polygonToCells(latLngRing(vertexCells), 15));
     } catch (e) {
       const detail = e instanceof Error ? e.message : String(e);
@@ -168,10 +170,9 @@ export function buildTileAreas(
       };
     }
 
-    const layoutShapeHexes = new Set<string>(interior);
-    for (const h of vertexCells) {
-      layoutShapeHexes.add(h);
-    }
+    // layoutShapeHexes uses containmentOverlapping (same as the gram consumer) to determine
+    // which layout cells are implied by this polygon — these are omitted from the tile layer.
+    const layoutShapeHexes = new Set<string>(computeCellsFromVertices(vertexCells));
 
     areas.push({
       id: obj.id,
