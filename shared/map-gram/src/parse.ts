@@ -117,8 +117,16 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
 
   const { header, patterns } = parseResult;
 
-  const name = typeof header?.["name"] === "string" ? header["name"] : "unnamed";
-  const elevation = typeof header?.["elevation"] === "number" ? header["elevation"] : 0;
+  // Require a valid root record
+  if (header?.["kind"] !== "matrix-map") {
+    throw new MapGramParseError("gram-syntax", `Document must begin with { kind: "matrix-map", name: "..." } — found kind: ${JSON.stringify(header?.["kind"] ?? null)}`);
+  }
+  if (typeof header["name"] !== "string" || (header["name"] as string).trim() === "") {
+    throw new MapGramParseError("gram-syntax", `Document header must have a non-empty "name" property`);
+  }
+
+  const name = header["name"] as string;
+  const elevation = typeof header["elevation"] === "number" ? header["elevation"] : 0;
 
   const tileTypes = new Map<string, TileTypeDef>();
   const itemTypes = new Map<string, ItemTypeDef>();
@@ -226,6 +234,8 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
           // Polygon fill — expand vertices to cells
           const typeName = getNonCategoryLabel(elemLabels);
           if (!typeName) continue;
+          // No hard upper bound: real maps (e.g. map-with-polygons) have 7-vertex polygons.
+          // Minimum of 3 is required; polygonToCellsExperimental handles any count ≥ 3.
           if (h3s.length < 3) {
             console.warn(`[map-gram] Polygon:${typeName} has ${h3s.length} vertices (minimum 3) — skipped`);
             continue;
@@ -292,9 +302,15 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
   const cells = new Map<string, ParsedCell>();
   const portals: ParsedPortal[] = [];
 
-  const orderedLayers = layerOrder
-    .map((layerId) => layersById.get(layerId))
-    .filter((l): l is LayerData => l != null);
+  const orderedLayers: LayerData[] = [];
+  for (const layerId of layerOrder) {
+    const layer = layersById.get(layerId);
+    if (layer === undefined) {
+      console.warn(`[map-gram] LayerStack references unknown layer "${layerId}" — skipped`);
+    } else {
+      orderedLayers.push(layer);
+    }
+  }
 
   for (const layer of orderedLayers) {
     // Apply cells (tile overrides win over earlier polygon fills)

@@ -36,7 +36,7 @@ export function parseMapGram(gramText: string): Promise<ParsedMap>
 ### Constraints
 - Input must be a valid gram document with `kind: "matrix-map"` root record
 - A `LayerStack` walk must be present; files without one are rejected with `MapGramParseError("missing-layer-stack")`
-- Polygon vertex lists outside the 3–6 range → **warning logged, polygon skipped** — parsing continues (not a thrown error)
+- Polygon vertex lists with fewer than 3 vertices → **warning logged, polygon skipped** — parsing continues (not a thrown error). No upper bound is enforced; real authored maps contain polygons with 7+ vertices and `polygonToCellsExperimental` handles any count ≥ 3.
 - All H3 indices in geometry arrays must pass `h3.isValidCell()`; invalid cells → `MapGramParseError("invalid-h3")`
 - `polygonToCellsExperimental` returning 0 cells for a polygon → warning logged, polygon skipped (not an error)
 
