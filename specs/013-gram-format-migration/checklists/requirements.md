@@ -35,5 +35,5 @@ All items pass. The spec is ready for `/speckit.plan`.
 
 Key decisions captured in Assumptions:
 - File extension stays `.map.gram` (not renamed to `.world.gram`)
-- Backward compatibility with old flat-cell format is required
+- Backward compatibility with old flat-cell format is NOT required (clarified in session 2026-05-03)
 - Portal and rules data must be parsed/stored but acting on them is out of scope
