@@ -9,7 +9,7 @@
  * carries for logging.
  *
  * Apply via `applyDelta` (sliders.ts) per facet — see
- * `peppers-house/src/run-loop.ts` for the per-facet apply loop.
+ * `peppers-agent/src/run-loop.ts` for the per-facet apply loop.
  */
 
 import type { Direction } from "./sliders.js";

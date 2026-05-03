@@ -182,7 +182,7 @@ function formatItemCounts(refs: readonly string[]): string {
     .join(", ");
 }
 
-function formatStimulus(s: Stimulus): string {
+export function formatStimulus(s: Stimulus): string {
   switch (s.kind) {
     case "utterance":
       return `${s.from} says: "${s.text}"`;
@@ -199,7 +199,7 @@ function formatStimulus(s: Stimulus): string {
   }
 }
 
-function parseAction(value: unknown): SurfaceAction {
+export function parseAction(value: unknown): SurfaceAction {
   if (!value || typeof value !== "object") {
     throw new Error(`Surface action must be an object; got ${JSON.stringify(value)}`);
   }

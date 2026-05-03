@@ -85,7 +85,7 @@ export interface RunHouseOptions {
   /**
    * Optional log-line prefix label, e.g. `"#0"` or `"#1"` when running
    * multiple peppers ghosts in parallel. When set, log lines read
-   * `[peppers-house #0] …` instead of `[peppers-house] …`.
+   * `[peppers-agent #0] …` instead of `[peppers-agent] …`.
    */
   readonly label?: string;
   /**
@@ -96,6 +96,59 @@ export interface RunHouseOptions {
    * allows cross-thread reads within a single house).
    */
   readonly preRegisteredHouseId?: string;
+  /**
+   * Pre-provisioned ghost credentials from an A2A spawn context (IC-006).
+   * When set, skips the registry register/adopt flow and uses these
+   * values directly — the MCP URL and token come from ghost-house's proxy.
+   */
+  readonly preProvisionedGhost?: {
+    readonly ghostId: string;
+    readonly worldApiBaseUrl: string;
+    readonly token: string;
+    readonly ghostHouseId?: string;
+  };
+}
+
+export interface ConversationalState {
+  readonly inConversationalMode: boolean;
+  readonly turnsSinceLastSayWithNoReply: number;
+  readonly socialAnchorTurnsLeft: number;
+}
+
+export const SOCIAL_ANCHOR_DURATION = 4;
+
+/**
+ * Pure state transition after one cascade. Given the previous state and the
+ * cascade result (action + outcome + triggering stimulus), returns the next
+ * conversational state. Does not handle the pre-cascade arm (cluster-entered
+ * / new-peer detection); callers apply those before passing in.
+ */
+export function nextConversationalState(
+  prev: ConversationalState,
+  action: import("@aie-matrix/ghost-peppers-inner").SurfaceAction,
+  outcome: import("@aie-matrix/ghost-peppers-inner").ActionOutcome,
+  stimulus: import("@aie-matrix/ghost-peppers-inner").Stimulus,
+): ConversationalState {
+  let { inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft } = prev;
+
+  if (action.kind === "say" && outcome.ok) {
+    inConversationalMode = true;
+    turnsSinceLastSayWithNoReply = 0;
+  } else if (action.kind === "bye" && outcome.ok) {
+    inConversationalMode = false;
+    turnsSinceLastSayWithNoReply = 0;
+  } else if (outcome.ok === false && outcome.code === "IN_CONVERSATION") {
+    inConversationalMode = true;
+  } else if (stimulus.kind === "utterance") {
+    turnsSinceLastSayWithNoReply = 0;
+    socialAnchorTurnsLeft = SOCIAL_ANCHOR_DURATION;
+  } else if (inConversationalMode) {
+    turnsSinceLastSayWithNoReply++;
+  }
+
+  if (socialAnchorTurnsLeft > 0) socialAnchorTurnsLeft--;
+
+  return { inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft };
 }
 
 /**
@@ -113,7 +166,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   const verbose = opts.verbose ?? false;
   const objective = opts.objective;
   const overlayPort = opts.overlayPort;
-  const tag = opts.label ? `peppers-house ${opts.label}` : "peppers-house";
+  const tag = opts.label ? `peppers-agent ${opts.label}` : "peppers-agent";
   const log = (msg: string): void => console.info(`[${tag}] ${msg}`);
   const warn = (msg: string, err?: unknown): void =>
     console.warn(`[${tag}] ${msg}`, err ?? "");
@@ -125,10 +178,21 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   process.once("SIGINT", stop);
   process.once("SIGTERM", stop);
 
-  // 1. Register + adopt. If the CLI pre-registered a shared house
-  //    (multi-ghost mode), adopt under it; otherwise register a fresh
-  //    house ourselves (single-ghost mode).
-  const adopted: AdoptedGhost = await (opts.preRegisteredHouseId !== undefined
+  // 1. Resolve ghost credentials: A2A spawn context takes priority, then
+  //    shared house pre-registration, then fresh register+adopt.
+  const adopted: AdoptedGhost = await (opts.preProvisionedGhost !== undefined
+    ? (() => {
+        const p = opts.preProvisionedGhost!;
+        log(`using pre-provisioned ghost=${p.ghostId} from A2A spawn context`);
+        return Promise.resolve({
+          ghostId: p.ghostId,
+          caretakerId: "a2a",
+          ghostHouseId: p.ghostHouseId ?? "a2a",
+          worldApiBaseUrl: p.worldApiBaseUrl,
+          token: p.token,
+        } satisfies AdoptedGhost);
+      })()
+    : opts.preRegisteredHouseId !== undefined
     ? (() => {
         log(`adopting under shared house ${opts.preRegisteredHouseId} …`);
         return adoptUnderHouse({
@@ -183,7 +247,6 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   // the conversation actually start without forever-trapping us when
   // the world is dense.
   let socialAnchorTurnsLeft = 0;
-  const SOCIAL_ANCHOR_DURATION = 4;
   // Tracks which peers we saw last cascade so we can detect first-sighting
   // transitions (peer appears in look-around when we hadn't seen them before)
   // and re-arm the anchor — covers ghosts that started already-clustered
@@ -293,35 +356,14 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
           }
         }
 
-        // Update conversational-mode mirror from this cascade's action +
-        // outcome + stimulus.
-        if (record.action.kind === "say" && record.outcome.ok) {
-          inConversationalMode = true;
-          turnsSinceLastSayWithNoReply = 0;
-        } else if (record.action.kind === "bye" && record.outcome.ok) {
-          inConversationalMode = false;
-          turnsSinceLastSayWithNoReply = 0;
-        } else if (
-          record.outcome.ok === false &&
-          record.outcome.code === "IN_CONVERSATION"
-        ) {
-          // World told us we're locked even though our local mirror said
-          // otherwise. Trust the world.
-          inConversationalMode = true;
-        } else if (record.stimulus.kind === "utterance") {
-          // A reply came in — conversation is active, reset patience and
-          // re-arm the anchor so we keep the conversation going.
-          turnsSinceLastSayWithNoReply = 0;
-          socialAnchorTurnsLeft = SOCIAL_ANCHOR_DURATION;
-        } else if (inConversationalMode) {
-          // We're waiting in conversation but nothing happened this
-          // turn — patience clock ticks.
-          turnsSinceLastSayWithNoReply++;
-        }
-
-        // Tick down the social anchor each cascade; cluster-entered
-        // and incoming utterance re-arm it above.
-        if (socialAnchorTurnsLeft > 0) socialAnchorTurnsLeft--;
+        // Update conversational-mode mirror and social anchor.
+        ({ inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft } =
+          nextConversationalState(
+            { inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft },
+            record.action,
+            record.outcome,
+            record.stimulus,
+          ));
       } catch (err) {
         warn("cascade failed:", err);
       }
@@ -501,7 +543,7 @@ function formatOutcome(o: ActionOutcome): string {
  * emitted. Useful for understanding why the ghost made the choice it
  * did, not just what it chose.
  */
-function printVerbose(record: import("./run-loop.js").RunRecord, tag = "peppers-house"): void {
+function printVerbose(record: import("./run-loop.js").RunRecord, tag = "peppers-agent"): void {
   const indent = (s: string): string =>
     s
       .split("\n")
@@ -544,7 +586,7 @@ function printVerbose(record: import("./run-loop.js").RunRecord, tag = "peppers-
   }
 }
 
-function printPersonality(p: PersonalityState, tag = "peppers-house"): void {
+function printPersonality(p: PersonalityState, tag = "peppers-agent"): void {
   for (const facet of STARTER_FACETS) {
     const t = p[facet];
     const i = toDisplay(t.internal).toFixed(2);
@@ -558,7 +600,7 @@ function printPersonality(p: PersonalityState, tag = "peppers-house"): void {
  * These never change between cascades, so we print them once at
  * startup in verbose mode rather than per-cascade.
  */
-function printSystemPrompts(tag = "peppers-house"): void {
+function printSystemPrompts(tag = "peppers-agent"): void {
   const indent = (s: string): string =>
     s
       .split("\n")

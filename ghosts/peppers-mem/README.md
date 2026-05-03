@@ -30,4 +30,4 @@ pnpm --filter @aie-matrix/ghost-peppers-mem run inspect:cascade # pretty-print a
 
 ## Where this fits
 
-See [`peppers-house/README.md`](../peppers-house/README.md) for the end-to-end architecture. The Id pipeline calls `fetchRecentCascades` to pull trigger trajectory into each cascade; `runOneStimulus` calls `persistCascade` after the surface action executes.
+See [`peppers-agent/README.md`](../peppers-agent/README.md) for the end-to-end architecture. The Id pipeline calls `fetchRecentCascades` to pull trigger trajectory into each cascade; `runOneStimulus` calls `persistCascade` after the surface action executes.

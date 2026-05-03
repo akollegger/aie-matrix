@@ -76,7 +76,7 @@ export interface RunOneStimulusRequest {
  * ≥1-up + ≥1-down rule that doesn't fit the modular Id pipeline (each
  * facet agent decides independently for its own slider).
  */
-function applyAdjustmentsPerFacet(
+export function applyAdjustmentsPerFacet(
   state: PersonalityState,
   adjustments: readonly Adjustment[],
 ): { state: PersonalityState; applied: readonly AppliedAdjustment[] } {

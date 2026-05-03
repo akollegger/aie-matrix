@@ -12,4 +12,4 @@ Pure logic for the Peppers Ghost architecture. No I/O, no LLM calls, no network 
 
 ## Where this fits
 
-See [`peppers-house/README.md`](../peppers-house/README.md) for the end-to-end architecture. This package is pure data and pure functions — everything stateful lives in `peppers-house`, everything persistent in `peppers-mem`.
+See [`peppers-agent/README.md`](../peppers-agent/README.md) for the end-to-end architecture. This package is pure data and pure functions — everything stateful lives in `peppers-agent`, everything persistent in `peppers-mem`.

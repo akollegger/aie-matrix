@@ -22,5 +22,5 @@ packages:
   - ghosts/tck
   - ghosts/peppers-inner
   - ghosts/peppers-mem
-  - ghosts/peppers-house
+  - ghosts/peppers-agent
   - e2e
