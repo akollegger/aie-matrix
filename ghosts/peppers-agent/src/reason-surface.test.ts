@@ -141,7 +141,7 @@ describe("formatStimulus", () => {
   });
 
   it("formats tile-entered", () => {
-    const result = formatStimulus({ kind: "tile-entered", tileClass: "plaza" });
+    const result = formatStimulus({ kind: "tile-entered", h3Index: "8f2830828052d25", tileClass: "plaza" });
     expect(result).toContain("plaza");
   });
 

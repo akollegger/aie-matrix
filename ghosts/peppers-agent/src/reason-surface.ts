@@ -15,7 +15,7 @@ import { chatJson } from "./llm-client.js";
  * an exit that doesn't exist.
  */
 export interface WorldContext {
-  /** Compass tokens (or named transitions) the ghost can `go` toward. */
+  /** Compass tokens (n/s/ne/nw/se/sw) the ghost can `go` toward. */
   readonly availableExits?: ReadonlyArray<string>;
   /** Item refs the ghost can `take` from the current tile. */
   readonly takeableItemRefs?: ReadonlyArray<string>;

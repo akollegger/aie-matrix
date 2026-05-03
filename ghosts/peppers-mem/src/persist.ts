@@ -4,11 +4,12 @@
  * ghost's session, tagged with a role string that identifies the event
  * type, and accompanied by structured metadata for later reconstruction.
  *
- * v1 uses only `memory_store_message` — the simplest mapping that
- * preserves causal ordering via timestamps and keeps the cascade
- * retrievable through `memory_get_context` and `memory_search`.
- * Richer mappings (entities for ghosts/McGuffins, fact triples for
- * adjustments) can layer on later without changing the call site.
+ * Uses the reasoning-trace tier (`memory_start_trace`,
+ * `memory_record_step`, `memory_complete_trace`) so each cascade
+ * lands as a `ReasoningTrace` with linked `ReasoningStep` nodes,
+ * making cascades retrievable via Cypher for future Id-pipeline
+ * context. Spoken utterances are also written to the conversation
+ * tier via `memory_store_message`.
  */
 
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";

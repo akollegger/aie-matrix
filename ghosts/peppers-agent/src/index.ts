@@ -1,5 +1,5 @@
 /**
- * @aie-matrix/ghost-peppers-house
+ * @aie-matrix/ghost-peppers-agent
  *
  * Orchestrator package: takes a stimulus, runs the Id reasoning loop,
  * runs the Surface action loop, persists the cascade, and returns the

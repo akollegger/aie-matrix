@@ -23,12 +23,17 @@ function parseSpawnContext(msg: import("@a2a-js/sdk").Message | undefined): Spaw
   return null;
 }
 
+/** One running loop per ghostId — aborted when the same ghost is re-spawned. */
 const loopAbortControllers = new Map<string, AbortController>();
+
+/** taskId → { ac, ghostId, contextId } — used by cancelTask to stop the loop. */
+const taskLoops = new Map<string, { ac: AbortController; ghostId: string; contextId: string }>();
 
 export class PeppersAgentExecutor implements AgentExecutor {
   execute = async (requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> => {
     const { userMessage, contextId, taskId, task } = requestContext;
     const tid = taskId ?? randomUUID();
+    const ctxId = contextId ?? "";
 
     const t: Task = task ?? {
       kind: "task",
@@ -45,7 +50,7 @@ export class PeppersAgentExecutor implements AgentExecutor {
       const failed: TaskStatusUpdateEvent = {
         kind: "status-update",
         taskId: t.id,
-        contextId: contextId ?? t.contextId,
+        contextId: ctxId,
         final: true,
         status: { state: "failed", timestamp: new Date().toISOString() },
       };
@@ -55,15 +60,18 @@ export class PeppersAgentExecutor implements AgentExecutor {
     }
 
     const { ghostId } = ctx;
+
+    // Abort any prior loop for this ghost (re-spawn replace policy).
     const prev = loopAbortControllers.get(ghostId);
     if (prev) prev.abort();
     const ac = new AbortController();
     loopAbortControllers.set(ghostId, ac);
+    taskLoops.set(t.id, { ac, ghostId, contextId: ctxId });
 
     const working: TaskStatusUpdateEvent = {
       kind: "status-update",
       taskId: t.id,
-      contextId: contextId ?? t.contextId,
+      contextId: ctxId,
       final: false,
       status: { state: "working", timestamp: new Date().toISOString() },
     };
@@ -92,6 +100,7 @@ export class PeppersAgentExecutor implements AgentExecutor {
       initialPersonality,
       objective,
       verbose: process.env.PEPPERS_VERBOSE === "1",
+      signal: ac.signal,
       preProvisionedGhost: {
         ghostId: ctx.ghostId,
         worldApiBaseUrl: ctx.houseEndpoints.mcp,
@@ -101,10 +110,11 @@ export class PeppersAgentExecutor implements AgentExecutor {
       .then(() => {
         if (ac.signal.aborted) return;
         loopAbortControllers.delete(ghostId);
+        taskLoops.delete(t.id);
         const done: TaskStatusUpdateEvent = {
           kind: "status-update",
           taskId: t.id,
-          contextId: contextId ?? t.contextId,
+          contextId: ctxId,
           final: true,
           status: { state: "completed", timestamp: new Date().toISOString() },
         };
@@ -114,13 +124,14 @@ export class PeppersAgentExecutor implements AgentExecutor {
       .catch((err) => {
         if (ac.signal.aborted) return;
         loopAbortControllers.delete(ghostId);
+        taskLoops.delete(t.id);
         console.error(
           JSON.stringify({ kind: "peppers-agent.loop-error", ghostId, message: err instanceof Error ? err.message : String(err) }),
         );
         const failed: TaskStatusUpdateEvent = {
           kind: "status-update",
           taskId: t.id,
-          contextId: contextId ?? t.contextId,
+          contextId: ctxId,
           final: true,
           status: { state: "failed", timestamp: new Date().toISOString() },
         };
@@ -133,13 +144,20 @@ export class PeppersAgentExecutor implements AgentExecutor {
   };
 
   cancelTask = async (taskId: string, eventBus: ExecutionEventBus): Promise<void> => {
+    const entry = taskLoops.get(taskId);
+    if (entry) {
+      entry.ac.abort();
+      loopAbortControllers.delete(entry.ghostId);
+      taskLoops.delete(taskId);
+    }
     const canceled: TaskStatusUpdateEvent = {
       kind: "status-update",
       taskId,
-      contextId: "",
+      contextId: entry?.contextId ?? "",
       final: true,
       status: { state: "canceled", timestamp: new Date().toISOString() },
     };
     eventBus.publish(canceled);
+    eventBus.finished();
   };
 }

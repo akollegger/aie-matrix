@@ -356,7 +356,7 @@
       setStatus('live', true);
       renderObjective(data.objective, null);
       renderPersonality(data.personality);
-      $('meta').textContent = `seed ${data.birthSeed ?? '—'} · started ${data.startedAt ?? '—'}`;
+      $('meta').textContent = `started ${data.startedAt ?? '—'}`;
     };
 
     const handleCascade = (record) => {

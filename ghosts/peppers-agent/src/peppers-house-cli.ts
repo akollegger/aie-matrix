@@ -2,7 +2,7 @@
  * CLI entry point: spin up one peppers ghost against a running combined
  * server. Defaults match `pnpm run demo`'s server URL.
  *
- *   pnpm --filter @aie-matrix/ghost-peppers-house run start
+ *   pnpm --filter @aie-matrix/ghost-peppers-agent run start
  */
 
 import {

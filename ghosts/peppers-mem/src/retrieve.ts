@@ -43,9 +43,9 @@ export interface CascadeReplay {
 }
 
 /**
- * Fetch the most recent successful cascades for a ghost, expanded with
- * each one's full step content. Useful as the Id's working memory — a
- * concise journal of what just happened in the ghost's recent past.
+ * Fetch the most recent cascades for a ghost (regardless of success
+ * flag), expanded with each one's full step content. Useful as the
+ * Id's working memory — a concise journal of recent past experience.
  *
  * @param client     Connected Agent Memory MCP client (extended profile).
  * @param ghostId    Session id of the ghost whose history to read.

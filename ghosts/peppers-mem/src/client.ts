@@ -102,7 +102,13 @@ export async function connectMemory(opts: MemoryClientOptions): Promise<MemoryCl
   return {
     client,
     async close() {
-      await client.close();
+      try {
+        await client.close();
+      } finally {
+        // Close the transport after the client so the uvx subprocess is
+        // reliably terminated and stdio handles are released.
+        await transport.close();
+      }
     },
   };
 }

@@ -1,13 +1,13 @@
 /**
- * Top-level live ghost-house orchestrator.
+ * Top-level live ghost orchestrator.
  *
  * Registers with the running combined server, adopts one ghost,
  * connects to the world-api MCP, and drives a bounded stimulus loop:
  * each tick polls the world, runs a cascade if there's something to
  * react to, executes the Surface action against the real world.
  *
- * Stops on Ctrl+C, on max-stimuli-reached, or if `bye` was the
- * last action issued.
+ * Stops on Ctrl+C, on max-stimuli-reached, or when the optional
+ * AbortSignal is aborted (e.g. from the A2A cancelTask path).
  */
 
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
@@ -107,6 +107,12 @@ export interface RunHouseOptions {
     readonly token: string;
     readonly ghostHouseId?: string;
   };
+  /**
+   * Optional AbortSignal. When aborted the stimulus loop exits cleanly
+   * after the current cascade finishes (or before the next poll).
+   * Wired by the A2A executor so cancelTask can stop the loop.
+   */
+  readonly signal?: AbortSignal;
 }
 
 export interface ConversationalState {
@@ -276,7 +282,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
     // killed long demos. Now `bye` is just an action like any other —
     // the world-api handles it, the loop continues until Ctrl+C or
     // maxStimuli.
-    while (!stopRequested && stimuliRun < maxStimuli) {
+    while (!stopRequested && !opts.signal?.aborted && stimuliRun < maxStimuli) {
       let stimulus: Stimulus | null = await pollNextStimulus(mcp, ctx);
 
       if (stimulus === null) {
