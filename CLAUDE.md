@@ -18,6 +18,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Browser memory only (MVP); files exchanged via browser download/upload (012-h3geojson-map-editor)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@relateby/pattern` (Gram AST), `h3-js` 4 (polygon fill, cell math), `effect` v3+ (async plumbing), `@colyseus/core` 0.15.57 (consumer), `vitest` (tests) (013-gram-format-migration)
 - File-based — `.map.gram` files in `maps/`; no database (013-gram-format-migration)
+- TypeScript 5.7 (browser target, ESM) + React 18, deck.gl ≥ 9 (`H3HexagonLayer`, `ScatterplotLayer`, `_GlobeView`), h3-js ≥ 4, colyseus.js, `@react-three/fiber`, `three`, Vite 6 (014-intermedium-polish)
+- N/A — stateless browser clien (014-intermedium-polish)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -65,6 +67,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 014-intermedium-polish: Added TypeScript 5.7 (browser target, ESM) + React 18, deck.gl ≥ 9 (`H3HexagonLayer`, `ScatterplotLayer`, `_GlobeView`), h3-js ≥ 4, colyseus.js, `@react-three/fiber`, `three`, Vite 6
 - 013-gram-format-migration: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@relateby/pattern` (Gram AST), `h3-js` 4 (polygon fill, cell math), `effect` v3+ (async plumbing), `@colyseus/core` 0.15.57 (consumer), `vitest` (tests)
 - 012-h3geojson-map-editor: Added TypeScript 5.7 (browser target, ESM) + React 18, Vite 6, MapLibre GL 5 (base map), h3-js 4 (cell math), `@relateby/pattern` (gram import parsing)
-- 011-intermedium-client: Added TypeScript 5.7 (browser target), React 18, Node.js 24 (build/dev only) + deck.gl ≥ 9 (H3HexagonLayer, PointCloudLayer, IconLayer), `h3-js` ≥ 4, `colyseus.js` (matches `@colyseus/core` 0.15.57), `@relateby/pattern` (gram parsing, per IC-002 consumer note in spec-010), `@aie-matrix/shared-types` (existing workspace package); UI model: full-viewport world + **overlay** panels; Ghost copy: goals/memories (not quest/memory-log; RFC-0008 / `specs/011-intermedium-client/spec.md`)

@@ -38,6 +38,11 @@ export function getColyseusUrl(): string {
   return import.meta.env.VITE_COLYSEUS_URL ?? "";
 }
 
+/** Derive the HTTP base URL from the WebSocket URL (ws → http, wss → https). */
+function getHttpBase(): string {
+  return getColyseusUrl().replace(/^ws(s?):\/\//, "http$1://");
+}
+
 function ensureClient(): Client {
   const url = getColyseusUrl();
   if (!url) {
@@ -75,8 +80,19 @@ export function getSpectatorRoom(): Room<WorldSpectatorState> | null {
 }
 
 /**
- * `joinOrCreate("world_spectator")` with `WorldSpectatorState` for `ghostTiles` patches.
+ * Fetch the singleton spectator room ID from `/spectator/room`, then join by ID.
+ * The server registers one `"matrix"` room and exposes its ID via that endpoint.
+ * Retries on transient 4212 (room not found) in case the room is still being created.
  */
+async function fetchRoomId(): Promise<string> {
+  const res = await fetch(`${getHttpBase()}/spectator/room`);
+  if (!res.ok) {
+    throw new Error(`/spectator/room: ${res.status} ${await res.text()}`);
+  }
+  const { roomId } = (await res.json()) as { roomId: string };
+  return roomId;
+}
+
 export async function joinWorldSpectator(): Promise<Room<WorldSpectatorState>> {
   if (room && room.connection.isOpen) {
     return room;
@@ -84,7 +100,8 @@ export async function joinWorldSpectator(): Promise<Room<WorldSpectatorState>> {
   setLinkState("connecting");
   try {
     const c = ensureClient();
-    const r = await c.joinOrCreate<WorldSpectatorState>("world_spectator", {}, WorldSpectatorState);
+    const roomId = await fetchRoomId();
+    const r = await c.joinById<WorldSpectatorState>(roomId, {}, WorldSpectatorState);
     setRoom(r);
     r.onLeave(() => {
       if (ignoreNextLeaveReconnect) {
