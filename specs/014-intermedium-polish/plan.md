@@ -4,9 +4,11 @@
 
 ## Summary
 
-Polish pass on the `clients/intermedium/` React client: add the missing `neighborhood` camera stop (completing the seven-stop arc), fix three chat UX gaps at the Personal stop (auto-scroll, auto-focus, and floating-panel redirect), add a navigation hint at Global stop, replace the stub in the Situational panel with the actual last paired-ghost message, and clean up the void platter boundary at Plan. Ghost rendering (`ScatterplotLayer`) was already corrected in the current session.
+Iterative polish pass on the `clients/intermedium/` React client, working through each camera stop in sequence with user approval of the experience at each step. Covers: navigation hint at Global stop, Regional verification, a Neighborhood Re-Evaluation phase (the decision to add or skip the stop is made after experiencing Regional → Plan, not before), ghost marker placement at Plan, ghost identity at Room, last-paired-message preview at Situational, and chat UX (auto-scroll, auto-focus, floating-panel redirect) at Personal. Ghost rendering (`ScatterplotLayer`) was already corrected in the current session.
 
 All changes are confined to `clients/intermedium/src/`. No new packages, no server changes, no shared-type changes.
+
+**Acceptance model**: Each stop phase ends with a live review session. The phase is not complete until the user approves the experience at that stop. TypeScript and smoke-test passes are necessary but not sufficient — user sign-off is the gate.
 
 ## Technical Context
 
@@ -30,7 +32,7 @@ All changes are confined to `clients/intermedium/src/`. No new packages, no serv
 | Verifiable increments per user slice | ✅ | Each stop has an independent smoke-test path (see quickstart.md); each phase below is independently demonstrable |
 | Documentation impact enumerated | ✅ | `clients/intermedium/README.md` requires update for seven-stop table and chat integration note; `spec-011` requires superseded-by notes |
 
-*Re-check after Phase 1 design: `neighborhood` stop is purely additive — it extends `CameraStop` union type within one package, touches no cross-package contract.*
+*Re-check after Phase 3 (Neighborhood Re-Evaluation): if Outcome A is chosen, `neighborhood` is purely additive — it extends `CameraStop` within one package. The venueZoom trigger fix is the only non-additive change. No cross-package contracts affected.*
 
 ## Project Structure
 
@@ -48,21 +50,21 @@ specs/014-intermedium-polish/
 
 ### Source Code (affected files only)
 
-All changes are inside `clients/intermedium/src/`:
+All changes are inside `clients/intermedium/src/`. Neighborhood files are conditional on the re-evaluation outcome.
 
 ```text
 clients/intermedium/src/
-├── types/
-│   └── viewState.ts              ← add "neighborhood" to CameraStop / ExteriorStop
-├── hooks/
-│   └── useViewState.ts           ← STOP_SEQUENCE, isExteriorStop, cycleIn gate
 ├── utils/
-│   └── hexViewport.ts            ← STOP_PITCH entry, neighborhoodView(), voidNeighborH3s fix
+│   └── hexViewport.ts            ← voidNeighborH3s fix (Plan); neighborhoodView() if Neighborhood proceeds
+├── hooks/
+│   └── useViewState.ts           ← STOP_SEQUENCE + isExteriorStop (conditional on Neighborhood decision)
+├── types/
+│   └── viewState.ts              ← ExteriorStop union (conditional on Neighborhood decision)
 ├── components/
 │   ├── SceneView/
-│   │   └── SceneView.tsx         ← computeMapCamera + layers memo: neighborhood case
+│   │   └── SceneView.tsx         ← computeMapCamera + layers: neighborhood case (conditional)
 │   ├── PanelView/
-│   │   ├── PanelView.tsx         ← add neighborhood to no-panel guard
+│   │   ├── PanelView.tsx         ← no-panel guard: neighborhood (conditional)
 │   │   └── NeighborPanel.tsx     ← replace last-message stub with useA2AConversation
 │   ├── ConversationThread/
 │   │   ├── ConversationThread.tsx ← auto-scroll to bottom on message append
@@ -73,121 +75,17 @@ clients/intermedium/src/
 └── App.tsx                        ← render NavHint at Global stop
 ```
 
-**Structure decision**: Single package, in-place edits; one new file (`NavHint.tsx`). No new directories. The `neighborhood` stop change is the widest, touching 4–5 files, but all are in `clients/intermedium/src/` and the changes are purely additive (new case in existing switches/maps).
+**Structure decision**: Single package, in-place edits; one new file (`NavHint.tsx`). No new directories needed for the confirmed scope.
 
 ## Implementation Phases
 
----
-
-### Phase 1 — Neighborhood Stop: Type Foundations (IC-005)
-
-*Widest change — touches every file that enumerates `CameraStop`. Must land before Phase 2.*
-
-**Files**: `viewState.ts`, `useViewState.ts`, `hexViewport.ts`, `PanelView.tsx`
-
-**Tasks**:
-
-1. **`viewState.ts`** — Add `"neighborhood"` to `ExteriorStop` union:
-   ```
-   export type ExteriorStop = "global" | "regional" | "neighborhood";
-   ```
-   TypeScript will surface every exhaustive check that needs updating.
-
-2. **`useViewState.ts`** — Insert `"neighborhood"` in `STOP_SEQUENCE` between `"regional"` and `"plan"`:
-   ```
-   export const STOP_SEQUENCE: CameraStop[] = [
-     "global", "regional", "neighborhood",
-     "plan", "room", "situational", "personal",
-   ];
-   ```
-   `isExteriorStop` already checks `stop === "regional"` — add `|| stop === "neighborhood"`. The `nextStopInSequence` / `prevStopInSequence` functions use the array and need no change beyond the sequence update.
-
-3. **`hexViewport.ts`** — Add pitch entry and camera function:
-   - `STOP_PITCH`: add `neighborhood: 45`
-   - New `neighborhoodView(tiles, widthPx, heightPx)`: fit the R12 parent of the first board tile into the viewport (same cell used in the venue zoom sequence). Returns a `MapViewport`; pitch is applied by the caller.
-
-4. **`PanelView.tsx`** — Add `neighborhood` to the no-panel guard:
-   ```
-   if (
-     viewState.stop === "global" ||
-     viewState.stop === "regional" ||
-     viewState.stop === "neighborhood" ||
-     viewState.stop === "plan"
-   ) { return null; }
-   ```
-
-**Verification**: TypeScript build must pass with zero new errors. A `console.log` of `STOP_SEQUENCE` from `useViewState.ts` should show all seven stops.
+*Phases follow camera stop sequence. Each phase ends with a live user review — the phase is not complete until the user approves the experience. The Neighborhood phase is a re-evaluation point: the decision to add or skip the stop is made after experiencing Regional and the Regional → Plan transition, not before.*
 
 ---
 
-### Phase 2 — Neighborhood Stop: Camera + Rendering
+### Phase 1 — Global Stop: Navigation Hint
 
-*Depends on Phase 1. Adds the actual camera target and layer set for the new stop.*
-
-**Files**: `SceneView.tsx`
-
-**Tasks**:
-
-1. **`computeMapCamera`** — Add `neighborhood` case:
-   ```
-   if (vs.stop === "neighborhood") {
-     const v = neighborhoodView(tiles, w, h);
-     return { ...v, pitch, bearing: 0 };
-   }
-   ```
-
-2. **`layers` memo** — Add `neighborhood` case to the giant `if (s === ...)` chain:
-   - Layer set: use `buildRegionalEndLayers()` (the same stable-ID regional end-state) so the transition from `regional` to `neighborhood` is purely a camera move with no layer swap
-   - This mirrors the Regional → Plan continuity already in the codebase: same layers, different camera
-
-3. **`lodExtruded`** — The `neighborhood` stop is exterior, so `lodExtruded` should be `true`. Verify the existing condition covers it:
-   ```
-   const lodExtruded = !(
-     viewState.stop === "plan" || viewState.stop === "room" || viewState.stop === "situational" ||
-     (viewState.stop === "regional" && drillLevel >= REGIONAL_DRILL_MAX)
-   );
-   ```
-   `neighborhood` is not in the exclusion list, so it evaluates to `true` — correct, no change needed.
-
-**Verification**: Navigate `global → regional → neighborhood → plan` using `+` key. Each step must show a smooth animated camera move. At `neighborhood`, the board fills ~70% of the viewport height at ~45° pitch. No ghost markers visible.
-
----
-
-### Phase 3 — Chat UX: Auto-scroll, Auto-focus, Floating Panel Note
-
-*Independent of Phases 1–2. Three self-contained fixes to the conversation surface.*
-
-**Files**: `ConversationThread.tsx`, `MessageInput.tsx`, `ChatPanel.tsx`
-
-**Tasks**:
-
-1. **`ConversationThread.tsx`** — Add auto-scroll to bottom:
-   - Add a `bottomRef = useRef<HTMLDivElement>(null)` sentinel div after the message list
-   - `useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])` — fires whenever `messages` array changes length
-
-2. **`MessageInput.tsx`** — Auto-focus on mount:
-   - The `inputRef` already exists and is used for post-send refocus
-   - Add `useEffect(() => { inputRef.current?.focus() }, [])` — fires once on mount
-   - This also serves FR-037: when `PersonalPanel` mounts (i.e., Personal stop activates), the input receives focus automatically
-
-3. **`ChatPanel.tsx`** — "Full conversation at Personal stop" note:
-   - Add `useClientState()` call to read `viewState.stop`
-   - When `viewState.stop !== "personal"`, render a small banner below the header:
-     ```
-     Full conversation view available at the Personal stop (navigate with +/=)
-     ```
-   - The banner should be subtle (dim text, no border) — informational, not a blocker
-
-**Verification**:
-- Open Personal stop with prior messages — thread scrolls to bottom on mount without manual scroll
-- Send a message — input clears and re-focuses; new message appears at bottom
-- Open [C] chat from Plan stop — banner is visible. Close and open from Personal stop — banner absent.
-
----
-
-### Phase 4 — Global Stop: Navigation Hint
-
-*Independent of Phases 1–3. Adds the first-time hint overlay.*
+*Adds the first-time keyboard hint overlay so first-time attendees know how to advance.*
 
 **Files**: `NavHint.tsx` (new), `App.tsx`
 
@@ -196,21 +94,92 @@ clients/intermedium/src/
 1. **`NavHint.tsx`** — Create a small overlay component:
    - Renders when `visible` prop is `true`
    - Position: bottom-center, above the [C] button
-   - Content: keyboard hints for the current context — at Global: `+ / = zoom in · Esc back`
-   - Style: monospace, ~10px, dim text (~50% opacity), no background box (inline text only)
+   - Content: `+ / = zoom in · Esc back`
+   - Style: monospace, ~10px, dim text (~50% opacity), no background box
    - Auto-hides after first `+` / `=` or `Escape` keypress using local `useState`
 
 2. **`App.tsx`** — Add `<NavHint visible={stop === "global"} />` inside the non-Personal branch, above `PanelView`
 
-**Verification**: Open the client — hint text is visible at the bottom-center of the Global stop viewport. Press `+` — view advances to Regional and hint disappears. Return to Global via `Escape` — hint does not reappear (dismissed state persists in session).
+**Smoke test**: Open the client — hint text visible at bottom-center at Global stop. Press `+` — view advances to Regional and hint disappears. Return to Global via `Escape` — hint does not reappear (dismissed state persists in session).
+
+**Acceptance gate**: User approves that the Global stop communicates its purpose and affords navigation without additional explanation.
 
 ---
 
-### Phase 5 — Situational Panel: Last Paired Message
+### Phase 2 — Regional Stop: Verification
 
-*Independent. Replaces the `NeighborPanel` conversation stub with the real last message.*
+*Confirm the existing Regional drill-in animation is correct and geographic context is legible — no code changes expected.*
 
-**Files**: `NeighborPanel.tsx`
+**Files**: None anticipated.
+
+**Smoke test**: Navigate Global → Regional. Drill animation plays through all levels. Venue marker (teal) and ≥2 SF landmark markers (amber) visible at drill completion. `+` advances toward Plan.
+
+**Acceptance gate**: User approves that the Regional stop provides meaningful geographic context and a clear sense of approaching the venue.
+
+---
+
+### Phase 3 — Neighborhood Re-Evaluation
+
+*The Neighborhood stop is specified in RFC-0008 but never implemented. Rather than deciding in advance whether it belongs, this phase examines the Regional → Plan transition as experienced and makes the decision collaboratively.*
+
+**Decision criteria to evaluate**:
+- Does the Regional → Plan automatic venueZoom animation (already implemented) provide sufficient venue-scale orientation, making a discrete Neighborhood stop redundant?
+- Does inserting a manual stop between Regional and Plan interrupt the cinematic flow?
+- Would a 45° overhead stop at the R12 venue cell add meaningful legibility beyond what the venueZoom already delivers?
+- **Key technical note**: adding `neighborhood` between `regional` and `plan` in `STOP_SEQUENCE` breaks the venueZoom activation trigger at `SceneView.tsx:234` (`prev === "regional" && viewState.stop === "plan"`), requiring a fix.
+
+**Outcome A — Add Neighborhood stop**:
+- Add `"neighborhood"` to `ExteriorStop` union in `types/viewState.ts`
+- Insert `"neighborhood"` between `"regional"` and `"plan"` in `STOP_SEQUENCE`; add to `isExteriorStop` in `hooks/useViewState.ts`
+- Add `neighborhood: 45` to `STOP_PITCH`; add `neighborhoodView()` in `utils/hexViewport.ts`
+- Fix venueZoom trigger in `SceneView.tsx` (`prev === "neighborhood"` or alternative logic)
+- Add `neighborhood` case in `computeMapCamera` and `layers` memo in `SceneView.tsx`
+- Add `neighborhood` to no-panel guard in `PanelView.tsx`
+- Run `pnpm typecheck` — zero new errors
+
+**Outcome B — Skip Neighborhood stop**:
+- Update spec and RFC notes to record the decision and rationale
+- No code changes required
+
+**Acceptance gate**: User and implementer jointly decide Outcome A or B based on the experienced Regional → Plan transition. No code is written before this gate.
+
+---
+
+### Phase 4 — Plan Stop: Ghost Markers + Void Platter
+
+*Ghost markers correctly placed on their tiles; no void-platter artifacts outside the map footprint.*
+
+**Files**: `utils/hexViewport.ts`
+
+**Tasks**:
+
+1. **`voidNeighborH3s()` fix** — Replace `gridDisk(centerH3, platterRadius)` body with K=1 edge-neighbor approach: iterate each tile, collect `gridDisk(tile.h3Index, 1)` neighbors not in the tile set, return deduplicated array. Produces a one-cell-wide halo matching actual map outline.
+
+2. Confirm `layers/ghostPointCloudLayer.ts` uses `ScatterplotLayer` (already done — verify and document).
+
+**Smoke test**: Open Plan stop on 1920×1080 viewport with active ghosts; verify ghost count matches backend, each marker on its tile, no wireframe outside tile footprint.
+
+**Acceptance gate**: User approves ghost marker placement and map boundary rendering at Plan stop.
+
+---
+
+### Phase 5 — Room Stop: Ghost Identity
+
+*Ghost identity panel visible immediately on arrival — no code changes expected.*
+
+**Files**: None anticipated.
+
+**Smoke test**: Double-click a tile near active ghosts at Plan; Room stop opens; `AreaPanel` lists nearby ghosts without any additional click; double-click a ghost marker to advance to Situational.
+
+**Acceptance gate**: User approves that the Room stop surfaces ghost identities without extra interaction.
+
+---
+
+### Phase 6 — Situational Stop: Last Paired Message
+
+*Replaces the `NeighborPanel` conversation stub with the actual last message from the paired ghost's thread.*
+
+**Files**: `components/PanelView/NeighborPanel.tsx`
 
 **Tasks**:
 
@@ -222,43 +191,36 @@ clients/intermedium/src/
    const { thread } = useA2AConversation(pairedGhostId, worldApiUrl, humanId);
    ```
 
-2. Replace the stub section with the last message:
-   ```
-   const lastMessage = thread.messages[thread.messages.length - 1] ?? null;
-   ```
-   Render it as a compact quoted message: sender label (`Ghost` / `You`), first 120 chars of content, ellipsis if truncated.
+2. Replace stub with compact last-message display: sender label (`Ghost` / `You`), first 120 chars, ellipsis if truncated. Show "No messages yet." if thread is empty. Section absent if paired ghost not in cluster.
 
-3. Keep the conditional gated on `pairedInCluster` — no hook call when the paired ghost is outside the cluster
+**Smoke test**: Navigate to Situational with paired ghost in 7-hex cluster; verify last message renders; verify section absent when paired ghost outside cluster.
 
-**Verification**: Navigate to Situational stop while paired ghost is in the 7-hex cluster. The "Conversation view unlocks at Partner scale" stub is replaced by the last message from the thread. If no messages exist, show "No messages yet." If the paired ghost is not in the cluster, section is absent.
+**Acceptance gate**: User approves that the Situational stop previews the conversation and bridges spatial exploration to the Personal stop.
 
 ---
 
-### Phase 6 — Void Platter Boundary (FR-032)
+### Phase 7 — Personal Stop: Chat UX
 
-*Lower priority — cosmetic polish. Can ship without this if time-constrained.*
+*Conversation thread visible immediately; input auto-focused; floating [C] panel redirects to Personal for full experience.*
 
-**Files**: `hexViewport.ts`
+**Files**: `ConversationThread.tsx`, `MessageInput.tsx`, `ChatPanel.tsx`
 
-**Context**: `voidNeighborH3s()` uses `gridDisk(centerH3, platterRadius)` to create a ring of cells around the map footprint. At res-15 with an irregular map shape, the disk is circular while the map is rectangular, producing void cells that visually extend beyond the map edge in some directions.
+**Tasks**:
 
-**Task**: Replace `gridDisk` with a set of cells derived from the map's K-ring boundary — iterate each tile's neighbors, collect any neighbor H3 that is NOT in the tile set, and return those edge-adjacent void cells (K=1 only). This produces a one-cell-wide edge halo that closely follows the actual map outline rather than a circle.
+1. **`ConversationThread.tsx`** — Auto-scroll to bottom:
+   - Add `bottomRef = useRef<HTMLDivElement>(null)` sentinel div after message list
+   - `useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])`
 
-**Verification**: At Plan stop, the void platter wireframe forms a thin outline exactly around the map boundary — no wireframe artifacts extending into empty globe space.
+2. **`MessageInput.tsx`** — Auto-focus on mount:
+   - Add `useEffect(() => { inputRef.current?.focus() }, [])` — fires once on mount (existing `inputRef` is already wired)
 
----
+3. **`ChatPanel.tsx`** — Stop-context note:
+   - Read `viewState.stop` via `useClientState()`
+   - When `stop !== "personal"`, render dim informational banner: "Full conversation view available at the Personal stop (navigate with +/=)"
 
-### Phase 7 — Ghost Last-Move Direction (FR-045 annotation)
+**Smoke test**: Navigate to Personal; thread scrolled to bottom + input focused on mount; send message; open [C] from Plan, verify banner; open [C] from Personal, verify no banner.
 
-*Optional polish. Adds "last move direction" to the Personal stop ghost state annotation.*
-
-**Files**: `types/ghostPosition.ts`, `context/ClientState.tsx`, `components/GhostCard/GhostCard.tsx`
-
-**Context**: `GhostPosition` currently stores only `{ ghostId, h3Index }`. The Personal stop spec says ghost state annotation includes "last move direction." This field is not in the Colyseus schema — it must be derived client-side by comparing the previous and current `h3Index` using h3's `gridDistance` or a compass bearing computed from `cellToLatLng` differences.
-
-**Task**: In `ClientState.tsx`, track `prevH3Index` per ghost alongside `h3Index`. When a ghost's `h3Index` changes, compute the bearing from old to new centroid using `cellToLatLng`, quantize to 8 compass directions, and store as `lastDirection: CompassDir | null`. Expose in `GhostCard` as a dim subtitle line (e.g., `↗ NE`).
-
-**Verification**: With a live ghost running, navigate to Personal stop. The ghost's card shows a direction indicator that updates as the ghost moves. If the ghost has not moved since page load, direction shows as `—`.
+**Acceptance gate**: User approves that the Personal stop is the primary conversation surface requiring no extra navigation or clicks to engage.
 
 ## Data Model Changes
 
@@ -268,12 +230,12 @@ See `data-model.md` for entity details. The only structural change is to `Camera
 
 IC-005 and IC-006 are internal to `clients/intermedium/src/` — they cross no package, process, or language boundary. No formal contract artifact beyond what the spec documents is required by the constitution.
 
-IC-005 **touchpoint checklist** (all in `clients/intermedium/src/`):
-- [x] `types/viewState.ts` — type definition
-- [x] `hooks/useViewState.ts` — sequence + predicate
-- [x] `utils/hexViewport.ts` — pitch map + camera function
-- [x] `components/SceneView/SceneView.tsx` — camera + layers
-- [x] `components/PanelView/PanelView.tsx` — no-panel guard
+IC-005 **touchpoint checklist** (all in `clients/intermedium/src/`) — conditional on Neighborhood Re-Evaluation outcome:
+- [ ] `types/viewState.ts` — type definition
+- [ ] `hooks/useViewState.ts` — sequence + predicate
+- [ ] `utils/hexViewport.ts` — pitch map + camera function
+- [ ] `components/SceneView/SceneView.tsx` — camera + layers + venueZoom trigger fix
+- [ ] `components/PanelView/PanelView.tsx` — no-panel guard
 
 ## Success Criteria Verification Plan
 
@@ -293,19 +255,18 @@ After implementation, update:
 - `proposals/rfc/0008-human-spectator-client.md`:
   - Layer composition section (line ~140): correct `PointCloudLayer` → `ScatterplotLayer` for ghost positions at interior stops; note that `PointCloudLayer` with `COORDINATE_SYSTEM.LNGLAT` misprojected in `_GlobeView` and `ScatterplotLayer` is the correct globe-aware layer
   - Layer composition section (line ~163): same correction in the numbered layer list
-  - Neighborhood stop (line ~103): add an implementation note confirming the stop is now added in spec-014, closing the gap between the RFC definition and the shipping implementation
+  - Neighborhood stop (line ~103): add an implementation note recording the Phase 3 re-evaluation outcome — either confirming the stop was added in spec-014 or explaining why the venueZoom animation satisfies the same need
 
 **Feature specs**
 - `specs/011-intermedium-client/spec.md`:
   - Add superseded note to FR-002 (ghost rendering — `ScatterplotLayer` per FR-031)
-  - Add superseded note to FR-003 (six stops shipped → seven stops with neighborhood per FR-034)
+  - Add superseded note to FR-003 (six stops shipped; seven-stop question deferred to spec-014 Phase 3 re-evaluation)
   - Add superseded note to FR-009 (floating chat panel is secondary; `PersonalPanel` is the primary surface per FR-035)
 
 **Client docs**
 - `clients/intermedium/README.md`:
   - Architecture section: replace "PointCloudLayer" with "ScatterplotLayer" for ghost markers
-  - Camera stops table: `neighborhood` row is already present — confirm its description matches the implemented camera target and pitch
-  - Smoke test: add step 2a — navigate to Neighborhood stop via `+` from Regional
+  - Camera stops table: update `neighborhood` row based on Phase 3 re-evaluation outcome — either confirm description matches implementation, or mark as intentionally omitted with rationale
 
 **Project-wide docs**
 - `docs/architecture.md`: already correct (7-stop model referenced, no `PointCloudLayer` ghost reference); verify after implementation that no new inaccuracies were introduced
