@@ -16,7 +16,7 @@
 
 **Purpose**: Confirm the build baseline is clean.
 
-- [ ] T001 Verify TypeScript builds with zero errors: run `pnpm typecheck` from repo root and record current error count as baseline
+- [X] T001 Verify TypeScript builds with zero errors: run `pnpm typecheck` from repo root and record current error count as baseline
 
 **Checkpoint**: Baseline established.
 
@@ -29,10 +29,10 @@
 **Story**: US1 — Understanding + Discoverability at Global stop  
 **Independent Test**: Open cold; keyboard hint visible bottom-center; press `+`; hint disappears; stop advances to Regional.
 
-- [ ] T002 [US1] Create `components/NavHint.tsx`: position `absolute`, bottom-center, `pointer-events: none`; renders keyboard hint text (`+ / = zoom in · Esc back`); local `useState(false)` dismissed flag; registers `keydown` listener for `=`, `+`, `Escape` and sets dismissed on first press
-- [ ] T003 [US1] Wire `<NavHint visible={stop === "global" && !dismissed} />` into `App.tsx` inside the non-Personal branch, stacked above `PanelView`
-- [ ] T004 [US1] Smoke test: open client, verify hint text visible at Global stop; press `+`, verify hint gone and stop advances to Regional
-- [ ] T005 [US1] **User review**: present Global stop experience; phase complete on user approval
+- [X] T002 [US1] Create `components/NavHint.tsx`: position `absolute`, bottom-center, `pointer-events: none`; renders keyboard hint text (`+ / = zoom in · Esc back`); local `useState(false)` dismissed flag; registers `keydown` listener for `=`, `+`, `Escape` and sets dismissed on first press
+- [X] T003 [US1] Wire `<NavHint visible={stop === "global" && !dismissed} />` into `App.tsx` inside the non-Personal branch, stacked above `PanelView`
+- [X] T004 [US1] Smoke test: open client, verify hint text visible at Global stop; press `+`, verify hint gone and stop advances to Regional
+- [X] T005 [US1] **User review**: present Global stop experience; phase complete on user approval
 
 **Checkpoint**: Global stop approved by user.
 

@@ -1,3 +1,5 @@
+> **DEPRECATED** — Superseded by [Intermedium](../../intermedium/README.md) (`@aie-matrix/intermedium`), the primary spectator UI. This client is no longer maintained.
+
 # Phaser spectator (`@aie-matrix/client-phaser`)
 
 Read-only hex map view driven by Colyseus `WorldSpectatorState` (IC-004).

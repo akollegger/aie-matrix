@@ -1,0 +1,35 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "World Server",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/server", "run", "dev"],
+      "port": 8787
+    },
+    {
+      "name": "Intermedium",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/intermedium", "run", "dev"],
+      "port": 5180
+    },
+    {
+      "name": "Ghost House",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/ghost-house", "run", "dev"],
+      "port": 4000
+    },
+    {
+      "name": "Random Agent",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/random-agent", "run", "dev"],
+      "port": 4001
+    },
+    {
+      "name": "Peppers Agent",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/ghost-peppers-agent", "run", "dev"],
+      "port": 4002
+    }
+  ]
+}

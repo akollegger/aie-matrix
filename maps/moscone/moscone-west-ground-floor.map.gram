@@ -1,0 +1,9 @@
+{ kind: "matrix-map", name: "Moscone West - Ground Floor", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor", style: css`background: #369` })
+
+[ground:Layer {kind: "tile", name: "Ground"}]
+[lyr0gxw2zk:Layer {kind: "polygon", name: "Building"} | (:Polygon:Floor { geometry: [h3`8f283082aa20ce0`, h3`8f283082aa3374e`, h3`8f283082ab8db13`, h3`8f283082ab1838c`] }), (:Polygon:Floor { geometry: [h3`8f283082aa20c9e`, h3`8f283082aa26263`, h3`8f283082aa26264`, h3`8f283082aa20c95`] })]
+[layers:LayerStack | ground, lyr0gxw2zk]
+
+[rules:Rules | (floor)-[:GO]->(floor)]

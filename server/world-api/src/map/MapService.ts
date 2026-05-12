@@ -115,7 +115,7 @@ function mapRelatebyParseError(path: string, err: RelatebyGramParseError): GramP
 
 function validateGramFile(
   gramPath: string,
-  expectedStem: string,
+  _expectedStem: string,
 ): Effect.Effect<void, GramParseError | MapNameMismatchError> {
   return pipe(
     Effect.tryPromise({
@@ -133,18 +133,9 @@ function validateGramFile(
         Effect.flatMap((patterns) =>
           pipe(
             checkLayerStackPresent(patterns, gramPath),
+            // Validate header exists; name is display text, stem is the mapId
             Effect.flatMap(() => extractMatrixMapName(patterns, gramPath)),
-            Effect.flatMap((nameFromGram) =>
-              nameFromGram === expectedStem
-                ? Effect.void
-                : Effect.fail(
-                    new MapNameMismatchError({
-                      path: gramPath,
-                      expected: expectedStem,
-                      actual: nameFromGram,
-                    }),
-                  ),
-            ),
+            Effect.asVoid,
           ),
         ),
       ),

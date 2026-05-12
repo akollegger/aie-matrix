@@ -16,7 +16,7 @@ const RefreshIdentitiesCtx = createContext<() => void>(() => {});
 export function ClientStateProvider({ children }: { readonly children: ReactNode }) {
   const pairing = usePairing();
   const { identities, refresh } = useGhostIdentity(import.meta.env.VITE_GHOST_HOUSE_URL ?? "");
-  const { status: mapGramStatus, tiles, error: mapGramError, retry: retryMapLoad } = useMapGram();
+  const { status: mapGramStatus, tiles, tileTypeStyles, error: mapGramError, retry: retryMapLoad } = useMapGram();
   const { ghosts, connectionState: colyseusLinkState } = useColyseus();
   const { viewState, nav } = useViewState(pairing);
   const [thread] = useState<ClientState["thread"]>(null);
@@ -29,6 +29,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
       ghosts,
       identities,
       tiles,
+      tileTypeStyles,
       thread,
       interiority,
       pairing,
@@ -43,6 +44,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
       ghosts,
       identities,
       tiles,
+      tileTypeStyles,
       thread,
       interiority,
       pairing,

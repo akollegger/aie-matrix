@@ -31,7 +31,8 @@ export function createSelectionH3Layer(
     filled: true,
     getFillColor: [255, 200, 60, 35] as [number, number, number, number],
     getLineColor: [255, 220, 80, 255] as [number, number, number, number],
+    lineWidthUnits: "pixels",
     getLineWidth: 2,
-    lineWidthMinPixels: 2,
+    lineWidthMinPixels: 1,
   });
 }

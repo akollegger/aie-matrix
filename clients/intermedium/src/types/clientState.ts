@@ -6,6 +6,7 @@ import type { ConversationThread } from "./conversation.js";
 import type { GhostInteriority, HumanPairing, GhostIdentity } from "./ghost.js";
 import type { GhostPosition } from "./ghostPosition.js";
 import type { WorldTile } from "./worldTile.js";
+import type { TileTypeStyles } from "../services/gramParser.js";
 import type { ViewState } from "./viewState.js";
 import type { ColyseusLinkState, MapGramStatus } from "./spectator.js";
 import type { ViewNavigation } from "./navigation.js";
@@ -23,6 +24,8 @@ export interface ClientState {
   readonly identities: ReadonlyMap<string, GhostIdentity>;
   /** Parsed map cells, keyed by H3 index. */
   readonly tiles: ReadonlyMap<string, WorldTile>;
+  /** Background hex color keyed by tileType (from gram style field). */
+  readonly tileTypeStyles: TileTypeStyles;
   readonly thread: ConversationThread | null;
   readonly interiority: GhostInteriority | null;
   readonly pairing: HumanPairing | null;

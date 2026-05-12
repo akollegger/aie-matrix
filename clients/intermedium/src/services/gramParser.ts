@@ -11,6 +11,8 @@ import { parseMapGram } from "@aie-matrix/map-gram";
 import { gridDisk, isValidCell } from "h3-js";
 import type { WorldTile, TileType } from "../types/worldTile.js";
 
+export type TileTypeStyles = ReadonlyMap<string, string>;
+
 function asTileType(typeName: string): TileType {
   if (typeName.length === 0) return "open";
   return (typeName[0]!.toLowerCase() + typeName.slice(1)) as TileType;
@@ -21,10 +23,25 @@ function neighborsForCell(h3Index: string): string[] {
   return gridDisk(h3Index, 1).filter((c) => c !== h3Index);
 }
 
-export async function parseMapGramToTiles(gramText: string): Promise<Map<string, WorldTile>> {
-  const parsed = await parseMapGram(gramText);
-  const tiles = new Map<string, WorldTile>();
+function extractHexColor(style?: string): string | undefined {
+  if (!style) return undefined;
+  return /background:\s*(#[0-9a-fA-F]{3,8})/.exec(style)?.[1];
+}
 
+export async function parseMapGramToTiles(gramText: string): Promise<{
+  tiles: Map<string, WorldTile>;
+  tileTypeStyles: TileTypeStyles;
+}> {
+  const parsed = await parseMapGram(gramText);
+
+  const stylesBuilder = new Map<string, string>();
+  for (const def of parsed.tileTypes.values()) {
+    const hex = extractHexColor(def.style);
+    if (hex) stylesBuilder.set(asTileType(def.typeName), hex);
+  }
+  const tileTypeStyles: TileTypeStyles = stylesBuilder;
+
+  const tiles = new Map<string, WorldTile>();
   for (const [h3Index, cell] of parsed.cells) {
     tiles.set(h3Index, {
       h3Index,
@@ -34,5 +51,5 @@ export async function parseMapGramToTiles(gramText: string): Promise<Map<string,
     });
   }
 
-  return tiles;
+  return { tiles, tileTypeStyles };
 }

@@ -19,7 +19,7 @@
     "dev": "pnpm --filter @aie-matrix/server dev",
     "server": "pnpm --filter @aie-matrix/server start",
     "server:dev": "pnpm --filter @aie-matrix/server dev",
-    "spectator": "pnpm --filter @aie-matrix/client-phaser dev",
+    "intermedium": "pnpm --filter @aie-matrix/intermedium dev",
     "ghost:house": "pnpm --filter @aie-matrix/ghost-house dev",
     "ghost:peppers-agent": "pnpm --filter @aie-matrix/ghost-peppers-agent run start",
     "peppers:demo": "node ghosts/peppers-agent/scripts/peppers-demo.mjs",

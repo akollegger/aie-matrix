@@ -33,6 +33,7 @@ export function createGhostPickLayer(
     getFillColor: [0, 0, 0, 0] as [number, number, number, number],
     getLineColor: [120, 200, 255, 100] as [number, number, number, number],
     getLineWidth: 1,
+    lineWidthUnits: "pixels",
     stroked: true,
     radiusUnits: "pixels",
   });

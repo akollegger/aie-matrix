@@ -9,6 +9,7 @@ import { FailWhale } from "./components/FailWhale.js";
 import { GhostArrivalOverlay } from "./components/GhostArrivalOverlay.js";
 import { ReconnectingBanner } from "./components/ReconnectingBanner.js";
 import { ChatPanel } from "./components/ChatPanel/ChatPanel.js";
+import { NavHint } from "./components/NavHint.js";
 
 /** Fade duration in ms for the deck.gl ↔ R3F renderer swap (FR-028, T090). */
 const FADE_MS = 200;
@@ -80,6 +81,27 @@ function AppInner() {
         {/* Deck.gl geospatial scene (all stops except Personal) */}
         {!showPersonal && (
           <>
+            {/* Global + Regional background layers */}
+            {(stop === "global" || stop === "regional") && (
+              <>
+                {/* Flat inky-purple base — stays as the Regional fill */}
+                <div
+                  className="absolute inset-0"
+                  style={{ background: "#0b0920", zIndex: 0 }}
+                />
+                {/* Radial glow — fades out as the drill-in animation plays */}
+                <div
+                  className="absolute inset-0"
+                  style={{
+                    background:
+                      "radial-gradient(ellipse at 50% 50%, #2a1eb8 0%, #13106b 38%, #0b0920 65%, #0b0920 100%)",
+                    opacity: stop === "global" ? 1 : 0,
+                    transition: "opacity 2.5s ease",
+                    zIndex: 0,
+                  }}
+                />
+              </>
+            )}
             {state.mapGramStatus === "ready" && state.tiles.size > 0 ? <SceneView /> : null}
             {state.mapGramStatus === "loading" ? (
               <div
@@ -113,31 +135,25 @@ function AppInner() {
 
         <ReconnectingBanner visible={state.colyseusLinkState === "reconnecting"} />
 
-        {/* Chat toggle button — bottom-right corner */}
-        <button
-          type="button"
-          onClick={() => setChatOpen((o) => !o)}
-          aria-label="Toggle ghost chat (C)"
-          title="Ghost Chat [C]"
-          style={{
-            position: "absolute",
-            bottom: 20,
-            right: 20,
-            zIndex: 10,
-            background: chatOpen ? "rgba(60, 100, 160, 0.6)" : "rgba(20, 30, 50, 0.7)",
-            border: "1px solid rgba(100, 140, 180, 0.4)",
-            borderRadius: 6,
-            color: "rgba(180, 210, 255, 0.9)",
-            fontSize: 11,
-            padding: "6px 12px",
-            cursor: "pointer",
-            fontFamily: "monospace",
-            letterSpacing: "0.06em",
-            textTransform: "uppercase",
-          }}
-        >
-          Chat [C]
-        </button>
+        {/* Overlay corner — toasts + persistent controls, bottom-right */}
+        <div className="absolute bottom-5 right-5 z-10 flex flex-col items-end gap-2">
+          <NavHint visible={stop === "global"} />
+          {/* Chat toggle button */}
+          <button
+            type="button"
+            onClick={() => setChatOpen((o) => !o)}
+            aria-label="Toggle ghost chat (C)"
+            title="Ghost Chat [C]"
+            className={[
+              "font-mono text-sm uppercase tracking-[--tracking-label] px-3 py-1.5 rounded border cursor-pointer transition-colors",
+              chatOpen
+                ? "bg-human-bg border-border-bright text-text"
+                : "bg-surface border-border text-text-dim hover:border-border-bright hover:text-text",
+            ].join(" ")}
+          >
+            Chat [C]
+          </button>
+        </div>
       </div>
 
       {/* Full-screen chat overlay */}

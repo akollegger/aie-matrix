@@ -1,10 +1,10 @@
 { kind: "matrix-map", name: "map-with-polygons", elevation: 0 }
 
-(yellow:TileType:Yellow { name: "Yellow" })
-(red:TileType:Red { name: "Red" })
-(blue:TileType:Blue { name: "Blue" })
-(purple:TileType:Purple { name: "Purple" })
-(green:TileType:Green { name: "Green" })
+(yellow:TileType:Yellow { name: "Yellow", style: css`background: #FF6` })
+(red:TileType:Red { name: "Red", style: css`background: #F66` })
+(blue:TileType:Blue { name: "Blue", style: css`background: #66F` })
+(purple:TileType:Purple { name: "Purple", style: css`background: #F6F` })
+(green:TileType:Green { name: "Green", style: css`background: #6F6` })
 
 [polygons:Layer {kind: "polygon", name: "Polygons"} | (:Polygon:Red { geometry: [h3`8f2830828052d25`, h3`8f28308280e5a40`, h3`8f28308280564c0`, h3`8f28308280567a5`] }), (:Polygon:Blue { geometry: [h3`8f28308280e5a42`, h3`8f28308280e5af4`, h3`8f28308280e5a33`, h3`8f28308280e5a0c`, h3`8f28308280e5b58`] }), (:Polygon:Yellow { geometry: [h3`8f28308280564d8`, h3`8f28308280e5b33`, h3`8f28308280e5b11`, h3`8f28308280e5b00`, h3`8f28308280e5b29`, h3`8f28308280e5b75`] }), (:Polygon:Purple { geometry: [h3`8f28308280564dc`, h3`8f28308280e5b30`, h3`8f28308280e5b34`, h3`8f28308280564c2`] }), (:Polygon:Green { geometry: [h3`8f28308280e5b5c`, h3`8f28308280e5a2a`, h3`8f28308280e5a30`, h3`8f28308280e5b1e`, h3`8f28308280e5b03`, h3`8f28308280e5b76`, h3`8f28308280e5b71`] })]
 

@@ -1,7 +1,27 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { cellToLatLng, gridDisk, isValidCell } from "h3-js";
 import type { CameraStop, ViewState } from "../types/viewState.js";
 import type { HumanPairing } from "../types/ghost.js";
-import type { PickTarget, ViewNavigation } from "../types/navigation.js";
+import type { ArrowDirection, PickTarget, ViewNavigation } from "../types/navigation.js";
+
+const ARROW_DIRS: readonly string[] = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"];
+
+function stepH3(h3: string, dir: ArrowDirection): string {
+  const [cLat, cLng] = cellToLatLng(h3);
+  const neighbors = gridDisk(h3, 1).filter(n => n !== h3);
+  let best = neighbors[0]!;
+  let bestScore = -Infinity;
+  for (const n of neighbors) {
+    const [nLat, nLng] = cellToLatLng(n);
+    const score =
+      dir === "ArrowUp" ? nLat - cLat :
+      dir === "ArrowDown" ? cLat - nLat :
+      dir === "ArrowRight" ? nLng - cLng :
+      cLng - nLng;
+    if (score > bestScore) { bestScore = score; best = n; }
+  }
+  return best;
+}
 
 export const STOP_SEQUENCE: CameraStop[] = [
   "global", "regional",
@@ -16,11 +36,13 @@ function nextStopInSequence(current: CameraStop, hasPairing: boolean): CameraSto
   const idx = STOP_SEQUENCE.indexOf(current);
   if (idx === -1 || idx >= STOP_SEQUENCE.length - 1) return null;
   const next = STOP_SEQUENCE[idx + 1]!;
+  if (next === "situational") return null; // Situational+ disabled — focusing on Plan/Room
   if (next === "personal" && !hasPairing) return null;
   return next;
 }
 
 function prevStopInSequence(current: CameraStop): CameraStop | null {
+  if (current === "plan") return null; // Plan is the floor — no zooming out further
   const idx = STOP_SEQUENCE.indexOf(current);
   if (idx <= 0) return null;
   return STOP_SEQUENCE[idx - 1]!;
@@ -33,12 +55,17 @@ function prevStopInSequence(current: CameraStop): CameraStop | null {
 export function useViewState(
   pairing: HumanPairing | null,
 ): { readonly viewState: ViewState; readonly nav: ViewNavigation } {
-  const initial: ViewState = { stop: "global", focus: null };
+  // Plan is the default entry point — global/regional/situational/personal are
+  // temporarily disabled while we focus on the Plan+Room experience.
+  const initial: ViewState = { stop: "plan", focus: null };
   const [stack, setStack] = useState<ViewState[]>([initial]);
   const [pickTarget, setPickTarget] = useState<PickTarget | null>(null);
+  const stopRef = useRef(initial.stop);
+  const defaultFocusRef = useRef<string | null>(null);
 
   const viewState = stack[stack.length - 1]!;
   const hasPairing = pairing !== null;
+  stopRef.current = viewState.stop;
 
   const cycleIn = useCallback(() => {
     setStack((s) => {
@@ -52,9 +79,8 @@ export function useViewState(
   const zoomInFromTile = useCallback((h3: string) => {
     setStack((s) => {
       const current = s[s.length - 1]!;
-      if (current.stop !== "plan" && current.stop !== "room") return s;
-      const next = current.stop === "plan" ? "room" : "situational";
-      return [...s, { stop: next, focus: h3 }];
+      if (current.stop !== "plan") return s; // Only plan→room; room→situational disabled
+      return [...s, { stop: "room", focus: h3 }];
     });
   }, []);
 
@@ -80,6 +106,32 @@ export function useViewState(
   // Return to the previous stop in history (Escape / back button).
   const zoomOut = useCallback(() => {
     setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
+  }, []);
+
+  // Move focus to neighboring H3 cell (Room + Situational arrow keys). Replaces top of stack (no new history entry).
+  // Guards against ghost-ID focus (UUIDs are not valid H3 cells).
+  // Falls back to defaultFocusRef when viewState.focus is null (e.g. cycleIn to Room with no prior focus).
+  const moveFocus = useCallback((dir: ArrowDirection) => {
+    setStack((s) => {
+      const cur = s[s.length - 1]!;
+      if (cur.stop !== "room" && cur.stop !== "situational") return s;
+      const startFocus = cur.focus ?? defaultFocusRef.current;
+      if (!startFocus || !isValidCell(startFocus)) return s;
+      return [...s.slice(0, -1), { ...cur, focus: stepH3(startFocus, dir) }];
+    });
+  }, []);
+
+  const setDefaultFocus = useCallback((h3: string | null) => {
+    defaultFocusRef.current = h3;
+  }, []);
+
+  // Re-center focus on a specific tile at Room stop without changing stop (double-click re-pan).
+  const relocateFocus = useCallback((h3: string) => {
+    setStack((s) => {
+      const cur = s[s.length - 1]!;
+      if (cur.stop !== "room") return s;
+      return [...s.slice(0, -1), { ...cur, focus: h3 }];
+    });
   }, []);
 
   const triggerEnterZoom = useCallback(() => {
@@ -112,10 +164,15 @@ export function useViewState(
         e.preventDefault();
         cycleOut();
       }
+      // Arrow keys pan focus at Room and Situational stops
+      if (ARROW_DIRS.includes(e.key) && (stopRef.current === "room" || stopRef.current === "situational")) {
+        e.preventDefault();
+        moveFocus(e.key as ArrowDirection);
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [zoomOut, triggerEnterZoom, cycleIn, cycleOut]);
+  }, [zoomOut, triggerEnterZoom, cycleIn, cycleOut, moveFocus]);
 
   const nav: ViewNavigation = {
     pickTarget,
@@ -125,6 +182,9 @@ export function useViewState(
     zoomInFromGhost,
     zoomOut,
     triggerEnterZoom,
+    moveFocus,
+    setDefaultFocus,
+    relocateFocus,
   };
 
   return { viewState, nav };
