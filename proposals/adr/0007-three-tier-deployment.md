@@ -1,6 +1,6 @@
 # ADR-0007: Three-Tier Deployment Strategy
 
-**Status:** proposed  
+**Status:** accepted  
 **Date:** 2026-05-17  
 **Authors:** @akollegger
 
@@ -68,7 +68,7 @@ Maps, movement rules, item definitions, ghost conversation history, and the A2A 
 | Conversation history | JSONL on local disk | JSONL on named volume | Neo4j Aura |
 | Ghost house catalog | `catalog.json` on disk | JSON on named volume | Neo4j Aura |
 
-In Tier 3, world-api fetches map and rules artifacts from GCS at startup (or on demand via the map management API — see follow-on RFC) and seeds Neo4j. After seeding, **Neo4j is the runtime source of truth**; world-api does not re-read local files in production.
+In Tier 3, world-api fetches map and rules artifacts from GCS at startup (or on demand via the map management API — see [RFC-0013](../rfc/0013-map-management.md)) and seeds Neo4j. After seeding, **Neo4j is the runtime source of truth**; world-api does not re-read local files in production.
 
 ### Source-of-truth hierarchy
 
@@ -179,7 +179,7 @@ The Effect-ts `Layer` for each stateful service reads these variables at startup
 - **Secrets hygiene**: Kubernetes `Secret` objects and `.env` files must never be committed. `@aie-matrix/root-env` already reads from the environment; this is an operational discipline requirement.
 - **Service discovery changes between tiers**: Localhost ports in Tier 1 become DNS names in Tier 2/3. Services must not hard-code `localhost`; all inter-service URLs must be configurable env vars.
 - **Filesystem-to-Neo4j migration for conversation history and agent catalog**: `server/conversation` (JSONL store) and `ghosts/ghost-house` (catalog.json) currently write to local disk. In production these must write to Neo4j Aura. Each will need an Effect-ts `Layer` implementation backed by Neo4j, selected when `CONVERSATION_DATA_DIR` / `CATALOG_FILE_PATH` are unset in the production config. This is new implementation work gated behind staging validation.
-- **Map publish step**: A "publish map" operation (upload `.map.gram` + sidecar to GCS, seed Neo4j, update active-map pointer) is required before production can serve a new map. The interface for this is out of scope for this ADR; it is deferred to the map management RFC.
+- **Map publish step**: A "publish map" operation (upload `.map.gram` + sidecar to GCS, seed Neo4j, update active-map pointer) is required before production can serve a new map. The interface for this is out of scope for this ADR; it is defined in [RFC-0013](../rfc/0013-map-management.md).
 - **world-api refactor**: Removing the local-file read path from world-api in favour of Neo4j is a non-trivial change to `MapService` and `ItemService`. This work is explicitly deferred until the local-file fallback is no longer required (i.e., when the map publish workflow exists).
 
 ### Open questions resolved
@@ -205,3 +205,4 @@ This ADR resolves the **CI/CD Pipeline** open question in `docs/architecture.md`
 | [RFC-0009](../rfc/0009-map-format-pipeline.md) | Map Format Pipeline | `.map.gram` artifacts are the input to the GCS upload step; `MapService` must support GCS fetch in Tier 3. |
 | [RFC-0010](../rfc/0010-h3geojson-map-editor.md) | H3GeoJSON Map Editor | Editor outputs are the "authored artifacts" in the source-of-truth hierarchy — they feed the publish-to-GCS workflow before world-api can serve them. |
 | [RFC-0012](../rfc/0012-speaker-rooms.md) | Speaker Rooms | Room claim state must persist to Neo4j to satisfy the stateless-application-service invariant; in-memory storage would be lost on world-api restart. |
+| [RFC-0013](../rfc/0013-map-management.md) | Map Management | Implements the publish/activate/archive lifecycle deferred by this ADR; defines the `/maps/` and `/live/` API surfaces and the `LIVE_SESSION_ID` env var. |

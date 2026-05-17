@@ -125,7 +125,7 @@ How does an IRL conference badge become a ghost? Options range from simple email
 IRL talks could feed speaker agents via live transcription (Whisper or similar). This touches live A/V infrastructure at the venue, which is operationally complex. Whether this is in scope for v1, and what the fallback is (slides + abstract), needs a decision.
 
 ### CI/CD Pipeline
-What runs on PRs, how are services built and deployed, and how is the Kubernetes cluster managed? Likely GitHub Actions for CI; deployment tooling is open.
+**Resolved by [ADR-0007](../proposals/adr/0007-three-tier-deployment.md).** GitHub Actions for CI; `docker compose` for staging validation; GKE (GCP) for production. Helm charts under `deploy/k8s/`; Neo4j Aura (managed) and GCP Memorystore (Redis) as the stateful backing services.
 
 ---
 
