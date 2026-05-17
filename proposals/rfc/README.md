@@ -59,3 +59,4 @@ What other approaches were considered?
 | [RFC-0010](0010-h3geojson-map-editor.md) | H3 GeoJSON Map Editor | draft |
 | [RFC-0011](0011-ghost-personality-substructure.md) | Ghost Personality Substructure | draft |
 | [RFC-0012](0012-speaker-rooms.md) | Speaker Rooms | draft |
+| [RFC-0013](0013-map-management.md) | Map Management — Publish, Activate, and Archive | draft |

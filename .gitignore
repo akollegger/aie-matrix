@@ -101,3 +101,5 @@ coverage.xml
 *.log
 tmp/
 temp/
+
+.claude/*.lock
