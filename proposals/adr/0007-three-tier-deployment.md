@@ -82,7 +82,49 @@ Three layers own distinct authority in staging and production:
 
 The current local-dev model — where world-api reads `.map.gram` from disk at startup — is a convenience shortcut that does not carry forward to multi-replica deployments.
 
-### Configuration contract
+### Operational resilience
+
+#### Startup dependency order
+
+Services must start in dependency order. Kubernetes readiness probes enforce this; docker-compose `depends_on: condition: service_healthy` enforces it in staging.
+
+```
+Neo4j Aura ──────────────────────────────────────┐
+                                                  ▼
+Redis ──────────────────┐               world-api (ready when Neo4j
+                        ▼               schema check passes)
+                  Colyseus (ready              │
+                  when Redis +                 │
+                  world-api answer)            │
+                        │                      │
+                        └──────────┬───────────┘
+                                   ▼
+                             ghost-house (ready when
+                             world-api + Colyseus answer)
+```
+
+Each application service exposes a `/health` endpoint that checks its own dependencies. Kubernetes `readinessProbe` hits `/health`; the service receives no traffic until it passes.
+
+#### Failure semantics
+
+Redis and Neo4j have different failure profiles and require different responses:
+
+| Store | What it owns | Failure impact | Recovery |
+|-------|-------------|----------------|----------|
+| **Redis** | Ephemeral coordination (presence, pub/sub, matchmaking) | Cross-replica pub/sub breaks; existing Colyseus room schema survives in process memory; ghost positions in Neo4j are intact | Redis restart → Colyseus reconnects automatically via `RedisPresence` retry; ghosts re-sync on next heartbeat. No data loss. |
+| **Neo4j Aura** | Live world state (cells, positions, relationships, active map, conversation history, agent catalog) | world-api rejects all tool calls; ghost movement and MCP proxy fail; ghost-house cannot resolve agent catalog | world-api and ghost-house enter a retry loop with exponential backoff. Colyseus continues accepting WebSocket connections but world calls error until Neo4j recovers. Neo4j Aura HA handles node failover transparently. |
+
+#### Stateless application services
+
+Colyseus, world-api, registry, and ghost-house carry **no authoritative state that is not already in Redis or Neo4j**. Any of these services can be killed and restarted at any time without data loss:
+
+- Colyseus restart: WebSocket clients reconnect; room state re-hydrates from ghost positions already stored in Neo4j.
+- world-api restart: no local state; resumes serving from Neo4j immediately after reconnect.
+- ghost-house restart: agent catalog read from Neo4j on startup; registered agents re-attach via A2A heartbeat.
+
+This property is what makes horizontal scaling (multiple Colyseus replicas) and rolling deploys (one replica at a time) safe.
+
+#### Configuration contract
 
 A single env-var contract governs all tiers:
 
