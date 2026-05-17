@@ -257,3 +257,7 @@ Two new fields:
 **Operator-assigned speaker role at registration.** Pre-assigning a ghost as speaker for a specific room before the event avoids the first-come-first-served problem entirely, but requires knowing ghost IDs at map-authoring time — identifiers that are difficult to know that far in advance. The `claim` mechanic defers this problem to `ClaimRule`, which can be tightened (allowlist, token, time window) without changing the command surface. First-come-first-served is a conscious starting tradeoff.
 
 **Listening state freezes movement.** An alternative is to freeze ghost movement in listening state (matching conversational mode) to reflect the social norms of a talk. The decision here is to keep movement free because the optimization challenge — deciding when to leave an ongoing talk to catch something else — is a core agentic decision we want to enable. Freezing would remove that decision point.
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — Room claim state (current speaker identity, listener roster, polygon membership) must persist to Neo4j Aura to satisfy the stateless-application-service invariant. Storing it only in world-api process memory would cause the active speaker and all listener associations to be lost on any world-api restart or rolling deploy.

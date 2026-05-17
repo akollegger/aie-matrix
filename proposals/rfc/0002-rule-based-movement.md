@@ -320,3 +320,7 @@ TypeScript conditionals at evaluation time. This is the current PoC state
 (permissive no-op). Rejected for production use because it requires a code
 change to modify world physics, cannot be authored by non-engineers, and does
 not support runtime or per-event configuration.
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — Movement rulesets (`.rules.gram` files) follow the GCS artifact → Neo4j seed path in Tier 2/3. The `AIE_MATRIX_RULES` local file path is a Tier 1 convenience; in production the rules loader must read from Neo4j after the publish step rather than from local disk.

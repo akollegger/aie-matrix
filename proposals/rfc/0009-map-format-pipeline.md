@@ -215,3 +215,7 @@ The `golden/` directory holds reference PNGs from the TMJ path. Regenerate with 
 **Static-file serving for `.tmj` (debugger) and dynamic serving only for `.map.gram` (intermedium).** Two endpoints, two surfaces. Rejected: a single `GET /maps/:mapId?format=...` endpoint is one route, one error path, one set of contract tests. Splitting saves a small amount of code at the cost of operational and documentation duplication.
 
 **Move `mapLoader.ts` from `server/colyseus/` to `server/world-api/` in this RFC.** Relocate the legacy loader and rewrite it on top of `@relateby/pattern` in a single change. Rejected: AGENTS.md flags Colyseus internals as off-limits to mid-flight refactors. Touching the room load path also forces an Effect-Layer seam through the colyseus-bridge that is its own design problem. Bundling it would double the scope of this RFC and risk it landing nothing. Deferred to a follow-up RFC.
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — `.map.gram` artifacts produced by the pipeline described here are the canonical input to the GCS upload step in production. In Tier 3, `MapService` fetches maps from GCS rather than local disk; the local `AIE_MATRIX_MAP` file path is a Tier 1 convenience only. The `tmj-to-gram` CLI output feeds the publish-to-GCS workflow that seeds Neo4j with the world graph.
