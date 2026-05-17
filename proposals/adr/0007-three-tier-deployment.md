@@ -22,7 +22,7 @@ We adopt a **three-tier deployment strategy** where the same codebase and contai
 |------|--------|---------------|-------|-------|
 | **1 — Local dev** | Developer workstation | `pnpm dev` (watch mode) | In-memory (`LocalPresence`) | Docker Desktop or native install |
 | **2 — Staging** | Single VM or CI runner | `docker compose up` | Redis container (Compose service) | Neo4j container (Compose service) |
-| **3 — Production** | GCP / GKE | Kubernetes (Helm) | GCP Memorystore (Redis) | Neo4j on GKE or Neo4j Aura |
+| **3 — Production** | GCP / GKE | Kubernetes (Helm) | GCP Memorystore (Redis) | Neo4j Aura (managed) |
 
 ### Tier 1 — Local dev
 
@@ -51,7 +51,7 @@ Images are built from the repo's multi-stage `Dockerfile` (one per package, shar
 Each service runs as a Kubernetes `Deployment` behind a `Service`. Helm charts under `deploy/k8s/` parameterise image tags, replica counts, and resource limits. External traffic enters through a GCP `LoadBalancer` or `Ingress`.
 
 - **Redis**: GCP Memorystore (managed Redis). `REDIS_URL` injected via Kubernetes `Secret`.
-- **Neo4j**: Self-hosted on GKE (StatefulSet + PersistentVolumeClaim) or Neo4j Aura (managed). `NEO4J_URI` injected via Secret.
+- **Neo4j**: Neo4j Aura (managed cloud). `NEO4J_URI` injected via Kubernetes `Secret`.
 - **Colyseus horizontal scaling**: `RedisPresence` + `RedisDriver` enabled when `REDIS_URL` is set.
 - **Secrets**: Kubernetes `Secret` objects; never committed to the repo.
 - **Service discovery**: Kubernetes `Service` DNS (`colyseus.aie-matrix.svc.cluster.local`).
@@ -76,7 +76,8 @@ The Effect-ts `Layer` for each stateful service reads these variables at startup
 - **Environment parity**: Staging uses the same built Docker images as production, catching integration failures before conference day.
 - **Colyseus scaling is already designed for this**: `RedisPresence` and `RedisDriver` are the official Colyseus multi-process mechanism; enabling them is a configuration change, not a code change.
 - **docker-compose is the right staging tool**: It faithfully reproduces the multi-service topology at low operational cost and matches what GitHub Actions CI can run on a standard runner.
-- **GKE for production**: GCP is the natural host for a project using Memorystore (managed Redis) and potentially Firestore or Dataflow for future event-log needs. Kubernetes provides the scaling and rolling-update guarantees needed for a live conference.
+- **GKE for production**: GCP is the natural host for a project using Memorystore (managed Redis). Kubernetes provides the scaling and rolling-update guarantees needed for a live conference.
+- **Neo4j Aura**: Eliminates StatefulSet management on GKE (no PersistentVolumeClaim, no backup configuration). Aura is a Neo4j-managed cloud service with SLA guarantees appropriate for a live event.
 - **No code branching**: Effect-ts `Layer` composition makes the right implementation injectable by environment. Branching the codebase per environment is a maintenance anti-pattern.
 
 ## Alternatives Considered
@@ -85,6 +86,7 @@ The Effect-ts `Layer` for each stateful service reads these variables at startup
 - **Skip staging; go dev → prod directly**: High risk for a live conference. Staging is the only place to validate multi-container wiring, volume mounts, and Redis failover before attendees connect.
 - **Single docker-compose for all environments**: Works at small scale but lacks the rolling-update, health-check, and autoscaling primitives needed for conference-day load spikes.
 - **Colyseus Cloud**: Managed hosting from the Colyseus team. Removes operational burden but constrains the ability to co-locate world-api and ghost-house in the same cluster, and adds a vendor dependency at the real-time core.
+- **Neo4j self-hosted on GKE**: More control but adds StatefulSet management, backup procedures, and upgrade coordination. Neo4j Aura offloads this operationally without changing the driver or query surface.
 
 ## Consequences
 
@@ -106,8 +108,8 @@ The Effect-ts `Layer` for each stateful service reads these variables at startup
 
 This ADR resolves the **CI/CD Pipeline** open question in `docs/architecture.md`: GitHub Actions for CI; `docker compose` for staging validation; GKE for production.
 
-### Assumptions requiring maintainer confirmation
+### Confirmed decisions (resolved during proposal)
 
-1. GCP / GKE is the agreed production platform (assumed from the task description; confirm if the platform is undecided).
-2. Neo4j Aura vs self-hosted on GKE is deferred — either works with this ADR. A follow-on decision note is recommended once cost is evaluated.
-3. The `@aie-matrix/root-env` package already provides the env-loading contract used here; confirm it supports all the variables listed above or extend it as needed.
+1. **GCP / GKE** is the agreed production platform.
+2. **Neo4j Aura** (managed) is the production Neo4j target — not self-hosted on GKE.
+3. **`@aie-matrix/root-env`** provides the env-loading contract and will be extended to cover all variables listed above if not already present.
