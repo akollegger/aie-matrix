@@ -169,25 +169,38 @@ End a live session.
 2. Broadcast `world.session-ended` via Redis pub/sub.
 3. Does not archive maps; map lifecycle is independent.
 
-### Service startup
+### Service startup and session binding
 
-At startup each service resolves the active session and primary map:
+Session binding differs by consumer type:
+
+**Server processes** (world-api, Colyseus, ghost-house) are told their session at deploy time via `LIVE_SESSION_ID`. They do not discover sessions — they are assigned one.
 
 ```
 if AIE_MATRIX_MAP is set:
-  # Tier 1 — local dev; load from local file
+  # Tier 1 — local dev; load from local file, no session needed
   loadFromFile(AIE_MATRIX_MAP)
-else:
-  # Tier 2/3 — resolve from live session
-  session = GET /live?status=active  → take first result
+elif LIVE_SESSION_ID is set:
+  # Tier 2/3 — load primary map from assigned session
+  session = GET /live/{LIVE_SESSION_ID}
   primaryMap = session.maps.find(m => m.role === "primary")
   loadFromGCS(primaryMap.gcsPath)
+else:
+  # Tier 2/3 with single session (degenerate case convenience)
+  sessions = GET /live?status=active
+  if sessions.length != 1: fail loudly
+  # same as above from here
 ```
 
-Both paths call the same internal `loadHexMap(bytes, options)`. No branching in business logic beyond the source resolution.
+The "take first if exactly one" path is a Tier 1/2 convenience for the simple case. In any deployment with more than one active session, `LIVE_SESSION_ID` is required and its absence is a startup error, not a guess.
 
-If no active session exists at Tier 2/3 startup, the service fails with:
-> `No active live session found. Run POST /live to start one.`
+Both load paths call the same internal `loadHexMap(bytes, options)`.
+
+**Browser clients** (Intermedium) discover sessions via `GET /live?status=active` and handle the result themselves:
+- If the client has a stored session ID (localStorage), it attempts to re-join that session.
+- If the stored session is no longer active, or if this is a first visit, the client presents the list of active sessions and lets the attendee choose.
+- The chosen session ID is stored for reconnection.
+
+This means clients are resilient to session restarts without any server-side "last known session" tracking.
 
 ### `world.map-changed` handling per service
 
@@ -219,7 +232,7 @@ If absent: affected ghosts enter **limbo** — their position is retained but `g
 
 3. **Tier 2 GCS substitute.** docker-compose staging doesn't naturally have GCS credentials. Options: a MinIO container as a GCS-compatible backend, or inject real GCS credentials into the Compose environment. MinIO is closer to operational simplicity; real GCS is closer to Tier 3 parity.
 
-4. **Multiple simultaneous sessions.** `GET /live?status=active` returning more than one result is currently undefined behaviour for services at startup. Define a `primary` flag on `LiveSession`, or require the caller to specify a session ID via env var (`LIVE_SESSION_ID`) in multi-world deployments.
+4. ~~**Multiple simultaneous sessions.**~~ **Resolved.** Server processes receive their session assignment via `LIVE_SESSION_ID` at deploy time; they do not discover sessions. Browser clients store their last session ID and re-join on reconnect, or present a session picker on first visit. The "take first active session" path is retained only as a single-session convenience for Tier 1/2.
 
 5. **Speaker room state across map switch.** If a polygon's geometry changes in the new map (same name, different cell set), existing listeners in the still-present polygon are not re-evaluated. Only ghosts on fully removed polygons are released. Is this the right behaviour?
 
