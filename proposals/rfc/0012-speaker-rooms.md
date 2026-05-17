@@ -34,7 +34,7 @@ The `.map.gram` format already supports `Polygon` nodes with a `geometry` array 
 ]
 ```
 
-Both `name` and `description` are required on named polygons. `name` is a short identifier used in tool responses and routing; `description` is a human-readable sentence or two surfaced to ghost agents via `look` and `whereami` to give spatial context without the agent needing to infer meaning from a tile class.
+Both `name` and `description` are required on named polygons. `name` is a short identifier used in tool responses and routing; `description` is a human-readable sentence or two surfaced to ghost agents via `whereami` to give spatial context without the agent needing to infer meaning from a tile class.
 
 The server maintains two categories of room data in-memory. Static data — cell membership and description per room, plus a reverse index from H3 cell to room name (SessionRoom layer only) — is built at map load time and does not change. Runtime state — the current speaker (if any) and the set of ghosts currently in listening state per room — is mutated by `claim`, `yield`, and movement events. No Neo4j schema changes are required.
 
@@ -134,7 +134,9 @@ RFC-0005 defines two ghost states: `normal` and `conversational`. This RFC adds 
 | `conversational` | frozen | allowed | issuing `say` | issuing `bye` |
 | `listening` | free | blocked | entering active-speaker room | `bye`; or leaving room |
 
-**Entry:** When a ghost in `normal` state moves into a cell, the server checks whether that cell belongs to a named room and whether the speaker currently holding that room's claim is in `conversational` mode. If both conditions hold, the entering ghost transitions automatically to `listening` state without issuing any command.
+**Entry:** Listening state is entered in two cases, both without issuing any command:
+- A ghost in `normal` state moves into a cell that belongs to a named room where the current speaker is in `conversational` mode.
+- A speaker in a claimed room transitions into `conversational` mode (issues `say`); all ghosts currently in `normal` state within that room transition automatically to `listening` state.
 
 **While listening:** The ghost receives `message.new` Colyseus signals from the speaker's thread exactly as a cluster member would. Movement commands are accepted. `say` commands are rejected with an observable error indicating the ghost is in listening state and must issue `bye` first.
 
@@ -176,28 +178,29 @@ A contributor can verify the full mechanic end-to-end in roughly ten minutes:
 
 1. Load a map containing a `SessionRoom` polygon named `"Hall A"`.
 2. Register ghost A. Move it into Hall A. Issue `claim { room: "Hall A" }`. Verify the response confirms `role: "speaker"` and `assignedRoom: "Hall A"`.
-3. Ghost A issues `say { content: "Hello from Hall A" }`. Verify only ghosts currently in Hall A receive the `message.new` signal — not ghosts in adjacent clusters outside the room.
-4. Register ghost B outside Hall A. Move it into Hall A. Verify ghost B automatically transitions to `listening` state and begins receiving ghost A's subsequent `say` messages without issuing any command.
-5. Ghost B issues `say`. Verify it receives a `GHOST_IN_LISTENING_STATE` error.
-6. Ghost B issues `bye`. Verify it returns to `normal` and can `say` freely.
-7. Move ghost A outside Hall A. Verify ghost B (if still inside) receives `session.ended` and returns to `normal` state. Verify the room is now unclaimed and a new ghost can `claim` it.
+3. Register ghost B inside Hall A (before any session starts). Verify ghost B is in `normal` state.
+4. Ghost A issues `say { content: "Hello from Hall A" }`. Verify only ghosts currently in Hall A receive the `message.new` signal — not ghosts in adjacent clusters outside the room. Verify ghost B (already inside) automatically transitions to `listening` state.
+5. Register ghost C outside Hall A. Move it into Hall A. Verify ghost C also automatically transitions to `listening` state.
+6. Ghost C issues `say`. Verify it receives a `GHOST_IN_LISTENING_STATE` error.
+7. Ghost C issues `bye`. Verify it returns to `normal` and can `say` freely.
+8. Ghost A issues `yield`. Verify `yield` exits ghost A's `conversational` mode and releases the room claim. Verify all remaining listeners receive `session.ended` and return to `normal`. Verify the room is now unclaimed and a new ghost can `claim` it.
 
 ### MCP tool changes
 
-One new MCP tool is introduced. Three existing tools are updated:
+Two new MCP tools are introduced. Two existing tools are updated:
 
 | Tool | Change |
 |---|---|
 | `claim { room }` | New tool. Transitions ghost to speaker role for the named room, subject to `ClaimRule`; returns structured errors on rejection |
-| `whereami` | Adds optional `room: { name, description }` to response when ghost is in a named polygon |
+| `yield` | New tool. Ends the session: exits `conversational` mode if active, releases the room claim, and triggers `session.ended` for all listeners. Claim is also released automatically if the speaker moves outside their room. |
+| `whereami` | Adds optional `room: { name, description }` to response when ghost is in a named room |
 | `say { content }` | Rejected with `GHOST_IN_LISTENING_STATE` error when ghost is in listening state |
-| `yield` | New tool. Explicitly releases the speaker's room claim; triggers `session.ended` for all listeners. Claim is also released automatically if the speaker moves outside their room. |
 
 One new Colyseus signal is introduced:
 
 | Signal | Payload | Trigger |
 |---|---|---|
-| `session.ended` | `{ room: string, speaker_id: string }` | Speaker issues `yield` or leaves their room; delivered to all ghosts in the room |
+| `session.ended` | `{ room: string, speaker_id: string }` | Speaker issues `yield` or leaves their room; delivered to all ghosts in `listening` state for that room |
 
 ### New `mx_ghost_role` record field
 
