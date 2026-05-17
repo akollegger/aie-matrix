@@ -59,8 +59,8 @@
 
 ## 6. Neo4j Cell Sync Strategy
 
-**Decision**: `MERGE` on `(:Cell { h3Index })`, then set all other properties  
-**Rationale**: Cell seeding at publish time must be idempotent — re-publishing the same or an updated map must not create duplicate nodes. `MERGE` on the unique `h3Index` property (constraint `cell_h3_unique` already exists) satisfies this. For a map update, cells removed from the new version are left in Neo4j (orphaned) — they are never in an active session's movement graph, and the `CELL_NOT_IN_MAP` rejection path handles movement attempts to them. Explicit cleanup of orphaned cells is deferred.  
+**Decision**: `MERGE` on `(:Tile { h3Index })`, then set all other properties  
+**Rationale**: Cell seeding at publish time must be idempotent — re-publishing the same or an updated map must not create duplicate nodes. `MERGE` on the unique `h3Index` property (constraint `tile_h3_unique` already exists) satisfies this. For a map update, cells removed from the new version are left in Neo4j (orphaned) — they are never in an active session's movement graph, and the `CELL_NOT_IN_MAP` rejection path handles movement attempts to them. Explicit cleanup of orphaned cells is deferred.  
 **Alternatives considered**:
 - DELETE + CREATE: not idempotent; would break in-flight sessions if a re-publish races with ghost movement.
 - Full graph replace inside a Neo4j transaction: feasible but more complex; deferred unless performance demands it.
@@ -70,5 +70,5 @@
 ## 7. Map Switch Cell Diff
 
 **Decision**: Compute `removedCells` / `addedCells` by querying Neo4j cell sets for old and new map IDs  
-**Rationale**: Since all published maps' cells are in Neo4j at publish time, the diff for `PATCH /live/:id/maps` is a set operation on cell nodes tagged by their source map, with no GCS download at switch time. Each `(:Cell)` node carries the `mapId` from which it was seeded (added as a property during publish). The diff is: old primary `mapId` cells − new primary `mapId` cells = `removedCells`; new − old = `addedCells`.  
+**Rationale**: Since all published maps' cells are in Neo4j at publish time, the diff for `PATCH /live/:id/maps` is a set operation on cell nodes tagged by their source map, with no GCS download at switch time. Each `(:Tile)` node carries the `mapId` from which it was seeded (added as a property during publish). The diff is: old primary `mapId` cells − new primary `mapId` cells = `removedCells`; new − old = `addedCells`.  
 **Alternatives considered**: Download both `.map.gram` files from GCS and diff in memory: adds GCS latency and re-parse cost at switch time. Not needed given cells are already in Neo4j.

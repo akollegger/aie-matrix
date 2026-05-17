@@ -67,7 +67,7 @@ Structured log lines emit JSON objects with a `kind`, `op`, `traceId`, and relev
 
 Adjacent ghost `go` steps are evaluated in **`server/world-api`** (not inside Colyseus room code). The **map** supplies hex geometry and per-cell **tile classes** (Tiled types). An optional **Gram ruleset** under `server/world-api/src/rules/fixtures/` (loaded via env; see `server/world-api/README.md`) supplies allow-list **policy** as `GO` edges between class labels. Leaving **`AIE_MATRIX_RULES`** unset preserves the original permissive “any adjacent step on the map graph” baseline; setting **`AIE_MATRIX_RULES`** to a `.gram` file path enables authored policy.
 
-Canonical cell identity for ghosts, Colyseus `ghostTiles`, and MCP tools is **H3 resolution 15** (see [RFC-0004](../proposals/rfc/0004-h3-geospatial-coordinate-system.md)). Tiled maps supply `h3_anchor` so every navigable cell gets a stable `h3Index`. In **Neo4j**, `(:Cell { h3Index })` is the node identity for the world graph (uniqueness constraint `cell_h3_unique`); non-adjacent exits use `ELEVATOR` and `PORTAL` relationship types with a `name` property matching MCP `exits` / `traverse`.
+Canonical cell identity for ghosts, Colyseus `ghostTiles`, and MCP tools is **H3 resolution 15** (see [RFC-0004](../proposals/rfc/0004-h3-geospatial-coordinate-system.md)). Tiled maps supply `h3_anchor` so every navigable cell gets a stable `h3Index`. In **Neo4j**, `(:Tile { h3Index })` is the node identity for the world graph (uniqueness constraint `tile_h3_unique`); non-adjacent exits use `ELEVATOR` and `PORTAL` relationship types with a `name` property matching MCP `exits` / `traverse`.
 
 ### Map formats: two readers during the transition (RFC-0009)
 
@@ -80,6 +80,10 @@ As of `specs/013-gram-format-migration`, **`.map.gram` is the sole runtime forma
 | HTTP `GET /maps/:mapId` | `.map.gram` or `.tmj` | `server/world-api/src/map/MapService.ts` — byte passthrough + LayerStack validation |
 
 The **`.map.gram`** layered format is produced by `tools/tmj-to-gram` (from Tiled `.tmj` sources) or the native map editor. All sandbox maps are committed in the layered format. Shared parsing logic lives in `@aie-matrix/map-gram` (`shared/map-gram/`). Startup validation in world-api requires a `LayerStack` walk in addition to the `kind: "matrix-map"` header.
+
+**Tier 1 (local dev):** world-api loads the map from `AIE_MATRIX_MAP` (local file path). No GCS or session binding needed.
+
+**Tier 2/3 (staging/production):** Maps are published to GCS via `POST /maps` (world-api validates and seeds `(:Tile)` nodes into Neo4j at publish time). A live session is activated via `POST /live`, binding a session record to a published map. world-api loads the primary map from GCS using the session assigned by `LIVE_SESSION_ID`. See [RFC-0013](../proposals/rfc/0013-map-management.md) for the full map lifecycle API.
 
 ### World item state (PoC)
 
@@ -96,6 +100,9 @@ World items are currently a PoC-layer extension around the existing map + MCP st
 |---|---|
 | `AIE_MATRIX_RULES` | Optional path to a Gram movement rules file. Unset keeps adjacent movement permissive. |
 | `AIE_MATRIX_ITEMS` | Optional path to a `*.items.json` sidecar. Unset falls back to the co-located sidecar next to the active map. |
+| `GCS_BUCKET` | GCS bucket name for map artifact storage (e.g. `aie-matrix-maps`). Unset in Tier 1 — `GcsService` uses a local `tmp/gcs/` stub. |
+| `ADMIN_TOKEN` | Static bearer token for admin-only `/maps/` and `/live/` endpoints. Never logged. Required when using map management API. |
+| `LIVE_SESSION_ID` | ULID of the live session this process instance serves. Required in multi-session Tier 2/3 deployments. Unset → auto-discover single active session; fail if multiple exist. |
 
 ---
 

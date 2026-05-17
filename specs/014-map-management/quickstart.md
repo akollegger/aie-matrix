@@ -50,7 +50,7 @@ curl -s -X POST http://localhost:8787/maps \
 
 Verify cells in Neo4j (Cypher in Neo4j Browser at http://localhost:7474):
 ```cypher
-MATCH (c:Cell { sourceMapId: "sandbox-freeplay" }) RETURN count(c)
+MATCH (c:Tile { sourceMapId: "sandbox-freeplay" }) RETURN count(c)
 ```
 Should return a non-zero count.
 

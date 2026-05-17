@@ -4,10 +4,19 @@ import type {
   RegistryUnknownGhostHouse,
 } from "@aie-matrix/server-registry";
 import type {
+  AdminAuthError,
   AuthError,
+  GcsError,
+  LiveSessionAlreadyEndedError,
+  LiveSessionMapNotPublishedError,
+  LiveSessionNotFoundError,
+  MapAlreadyActiveError,
   MapFileReadError,
   MapNotFoundError,
+  MapPublishError,
   McpHandlerError,
+  MultipartParseError,
+  Neo4jNotConfiguredError,
   UnsupportedFormatError,
   WorldApiError,
   WorldBridgeError,
@@ -62,7 +71,16 @@ export type HttpMappingError =
   | McpHandlerError
   | MapNotFoundError
   | UnsupportedFormatError
-  | MapFileReadError;
+  | MapFileReadError
+  | MapPublishError
+  | MapAlreadyActiveError
+  | MultipartParseError
+  | AdminAuthError
+  | GcsError
+  | Neo4jNotConfiguredError
+  | LiveSessionNotFoundError
+  | LiveSessionMapNotPublishedError
+  | LiveSessionAlreadyEndedError;
 
 function authErrorBody(error: AuthError): string {
   const variant = error._tag.slice("AuthError.".length);
@@ -187,6 +205,96 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
           error: "MapFileReadError",
           message: `Could not read map file: ${error.cause}`,
           path: error.path,
+        }),
+      };
+    case "MapPublishError":
+      return {
+        status: 422,
+        body: JSON.stringify({
+          error: "MapPublishError",
+          mapId: error.mapId,
+          message: error.cause,
+        }),
+      };
+    case "MapAlreadyActiveError":
+      return {
+        status: 409,
+        body: JSON.stringify({
+          error: "MapAlreadyActiveError",
+          mapId: error.mapId,
+          message: "Map is in use by an active session",
+        }),
+      };
+    case "MultipartParseError":
+      return {
+        status: 400,
+        body: JSON.stringify({
+          error: "MultipartParseError",
+          message: error.cause,
+        }),
+      };
+    case "AdminAuthError":
+      return {
+        status: 401,
+        body: JSON.stringify({
+          error: "Unauthorized",
+          message:
+            error.reason === "missing"
+              ? "Authorization header required"
+              : "Invalid token",
+        }),
+      };
+    case "GcsError":
+      return {
+        status: 500,
+        body: JSON.stringify({
+          error: "GcsError",
+          message: error.message,
+        }),
+      };
+    case "Neo4jNotConfiguredError":
+      return {
+        status: 503,
+        body: JSON.stringify({
+          error: "NEO4J_REQUIRED",
+          message: "Map management requires Neo4j. Set NEO4J_URI or use AIE_MATRIX_MAP for local file mode.",
+        }),
+      };
+    case "LiveSessionNotFoundError":
+      return {
+        status: 404,
+        body: JSON.stringify({
+          error: "LiveSessionNotFoundError",
+          id: error.id,
+          message: `Session '${error.id}' not found`,
+        }),
+      };
+    case "LiveSessionMapNotPublishedError":
+      return {
+        status: 422,
+        body: JSON.stringify({
+          error: "LiveSessionMapNotPublishedError",
+          mapId: error.mapId,
+          message: `Map '${error.mapId}' is not published`,
+        }),
+      };
+    case "LiveSessionAlreadyEndedError":
+      return {
+        status: 409,
+        body: JSON.stringify({
+          error: "LiveSessionAlreadyEndedError",
+          id: error.id,
+          message: "Session has already ended",
+        }),
+      };
+    case "GhostInLimboError":
+      return {
+        status: 422,
+        body: JSON.stringify({
+          ok: false,
+          code: "GHOST_IN_LIMBO",
+          ghostId: error.ghostId,
+          message: "Ghost is in limbo — the map it was on has been removed. Contact an admin to respawn.",
         }),
       };
     default: {

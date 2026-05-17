@@ -5,7 +5,7 @@
 
 ## Summary
 
-Implement `/maps/` (artifact CRUD) and `/live/` (live session management) HTTP routes in `server/world-api/`, backed by GCS (artifact storage) and Neo4j (map cell sync + session state). Map publish is a two-step write: GCS upload then Neo4j `(:Cell)` merge. Session activation is lightweight — cells are already in Neo4j at publish time, so `POST /live` only creates the session record and `[:USES]` edges. A Redis pub/sub broadcast over `aie-matrix:world-events` notifies Colyseus and ghost-house of session and map-change events. All management endpoints require `ADMIN_TOKEN` bearer auth via a new Effect-ts middleware. The existing file-based `MapService` (Tier 1 local dev) is unchanged.
+Implement `/maps/` (artifact CRUD) and `/live/` (live session management) HTTP routes in `server/world-api/`, backed by GCS (artifact storage) and Neo4j (map cell sync + session state). Map publish is a two-step write: GCS upload then Neo4j `(:Tile)` merge. Session activation is lightweight — cells are already in Neo4j at publish time, so `POST /live` only creates the session record and `[:USES]` edges. A Redis pub/sub broadcast over `aie-matrix:world-events` notifies Colyseus and ghost-house of session and map-change events. All management endpoints require `ADMIN_TOKEN` bearer auth via a new Effect-ts middleware. The existing file-based `MapService` (Tier 1 local dev) is unchanged.
 
 ## Deployment Scope
 
@@ -28,7 +28,7 @@ This feature targets **Tier 1 (local dev)** only. Tier 2 (staging) and Tier 3 (p
 **Target Platform**: Node.js 24 server process; Tier 1 = `pnpm dev` with local Neo4j (Docker Desktop)  
 **Project Type**: HTTP service extension (new routes within existing `server/world-api/` package)  
 **Performance Goals**: `POST /maps` (publish + Neo4j sync) < 10 s for conference-sized maps; `POST /live` (activation) < 500 ms  
-**Constraints**: `ADMIN_TOKEN` must never be logged; GCS write precedes Neo4j write; `(:Cell)` sync is idempotent (MERGE, not CREATE); Tier 2/3 deployment concerns out of scope  
+**Constraints**: `ADMIN_TOKEN` must never be logged; GCS write precedes Neo4j write; `(:Tile)` sync is idempotent (MERGE, not CREATE); Tier 2/3 deployment concerns out of scope  
 **Scale/Scope**: Single active session at v1; map artifacts are tens of KB; 500–2000 cells per map
 
 ## Constitution Check

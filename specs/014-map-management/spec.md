@@ -29,11 +29,11 @@ An operator has a `.map.gram` file and wants to make it available for use in a l
 
 **Why this priority**: Publishing is the prerequisite for every other operation. Nothing else in this feature can be tested without at least one published map.
 
-**Independent Test**: Send `POST /maps` with a valid `.map.gram` file and a `mapId`. Confirm the map is retrievable via `GET /maps/:mapId` with `status: "published"` and that Neo4j contains `(:Cell)` nodes for the map's navigable cells. Item types and item placements defined in the gram file are also available via world-api after publish. No live session or ghost is required.
+**Independent Test**: Send `POST /maps` with a valid `.map.gram` file and a `mapId`. Confirm the map is retrievable via `GET /maps/:mapId` with `status: "published"` and that Neo4j contains `(:Tile)` nodes for the map's navigable cells. Item types and item placements defined in the gram file are also available via world-api after publish. No live session or ghost is required.
 
 **Acceptance Scenarios**:
 
-1. **Given** a valid `.map.gram` file and a unique `mapId`, **When** the operator POSTs to `/maps`, **Then** the response is `{ mapId, gcsPath, status: "published" }`, the map appears in `GET /maps?status=published`, and Neo4j contains `(:Cell)` nodes for each navigable cell in the artifact.
+1. **Given** a valid `.map.gram` file and a unique `mapId`, **When** the operator POSTs to `/maps`, **Then** the response is `{ mapId, gcsPath, status: "published" }`, the map appears in `GET /maps?status=published`, and Neo4j contains `(:Tile)` nodes for each navigable cell in the artifact.
 2. **Given** an already-published map with the same `mapId` and identical content, **When** the operator POSTs again, **Then** the response returns the existing record unchanged (idempotent — no duplicate upload).
 3. **Given** a file with a missing `kind: "matrix-map"` header or cells without `h3Index`, **When** the operator POSTs to `/maps`, **Then** the server returns a validation error and no artifact is stored.
 
@@ -103,7 +103,7 @@ The event is over. The operator ends the live session and archives the map so it
 
 ### Functional Requirements
 
-- **FR-001**: The system MUST allow an operator to publish a `.map.gram` artifact via HTTP, addressable by a logical `mapId`. Publishing performs two writes in order: (1) upload artifact to GCS, (2) sync navigable cells into Neo4j as `(:Cell)` nodes. Both must succeed for the map to be marked `"published"`. If GCS upload fails, no Neo4j write occurs. If Neo4j sync fails after a successful GCS upload, the map is NOT marked published; the operator retries and the GCS object is overwritten idempotently.
+- **FR-001**: The system MUST allow an operator to publish a `.map.gram` artifact via HTTP, addressable by a logical `mapId`. Publishing performs two writes in order: (1) upload artifact to GCS, (2) sync navigable cells into Neo4j as `(:Tile)` nodes. Both must succeed for the map to be marked `"published"`. If GCS upload fails, no Neo4j write occurs. If Neo4j sync fails after a successful GCS upload, the map is NOT marked published; the operator retries and the GCS object is overwritten idempotently.
 - **FR-002**: The system MUST validate `.map.gram` artifacts on publish: `kind: "matrix-map"` header, LayerStack walk, and all navigable cells having `h3Index`. Item types, item placements, tile types, and movement rules are encoded inline in the `.map.gram` — no separate sidecar file is accepted or required. Invalid artifacts MUST be rejected before any storage or Neo4j write occurs.
 - **FR-003**: Publishing a map that is already `"published"` with unchanged content MUST be idempotent — the server returns the existing record without re-uploading to GCS or re-syncing Neo4j. Publishing a map that is `"archived"` MUST always restore it to `"published"`, re-syncing Neo4j cells if the content changed, and updating the status regardless.
 - **FR-004**: The system MUST allow an operator to activate a live session referencing one or more published maps. Activation is a lightweight operation: it creates the session record and `[:USES]` edges in Neo4j, then notifies services via Redis pub/sub. No GCS download or cell seeding occurs at activation time — cells are guaranteed present from the publish step.

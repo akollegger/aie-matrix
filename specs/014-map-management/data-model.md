@@ -51,15 +51,52 @@ active --DELETE /live/:id--> ended
 
 ---
 
-### `:Cell` (extended)
+### `:TileType`
 
-Existing node type. Extended with a `sourceMapId` property set during publish-time seeding.
+A tile class definition from a `.map.gram` file. Scoped to a single map. Linked from `(:Map)` via `[:DEFINES { order }]`. Deleted and recreated on re-publish so removed types don't linger.
 
 | Property | Type | Notes |
 |---|---|---|
-| `h3Index` | string | Existing unique key (constraint `cell_h3_unique`) |
-| `sourceMapId` | string | `mapId` of the map that seeded this cell; used for map-switch cell diff |
-| *(other existing properties)* | | Unchanged |
+| `mapId` | string | Scope key — part of composite unique constraint `(mapId, identity)` |
+| `identity` | string | Gram identity (e.g. `"blue"`) |
+| `typeName` | string | Label used as `tileClass` on `(:Tile)` nodes (e.g. `"Blue"`) |
+| `name` | string | Human display name |
+| `description` | string? | Optional description |
+| `capacity` | integer? | Max ghosts per tile |
+| `cssStyle` | string? | Raw CSS string from `css\`...\`` literal — re-emit with `css\`\`` wrapper on round-trip |
+
+**Constraint**: `CREATE CONSTRAINT tiletype_map_identity_unique IF NOT EXISTS FOR (t:TileType) REQUIRE (t.mapId, t.identity) IS UNIQUE`
+
+---
+
+### `:ItemType`
+
+An item class definition from a `.map.gram` file. Scoped to a single map. Same lifecycle as `:TileType`.
+
+| Property | Type | Notes |
+|---|---|---|
+| `mapId` | string | Scope key |
+| `identity` | string | Gram identity (e.g. `"badge-sponsor"`) |
+| `typeName` | string | Label used in gram (e.g. `"Badge"`) |
+| `name` | string | Human display name |
+| `description` | string? | Optional description |
+| `charGlyph` | string? | Raw char string from `char\`...\`` literal — re-emit with `char\`\`` wrapper on round-trip |
+| `takeable` | boolean? | Whether a ghost can pick it up |
+| `capacityCost` | integer? | Inventory slots consumed |
+
+**Constraint**: `CREATE CONSTRAINT itemtype_map_identity_unique IF NOT EXISTS FOR (t:ItemType) REQUIRE (t.mapId, t.identity) IS UNIQUE`
+
+---
+
+### `:Tile` (seeded at publish time)
+
+A thing that occupies an H3 coordinate in the world. The `h3Index` is a coordinate attribute, not an identity. Seeded from `.map.gram` during `POST /maps`.
+
+| Property | Type | Notes |
+|---|---|---|
+| `h3Index` | string | Unique coordinate key (constraint `tile_h3_unique`) |
+| `tileClass` | string | Tile type label from the gram (e.g. `"Blue"`, `"Red"`, `"Pentagon"`) — matches `TileType.typeName` |
+| `sourceMapId` | string | `mapId` of the map that seeded this tile; used for map-switch tile diff |
 
 ---
 
@@ -91,7 +128,7 @@ RETURN m
 ### Seed cells from a map (idempotent)
 ```cypher
 UNWIND $cells AS cell
-MERGE (c:Cell { h3Index: cell.h3Index })
+MERGE (c:Tile { h3Index: cell.h3Index })
 SET c.sourceMapId = $mapId,
     c.tileClass = cell.tileClass
 ```
@@ -125,11 +162,11 @@ RETURN s, m
 ```cypher
 // Step 1: get old primary map cells
 MATCH (s:LiveSession { id: $sessionId })-[:USES { role: "primary" }]->(oldMap:Map)
-MATCH (oldCell:Cell { sourceMapId: oldMap.mapId })
+MATCH (oldCell:Tile { sourceMapId: oldMap.mapId })
 RETURN collect(oldCell.h3Index) AS oldCells, oldMap.mapId AS oldMapId
 
 // Step 2: get new primary map cells
-MATCH (newCell:Cell { sourceMapId: $newMapId })
+MATCH (newCell:Tile { sourceMapId: $newMapId })
 RETURN collect(newCell.h3Index) AS newCells
 
 // Step 3: update edges

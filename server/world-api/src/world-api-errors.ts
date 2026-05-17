@@ -38,6 +38,10 @@ export class WorldApiTileFull extends Data.TaggedError("WorldApiError.TileFull")
   readonly h3Index: string;
 }> {}
 
+export class GhostInLimboError extends Data.TaggedError("GhostInLimboError")<{
+  readonly ghostId: string;
+}> {}
+
 export type WorldApiError =
   | WorldApiNoPosition
   | WorldApiUnknownCell
@@ -47,4 +51,5 @@ export type WorldApiError =
   | WorldApiItemNotFound
   | WorldApiItemNotCarriable
   | WorldApiItemNotCarrying
-  | WorldApiTileFull;
+  | WorldApiTileFull
+  | GhostInLimboError;

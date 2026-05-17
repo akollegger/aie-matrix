@@ -72,6 +72,7 @@ export {
   WorldApiItemNotHere,
   WorldApiTileFull,
   WorldApiUnknownCell,
+  GhostInLimboError,
   type WorldApiError,
 } from "./world-api-errors.js";
 export {
@@ -81,6 +82,9 @@ export {
   MapNameMismatchError,
   MapNotFoundError,
   UnsupportedFormatError,
+  MapPublishError,
+  MapAlreadyActiveError,
+  MultipartParseError,
 } from "./map/map-errors.js";
 export {
   MapService,
@@ -114,9 +118,10 @@ export {
   type RequestTrace,
 } from "./request-trace.js";
 export {
-  CELL_H3_UNIQUE_CONSTRAINT_CYPHER,
+  TILE_H3_UNIQUE_CONSTRAINT_CYPHER,
   createNeo4jDriverFromEnv,
-  ensureCellH3UniqueConstraint,
+  ensureTileH3UniqueConstraint,
+  ensureMapManagementConstraints,
 } from "./neo4j-graph-init.js";
 export { seedNeo4jGraphArtifacts } from "./neo4j-graph-seed.js";
 export {
@@ -126,3 +131,39 @@ export {
   type Neo4jGraphOps,
   type NonAdjacentRow,
 } from "./Neo4jGraphService.js";
+export {
+  GcsService,
+  GcsError,
+  makeGcsLayerFromEnv,
+  makeNoOpGcsLayer,
+  makeLiveGcsLayer,
+  type GcsOps,
+} from "./gcs/GcsService.js";
+export {
+  RedisPublishService,
+  makeNoOpRedisPublishLayer,
+  makeLiveRedisPublishLayer,
+  makeRedisPublishLayerFromEnv,
+  type RedisPublishOps,
+} from "./redis/RedisPublishService.js";
+export { checkAdminToken, AdminAuthError } from "./admin-auth.js";
+export { requireNeo4j, Neo4jNotConfiguredError } from "./neo4j-guard.js";
+export {
+  MapManagementService,
+  makeMapManagementLayer,
+  type MapManagementOps,
+  type MapRecord,
+} from "./map/MapManagementService.js";
+export { tryHandleMapManagement } from "./map/MapManagementRoutes.js";
+export {
+  LiveSessionService,
+  makeLiveSessionLayer,
+  type LiveSessionOps,
+  type SessionRecord,
+} from "./live/LiveSessionService.js";
+export { tryHandleLiveSession } from "./live/LiveSessionRoutes.js";
+export {
+  LiveSessionNotFoundError,
+  LiveSessionMapNotPublishedError,
+  LiveSessionAlreadyEndedError,
+} from "./live/live-errors.js";

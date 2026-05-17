@@ -103,3 +103,4 @@ tmp/
 temp/
 
 .claude/*.lock
+.claude/worktrees/

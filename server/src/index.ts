@@ -12,24 +12,35 @@ import {
   broadcastInitialItemState,
   createColyseusBridge,
   createNeo4jDriverFromEnv,
-  ensureCellH3UniqueConstraint,
+  ensureTileH3UniqueConstraint,
+  ensureMapManagementConstraints,
+  GcsService,
   getRequestTraceId,
   handleGhostMcpEffect,
   loadMovementRulesFromEnv,
   makeLiveNeo4jGraphLayer,
+  makeLiveSessionLayer,
+  makeGcsLayerFromEnv,
+  makeMapManagementLayer,
   makeMapServiceLayer,
   makeMovementRulesLayer,
   makeNoOpNeo4jGraphLayer,
   makeItemServiceLayer,
+  makeRedisPublishLayerFromEnv,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
+  MapManagementService,
   MapService,
   Neo4jGraphService,
   ItemService,
   ItemServiceImpl,
+  LiveSessionService,
+  RedisPublishService,
   runWithRequestTrace,
   seedNeo4jGraphArtifacts,
   tryHandleMapGet,
+  tryHandleMapManagement,
+  tryHandleLiveSession,
   type MovementRulesService,
   type RegistryStoreService,
   type WorldBridgeService,
@@ -141,13 +152,26 @@ async function main(): Promise<void> {
 
   // `scripts/demo.mjs` polls this as soon as the TCP port is open. Colyseus registers its HTTP
   // layer during `listen()`; our main `httpServer.on` handler is attached much later after slow
-  // init. Answer `/spectator/room` here first so clients get 503 (starting) then 200 (ready).
+  // init. Answer `/spectator/room` and `/health` here first so clients get 503 (starting) then 200 (ready).
   httpServer.prependListener("request", (req, res) => {
     if (res.headersSent || res.writableEnded) {
       return;
     }
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${httpPort}`);
-    if (req.method !== "GET" || url.pathname !== "/spectator/room") {
+    if (req.method !== "GET") {
+      return;
+    }
+    if (url.pathname === "/health") {
+      if (!spectatorMetaReady) {
+        res.writeHead(503, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ status: "starting" }));
+      } else {
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ status: "ok" }));
+      }
+      return;
+    }
+    if (url.pathname !== "/spectator/room") {
       return;
     }
     if (!spectatorMetaReady || !roomIdForSpectators) {
@@ -257,7 +281,8 @@ async function main(): Promise<void> {
   let neoDriver = createNeo4jDriverFromEnv() ?? null;
   if (neoDriver) {
     try {
-      await ensureCellH3UniqueConstraint(neoDriver);
+      await ensureTileH3UniqueConstraint(neoDriver);
+      await ensureMapManagementConstraints(neoDriver);
       await seedNeo4jGraphArtifacts(neoDriver, colyseusBridge.getLoadedMap());
       console.info("[aie-matrix] Neo4j: constraint + graph seeds applied");
     } catch (e) {
@@ -270,6 +295,9 @@ async function main(): Promise<void> {
   const neo4jGraphLayer: Layer.Layer<Neo4jGraphService> = neoDriver
     ? makeLiveNeo4jGraphLayer(neoDriver)
     : makeNoOpNeo4jGraphLayer;
+
+  const gcsLayer = makeGcsLayerFromEnv(process.env);
+  const redisLayer = await makeRedisPublishLayerFromEnv(process.env);
 
   let movementRules;
   try {
@@ -295,6 +323,26 @@ async function main(): Promise<void> {
   itemServiceImpl.setBridge(bridge);
   broadcastInitialItemState(itemServiceImpl, bridge);
 
+  // Map management layers — require Neo4j driver; provide no-op stubs when unavailable
+  const mapMgmtLayer: Layer.Layer<MapManagementService> = neoDriver
+    ? makeMapManagementLayer(neoDriver).pipe(Layer.provide(gcsLayer))
+    : Layer.succeed(MapManagementService, {
+        publish: () => Effect.die("MapManagementService requires Neo4j"),
+        list: () => Effect.succeed([]),
+        get: () => Effect.die("MapManagementService requires Neo4j"),
+        archive: () => Effect.die("MapManagementService requires Neo4j"),
+      });
+
+  const liveSessionLayer: Layer.Layer<LiveSessionService> = neoDriver
+    ? makeLiveSessionLayer(neoDriver).pipe(Layer.provide(redisLayer))
+    : Layer.succeed(LiveSessionService, {
+        start: () => Effect.die("LiveSessionService requires Neo4j"),
+        list: () => Effect.succeed([]),
+        get: () => Effect.die("LiveSessionService requires Neo4j"),
+        switchMaps: () => Effect.die("LiveSessionService requires Neo4j"),
+        end: () => Effect.die("LiveSessionService requires Neo4j"),
+      });
+
   type MatrixRuntimeServices =
     | WorldBridgeService
     | RegistryStoreService
@@ -303,7 +351,11 @@ async function main(): Promise<void> {
     | ConversationService
     | Neo4jGraphService
     | ItemService
-    | MapService;
+    | MapService
+    | GcsService
+    | RedisPublishService
+    | MapManagementService
+    | LiveSessionService;
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -314,9 +366,36 @@ async function main(): Promise<void> {
     neo4jGraphLayer,
     makeItemServiceLayer(itemServiceImpl),
     makeMapServiceLayer(repoRoot, mapPath),
+    gcsLayer,
+    redisLayer,
+    mapMgmtLayer,
+    liveSessionLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
+
+  // T025 — Session binding for Tier 2/3 (skip when AIE_MATRIX_MAP is set = Tier 1 local file mode)
+  const liveSessionId = process.env.LIVE_SESSION_ID?.trim();
+  if (!mapPathRaw && neoDriver) {
+    let sessionToBind: string | undefined;
+    if (liveSessionId) {
+      sessionToBind = liveSessionId;
+    } else {
+      const sessions = await runtime.runPromise(
+        Effect.flatMap(LiveSessionService, (svc) => svc.list("active")),
+      );
+      if (sessions.length === 1) {
+        sessionToBind = sessions[0]!.id;
+      } else if (sessions.length > 1) {
+        console.error("[aie-matrix] Multiple active sessions found. Set LIVE_SESSION_ID.");
+        process.exit(1);
+      }
+      // sessions.length === 0 is ok — no session yet, server starts without binding
+    }
+    if (sessionToBind) {
+      console.info(JSON.stringify({ kind: "session-binding", op: "bind", sessionId: sessionToBind }));
+    }
+  }
 
   process.on("SIGTERM", () => {
     void Effect.runPromise(
@@ -361,6 +440,9 @@ async function main(): Promise<void> {
           p === "/maps" ||
           p === "/maps/" ||
           p.startsWith("/maps/") ||
+          p === "/live" ||
+          p === "/live/" ||
+          p.startsWith("/live/") ||
           p.startsWith("/registry") ||
           p.startsWith("/threads") ||
           p.startsWith("/ghosts") ||
@@ -372,6 +454,52 @@ async function main(): Promise<void> {
           res.end();
           return;
         }
+      }
+
+      // Map management routes (POST /maps, DELETE /maps/:id) — BEFORE the read-only map GET handler
+      if (url.pathname === "/maps" || url.pathname === "/maps/" || url.pathname.startsWith("/maps/")) {
+        if (req.method === "POST" || req.method === "DELETE") {
+          const traceId = randomUUID();
+          const handled = await runWithRequestTrace(traceId, () =>
+            runtime.runPromise(
+              tryHandleMapManagement(req, res, url, corsHeaders).pipe(
+                Effect.catchAll((e) =>
+                  Effect.sync(() => {
+                    if (!res.headersSent && !res.writableEnded) {
+                      const { status, body } = errorToResponse(e as HttpMappingError);
+                      res.writeHead(status, { "Content-Type": "application/json", ...corsHeaders });
+                      res.end(body);
+                    }
+                    return true as const;
+                  }),
+                ),
+              ),
+            ),
+          );
+          if (handled) return;
+        }
+      }
+
+      // Live session routes
+      if (url.pathname === "/live" || url.pathname === "/live/" || url.pathname.startsWith("/live/")) {
+        const traceId = randomUUID();
+        const handled = await runWithRequestTrace(traceId, () =>
+          runtime.runPromise(
+            tryHandleLiveSession(req, res, url, corsHeaders).pipe(
+              Effect.catchAll((e) =>
+                Effect.sync(() => {
+                  if (!res.headersSent && !res.writableEnded) {
+                    const { status, body } = errorToResponse(e as HttpMappingError);
+                    res.writeHead(status, { "Content-Type": "application/json", ...corsHeaders });
+                    res.end(body);
+                  }
+                  return true as const;
+                }),
+              ),
+            ),
+          ),
+        );
+        if (handled) return;
       }
 
       if (req.method === "GET") {

@@ -1,6 +1,6 @@
 # RFC-0013: Map Management — Publish, Activate, and Archive
 
-**Status:** draft  
+**Status:** under review  
 **Date:** 2026-05-17  
 **Authors:** @akollegger  
 **Related:** [ADR-0007](../adr/0007-three-tier-deployment.md) (three-tier deployment), [RFC-0009](0009-map-format-pipeline.md) (map format pipeline), [RFC-0012](0012-speaker-rooms.md) (speaker rooms)

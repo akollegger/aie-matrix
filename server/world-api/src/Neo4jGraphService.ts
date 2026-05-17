@@ -27,10 +27,6 @@ export const makeNoOpNeo4jGraphLayer: Layer.Layer<Neo4jGraphService> = Layer.suc
   findTraverseTarget: () => Effect.succeed(undefined),
 });
 
-function relToKind(relType: string): NonAdjacentKind {
-  return relType === "ELEVATOR" ? "ELEVATOR" : "PORTAL";
-}
-
 export const makeLiveNeo4jGraphLayer = (driver: Driver): Layer.Layer<Neo4jGraphService> =>
   Layer.succeed(Neo4jGraphService, {
     configured: true,
@@ -39,13 +35,13 @@ export const makeLiveNeo4jGraphLayer = (driver: Driver): Layer.Layer<Neo4jGraphS
         const session = driver.session({ defaultAccessMode: neo4j.session.READ });
         try {
           const result = await session.run(
-            `MATCH (from:Cell { h3Index: $from })-[rel]->(to:Cell)
-             WHERE type(rel) IN ['ELEVATOR', 'PORTAL'] AND rel.name IS NOT NULL
-             RETURN type(rel) AS relType, rel.name AS name, to.h3Index AS toH3`,
+            `MATCH (from:Portal { h3Index: $from })-[rel:CONNECTS]->(to:Portal)
+             WHERE rel.kind IN ['ELEVATOR', 'PORTAL'] AND rel.name IS NOT NULL
+             RETURN rel.kind AS kind, rel.name AS name, to.h3Index AS toH3`,
             { from: fromH3Index },
           );
           return result.records.map((rec) => ({
-            kind: relToKind(rec.get("relType") as string),
+            kind: rec.get("kind") as NonAdjacentKind,
             name: rec.get("name") as string,
             toH3Index: rec.get("toH3") as string,
           }));
@@ -58,8 +54,8 @@ export const makeLiveNeo4jGraphLayer = (driver: Driver): Layer.Layer<Neo4jGraphS
         const session = driver.session({ defaultAccessMode: neo4j.session.READ });
         try {
           const result = await session.run(
-            `MATCH (from:Cell { h3Index: $from })-[rel]->(to:Cell)
-             WHERE type(rel) IN ['ELEVATOR', 'PORTAL'] AND rel.name = $via
+            `MATCH (from:Portal { h3Index: $from })-[rel:CONNECTS { name: $via }]->(to:Portal)
+             WHERE rel.kind IN ['ELEVATOR', 'PORTAL']
              RETURN to.h3Index AS toH3 LIMIT 1`,
             { from: fromH3Index, via },
           );

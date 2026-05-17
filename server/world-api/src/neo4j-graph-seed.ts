@@ -3,8 +3,8 @@ import neo4j, { type Driver } from "neo4j-driver";
 import type { LoadedMap } from "@aie-matrix/server-colyseus";
 
 /**
- * Idempotent: MERGE pentagon `Cell` nodes and a full directed `PORTAL` mesh (IC-006 cosmology).
- * From pentagon cell index `i`, an edge to cell `j` uses `name: "pentagon-${j + 1}"` (1-based target index).
+ * Idempotent: MERGE pentagon `Portal` nodes and a full directed `CONNECTS` mesh (IC-006 cosmology).
+ * Pentagon H3 indices are coordinate locations — not materialized Tile nodes.
  */
 export async function seedPentagonPortals(driver: Driver): Promise<void> {
   const cells = getPentagons(15);
@@ -13,22 +13,20 @@ export async function seedPentagonPortals(driver: Driver): Promise<void> {
     await session.executeWrite(async (tx) => {
       for (const h3 of cells) {
         await tx.run(
-          `MERGE (c:Cell { h3Index: $h3 })
-           ON CREATE SET c.tileClass = 'Pentagon'`,
+          `MERGE (:Portal { h3Index: $h3 })`,
           { h3 },
         );
       }
       for (let i = 0; i < cells.length; i++) {
         for (let j = 0; j < cells.length; j++) {
-          if (i === j) {
-            continue;
-          }
+          if (i === j) continue;
           const from = cells[i]!;
           const to = cells[j]!;
           const name = `pentagon-${j + 1}`;
           await tx.run(
-            `MATCH (a:Cell { h3Index: $from }), (b:Cell { h3Index: $to })
-             MERGE (a)-[r:PORTAL { name: $name }]->(b)`,
+            `MATCH (a:Portal { h3Index: $from }), (b:Portal { h3Index: $to })
+             MERGE (a)-[r:CONNECTS { name: $name }]->(b)
+             ON CREATE SET r.kind = 'PORTAL'`,
             { from, to, name },
           );
         }
@@ -43,30 +41,25 @@ export interface ElevatorSeed {
   readonly fromH3: string;
   readonly toH3: string;
   readonly name: string;
-  readonly fromTileClass: string;
-  readonly toTileClass: string;
 }
 
-/** MERGE endpoint cells and one `ELEVATOR` edge (TCK / dev fixtures). */
+/** MERGE endpoint Portal nodes and one `CONNECTS` edge of kind ELEVATOR (TCK / dev fixtures). */
 export async function seedElevatorEdge(driver: Driver, seed: ElevatorSeed): Promise<void> {
   const session = driver.session({ defaultAccessMode: neo4j.session.WRITE });
   try {
     await session.executeWrite(async (tx) => {
       await tx.run(
-        `MERGE (a:Cell { h3Index: $from })
-         ON CREATE SET a.tileClass = $fromClass
-         SET a.tileClass = coalesce(a.tileClass, $fromClass)`,
-        { from: seed.fromH3, fromClass: seed.fromTileClass },
+        `MERGE (:Portal { h3Index: $from })`,
+        { from: seed.fromH3 },
       );
       await tx.run(
-        `MERGE (b:Cell { h3Index: $to })
-         ON CREATE SET b.tileClass = $toClass
-         SET b.tileClass = coalesce(b.tileClass, $toClass)`,
-        { to: seed.toH3, toClass: seed.toTileClass },
+        `MERGE (:Portal { h3Index: $to })`,
+        { to: seed.toH3 },
       );
       await tx.run(
-        `MATCH (a:Cell { h3Index: $from }), (b:Cell { h3Index: $to })
-         MERGE (a)-[r:ELEVATOR { name: $name }]->(b)`,
+        `MATCH (a:Portal { h3Index: $from }), (b:Portal { h3Index: $to })
+         MERGE (a)-[r:CONNECTS { name: $name }]->(b)
+         ON CREATE SET r.kind = 'ELEVATOR'`,
         { from: seed.fromH3, to: seed.toH3, name: seed.name },
       );
     });
@@ -82,13 +75,10 @@ export async function seedNeo4jGraphArtifacts(driver: Driver, map: LoadedMap): P
   const cell = map.cells.get(anchor);
   const neighbor = cell ? Object.values(cell.neighbors).find((x) => x !== undefined) : undefined;
   if (cell && neighbor) {
-    const dest = map.cells.get(neighbor);
     await seedElevatorEdge(driver, {
       fromH3: anchor,
       toH3: neighbor,
       name: "tck-elevator",
-      fromTileClass: cell.tileClass,
-      toTileClass: dest?.tileClass ?? "Unknown",
     });
   }
 }

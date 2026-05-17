@@ -2,6 +2,53 @@
 
 MCP `world-api` (ghost tools) lives here. For the PoC it calls Colyseus **in-process** via `colyseus-bridge.ts` (see `specs/001-minimal-poc/research.md`).
 
+## Map Management API (`/maps/` and `/live/`) — RFC-0013
+
+The map management surface handles the full map lifecycle for Tier 1 local dev (and Tier 2/3 once ADR-0007 deployment work lands).
+
+### Required env vars
+
+| Variable | Purpose |
+|---|---|
+| `ADMIN_TOKEN` | Bearer token for admin-only endpoints (`POST /maps`, `POST /live`, `PATCH /live/:id/maps`, `DELETE /maps/:mapId`, `DELETE /live/:id`). Never logged. |
+| `NEO4J_URI` | Required for map management. When absent, `/maps/` and `/live/` return `503 NEO4J_REQUIRED`. The existing `AIE_MATRIX_MAP` file path still works as a no-DB Tier 1 fallback. |
+| `GCS_BUCKET` | GCS bucket for artifact storage. When unset, a local `tmp/gcs/` stub is used (Tier 1 dev without GCS credentials). |
+
+### `/maps/` — artifact lifecycle
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/maps` | Admin | Publish or replace a `.map.gram`. Validates gram, uploads to GCS, seeds `(:Cell)` nodes in Neo4j. Idempotent on unchanged content. |
+| `GET` | `/maps` | Public | List maps. `?status=published` (default) or `?status=archived`. |
+| `GET` | `/maps/:mapId` | Public | Get one map by logical name. 404 if not found. |
+| `DELETE` | `/maps/:mapId` | Admin | Archive a map. 409 if referenced by an active session. |
+
+### `/live/` — live session management
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `POST` | `/live` | Admin | Start a session bound to published maps. Lightweight — cells already in Neo4j from publish time. |
+| `GET` | `/live` | Public | List sessions. `?status=active` (default). |
+| `GET` | `/live/:id` | Public | Get one session. |
+| `PATCH` | `/live/:id/maps` | Admin | Switch the primary map. Computes removedCells/addedCells from Neo4j; broadcasts `world.map-changed`. |
+| `DELETE` | `/live/:id` | Admin | End a session. Broadcasts `world.session-ended`. |
+
+### `/health`
+
+Returns `503 { "status": "starting" }` during startup, `200 { "status": "ok" }` once ready.
+
+### Session binding at startup
+
+```
+AIE_MATRIX_MAP set    → Tier 1 file path; no session binding
+LIVE_SESSION_ID set   → bind to that session
+(neither set)         → auto-discover single active session; fail loudly if multiple
+```
+
+See [RFC-0013](../../proposals/rfc/0013-map-management.md) and [specs/014-map-management/](../../specs/014-map-management/) for full design details, contracts, and quickstart.
+
+---
+
 ## Map assets (`GET /maps/:mapId`) — RFC-0009
 
 The world HTTP surface (same process as the PoC server) exposes read-only map bytes for tooling and the RFC-0008 intermedium.
