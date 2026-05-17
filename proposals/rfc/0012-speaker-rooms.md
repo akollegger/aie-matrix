@@ -138,13 +138,13 @@ RFC-0005 defines two ghost states: `normal` and `conversational`. This RFC adds 
 - A ghost in `normal` state moves into a cell that belongs to a named room where the current speaker is in `conversational` mode.
 - A speaker in a claimed room transitions into `conversational` mode (issues `say`); all ghosts currently in `normal` state within that room transition automatically to `listening` state.
 
-**While listening:** The ghost receives `message.new` Colyseus signals from the speaker's thread exactly as a cluster member would. Movement commands are accepted. `say` commands are rejected with an observable error indicating the ghost is in listening state and must issue `bye` first.
+**While listening:** The ghost receives the speaker's messages via the A2A conversation stream, exactly as a cluster member would. Movement commands are accepted via MCP. `say` commands are rejected with an observable error indicating the ghost is in listening state and must issue `bye` first.
 
 **Exit via `bye`:** The ghost transitions to `normal` state. Subsequent movement and `say` commands are accepted.
 
 **Exit via room departure:** When a ghost in `listening` state moves to a cell outside the room, the server automatically transitions the ghost to `normal` state. No `bye` is required.
 
-**Speaker ends the talk:** When a speaker ghost issues `yield` or moves outside their claimed room, all ghosts currently in `listening` state for that room transition automatically to `normal` state and receive a `session.ended` Colyseus signal.
+**Speaker ends the talk:** When a speaker ghost issues `yield` or moves outside their claimed room, all ghosts currently in `listening` state for that room transition automatically to `normal` state and receive a `session.ended` A2A event.
 
 **Reconnect:** A ghost that reconnects always returns to `normal` state, matching RFC-0005 behavior for `conversational` mode. Normal state transition logic then re-applies: if the ghost's current cell is inside an active speaker's room, it will immediately auto-enter `listening` state. If the speaker has left or the session has ended in the interim, the ghost simply stays in `normal`.
 
@@ -172,6 +172,19 @@ A ghost in `conversational` mode cannot enter a new polygon because it cannot mo
 
 `claim` and `yield` operate on the speaker's room assignment independently of ghost state. A speaker may hold a claim while in `normal` state (between `say` calls); the claim is not tied to `conversational` mode.
 
+### Transport protocol boundary
+
+Ghost agents interact exclusively via **MCP** (tool calls: `claim`, `yield`, `say`, `bye`, `whereami`, `go`) and **A2A** (conversation stream, events). Ghost agents do not receive Colyseus signals.
+
+**Colyseus** is used solely by Intermedium for real-time world observability. The server publishes ghost state transitions — entering/exiting `listening`, room claimed/yielded — as Colyseus state updates so Intermedium can render them. These are internal server-to-Intermedium signals and are not part of the ghost agent contract.
+
+| Concern | Transport |
+|---|---|
+| Ghost tool calls | MCP |
+| Speaker's messages reaching listening ghosts | A2A conversation stream |
+| `session.ended` notification to ghost agents | A2A event |
+| Ghost state visibility for Intermedium | Colyseus (internal) |
+
 ### Demo scenario
 
 A contributor can verify the full mechanic end-to-end in roughly ten minutes:
@@ -179,7 +192,7 @@ A contributor can verify the full mechanic end-to-end in roughly ten minutes:
 1. Load a map containing a `SessionRoom` polygon named `"Hall A"`.
 2. Register ghost A. Move it into Hall A. Issue `claim { room: "Hall A" }`. Verify the response confirms `role: "speaker"` and `assignedRoom: "Hall A"`.
 3. Register ghost B inside Hall A (before any session starts). Verify ghost B is in `normal` state.
-4. Ghost A issues `say { content: "Hello from Hall A" }`. Verify only ghosts currently in Hall A receive the `message.new` signal — not ghosts in adjacent clusters outside the room. Verify ghost B (already inside) automatically transitions to `listening` state.
+4. Ghost A issues `say { content: "Hello from Hall A" }`. Verify the message is delivered via A2A only to ghosts currently in Hall A — not ghosts in adjacent clusters outside the room. Verify ghost B (already inside) automatically transitions to `listening` state.
 5. Register ghost C outside Hall A. Move it into Hall A. Verify ghost C also automatically transitions to `listening` state.
 6. Ghost C issues `say`. Verify it receives a `GHOST_IN_LISTENING_STATE` error.
 7. Ghost C issues `bye`. Verify it returns to `normal` and can `say` freely.
@@ -196,11 +209,11 @@ Two new MCP tools are introduced. Two existing tools are updated:
 | `whereami` | Adds optional `room: { name, description }` to response when ghost is in a named room |
 | `say { content }` | Rejected with `GHOST_IN_LISTENING_STATE` error when ghost is in listening state |
 
-One new Colyseus signal is introduced:
+One new A2A event is introduced:
 
-| Signal | Payload | Trigger |
+| Event | Payload | Trigger |
 |---|---|---|
-| `session.ended` | `{ room: string, speaker_id: string }` | Speaker issues `yield` or leaves their room; delivered to all ghosts in `listening` state for that room |
+| `session.ended` | `{ room: string, speaker_id: string }` | Speaker issues `yield` or leaves their room; delivered via A2A to all ghost agents in `listening` state for that room |
 
 ### New `mx_ghost_role` record field
 
