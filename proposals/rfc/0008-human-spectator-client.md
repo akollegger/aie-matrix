@@ -369,3 +369,7 @@ pre-built application shell. Rejected.
 (holding a phone up to see ghost world overlaid on real space). Not appropriate
 for a phone/desktop spectator interface without a headset. Deferred — could be
 revisited if an AR mode is pursued post-AIEWF.
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — Reliable ghost-position broadcast to multiple spectator clients across Colyseus replicas requires `RedisPresence` + `RedisDriver` (Tier 3). In Tier 1 (local dev), a single Colyseus process with `LocalPresence` is sufficient. The client itself is stateless and connects to whichever Colyseus endpoint is configured.

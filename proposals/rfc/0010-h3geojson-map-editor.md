@@ -391,3 +391,7 @@ In practice the implementation was built on MapLibre GL 5 directly, which
 gave finer control over hex rendering and layer interaction. h3-viewer
 provided useful reference for H3 index accumulation patterns but was not
 forked.
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — `.map.gram` files exported by this editor are the "authored artifacts" in ADR-0007's source-of-truth hierarchy. They are uploaded to GCS and seeded into Neo4j via the map publish step before world-api can serve them. The editor itself is a development tool and has no runtime presence in Tier 2/3.

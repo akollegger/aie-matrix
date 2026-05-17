@@ -191,3 +191,17 @@ This ADR resolves the **CI/CD Pipeline** open question in `docs/architecture.md`
 1. **GCP / GKE** is the agreed production platform.
 2. **Neo4j Aura** (managed) is the production Neo4j target — not self-hosted on GKE.
 3. **`@aie-matrix/root-env`** provides the env-loading contract and will be extended to cover all variables listed above if not already present.
+
+## Related RFCs
+
+| RFC | Title | Relationship |
+|-----|-------|--------------|
+| [RFC-0001](../rfc/0001-minimal-poc.md) | Minimal PoC | Runs all services in a single process as an explicit Tier 1 shortcut; this ADR defines how those services separate into independently deployable units at Tier 2 and Tier 3. |
+| [RFC-0002](../rfc/0002-rule-based-movement.md) | Rule-Based Movement | Movement rulesets follow the GCS artifact → Neo4j seed path; the `AIE_MATRIX_RULES` local file is a Tier 1 convenience only. |
+| [RFC-0005](../rfc/0005-ghost-conversation-model.md) | Ghost Conversation Model | The JSONL store is the Tier 1 implementation; a Neo4j-backed `ConversationStore` Layer is required at Tier 3, selected when `CONVERSATION_DATA_DIR` is unset. |
+| [RFC-0006](../rfc/0006-world-objects.md) | World Items | Item sidecars (`.items.json`) follow the GCS artifact path in Tier 3; `ItemService` must support GCS fetch when `AIE_MATRIX_ITEMS` is not a local path. |
+| [RFC-0007](../rfc/0007-ghost-house-architecture.md) | Ghost House Architecture | ghost-house is the last service in the startup dependency chain; its agent catalog must persist to Neo4j in Tier 3, not to `catalog.json` on disk. |
+| [RFC-0008](../rfc/0008-human-spectator-client.md) | Intermedium Spectator Client | Reliable broadcast to spectators across Colyseus replicas requires `RedisPresence` + `RedisDriver`; this is a Tier 3 requirement. |
+| [RFC-0009](../rfc/0009-map-format-pipeline.md) | Map Format Pipeline | `.map.gram` artifacts are the input to the GCS upload step; `MapService` must support GCS fetch in Tier 3. |
+| [RFC-0010](../rfc/0010-h3geojson-map-editor.md) | H3GeoJSON Map Editor | Editor outputs are the "authored artifacts" in the source-of-truth hierarchy — they feed the publish-to-GCS workflow before world-api can serve them. |
+| [RFC-0012](../rfc/0012-speaker-rooms.md) | Speaker Rooms | Room claim state must persist to Neo4j to satisfy the stateless-application-service invariant; in-memory storage would be lost on world-api restart. |
