@@ -29,12 +29,12 @@ The `.map.gram` format already supports `Polygon` nodes with a `geometry` array 
 
 ```gram
 [session-rooms:Layer {kind: "polygon", name: "Session Rooms"} |
-  (:Polygon:SessionRoom { name: "Hall A", description: "Main session hall, capacity 500. Home of keynote and opening sessions.", geometry: [h3`...`, h3`...`, ...] }),
-  (:Polygon:SessionRoom { name: "Hall B", description: "Breakout room for the Agents track.", geometry: [h3`...`, h3`...`, ...] })
+  (hall-a:Polygon:SessionRoom { name: "Hall A", description: "Main session hall, capacity 500. Home of keynote and opening sessions.", geometry: [h3`...`, h3`...`, ...] }),
+  (hall-b:Polygon:SessionRoom { name: "Hall B", description: "Breakout room for the Agents track.", geometry: [h3`...`, h3`...`, ...] })
 ]
 ```
 
-Both `name` and `description` are required on named polygons. `name` is a short identifier used in tool responses and routing; `description` is a human-readable sentence or two surfaced to ghost agents via `whereami` to give spatial context without the agent needing to infer meaning from a tile class.
+Named polygons require three properties: a **node identifier** (`hall-a`), a `name`, and a `description`. The node identifier is the stable machine key used in all runtime operations — `claim`, `yield`, `whereami`, and `session.ended`. The `name` property is the human-readable display label surfaced to ghost agents and UIs. The `description` is a sentence or two of spatial context surfaced via `whereami` so an agent can understand the space without inferring meaning from the tile class. Changing `name` or `description` never breaks a running claim; changing the node identifier is a breaking map change.
 
 The server maintains two categories of room data in-memory. Static data — cell membership and description per room, plus a reverse index from H3 cell to room name (SessionRoom layer only) — is built at map load time and does not change. Runtime state — the current speaker (if any) and the set of ghosts currently in listening state per room — is mutated by `claim`, `yield`, and movement events. No Neo4j schema changes are required.
 
@@ -54,19 +54,29 @@ One existing tool is extended to surface room information when the ghost's curre
 
 // ghost inside "Hall A"
 { h3Index: "8f2830828052d25", tileId: "8f2830828052d25", col: 12, row: 7,
-  room: { name: "Hall A", description: "Main session hall, capacity 500. Home of keynote and opening sessions." } }
+  room: { id: "hall-a", name: "Hall A", description: "Main session hall, capacity 500. Home of keynote and opening sessions." } }
 ```
 
-The `room` field is absent (not `null`) when the ghost is not in any named polygon, so existing agents that destructure the result do not need updates.
+The `room` field is absent (not `null`) when the ghost is not in any named polygon, so existing agents that destructure the result do not need updates. The `id` field is the polygon node identifier and is the correct value to pass to `claim`.
 
 The tool derives the room field from the same in-memory room index. No additional server queries are needed.
+
+**Layered spatial context.** Because tile types, polygons, and items all carry
+`description` fields in `.map.gram` (RFC-0010), the server can compose a richer
+spatial narrative from the ghost's current cell: the tile type description, the
+enclosing polygon description, and any items present all stack. A future
+iteration of `whereami` may assemble this chain explicitly — e.g. *"you are
+standing on a carpeted floor, at the edge of the Hall A stage, near a podium"*
+— to give LLM-backed agents richer grounding without requiring the agent to
+issue multiple tool calls. This is deferred; the current response includes only
+the immediate polygon via `room`.
 
 ### Speaker role and the `claim` command
 
 Any ghost may become a speaker by claiming a named room. The ghost issues the `claim` tool from inside the room's polygon boundary:
 
 ```typescript
-claim({ room: "Hall A" })
+claim({ room: "hall-a" })   // node identifier, not display name
 ```
 
 The server evaluates the request against a `ClaimRule` before accepting it. The initial rule requires two conditions:
@@ -90,7 +100,7 @@ On rejection, `claim` returns a structured error:
 |---|---|
 | `ROOM_ALREADY_CLAIMED` | Another ghost currently holds the room |
 | `GHOST_NOT_IN_ROOM` | Ghost's current cell is not inside the named polygon |
-| `ROOM_NOT_FOUND` | No named polygon with that name exists |
+| `ROOM_NOT_FOUND` | No named polygon with that node identifier exists |
 
 Role is runtime state, not registration config. All ghosts start as `"attendee"`; `claim` is the only path to `"speaker"`. The claim is released in two ways, mirroring how listeners exit listening state:
 
@@ -106,8 +116,8 @@ type GhostRole = "attendee" | "speaker"
 
 interface GhostRecord {
   ghostId: string
-  role: GhostRole        // "attendee" by default; "speaker" while a claim is held
-  assignedRoom?: string  // set on successful claim; cleared on yield or room departure
+  role: GhostRole          // "attendee" by default; "speaker" while a claim is held
+  assignedRoom?: string    // polygon node identifier; set on successful claim; cleared on yield or room departure
 }
 ```
 
@@ -189,8 +199,8 @@ Ghost agents interact exclusively via **MCP** (tool calls: `claim`, `yield`, `sa
 
 A contributor can verify the full mechanic end-to-end in roughly ten minutes:
 
-1. Load a map containing a `SessionRoom` polygon named `"Hall A"`.
-2. Register ghost A. Move it into Hall A. Issue `claim { room: "Hall A" }`. Verify the response confirms `role: "speaker"` and `assignedRoom: "Hall A"`.
+1. Load a map containing a `SessionRoom` polygon with node identifier `hall-a` and display name `"Hall A"`.
+2. Register ghost A. Move it into Hall A. Issue `claim { room: "hall-a" }`. Verify the response confirms `role: "speaker"` and `assignedRoom: "hall-a"`.
 3. Register ghost B inside Hall A (before any session starts). Verify ghost B is in `normal` state.
 4. Ghost A issues `say { content: "Hello from Hall A" }`. Verify the message is delivered via A2A only to ghosts currently in Hall A — not ghosts in adjacent clusters outside the room. Verify ghost B (already inside) automatically transitions to `listening` state.
 5. Register ghost C outside Hall A. Move it into Hall A. Verify ghost C also automatically transitions to `listening` state.
@@ -204,16 +214,16 @@ Two new MCP tools are introduced. Two existing tools are updated:
 
 | Tool | Change |
 |---|---|
-| `claim { room }` | New tool. Transitions ghost to speaker role for the named room, subject to `ClaimRule`; returns structured errors on rejection |
+| `claim { room }` | New tool. `room` is the polygon node identifier. Transitions ghost to speaker role for the named room, subject to `ClaimRule`; returns structured errors on rejection |
 | `yield` | New tool. Ends the session: exits `conversational` mode if active, releases the room claim, and triggers `session.ended` for all listeners. Claim is also released automatically if the speaker moves outside their room. |
-| `whereami` | Adds optional `room: { name, description }` to response when ghost is in a named room |
+| `whereami` | Adds optional `room: { id, name, description }` to response when ghost is in a named room; `id` is the polygon node identifier |
 | `say { content }` | Rejected with `GHOST_IN_LISTENING_STATE` error when ghost is in listening state |
 
 One new A2A event is introduced:
 
 | Event | Payload | Trigger |
 |---|---|---|
-| `session.ended` | `{ room: string, speaker_id: string }` | Speaker issues `yield` or leaves their room; delivered via A2A to all ghost agents in `listening` state for that room |
+| `session.ended` | `{ room_id: string, room_name: string, speaker_id: string }` | Speaker issues `yield` or leaves their room; delivered via A2A to all ghost agents in `listening` state for that room |
 
 ### New `mx_ghost_role` record field
 
@@ -227,14 +237,14 @@ The open question in RFC-0005 about `role` field values is partially resolved he
   "mx_ghost_role": "speaker",
   "content": "Welcome to my talk on multi-agent systems.",
   "mx_tile": "8f2830828052d25",
-  "mx_room": "Hall A",
+  "mx_room": "hall-a",
   "mx_listeners": ["ghost_abc", "ghost_def", "ghost_xyz"]
 }
 ```
 
 Two new fields:
 - `mx_ghost_role` — `"attendee"` | `"speaker"`; mirrors the broadcasting ghost's role
-- `mx_room` — present when the broadcasting ghost is a speaker; the name of the assigned room
+- `mx_room` — present when the broadcasting ghost is a speaker; the **node identifier** of the assigned room (not the display name)
 
 ## Alternatives
 
