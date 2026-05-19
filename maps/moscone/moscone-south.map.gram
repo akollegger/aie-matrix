@@ -1,0 +1,14 @@
+{ kind: "matrix-map", name: "moscone-south", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor" })
+(type-mpa6ufw1:TileType:StageA { name: "Stage A", style: css`background: #00f900` })
+(type-mpa77z42:TileType:StageB { name: "Stage B", style: css`background: #fefb00` })
+(type-mpa7sv9l:TileType:StageC { name: "Stage C", style: css`background: #ff9300` })
+(type-mpa7wtqu:TileType:MainStage { name: "Main Stage", style: css`background: #ff2600` })
+
+[ground:Layer {kind: "tile", name: "Ground"}]
+[lyr1d18jl9:Layer {kind: "polygon", name: "Building"} | (:Polygon:Floor { geometry: [h3`8f283082ab8a8b6`, h3`8f283082ab994e2`, h3`8f283082ab98195`, h3`8f283082ab8328a`] })]
+[lyrzxc09l9:Layer {kind: "polygon", name: "Stages"} | (:Polygon:StageA { geometry: [h3`8f283082ab994e2`, h3`8f283082ab982ea`, h3`8f283082ab99c31`, h3`8f283082ab991a8`], name: "Stage A", description: "Funny talks" }), (:Polygon:StageB { geometry: [h3`8f283082ab99c30`, h3`8f283082ab982c5`, h3`8f283082ab983b2`, h3`8f283082ab98a0e`], name: "Stage B", description: "Smart" }), (:Polygon:StageC { geometry: [h3`8f283082ab98a03`, h3`8f283082ab980cd`, h3`8f283082ab98195`, h3`8f283082ab9880e`], name: "Stage C", description: "Philosophical" }), (:Polygon:MainStage { geometry: [h3`8f283082ab8a8b6`, h3`8f283082ab8a505`, h3`8f283082ab9dc28`, h3`8f283082ab8328a`], name: "Main Stage", description: "Inspirational talks" })]
+[layers:LayerStack | ground, lyr1d18jl9, lyrzxc09l9]
+
+[rules:Rules | (floor)-[:GO]->(floor), (newtype)-[:GO]->(newtype), (newtype)-[:GO]->(newtype), (newtype)-[:GO]->(newtype), (newtype)-[:GO]->(newtype)]

@@ -201,7 +201,13 @@ export async function importGram(text: string): Promise<ImportResult> {
           const sides = h3s.length
           const vertices = h3s.map(h3Index)
           const cells = computeCellsFromVertices(h3s).map(h3Index)
-          polygons.push({ id: `poly-${uid()}`, typeName, cells, sides, vertices })
+          const polygonName = strProp(elemProps, "name")
+          const polygonDesc = strProp(elemProps, "description")
+          polygons.push({
+            id: `poly-${uid()}`, typeName, cells, sides, vertices,
+            ...(polygonName !== undefined ? { name: polygonName } : {}),
+            ...(polygonDesc !== undefined ? { description: polygonDesc } : {}),
+          })
 
         } else if (HashSet.has(elemLabels, "Portal")) {
           if (h3s.length < 2) { warnings.push("Portal has fewer than 2 geometry entries — skipped"); continue }

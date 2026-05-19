@@ -135,7 +135,7 @@ export {
   GcsService,
   GcsError,
   makeGcsLayerFromEnv,
-  makeNoOpGcsLayer,
+  makeLocalGcsStubLayer,
   makeLiveGcsLayer,
   type GcsOps,
 } from "./gcs/GcsService.js";

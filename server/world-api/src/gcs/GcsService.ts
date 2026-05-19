@@ -1,4 +1,7 @@
 import { Storage } from "@google-cloud/storage";
+import { promises as fs } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Context, Data, Effect, Layer } from "effect";
 
 export class GcsError extends Data.TaggedError("GcsError")<{
@@ -7,20 +10,34 @@ export class GcsError extends Data.TaggedError("GcsError")<{
 }> {}
 
 export interface GcsOps {
-  /** Upload bytes to `path` (e.g. `maps/foo.map.gram`) and return the public GCS URI. */
   upload(path: string, bytes: Buffer): Effect.Effect<string, GcsError>;
+  download(path: string): Effect.Effect<Buffer, GcsError>;
 }
 
 export class GcsService extends Context.Tag("aie-matrix/GcsService")<GcsService, GcsOps>() {}
 
 /**
- * No-op GCS layer — returns a `gs://<bucket>/<path>` URI without actually uploading.
- * Used when `GCS_BUCKET` is unset (local / CI environments).
+ * Local-file stub — reads/writes under `baseDir`.
+ * Used when `GCS_BUCKET` is unset (Tier 1 dev without GCS credentials).
  */
-export const makeNoOpGcsLayer = (bucket: string = "local"): Layer.Layer<GcsService> =>
+export const makeLocalGcsStubLayer = (baseDir: string): Layer.Layer<GcsService> =>
   Layer.succeed(GcsService, {
-    upload: (path) =>
-      Effect.succeed(`gs://${bucket}/${path}`),
+    upload: (path, bytes) =>
+      Effect.tryPromise({
+        try: async () => {
+          const fullPath = join(baseDir, path);
+          await fs.mkdir(dirname(fullPath), { recursive: true });
+          await fs.writeFile(fullPath, bytes);
+          return `file://${fullPath}`;
+        },
+        catch: (e) => new GcsError({ message: e instanceof Error ? e.message : String(e), cause: e }),
+      }),
+
+    download: (path) =>
+      Effect.tryPromise({
+        try: () => fs.readFile(join(baseDir, path)),
+        catch: (e) => new GcsError({ message: e instanceof Error ? e.message : String(e), cause: e }),
+      }),
   });
 
 /**
@@ -33,23 +50,30 @@ export const makeLiveGcsLayer = (bucket: string): Layer.Layer<GcsService> =>
       Effect.tryPromise({
         try: async () => {
           const storage = new Storage();
-          const file = storage.bucket(bucket).file(path);
-          await file.save(bytes, { resumable: false });
+          await storage.bucket(bucket).file(path).save(bytes, { resumable: false });
           return `gs://${bucket}/${path}`;
         },
-        catch: (e) =>
-          new GcsError({
-            message: e instanceof Error ? e.message : String(e),
-            cause: e,
-          }),
+        catch: (e) => new GcsError({ message: e instanceof Error ? e.message : String(e), cause: e }),
+      }),
+
+    download: (path) =>
+      Effect.tryPromise({
+        try: async () => {
+          const storage = new Storage();
+          const [contents] = await storage.bucket(bucket).file(path).download();
+          return contents as Buffer;
+        },
+        catch: (e) => new GcsError({ message: e instanceof Error ? e.message : String(e), cause: e }),
       }),
   });
 
-/** Build a GCS layer from environment variables. Falls back to no-op when `GCS_BUCKET` is unset. */
+const _repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../../..");
+
+/** Build a GCS layer from environment variables. Falls back to local-file stub when `GCS_BUCKET` is unset. */
 export function makeGcsLayerFromEnv(env: NodeJS.ProcessEnv = process.env): Layer.Layer<GcsService> {
   const bucket = env.GCS_BUCKET?.trim();
   if (!bucket) {
-    return makeNoOpGcsLayer();
+    return makeLocalGcsStubLayer(join(_repoRoot, "tmp", "gcs"));
   }
   return makeLiveGcsLayer(bucket);
 }

@@ -128,6 +128,7 @@ export type EditorAction =
   | { type: "CANCEL_POLYGON" }
   | { type: "DELETE_POLYGON"; layerId: string; id: string }
   | { type: "UPDATE_POLYGON_TYPE"; layerId: string; id: string; typeName: string }
+  | { type: "UPDATE_POLYGON_PROPERTIES"; layerId: string; id: string; name: string; description: string }
   // Portals (active tile layer)
   | { type: "SELECT_PORTAL_FROM"; h3: H3Index }
   | { type: "CREATE_PORTAL"; h3: H3Index }
@@ -344,11 +345,38 @@ export function editorReducer(
       }
     }
 
-    case "UPDATE_TILE_TYPE":
+    case "UPDATE_TILE_TYPE": {
+      const existing = state.tileTypes.find(t => t.id === action.id)
+      const oldTypeName = existing?.typeName
+      const newTypeName = action.patch.typeName
+      const newId = action.patch.id
+      const typeNameChanged = !!(oldTypeName && newTypeName && oldTypeName !== newTypeName)
       return {
         ...state,
         tileTypes: state.tileTypes.map(t => t.id === action.id ? { ...t, ...action.patch } : t),
+        // Cascade typeName change to rules and polygon typeNames
+        rules: typeNameChanged
+          ? state.rules.map(r => ({
+              fromTypeName: r.fromTypeName === oldTypeName ? newTypeName : r.fromTypeName,
+              toTypeName:   r.toTypeName   === oldTypeName ? newTypeName : r.toTypeName,
+            }))
+          : state.rules,
+        layers: typeNameChanged
+          ? state.layers.map(l =>
+              l.kind !== "polygon" ? l : {
+                ...l,
+                committed: l.committed.map(p =>
+                  p.typeName === oldTypeName ? { ...p, typeName: newTypeName } : p
+                ),
+              } as PolygonLayerState
+            )
+          : state.layers,
+        // Cascade id change to activeTypeId
+        ui: newId && newId !== action.id && state.ui.activeTypeId === action.id
+          ? { ...state.ui, activeTypeId: newId }
+          : state.ui,
       }
+    }
 
     case "DELETE_TILE_TYPE":
       if (action.id === BUILTIN_FLOOR_ID) return state
@@ -433,6 +461,16 @@ export function editorReducer(
         layers: state.layers.map(l =>
           l.id === action.layerId && l.kind === "polygon"
             ? { ...l, committed: l.committed.map(p => p.id === action.id ? { ...p, typeName: action.typeName } : p) } as PolygonLayerState
+            : l
+        ),
+      }
+
+    case "UPDATE_POLYGON_PROPERTIES":
+      return {
+        ...state,
+        layers: state.layers.map(l =>
+          l.id === action.layerId && l.kind === "polygon"
+            ? { ...l, committed: l.committed.map(p => p.id === action.id ? { ...p, name: action.name || undefined, description: action.description || undefined } : p) } as PolygonLayerState
             : l
         ),
       }

@@ -260,7 +260,13 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
           for (const h3 of filled) {
             layerData.cells.set(h3, typeName);
           }
-          layerData.polygons.push({ typeName, vertices: h3s, layerIdentity: walkId });
+          const polygonName = strProp(elemProps, "name");
+          const polygonDesc = strProp(elemProps, "description");
+          layerData.polygons.push({
+            typeName, vertices: h3s, layerIdentity: walkId,
+            ...(polygonName !== undefined ? { name: polygonName } : {}),
+            ...(polygonDesc !== undefined ? { description: polygonDesc } : {}),
+          });
 
         } else if (HashSet.has(elemLabels, "Portal")) {
           if (h3s.length < 2) continue;

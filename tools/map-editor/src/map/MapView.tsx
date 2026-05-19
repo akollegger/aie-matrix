@@ -25,6 +25,10 @@ export function MapView() {
   // Polygon drag state
   const dragStartRef = useRef<{ lat: number; lng: number } | null>(null)
   const hasDraggedRef = useRef(false)
+  // Pending drag — stores polygon info between mousedown and first mousemove.
+  // BEGIN_POLYGON_DRAG is deferred until movement actually starts so a simple
+  // click never puts the polygon into drag state (which hides its fill).
+  const pendingDragRef = useRef<{ layerId: string; polyId: string; cells: H3Index[]; sides: number } | null>(null)
 
   // Vertex drag state
   const vertexDragRef = useRef<{ idx: number } | null>(null)
@@ -93,7 +97,8 @@ export function MapView() {
       if (!poly) return
 
       dispatch({ type: "SELECT_ELEMENT", ref: { type: "polygon", layerId: s.ui.activeLayerId, id: poly.id } })
-      dispatch({ type: "BEGIN_POLYGON_DRAG", layerId: s.ui.activeLayerId, polyId: poly.id, cells: poly.cells as H3Index[], sides: poly.sides })
+      // Stash drag info but don't enter drag state yet — wait for first mousemove
+      pendingDragRef.current = { layerId: s.ui.activeLayerId, polyId: poly.id, cells: poly.cells as H3Index[], sides: poly.sides }
       dragStartRef.current = { lat, lng }
       hasDraggedRef.current = false
       map.dragPan.disable()
@@ -123,6 +128,14 @@ export function MapView() {
       if (dragStartRef.current !== null) {
         const dLat = lat - dragStartRef.current.lat
         const dLng = lng - dragStartRef.current.lng
+
+        // Lazily enter drag state on first actual movement
+        if (!stateRef.current.ui.draggedPolygon && pendingDragRef.current) {
+          dispatch({ type: "BEGIN_POLYGON_DRAG", ...pendingDragRef.current })
+          pendingDragRef.current = null
+          return // let the next mousemove fire the translate
+        }
+
         const dp = stateRef.current.ui.draggedPolygon
         if (!dp) return
         const newCells = translateCells(dp.originalCells as H3Index[], dLat, dLng)
@@ -144,11 +157,17 @@ export function MapView() {
       }
 
       if (dragStartRef.current !== null) {
-        if (hasDraggedRef.current) {
-          dispatch({ type: "COMMIT_POLYGON_DRAG" })
-        } else {
-          dispatch({ type: "CANCEL_POLYGON_DRAG" })
+        pendingDragRef.current = null
+        if (stateRef.current.ui.draggedPolygon) {
+          // Drag was actually started — commit or cancel
+          if (hasDraggedRef.current) {
+            dispatch({ type: "COMMIT_POLYGON_DRAG" })
+          } else {
+            dispatch({ type: "CANCEL_POLYGON_DRAG" })
+          }
         }
+        // If draggedPolygon is null, the mousedown was a simple click:
+        // SELECT_ELEMENT already handled selection, nothing else to do.
         dragStartRef.current = null
         map.dragPan.enable()
       }
@@ -250,6 +269,14 @@ export function MapView() {
     }
 
     function handleKeyDown(e: KeyboardEvent) {
+      // Don't intercept keystrokes while the user is typing in an input field
+      const focused = document.activeElement
+      if (
+        focused instanceof HTMLInputElement ||
+        focused instanceof HTMLTextAreaElement ||
+        focused instanceof HTMLSelectElement
+      ) return
+
       const s = stateRef.current
       if (s.ui.activeTool !== "hand") return
 

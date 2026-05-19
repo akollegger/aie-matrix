@@ -22,6 +22,7 @@ export interface MapManagementOps {
   publish(mapId: string, bytes: Buffer): Effect.Effect<MapRecord, MapPublishError | GcsError>;
   list(status?: "published" | "archived"): Effect.Effect<readonly MapRecord[], never>;
   get(mapId: string): Effect.Effect<MapRecord, MapNotFoundError>;
+  download(mapId: string): Effect.Effect<Buffer, MapNotFoundError | GcsError>;
   archive(mapId: string): Effect.Effect<void, MapNotFoundError | MapAlreadyActiveError>;
 }
 
@@ -118,6 +119,8 @@ export function makeMapManagementLayer(driver: Driver): Layer.Layer<MapManagemen
             typeName: p.typeName,
             vertices: p.vertices,
             layerIdentity: p.layerIdentity,
+            name: p.name ?? null,
+            description: p.description ?? null,
           }));
 
           const itemRows = parsedMap.itemPlacements.map((p) => ({
@@ -292,7 +295,7 @@ export function makeMapManagementLayer(driver: Driver): Layer.Layer<MapManagemen
                   tx.run(
                     `UNWIND $polygons AS p
                      MATCH (l:Layer { mapId: $mapId, identity: p.layerIdentity })
-                     CREATE (poly:Polygon { typeName: p.typeName, vertices: p.vertices, sourceMapId: $mapId })
+                     CREATE (poly:Polygon { typeName: p.typeName, vertices: p.vertices, sourceMapId: $mapId, name: p.name, description: p.description })
                      CREATE (poly)-[:IN_LAYER]->(l)`,
                     { polygons: polygonRows, mapId },
                   ),
@@ -401,7 +404,13 @@ export function makeMapManagementLayer(driver: Driver): Layer.Layer<MapManagemen
           });
         });
 
-      return { publish, list, get, archive };
+      const download = (mapId: string): Effect.Effect<Buffer, MapNotFoundError | GcsError> =>
+        Effect.gen(function* () {
+          yield* get(mapId); // verifies the map exists
+          return yield* gcs.download(`maps/${mapId}.map.gram`);
+        });
+
+      return { publish, list, get, download, archive };
     }),
   );
 }

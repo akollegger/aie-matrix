@@ -224,6 +224,24 @@ function PolygonProperties({ layerId, id }: { layerId: string; id: string }) {
         </select>
       </Field>
 
+      <Field label="Name">
+        <input
+          style={fieldStyle}
+          value={poly.name ?? ""}
+          placeholder="e.g. Main Stage"
+          onChange={e => dispatch({ type: "UPDATE_POLYGON_PROPERTIES", layerId, id: poly.id, name: e.target.value, description: poly.description ?? "" })}
+        />
+      </Field>
+
+      <Field label="Description">
+        <input
+          style={fieldStyle}
+          value={poly.description ?? ""}
+          placeholder="Optional"
+          onChange={e => dispatch({ type: "UPDATE_POLYGON_PROPERTIES", layerId, id: poly.id, name: poly.name ?? "", description: e.target.value })}
+        />
+      </Field>
+
       <Field label="Cells">
         <div style={{ ...fieldStyle, color: "#666", cursor: "default", fontSize: 11 }}>
           {poly.cells.length} cells

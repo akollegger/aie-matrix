@@ -330,6 +330,7 @@ async function main(): Promise<void> {
         publish: () => Effect.die("MapManagementService requires Neo4j"),
         list: () => Effect.succeed([]),
         get: () => Effect.die("MapManagementService requires Neo4j"),
+        download: () => Effect.die("MapManagementService requires Neo4j"),
         archive: () => Effect.die("MapManagementService requires Neo4j"),
       });
 

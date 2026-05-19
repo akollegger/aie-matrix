@@ -8,6 +8,7 @@ import type { MapAlreadyActiveError, MapNotFoundError, MapPublishError, Multipar
 import type { GcsError } from "../gcs/GcsService.js";
 
 const MAPS_SINGLE_SEGMENT = /^\/maps\/([^/]+)$/;
+const MAPS_GRAM_PATH = /^\/maps\/([^/]+)\/gram$/;
 
 function parseMapsManagementId(pathname: string): string | undefined {
   const m = MAPS_SINGLE_SEGMENT.exec(pathname);
@@ -73,7 +74,34 @@ export function tryHandleMapManagement(
     });
   }
 
-  // GET /maps/:mapId
+  // GET /maps/:mapId/gram — returns raw .map.gram bytes (public)
+  if (req.method === "GET") {
+    const gramMatch = MAPS_GRAM_PATH.exec(pathname);
+    if (gramMatch?.[1] !== undefined) {
+      let mapId: string;
+      try { mapId = decodeURIComponent(gramMatch[1]); } catch { return Effect.succeed(false); }
+      return Effect.gen(function* () {
+        const svc = yield* MapManagementService;
+        const bytes = yield* svc.download(mapId).pipe(
+          Effect.catchTag("MapError.NotFound", () => {
+            sendJson(res, 404, { error: "MapNotFoundError", mapId }, corsHeaders);
+            return Effect.succeed(null as Buffer | null);
+          }),
+          Effect.catchTag("GcsError", (e) => {
+            sendJson(res, 500, { error: "GcsError", message: e.message }, corsHeaders);
+            return Effect.succeed(null as Buffer | null);
+          }),
+        );
+        if (bytes !== null && !res.headersSent && !res.writableEnded) {
+          res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders });
+          res.end(bytes);
+        }
+        return true as const;
+      });
+    }
+  }
+
+  // GET /maps/:mapId — metadata
   if (req.method === "GET") {
     const mapId = parseMapsManagementId(pathname);
     if (mapId !== undefined) {

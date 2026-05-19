@@ -93,6 +93,9 @@ export interface ParsedPolygon {
   /** H3 vertex indices defining the polygon boundary. */
   vertices: string[];
   layerIdentity: string;
+  /** Human name for the polygon region (e.g. "Main Stage"). Used for speaker room claiming. */
+  name?: string;
+  description?: string;
 }
 
 /** An item placement from a `(:Item:X { geometry: [h3\`...\`] })` declaration, with layer membership. */

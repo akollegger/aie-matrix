@@ -73,7 +73,10 @@ function layerSection(state: MapEditorState): string {
         // geometry = defining vertices (corners); cells are derived and not stored
         const geomCells = poly.vertices?.length ? poly.vertices : poly.cells
         const verts = geomCells.map(v => h3Lit(v)).join(", ")
-        elements.push(`(:Polygon:${poly.typeName} { geometry: [${verts}] })`)
+        const propParts = [`geometry: [${verts}]`]
+        if (poly.name) propParts.push(`name: ${esc(poly.name)}`)
+        if (poly.description) propParts.push(`description: ${esc(poly.description)}`)
+        elements.push(`(:Polygon:${poly.typeName} { ${propParts.join(", ")} })`)
       }
     } else if (layer.kind === "tile") {
       for (const tile of layer.tiles.values()) {
