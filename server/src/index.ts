@@ -77,7 +77,7 @@ const conversationDataDir =
 /** PoC-wide CORS for browser clients (Phaser on Vite, etc.). */
 const corsHeaders: Record<string, string> = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS, DELETE",
+  "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS, DELETE",
   "Access-Control-Allow-Headers":
     "Content-Type, Authorization, Accept, mcp-protocol-version, X-Requested-With, Origin",
   "Access-Control-Max-Age": "86400",
@@ -457,9 +457,12 @@ async function main(): Promise<void> {
         }
       }
 
-      // Map management routes (POST /maps, DELETE /maps/:id) — BEFORE the read-only map GET handler
+      // Map management routes — BEFORE the read-only map GET handler.
+      // Handles POST /maps, DELETE /maps/:id, and management GETs (list, metadata, gram download).
+      // tryHandleMapManagement returns false for unrecognised paths so multi-segment static paths
+      // (e.g. /maps/sandbox/freeplay.map.gram) fall through to serveMapsIfMatched as before.
       if (url.pathname === "/maps" || url.pathname === "/maps/" || url.pathname.startsWith("/maps/")) {
-        if (req.method === "POST" || req.method === "DELETE") {
+        if (req.method === "POST" || req.method === "DELETE" || req.method === "GET") {
           const traceId = randomUUID();
           const handled = await runWithRequestTrace(traceId, () =>
             runtime.runPromise(
