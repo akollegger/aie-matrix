@@ -312,3 +312,7 @@ awkward and bloats the `.tsx` file with content that belongs in the world layer.
 with no movement capability. Rejected because it misuses the ghost identity and
 adoption system, adds noise to occupancy queries, and breaks the clean
 separation between agents (ghosts) and world fixtures (objects).
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — Item definition sidecars (`.items.json`) are mutable operational content that must not be baked into container images. In Tier 3 they are stored in GCS and fetched at startup; `ItemService` must support GCS fetch when `GCS_BUCKET` is set and `AIE_MATRIX_ITEMS` is not a local path.

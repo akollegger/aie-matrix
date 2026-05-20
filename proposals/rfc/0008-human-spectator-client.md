@@ -212,6 +212,17 @@ At Personal stop the R3F scene occupies the portion of the viewport not covered
 by the overlay. Ghost interiority (goals, memories, inventory) appears as
 ambient annotation within the R3F scene itself, not in the panel.
 
+**Layered spatial descriptions.** Tile types, polygon regions, and items each
+carry a `description` field in `.map.gram`. These compose into a spatial
+narrative that increases in richness as stops zoom in. At Room stop a hovered
+cell might surface only its tile type description. At Situational and Personal,
+the full containment chain is assembled — from item to tile to polygon to map
+— producing descriptions like *”some flowers on a desk, placed on a carpet,
+in the middle of the foyer”*. The intermedium assembles this chain from the
+map topology loaded at startup; no additional server query is required for the
+spatial context portion. Ghost-specific state (position, items held) overlays
+the static spatial context.
+
 **Copy rule:** avoid “quest” / “quest log” / “memory log” in any user-facing
 text. The aesthetic is **game-inspired**; the product is **not** a game.
 
@@ -358,3 +369,7 @@ pre-built application shell. Rejected.
 (holding a phone up to see ghost world overlaid on real space). Not appropriate
 for a phone/desktop spectator interface without a headset. Deferred — could be
 revisited if an AR mode is pursued post-AIEWF.
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — Reliable ghost-position broadcast to multiple spectator clients across Colyseus replicas requires `RedisPresence` + `RedisDriver` (Tier 3). In Tier 1 (local dev), a single Colyseus process with `LocalPresence` is sufficient. The client itself is stateless and connects to whichever Colyseus endpoint is configured.

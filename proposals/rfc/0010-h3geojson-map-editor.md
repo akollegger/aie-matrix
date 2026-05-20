@@ -1,7 +1,8 @@
 # RFC-0010: H3GeoJSON Map Format and Native Map Editor
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-04-28  
+**Revised:** 2026-05-17  
 **Authors:** @akollegger  
 **Related:** [ADR-0005](../adr/0005-h3-native-map-format.md) (H3-native map format),
 [RFC-0004](0004-h3-geospatial-coordinate-system.md) (H3 coordinate system),
@@ -10,8 +11,7 @@
 ## Summary
 
 Define H3GeoJSON as the native geometry model for `.map.gram` and `.world.gram`,
-and specify a browser-based map editor — forked from
-[h3-viewer](https://github.com/JosephChotard/h3-viewer) — that authors maps
+and specify a browser-based map editor built on MapLibre GL that authors maps
 directly in this format without Tiled as an intermediary. H3GeoJSON is
 GeoJSON's geometry model adapted to use H3 cell indices as coordinates.
 The editor replaces the Tiled authoring workflow for venue-scale maps (e.g.
@@ -59,8 +59,8 @@ H3GeoJSON is GeoJSON's geometry model with H3 cell indices substituted for
 | 3+ | Polygon | A closed, filled region |
 
 Two-vertex shapes (LineString) are not used. Directed connections between
-tiles are portals — authored as typed relationships in the portal layer, not
-as geometry.
+tiles are portals — serialised as `[:Portal { geometry: [from, to] }]`
+elements inside tile layers, not as standalone graph relationships.
 
 Polygon shapes are always closed; the editor enforces this and does not
 require the author to repeat the first vertex.
@@ -97,7 +97,7 @@ name conventions:
 
 ### `.map.gram` schema
 
-A map file contains five sections in order:
+A map file contains six sections in order:
 
 **1. Header**
 ```
@@ -137,28 +137,89 @@ Properties: `name` (string, required), `description` (string, optional),
 Properties: `name`, `description`, `glyph` (char), `takeable` (boolean),
 `capacityCost` (integer), `style` (CSS).
 
-**4. Tile instances and shapes (H3GeoJSON geometry)**
+**4. Layers**
 
-Single tiles are point geometries. Regions are polygon geometries with an
-ordered vertex list of H3 indices. Portals are relationships and are not
-represented as geometry (see Portals below).
+Each layer is a gram path with a `kind` property and inline element nodes.
+Tile and polygon elements use a `geometry` array of H3 indices.
 
-**5. Item instances**
+Tile layer — contains tile instances and portals:
 ```
-(key1:BrassKey { location: h3`8f2800000000015` })
+[hallFloor:Layer { kind: "tile", name: "Hall Floor" } |
+    [:Tile:CarpetedFloor { geometry: [h3`8f2800000000195`] }],
+    [:Tile:CarpetedFloor { geometry: [h3`8f28000000001a4`] }],
+    [:Portal { geometry: [h3`8f2800000000195`, h3`8f28000000001a4`], mode: "Door" }]
+]
 ```
+
+Polygon layer — stores vertex cells only (interior fill is recomputed at load):
+```
+[hallRegion:Layer { kind: "polygon", name: "Hall Region" } |
+    (hall-a:Polygon:CarpetedFloor {
+        name: "Hall A",
+        description: "Main session hall. Carpeted seating area for 500.",
+        geometry: [
+            h3`8f2800000000195`,
+            h3`8f28000000001a4`,
+            h3`8f2800000000c54`,
+            h3`8f2800000000c6c`
+        ]
+    }),
+    (hall-a-stage:Polygon:SessionRoom:StagedArea {
+        name: "Hall A Stage",
+        description: "Raised stage at the front of Hall A. A speaker claims this room to broadcast to everyone in the hall.",
+        geometry: [h3`8f2800000000100`, h3`8f2800000000101`, h3`8f2800000000102`]
+    })
+]
+```
+
+Every polygon node requires `name` and `description`. These fields are
+mandatory — the editor blocks confirmation of a polygon that lacks either.
+
+Polygon nodes **must** carry a node identifier (e.g. `hall-a`) whenever the
+polygon will be referenced at runtime. The node identifier is the stable
+machine key. The `name` property is the human-readable display label surfaced
+to agents and UIs; `description` gives spatial context in natural language.
+
+The `SessionRoom` label is the server's signal that a polygon is claimable
+via the `claim` / `yield` mechanic (RFC-0012). Adding or removing this label
+is toggled by a checkbox in the polygon property editor. Any polygon may carry
+the label; the server ignores it on polygons that lack a node identifier.
+Other semantic labels may be added the same way in future RFCs.
+
+Item layer:
+```
+[items:Layer { kind: "items", name: "Items" } |
+    [:Item:BrassKey { geometry: [h3`8f2800000000015`] }]
+]
+```
+
+**5. Layer stack**
+
+The `LayerStack` node records display order bottom-to-top:
+```
+[layers:LayerStack | hallRegion, hallFloor, items]
+```
+
+**6. Movement rules**
+
+One auto-generated self-traversal rule per tile type. The engine uses these
+to determine which tile types agents can move between:
+```
+[rules:Rules |
+    (carpetedFloor)-[:GO]->(carpetedFloor)
+]
+```
+
+Additional rules (e.g. cross-type transitions) may be authored manually.
 
 ### Portals
 
-A portal is a typed directed relationship between two existing tile references.
-It does not imply or create tiles — it connects tiles that already exist.
+A portal is a geometry element inside a tile layer. It stores exactly two
+H3 cell indices in its `geometry` array — the directed source and destination.
+It does not imply or create tiles; both cells must already exist in the layer.
 
 ```
-// By reference (tiles defined elsewhere in the map)
-(entrance)-[:Portal { mode: "Elevator" }]->(lobby)
-
-// Inline (tiles defined at point of use)
-(a:Tile { location: h3`8f28...` })-[:Portal { mode: "Stairs" }]->(b:Tile { location: h3`8f29...` })
+[:Portal { geometry: [h3`8f2800000000195`, h3`8f28000000001a4`], mode: "Door" }]
 ```
 
 Portal `mode` values are open-ended strings. Suggested values: `"Elevator"`,
@@ -193,63 +254,79 @@ individual map files.
 
 ### Layer model
 
-The editor organises authoring into four layer types per map, each with a
-distinct content type and interaction model:
+The editor organises authoring into three layer kinds per map. All layers
+are held in a single ordered `layers` array; the `LayerStack` node records
+the display order (bottom-to-top).
 
-**Polygon layer (zero or one per map).** Drawing surface for closed filled
-regions only. Each polygon is assigned a tile type from the palette. Polygons
-require a minimum of three vertices and are always closed — the editor
-prevents open shapes and has no concept of points or lines in this layer.
-On confirmation, `h3.polygonToCells` populates the tile layer with the
-filled cell set.
+**Polygon layer (`kind: "polygon"`, zero or one per map).** Drawing surface
+for closed filled regions. Each polygon is assigned a tile type from the
+palette. Polygons require a minimum of three vertices and are always closed.
+The implementation stores **only the vertex cells** — the full interior cell
+set is recomputed on demand via `h3.polygonToCells`. This avoids storing
+large cell arrays in the file while keeping the gram source compact.
+Vertex snapping ensures every vertex is an exact H3 cell centroid — no
+approximate positioning.
 
-**Tile layer (exactly one per map).** The canonical set of tile instances.
-Populated by: polygon fill (from the polygon layer), direct cell painting, or
-import from an existing `.tmj`. Individual cells are painted and erased here;
-type overrides for cells inside polygons are also authored here. This layer is
-what the game engine consumes.
+**Tile layer (`kind: "tile"`, one or more per map).** Contains tile instances
+and portal relationships. Populated by direct cell painting or from a polygon
+fill. Portals live in this layer as geometry elements alongside the tiles —
+there is no separate portal layer. This is a deliberate simplification: a
+portal is anchored to two specific cells and travels with the tile layer that
+owns those cells.
 
-**Portal layer (zero or one per map).** Directed traversal relationships
-between pairs of existing tiles. Select two tiles and create a typed directed
-Portal edge between them. Portals are relationships, not geometry — this layer
-authors edges, not nodes. Portal `mode` (e.g. `"Elevator"`, `"Stairs"`,
-`"Door"`) is set in the property editor.
+**Item layer (`kind: "items"`, zero or more per map).** Placement of item
+instances on tile cells. Multiple item layers are supported (e.g. `furniture`,
+`spawn-points`, `vendor-booths`). Each layer is independently toggleable.
 
-**Item layer (zero or more per map).** Placement of item instances on tile
-cells. Multiple item layers are supported (e.g. `furniture`, `spawn-points`,
-`vendor-booths`). Each layer is independently toggleable.
-
-| Layer | Count | Authors |
+| Layer kind | Count | Contains |
 |---|---|---|
-| Polygon | 0 or 1 | Closed filled regions (3+ vertices) |
-| Tile | exactly 1 | Individual cell instances and type overrides |
-| Portal | 0 or 1 | Directed traversal edges between tile pairs |
-| Item | 0 or more | Item instances placed on tiles |
+| `"polygon"` | 0 or 1 | Closed filled regions (3+ vertices, vertex-only storage) |
+| `"tile"` | 1 or more | Tile instances + portal edges between cell pairs |
+| `"items"` | 0 or more | Item instances placed on tile cells |
 
-### Editor (h3-viewer fork)
+### Editor
 
-The editor is a fork of
-[JosephChotard/h3-viewer](https://github.com/JosephChotard/h3-viewer), which
-already provides H3 cell rendering on an OpenStreetMap/Mapbox base, multi-cell
-selection, and H3 index accumulation. The fork adds:
+The editor is built with TypeScript 5.7, React 18, Vite 6, MapLibre GL 5
+(base map), h3-js 4, and `@relateby/pattern` for gram import parsing.
+It is browser-only; files are exchanged via browser download/upload with
+no server-side persistence.
 
-- **Polygon draw mode.** Click to place vertices; the editor snaps each vertex
-  to the nearest H3 cell centroid. The polygon closes automatically on
-  confirmation. Minimum three vertices enforced.
-- **Polygon fill.** On confirmation, calls `h3.polygonToCells` to derive the
-  interior cell set. The tile layer is populated from this set.
-- **Property editor panel.** Select a cell, polygon, or item to inspect and
-  edit its type and properties.
-- **Layer panel.** Toggle visibility and editability of polygon, tile, portal,
-  and item layers.
+Features:
+
+- **Polygon draw mode.** Two sub-modes: freeform vertex-by-vertex placement
+  (vertices snap to H3 cell centroids, min 3 vertices enforced, polygon
+  closes on confirmation) and one-click preset shapes (3/4/6-vertex regular
+  polygons centred on the clicked cell). Vertex drag is supported for
+  post-creation adjustment.
+- **Polygon fill.** On confirmation or vertex edit, calls
+  `h3.polygonToCellsExperimental(vertices, 15, containmentOverlapping)` to
+  derive the interior cell set for display. Only the vertex cells are
+  persisted; the fill is recomputed at load time.
+- **Property editor panel.** Context-aware: shows map metadata (name,
+  description, elevation, bounding-box, movement rules) when nothing is
+  selected; shows type and editable properties when a tile, polygon, portal,
+  or item is selected. For polygons, `name` and `description` are required
+  fields — the editor marks them invalid and blocks export until both are
+  filled. A **Session Room** checkbox toggles the `SessionRoom` label on the
+  polygon node, signalling to the world server that the polygon is
+  claimable/yieldable.
+- **Layer panel.** Toggle visibility (eye icon) and editability (lock icon)
+  per layer. Layers can be renamed, added, removed, and reordered.
 - **Tile type palette.** Define tile types with name, description, capacity,
-  and style. Paint cells by selecting a type and clicking.
-- **Item type palette.** Define item types with name, description, glyph,
-  takeable, and capacityCost. Place instances on tile cells.
-- **Portal tool.** Select two cells and create a typed directed Portal
-  relationship between them.
-- **Export to `.map.gram`.** Serialise the full map to H3GeoJSON-based gram
-  format. Import from `.map.gram` for continued editing.
+  and CSS style. The built-in "Floor" type is immutable. Paint cells by
+  selecting a type and clicking; eraser mode removes individual cells.
+- **Item type palette.** Define item types with name, description, glyph
+  (Unicode character), takeable flag, capacityCost, and style. Place
+  instances on tile cells.
+- **Portal tool.** Click a source cell (SELECT_PORTAL_FROM), then a
+  destination cell (CREATE_PORTAL) to create a typed directed Portal element
+  in the active tile layer. Portal `mode` is editable in the property panel.
+- **Export to `.map.gram`.** Serialises the full map — header, types, layers,
+  instances, polygons (vertices only), portals, movement rules — to gram
+  format for download.
+- **Import from `.map.gram`.** Parses via `@relateby/pattern`, restores all
+  types and layers, recomputes polygon fills from vertex cells. Emits import
+  warnings for unrecognised fields.
 - **GeoJSON import (deferred).** Import an external GeoJSON polygon (e.g. from
   OpenStreetMap) as a starting polygon shape. Deferred because imported
   polygons will require vertex adjustment to snap to H3 cells — a workflow that
@@ -275,6 +352,16 @@ selection, and H3 index accumulation. The fork adds:
 4. **`.world.gram` editor.** Assembling a world from multiple maps is deferred.
    The editor targets single-map authoring for MVP.
 
+5. **Movement rules authoring.** The current implementation auto-generates one
+   self-traversal rule per tile type and exposes the full rule set as read-only
+   in the property panel. Whether authors should be able to add cross-type
+   traversal rules (e.g. agents on `CarpetedFloor` can enter `StagedArea`) is
+   not decided. A full movement-rules editor is deferred.
+
+6. **Undo/redo.** There is no undo system. Import-save-reload is the current
+   recovery path. A history stack would significantly improve authoring
+   ergonomics at venue scale but is deferred for MVP.
+
 ## Alternatives
 
 **Continue extending the Tiled workflow.** The `tmj-to-gram` converter already
@@ -298,9 +385,13 @@ H3 is non-trivial at polygon boundaries and still requires the vertex-snap
 problem to be solved. A purpose-built editor that works natively in H3
 coordinates eliminates this class of error entirely.
 
-**Build the editor from scratch.** A clean-room implementation would have no
-dependency on the h3-viewer codebase. Rejected: the h3-viewer already provides
-the hardest parts — H3 rendering on a real-world map base, multi-cell
-selection, and H3 index export. Forking gives immediate visual feedback during
-development and a working baseline to validate design decisions against real
-geography.
+**Build the editor from scratch.** A clean-room implementation was initially
+expected to fork [h3-viewer](https://github.com/JosephChotard/h3-viewer).
+In practice the implementation was built on MapLibre GL 5 directly, which
+gave finer control over hex rendering and layer interaction. h3-viewer
+provided useful reference for H3 index accumulation patterns but was not
+forked.
+
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — `.map.gram` files exported by this editor are the "authored artifacts" in ADR-0007's source-of-truth hierarchy. They are uploaded to GCS and seeded into Neo4j via the map publish step before world-api can serve them. The editor itself is a development tool and has no runtime presence in Tier 2/3.

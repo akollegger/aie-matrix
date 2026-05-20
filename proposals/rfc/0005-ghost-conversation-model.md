@@ -162,4 +162,8 @@ The interface requires:
 
 **Full content in Neo4j** — messages as nodes in the world graph. Highly queryable and graph-traversable, but adds write latency to every message and may not scale to conference volume without dedicated tuning. Deferred as a potential future store implementation behind the pluggable interface.
 
+## Related Decisions
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — The JSONL `ConversationStore` is the Tier 1 implementation. In Tier 3 (production), conversation history must persist to Neo4j Aura via a Neo4j-backed `Layer` implementation — the same pluggable interface defined here. The switch is triggered by leaving `CONVERSATION_DATA_DIR` unset in the production environment.
+
 **Variable cluster radius ("shouting")** — a ghost could temporarily expand its broadcast cluster to 2 rings (19 cells) at some cost. This is intentionally out of scope for this RFC. It is a game mechanic that can be layered on top of the cluster model without changing any primitives defined here — the conversation store, signal format, and MCP tool are all radius-agnostic. A future RFC can introduce it as a ghost capability.

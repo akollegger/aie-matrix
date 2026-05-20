@@ -269,10 +269,15 @@ Phase 1/2/3 scope.
 requiring all third parties to host their own endpoints. This is simpler but
 may limit contribution. Flagged as open question above.
 
+## Deployment Constraints
+
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — ghost-house is the last service in the startup dependency chain (world-api and Colyseus must be ready before ghost-house is marked ready). The agent catalog (`catalog.json`) must persist to Neo4j Aura in Tier 3; the `CATALOG_FILE_PATH` env var selects the backing implementation. ghost-house is designed to be stateless: killed and restarted at any time, with registered agents re-attaching via A2A heartbeat after a restart.
+
 ## References
 
 - [A2A Protocol Specification v0.3.0](https://a2a-protocol.org/latest/specification/)
 - [@a2a-js/sdk (npm)](https://www.npmjs.com/package/@a2a-js/sdk)
 - [ADR-0001: MCP Ghost Wire Protocol](../adr/0001-mcp-ghost-wire-protocol.md)
 - [ADR-0004: A2A as the Ghost Agent Protocol](../adr/0004-a2a-ghost-agent-protocol.md)
+- [ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)
 - [RFC-0005: Ghost Conversation Model](0005-ghost-conversation-model.md)
