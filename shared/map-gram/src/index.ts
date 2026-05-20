@@ -3,6 +3,10 @@ export { computeCellsFromVertices } from "./expand-polygon.js";
 export type {
   ParsedMap,
   ParsedCell,
+  ParsedLayer,
+  ParsedExplicitTile,
+  ParsedPolygon,
+  ParsedItemPlacement,
   ParsedPortal,
   ParsedRule,
   TileTypeDef,

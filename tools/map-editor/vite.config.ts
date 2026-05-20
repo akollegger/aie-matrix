@@ -13,7 +13,7 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5181,
+    port: 5182,
     fs: {
       allow: [path.resolve(__dirname, "../..")],
     },

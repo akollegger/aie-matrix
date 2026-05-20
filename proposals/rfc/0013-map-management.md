@@ -1,6 +1,6 @@
 # RFC-0013: Map Management — Publish, Activate, and Archive
 
-**Status:** draft  
+**Status:** under review  
 **Date:** 2026-05-17  
 **Authors:** @akollegger  
 **Related:** [ADR-0007](../adr/0007-three-tier-deployment.md) (three-tier deployment), [RFC-0009](0009-map-format-pipeline.md) (map format pipeline), [RFC-0012](0012-speaker-rooms.md) (speaker rooms)
@@ -19,7 +19,44 @@ ADR-0007 establishes that maps are GCS artifacts with Neo4j as the runtime sourc
 
 The degenerate case the initial implementation covers: one live session, one world, one map.
 
+## Acceptance Criteria
+
+- An operator can `POST /maps` with a `.map.gram` file and receive a `{ mapId, status: "published" }` response. The map artifact is retrievable via `GET /maps/:mapId`.
+- An operator can `POST /live` referencing a published map and receive a session object. `GET /live?status=active` returns the session.
+- After `PATCH /live/:id/maps`, world-api rejects `go` commands targeting `removedCells` with `CELL_NOT_IN_MAP`, and Colyseus broadcasts a `message.map-changed` room event.
+- A ghost on a `removedCell` after a map switch is either teleported to `respawnCell` (if declared) or enters limbo (if not), and `whereami` returns `GHOST_IN_LIMBO` in the limbo case.
+- `DELETE /maps/:mapId` returns `409` when the map is referenced by an active session, and succeeds otherwise.
+- Services started with `LIVE_SESSION_ID` set load their primary map from GCS via `GET /live/{id}`, not from the local filesystem.
+
+## Demo / Verification
+
+Prerequisites: world-api running with a live Neo4j connection and `GCS_BUCKET` set (or a MinIO substitute — see Open Question 3). `ADMIN_TOKEN` set in the server's env.
+
+1. Publish a map:
+   ```
+   curl -X POST http://localhost:3000/maps \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -F "mapId=sandbox-freeplay" \
+     -F "file=@maps/sandbox/freeplay.map.gram"
+   # → { "mapId": "sandbox-freeplay", "status": "published" }
+   ```
+2. Start a session:
+   ```
+   curl -X POST http://localhost:3000/live \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"name":"Dev Session","maps":[{"mapId":"sandbox-freeplay","role":"primary"}]}'
+   # → session object with "status": "active"
+   ```
+3. Register a ghost and issue `whereami` — it should reflect cells from `sandbox-freeplay`.
+4. Publish a second map and call `PATCH /live/:id/maps` to switch. Observe ghost evacuation if the ghost is on a removed cell.
+5. Call `DELETE /live/:id`. Confirm `GET /live?status=active` returns `[]`.
+
+Expected time for a contributor familiar with the codebase: ~20 minutes with a running server.
+
 ## Design
+
+Both surfaces are implemented in `server/world-api/`, exposed at the same port as the existing MCP and registry routes.
 
 ### Neo4j model
 
@@ -67,9 +104,9 @@ Content-Type: multipart/form-data
 
 Server steps:
 1. Parse and validate the `.map.gram`: `kind: "matrix-map"` header, LayerStack walk, all navigable cells have `h3Index`.
-2. Compute SHA-256. If an existing `(:Map { mapId })` has the same `contentHash`, return it unchanged (idempotent).
+2. If an existing `(:Map { mapId })` node exists with an identical artifact, return it unchanged (idempotent). Content comparison mechanism is left to the implementer; `contentHash` is stored for cache validation.
 3. Upload to `gs://{GCS_BUCKET}/maps/{mapId}.map.gram` (overwrites any existing object).
-4. Upsert `(:Map { mapId, gcsPath, contentHash, status: "published", publishedAt: now() })`.
+4. Upsert `(:Map { mapId, gcsPath, contentHash, status: "published", publishedAt: now() })`. `contentHash` value and hashing algorithm are the implementer's choice.
 5. Return `{ mapId, gcsPath, status: "published" }`.
 
 #### `GET /maps`
@@ -204,6 +241,8 @@ This means clients are resilient to session restarts without any server-side "la
 
 ### `world.map-changed` handling per service
 
+Events are published to the Redis channel `aie-matrix:world-events`. This constant should be extracted into `@aie-matrix/shared-types` so all subscribers use the same value.
+
 **world-api:** Rebuilds in-memory movement graph and cell index. Applies ghost evacuation (below). Rejects movement commands on `removedCells` with `CELL_NOT_IN_MAP`.
 
 **Colyseus:** Removes `ghostTiles` entries for ghosts on `removedCells`. Broadcasts a `message.map-changed` room event to connected clients with `removedCells` and `addedCells`.
@@ -235,6 +274,8 @@ If absent: affected ghosts enter **limbo** — their position is retained but `g
 4. ~~**Multiple simultaneous sessions.**~~ **Resolved.** Server processes receive their session assignment via `LIVE_SESSION_ID` at deploy time; they do not discover sessions. Browser clients store their last session ID and re-join on reconnect, or present a session picker on first visit. The "take first active session" path is retained only as a single-session convenience for Tier 1/2.
 
 5. **Speaker room state across map switch.** If a polygon's geometry changes in the new map (same name, different cell set), existing listeners in the still-present polygon are not re-evaluated. Only ghosts on fully removed polygons are released. Is this the right behaviour?
+
+6. **`ADMIN_TOKEN` auth mechanism.** All `/maps/` and `/live/` endpoints require `Authorization: Bearer {ADMIN_TOKEN}`. The initial implementation should treat `ADMIN_TOKEN` as a static env-var secret validated by a simple equality check in an Effect-ts middleware layer. This is intentionally minimal — the "Authentication and Identity" open question in `docs/architecture.md` governs the long-term solution. The middleware should be extractable without changing route logic when that question is resolved.
 
 ## Alternatives
 

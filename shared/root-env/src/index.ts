@@ -5,6 +5,15 @@ import { fileURLToPath } from "node:url";
 
 export { isEnvTruthy } from "./debug-env.js";
 
+/** GCS bucket name for map artifact storage. Unset in Tier 1 — services use a local stub. */
+export const GCS_BUCKET = process.env.GCS_BUCKET;
+
+/** Static bearer token for admin-only management endpoints. Never logged. */
+export const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
+
+/** ULID of the live session this process instance serves. Required in multi-session deployments. */
+export const LIVE_SESSION_ID = process.env.LIVE_SESSION_ID;
+
 /**
  * Walks up from this package (or its compiled `dist/`) until `pnpm-workspace.yaml`
  * is found, then loads that directory’s `.env` and optional `.env.local` if present.

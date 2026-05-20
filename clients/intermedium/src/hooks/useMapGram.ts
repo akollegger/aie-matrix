@@ -10,9 +10,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-function mapUrl(base: string, mapId: string): string {
+function currentMapUrl(base: string): string {
   const b = base.endsWith("/") ? base.slice(0, -1) : base;
-  return `${b}/maps/${encodeURIComponent(mapId)}?format=gram`;
+  return `${b}/live/@current/map`;
 }
 
 /**
@@ -30,19 +30,17 @@ export function useMapGram(): {
 
   const load = useCallback(async () => {
     const base = import.meta.env.VITE_WORLD_API_URL ?? "";
-    const mapId = import.meta.env.VITE_MAP_ID ?? "sandbox";
     if (!base) {
       setError("VITE_WORLD_API_URL is not set");
       setStatus("error");
       return;
     }
+    const url = currentMapUrl(base);
     setError(null);
     setStatus("loading");
     for (let attempt = 0; attempt < RETRIES; attempt++) {
       try {
-        const res = await fetch(mapUrl(base, mapId), {
-          headers: { Accept: "text/plain" },
-        });
+        const res = await fetch(url, { headers: { Accept: "text/plain" } });
         if (!res.ok) {
           throw new Error(`Map fetch failed: HTTP ${res.status}`);
         }
@@ -56,7 +54,7 @@ export function useMapGram(): {
           await sleep(BACKOFF_MS);
         } else {
           const msg = e instanceof Error ? e.message : "Map load failed";
-          console.error(`[intermedium] map load failed (${mapUrl(base, mapId)}):`, e);
+          console.error(`[intermedium] map load failed (${url}):`, e);
           setError(msg);
           setStatus("error");
         }

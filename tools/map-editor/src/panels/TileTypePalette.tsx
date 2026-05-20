@@ -9,6 +9,17 @@ function toLabelSafe(name: string): string {
     .map(w => w.charAt(0).toUpperCase() + w.slice(1)).join("") || "Type"
 }
 
+function toKebabId(name: string): string {
+  return name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "type"
+}
+
+function uniqueId(base: string, taken: Set<string>): string {
+  if (!taken.has(base)) return base
+  let n = 2
+  while (taken.has(`${base}-${n}`)) n++
+  return `${base}-${n}`
+}
+
 const rowStyle = (active: boolean): CSSProperties => ({
   display: "flex",
   alignItems: "center",
@@ -42,7 +53,7 @@ function TileTypeRow({
   active: boolean
   onSelect: () => void
 }) {
-  const { dispatch } = useEditor()
+  const { state, dispatch } = useEditor()
   const [editing, setEditing] = useState(false)
   const [draftName, setDraftName] = useState(tileType.name)
   const isBuiltin = tileType.id === BUILTIN_FLOOR_ID
@@ -53,7 +64,10 @@ function TileTypeRow({
     setEditing(false)
     const trimmed = draftName.trim()
     if (trimmed && trimmed !== tileType.name) {
-      dispatch({ type: "UPDATE_TILE_TYPE", id: tileType.id, patch: { name: trimmed, typeName: toLabelSafe(trimmed) } })
+      const newTypeName = toLabelSafe(trimmed)
+      const takenIds = new Set(state.tileTypes.filter(t => t.id !== tileType.id).map(t => t.id))
+      const newId = uniqueId(toKebabId(trimmed), takenIds)
+      dispatch({ type: "UPDATE_TILE_TYPE", id: tileType.id, patch: { name: trimmed, typeName: newTypeName, id: newId } })
     } else {
       setDraftName(tileType.name)
     }
@@ -128,8 +142,10 @@ export function TileTypePalette() {
   if (!activeLayer || activeLayer.kind !== "tile") return null
 
   function addType() {
-    const id = `type-${Date.now().toString(36)}`
-    dispatch({ type: "CREATE_TILE_TYPE", tileType: { id, typeName: "NewType", name: "New Type" } })
+    const baseName = "New Type"
+    const takenIds = new Set(state.tileTypes.map(t => t.id))
+    const id = uniqueId(toKebabId(baseName), takenIds)
+    dispatch({ type: "CREATE_TILE_TYPE", tileType: { id, typeName: toLabelSafe(baseName), name: baseName } })
     dispatch({ type: "SET_ACTIVE_TYPE", typeId: id })
   }
 
