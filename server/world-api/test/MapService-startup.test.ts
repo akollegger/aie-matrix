@@ -45,12 +45,12 @@ test("startup: malformed gram → MapError.GramParse", async () => {
   }
 });
 
-test("startup: matrix-map name ≠ filename stem → MapError.NameMismatch", async () => {
+test("startup: matrix-map name ≠ filename stem → succeeds (name is display text, stem is mapId)", async () => {
   const root = await mkdtemp(join(tmpdir(), "map-startup-mismatch-"));
   try {
     await writePair(root, "sandbox", "name-mismatch", "name-mismatch.map.gram");
     const exit = await Effect.runPromiseExit(acquireMapService(root));
-    assertFailureWithTag(exit, "MapError.NameMismatch");
+    assert.ok(Exit.isSuccess(exit), "name mismatch should no longer block load");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
