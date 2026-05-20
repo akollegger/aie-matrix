@@ -42,15 +42,13 @@ You **MUST** consider the user input before proceeding (if not empty).
     To execute: `/{command}`
     ```
   - **Mandatory hook** (`optional: false`):
-    ```
-    ## Extension Hooks
-
-    **Automatic Pre-Hook**: {extension}
-    Executing: `/{command}`
-    EXECUTE_COMMAND: {command}
-
-    Wait for the result of the hook command before proceeding to the Outline.
-    ```
+    - Announce the hook in your output: `**Automatic Pre-Hook**: {extension} — /{command}`
+    - **Do NOT use the `Skill` tool.** The `Skill` tool creates a turn boundary — the sub-skill runs in a separate conversation turn and control does not automatically return here, breaking the sequential flow.
+    - Instead, run the hook's underlying script directly via Bash:
+      - For the `git` extension: `bash .specify/extensions/git/scripts/bash/create-new-feature.sh --json --short-name "<short-name>" "<feature description>"`
+      - For other extensions: look for scripts in `.specify/extensions/{extension}/scripts/bash/`
+    - Capture the JSON output. For the git hook, extract `BRANCH_NAME` and `FEATURE_NUM`.
+    - **Immediately continue with the Outline steps in the same response.** Do not wait for user input.
 - If no hooks are registered or `.specify/extensions.yml` does not exist, skip silently
 
 ## Outline
