@@ -1,3 +1,4 @@
+import { cellToLatLng } from "h3-js"
 import { computeCellsFromVertices, polygonAnchorCells } from "../map/polygon-geometry"
 import { h3Index } from "../types/map-gram"
 import type {
@@ -89,6 +90,8 @@ export function makeInitialState(): MapEditorState {
       draggedPolygon: null,
       editingPolygon: null,
       vertexDragPreview: null,
+      pendingFitBounds: null,
+      publishedMapId: null,
     },
   }
 }
@@ -128,6 +131,7 @@ export type EditorAction =
   | { type: "CANCEL_POLYGON" }
   | { type: "DELETE_POLYGON"; layerId: string; id: string }
   | { type: "UPDATE_POLYGON_TYPE"; layerId: string; id: string; typeName: string }
+  | { type: "UPDATE_POLYGON_PROPERTIES"; layerId: string; id: string; name: string; description: string }
   // Portals (active tile layer)
   | { type: "SELECT_PORTAL_FROM"; h3: H3Index }
   | { type: "CREATE_PORTAL"; h3: H3Index }
@@ -160,6 +164,8 @@ export type EditorAction =
   | { type: "SET_BOUNDING_BOX_VISIBILITY"; visible: boolean }
   // Import
   | { type: "IMPORT_MAP"; state: MapEditorState }
+  | { type: "CLEAR_FIT_BOUNDS" }
+  | { type: "SET_PUBLISHED_MAP_ID"; mapId: string | null }
 
 // ---------------------------------------------------------------------------
 // Reducer
@@ -344,11 +350,38 @@ export function editorReducer(
       }
     }
 
-    case "UPDATE_TILE_TYPE":
+    case "UPDATE_TILE_TYPE": {
+      const existing = state.tileTypes.find(t => t.id === action.id)
+      const oldTypeName = existing?.typeName
+      const newTypeName = action.patch.typeName
+      const newId = action.patch.id
+      const typeNameChanged = !!(oldTypeName && newTypeName && oldTypeName !== newTypeName)
       return {
         ...state,
         tileTypes: state.tileTypes.map(t => t.id === action.id ? { ...t, ...action.patch } : t),
+        // Cascade typeName change to rules and polygon typeNames
+        rules: typeNameChanged
+          ? state.rules.map(r => ({
+              fromTypeName: r.fromTypeName === oldTypeName ? newTypeName : r.fromTypeName,
+              toTypeName:   r.toTypeName   === oldTypeName ? newTypeName : r.toTypeName,
+            }))
+          : state.rules,
+        layers: typeNameChanged
+          ? state.layers.map(l =>
+              l.kind !== "polygon" ? l : {
+                ...l,
+                committed: l.committed.map(p =>
+                  p.typeName === oldTypeName ? { ...p, typeName: newTypeName } : p
+                ),
+              } as PolygonLayerState
+            )
+          : state.layers,
+        // Cascade id change to activeTypeId
+        ui: newId && newId !== action.id && state.ui.activeTypeId === action.id
+          ? { ...state.ui, activeTypeId: newId }
+          : state.ui,
       }
+    }
 
     case "DELETE_TILE_TYPE":
       if (action.id === BUILTIN_FLOOR_ID) return state
@@ -433,6 +466,16 @@ export function editorReducer(
         layers: state.layers.map(l =>
           l.id === action.layerId && l.kind === "polygon"
             ? { ...l, committed: l.committed.map(p => p.id === action.id ? { ...p, typeName: action.typeName } : p) } as PolygonLayerState
+            : l
+        ),
+      }
+
+    case "UPDATE_POLYGON_PROPERTIES":
+      return {
+        ...state,
+        layers: state.layers.map(l =>
+          l.id === action.layerId && l.kind === "polygon"
+            ? { ...l, committed: l.committed.map(p => p.id === action.id ? { ...p, name: action.name || undefined, description: action.description || undefined } : p) } as PolygonLayerState
             : l
         ),
       }
@@ -638,8 +681,30 @@ export function editorReducer(
       return { ...state, ui: { ...state.ui, showBoundingBox: action.visible } }
 
     // --- Import ---
-    case "IMPORT_MAP":
-      return action.state
+    case "IMPORT_MAP": {
+      const allCells = action.state.layers.flatMap(l => {
+        if (l.kind === "tile") return Array.from(l.tiles.keys()) as string[]
+        if (l.kind === "polygon") return l.committed.flatMap(p => p.cells as string[])
+        if (l.kind === "items") return l.items.map(i => i.h3Index as string)
+        return []
+      })
+      if (allCells.length === 0) return action.state
+      let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity
+      for (const cell of allCells) {
+        const [lat, lng] = cellToLatLng(cell)
+        if (lat < south) south = lat
+        if (lat > north) north = lat
+        if (lng < west) west = lng
+        if (lng > east) east = lng
+      }
+      return { ...action.state, ui: { ...action.state.ui, pendingFitBounds: { west, south, east, north } } }
+    }
+
+    case "CLEAR_FIT_BOUNDS":
+      return { ...state, ui: { ...state.ui, pendingFitBounds: null } }
+
+    case "SET_PUBLISHED_MAP_ID":
+      return { ...state, ui: { ...state.ui, publishedMapId: action.mapId } }
 
     default:
       return state

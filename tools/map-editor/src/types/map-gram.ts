@@ -64,6 +64,9 @@ export interface PolygonShape {
   sides: number
   /** The N vertex H3 cells defining the shape corners; stored for vertex editing */
   vertices?: H3Index[]
+  /** Human name for the polygon region (e.g. "Main Stage"). Used for speaker room claiming. */
+  name?: string
+  description?: string
 }
 
 export interface Portal {

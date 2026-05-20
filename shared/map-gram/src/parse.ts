@@ -5,7 +5,11 @@ import { computeCellsFromVertices } from "./expand-polygon.js";
 import type {
   ItemTypeDef,
   ParsedCell,
+  ParsedExplicitTile,
+  ParsedItemPlacement,
+  ParsedLayer,
   ParsedMap,
+  ParsedPolygon,
   ParsedPortal,
   ParsedRule,
   TileTypeDef,
@@ -83,9 +87,12 @@ type LayerKind = "polygon" | "tile" | "items";
 
 interface LayerData {
   kind: LayerKind;
-  cells: Map<string, string>; // h3Index → tileType
-  items: Map<string, string[]>; // h3Index → [itemTypeName, ...]
+  name: string;
+  cells: Map<string, string>;        // h3Index → tileType (merged, for navigation)
+  items: Map<string, string[]>;      // h3Index → [itemTypeName, ...]
   portals: ParsedPortal[];
+  explicitTiles: ParsedExplicitTile[]; // only (:Tile:X) declarations
+  polygons: ParsedPolygon[];           // only (:Polygon:X) definitions (unexpanded)
 }
 
 // ---------------------------------------------------------------------------
@@ -210,9 +217,12 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
 
       const layerData: LayerData = {
         kind,
+        name: strProp(props, "name") ?? walkId,
         cells: new Map(),
         items: new Map(),
         portals: [],
+        explicitTiles: [],
+        polygons: [],
       };
 
       for (const elemPattern of pattern.elements) {
@@ -229,13 +239,12 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
           const h3 = h3s[0]!;
           if (!isValidCell(h3)) throw new MapGramParseError("invalid-h3", `Invalid H3 index: ${h3}`);
           layerData.cells.set(h3, typeName);
+          layerData.explicitTiles.push({ h3Index: h3, tileType: typeName, layerIdentity: walkId });
 
         } else if (HashSet.has(elemLabels, "Polygon")) {
-          // Polygon fill — expand vertices to cells
+          // Polygon fill — expand vertices to cells (for navigation) and record definition (for round-trip)
           const typeName = getNonCategoryLabel(elemLabels);
           if (!typeName) continue;
-          // No hard upper bound: real maps (e.g. map-with-polygons) have 7-vertex polygons.
-          // Minimum of 3 is required; polygonToCellsExperimental handles any count ≥ 3.
           if (h3s.length < 3) {
             console.warn(`[map-gram] Polygon:${typeName} has ${h3s.length} vertices (minimum 3) — skipped`);
             continue;
@@ -251,6 +260,13 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
           for (const h3 of filled) {
             layerData.cells.set(h3, typeName);
           }
+          const polygonName = strProp(elemProps, "name");
+          const polygonDesc = strProp(elemProps, "description");
+          layerData.polygons.push({
+            typeName, vertices: h3s, layerIdentity: walkId,
+            ...(polygonName !== undefined ? { name: polygonName } : {}),
+            ...(polygonDesc !== undefined ? { description: polygonDesc } : {}),
+          });
 
         } else if (HashSet.has(elemLabels, "Portal")) {
           if (h3s.length < 2) continue;
@@ -263,6 +279,7 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
             fromCell,
             toCell,
             mode: strProp(elemProps, "mode") ?? "Door",
+            layerIdentity: walkId,
           });
 
         } else if (HashSet.has(elemLabels, "Item")) {
@@ -300,20 +317,23 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
 
   // Step 5: apply layers in LayerStack order
   const cells = new Map<string, ParsedCell>();
+  const layers: ParsedLayer[] = [];
+  const explicitTiles: ParsedExplicitTile[] = [];
+  const polygons: ParsedPolygon[] = [];
+  const itemPlacements: ParsedItemPlacement[] = [];
   const portals: ParsedPortal[] = [];
 
-  const orderedLayers: LayerData[] = [];
-  for (const layerId of layerOrder) {
+  for (let stackOrder = 0; stackOrder < layerOrder.length; stackOrder++) {
+    const layerId = layerOrder[stackOrder]!;
     const layer = layersById.get(layerId);
     if (layer === undefined) {
       console.warn(`[map-gram] LayerStack references unknown layer "${layerId}" — skipped`);
-    } else {
-      orderedLayers.push(layer);
+      continue;
     }
-  }
 
-  for (const layer of orderedLayers) {
-    // Apply cells (tile overrides win over earlier polygon fills)
+    layers.push({ identity: layerId, kind: layer.kind, name: layer.name, stackOrder });
+
+    // Apply cells (tile overrides win over earlier polygon fills) — for navigation
     for (const [h3, tileType] of layer.cells) {
       const existing = cells.get(h3);
       if (existing) {
@@ -322,7 +342,7 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
         cells.set(h3, { h3Index: h3, tileType, items: [] });
       }
     }
-    // Attach items (creates implicit "open" cell if needed)
+    // Attach items to merged cells (for navigation) and collect placements (for Neo4j)
     for (const [h3, itemNames] of layer.items) {
       let cell = cells.get(h3);
       if (!cell) {
@@ -330,10 +350,15 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
         cells.set(h3, cell);
       }
       cell.items.push(...itemNames);
+      for (const itemTypeName of itemNames) {
+        itemPlacements.push({ h3Index: h3, itemTypeName, layerIdentity: layerId });
+      }
     }
-    // Collect portals
+    // Collect explicit tiles, polygons, and portals with their layer membership
+    explicitTiles.push(...layer.explicitTiles);
+    polygons.push(...layer.polygons);
     portals.push(...layer.portals);
   }
 
-  return { name, elevation, tileTypes, itemTypes, cells, portals, rules };
+  return { name, elevation, tileTypes, itemTypes, cells, layers, explicitTiles, polygons, itemPlacements, portals, rules };
 }

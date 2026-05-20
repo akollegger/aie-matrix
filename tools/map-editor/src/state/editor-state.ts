@@ -82,6 +82,10 @@ export interface UIState {
   editingPolygon: { layerId: string; polyId: string } | null
   /** Live preview while a vertex is being dragged */
   vertexDragPreview: { cells: H3Index[]; vertices: H3Index[] } | null
+  /** Set after IMPORT_MAP so MapView can fly to the imported content */
+  pendingFitBounds: { west: number; south: number; east: number; north: number } | null
+  /** mapId this buffer was last successfully published as; null if never saved */
+  publishedMapId: string | null
 }
 
 // ---------------------------------------------------------------------------

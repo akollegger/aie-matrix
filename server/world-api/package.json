@@ -21,11 +21,16 @@
     "@aie-matrix/server-colyseus": "workspace:*",
     "@aie-matrix/server-conversation": "workspace:*",
     "@aie-matrix/shared-types": "workspace:*",
+    "@aie-matrix/map-gram": "workspace:*",
+    "@google-cloud/storage": "^7.15.2",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@relateby/pattern": "^0.4.0",
+    "busboy": "^1.6.0",
     "effect": "^3.21.0",
     "h3-js": "^4.1.0",
+    "ioredis": "^5.4.2",
     "neo4j-driver": "^5.28.3",
+    "ulid": "^2.3.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
