@@ -9,7 +9,8 @@ import type {
   LiveSessionNotFoundError,
 } from "./live-errors.js";
 import { MapManagementService } from "../map/MapManagementService.js";
-import type { MapNotFoundError } from "../map/map-errors.js";
+import { MapService } from "../map/MapService.js";
+import type { MapFileReadError, MapNotFoundError } from "../map/map-errors.js";
 import type { GcsError } from "../gcs/GcsService.js";
 
 const LIVE_SINGLE_SEGMENT = /^\/live\/([^/]+)$/;
@@ -58,6 +59,8 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
 
 /**
  * Handles live session routes:
+ * - `GET /live/@current/map`   — gram of the primary map of the current live session
+ *                                (Tier 1 fallback: serves MapService.activeMapId() when no session)
  * - `POST /live`               — start a session (admin)
  * - `GET /live`                — list sessions (public)
  * - `GET /live/:id`            — get session (public)
@@ -76,21 +79,46 @@ export function tryHandleLiveSession(
   | LiveSessionMapNotPublishedError
   | LiveSessionAlreadyEndedError
   | MapNotFoundError
+  | MapFileReadError
   | GcsError,
-  LiveSessionService | MapManagementService
+  LiveSessionService | MapManagementService | MapService
 > {
   const { pathname } = url;
 
-  // GET /live/@current/map — gram of the primary map of the current live session
+  // GET /live/@current/map — gram of the primary map of the current live session.
+  // Tier 1 fallback: when no live session exists, serve from MapService.activeMapId()
+  // (set via AIE_MATRIX_MAP in local dev; skips Neo4j + GCS entirely).
   if (req.method === "GET" && (pathname === "/live/@current/map" || pathname === "/live/@current/map/")) {
     return Effect.gen(function* () {
       const liveSvc = yield* LiveSessionService;
       const sessions = yield* liveSvc.list("active");
       const session = sessions[0];
+
       if (!session) {
-        sendJson(res, 404, { error: "NoActiveSession", message: "No active live session." }, corsHeaders);
+        // Tier 1: no live session — fall back to MapService active map (AIE_MATRIX_MAP)
+        const fileSvc = yield* MapService;
+        const mapId = fileSvc.activeMapId();
+        if (mapId === undefined) {
+          sendJson(res, 404, { error: "NoActiveSession", message: "No active live session and no local map configured." }, corsHeaders);
+          return true as const;
+        }
+        const bytes = yield* fileSvc.raw(mapId, "gram").pipe(
+          Effect.catchTag("MapError.NotFound", () => {
+            sendJson(res, 404, { error: "MapNotFoundError", mapId }, corsHeaders);
+            return Effect.succeed(null as Buffer | null);
+          }),
+          Effect.catchTag("MapError.FileRead", (e) => {
+            sendJson(res, 500, { error: "MapFileReadError", message: e.message }, corsHeaders);
+            return Effect.succeed(null as Buffer | null);
+          }),
+        );
+        if (bytes !== null && !res.headersSent && !res.writableEnded) {
+          res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders });
+          res.end(bytes);
+        }
         return true as const;
       }
+
       const primaryMap = session.maps.find(m => m.role === "primary") ?? session.maps[0];
       if (!primaryMap) {
         sendJson(res, 404, { error: "NoActiveMap", message: "Active session has no maps." }, corsHeaders);

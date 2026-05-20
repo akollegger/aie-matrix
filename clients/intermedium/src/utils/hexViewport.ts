@@ -18,6 +18,7 @@ import type { WorldTile } from "../types/worldTile.js";
  * (matrix-editor in another repo: keep constants here and document parity when known.)
  */
 export const AREA_CPV = 7;
+export const ROOM_CPV = 16;  // each cell ~half viewport/16 wide; 5-hex spotlight visible with surrounding context
 export const NEIGHBOR_CPV = 4;
 export const MAP_VS_AREA_CPV = 2;
 const MAP_CPV_MAX = 140;
@@ -52,8 +53,8 @@ export function zoomForCellsAcrossShortEdge(
   const minPx = Math.max(64, Math.min(viewportWidthPx, viewportHeightPx));
 
   let lo = 0;
-  let hi = 22;
-  for (let i = 0; i < 28; i++) {
+  let hi = 26;
+  for (let i = 0; i < 32; i++) {
     const z = (lo + hi) / 2;
     const mpp = metersPerPixelY(lat, z);
     const cellsEst = (minPx * mpp) / cellWidthM;
@@ -63,7 +64,7 @@ export function zoomForCellsAcrossShortEdge(
       hi = z;
     }
   }
-  return Math.max(0, Math.min(22, (lo + hi) / 2));
+  return Math.max(0, Math.min(26, (lo + hi) / 2));
 }
 
 export function tileBoundingLonLat(
@@ -104,7 +105,7 @@ export const STOP_PITCH: Readonly<Record<CameraStop, number>> = {
   global: 0,
   regional: 0,
   plan: 0,
-  room: 0,
+  room: 45,
   situational: 45,
   personal: 80, // reference only; Personal stop uses R3F, not deck.gl
 };
@@ -186,6 +187,20 @@ function tileCentroid(tiles: ReadonlyMap<string, WorldTile>): [number, number] {
   return [sumLat / tiles.size, sumLng / tiles.size];
 }
 
+/** H3 index of the tile nearest to the geographic centroid of the tile set. */
+export function centerH3(tiles: ReadonlyMap<string, WorldTile>): string | undefined {
+  if (tiles.size === 0) return undefined;
+  const [cLat, cLng] = tileCentroid(tiles);
+  let best: string | undefined;
+  let bestDist = Infinity;
+  for (const t of tiles.values()) {
+    const [la, lo] = cellToLatLng(t.h3Index);
+    const d = (la - cLat) ** 2 + (lo - cLng) ** 2;
+    if (d < bestDist) { bestDist = d; best = t.h3Index; }
+  }
+  return best;
+}
+
 /**
  * “Plan” stop (was “Map” scale): fit full tile set in the window, then clamp zoom to CPV
  * bounds; plan is always at least `MAP_VS_AREA_CPV ×` as wide in cell count as Room.
@@ -224,18 +239,20 @@ export function mapViewFromTileBounds(
 }
 
 /**
- * “Room” stop (was “Area” scale): fixed CPV on the focused H3, overhead.
+ * “Room” stop: zoomed in with a tight CPV (ROOM_CPV = 3) to compensate for the 45° pitch
+ * making the scene appear further away than overhead. Optional cpv override for callers.
  */
 export function areaViewFromFocus(
   focusH3: string,
   widthPx: number,
   heightPx: number,
+  cpv = ROOM_CPV,
 ): MapViewport {
   const [la, lo] = cellToLatLng(focusH3);
   return {
     longitude: lo,
     latitude: la,
-    zoom: zoomForCellsAcrossShortEdge(focusH3, AREA_CPV, widthPx, heightPx),
+    zoom: zoomForCellsAcrossShortEdge(focusH3, cpv, widthPx, heightPx),
   };
 }
 

@@ -18,6 +18,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Browser memory only (MVP); files exchanged via browser download/upload (012-h3geojson-map-editor)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@relateby/pattern` (Gram AST), `h3-js` 4 (polygon fill, cell math), `effect` v3+ (async plumbing), `@colyseus/core` 0.15.57 (consumer), `vitest` (tests) (013-gram-format-migration)
 - File-based — `.map.gram` files in `maps/`; no database (013-gram-format-migration)
+- TypeScript 5.7 (browser target, ESM) + React 18, deck.gl ≥ 9 (`H3HexagonLayer`, `ScatterplotLayer`, `_GlobeView`), h3-js ≥ 4, colyseus.js, `@react-three/fiber`, `three`, Vite 6 (014-intermedium-polish)
+- N/A — stateless browser client (014-intermedium-polish)
 - TypeScript 5.7 / Node.js 24, ESM (`"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@google-cloud/storage` v7 (new), `busboy` v1 (new — multipart parsing), `ioredis` v5 (new — world-api pub/sub), `ulid` (new — session IDs), `zod` v3 (015-map-management)
 - Neo4j (`:Map`, `:LiveSession`, `:Cell` nodes); GCS (`.map.gram` artifact blobs) (015-map-management)
 
@@ -68,5 +70,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 
 ## Recent Changes
 - 015-map-management: Added TypeScript 5.7 / Node.js 24, ESM (`"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@google-cloud/storage` v7 (new), `busboy` v1 (new — multipart parsing), `ioredis` v5 (new — world-api pub/sub), `ulid` (new — session IDs), `zod` v3
+- 014-intermedium-polish: Added TypeScript 5.7 (browser target, ESM) + React 18, deck.gl ≥ 9 (`H3HexagonLayer`, `ScatterplotLayer`, `_GlobeView`), h3-js ≥ 4, colyseus.js, `@react-three/fiber`, `three`, Vite 6
 - 013-gram-format-migration: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@relateby/pattern` (Gram AST), `h3-js` 4 (polygon fill, cell math), `effect` v3+ (async plumbing), `@colyseus/core` 0.15.57 (consumer), `vitest` (tests)
 - 012-h3geojson-map-editor: Added TypeScript 5.7 (browser target, ESM) + React 18, Vite 6, MapLibre GL 5 (base map), h3-js 4 (cell math), `@relateby/pattern` (gram import parsing)

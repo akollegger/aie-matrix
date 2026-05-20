@@ -1,14 +1,18 @@
 import { useMemo } from "react";
 import { useClientState } from "../../context/ClientState.js";
 import { AREA_DISK_K, cellDisk, listGhostsInCells } from "../../utils/h3region.js";
+import { centerH3 } from "../../utils/hexViewport.js";
 import { GhostCard } from "../GhostCard/GhostCard.js";
 
 /**
  * Area scale: ~20% width overlay; ghosts within k-ring of focused H3.
+ * Falls back to board centroid when no tile is explicitly focused.
  */
 export function AreaPanel() {
   const { viewState, tiles, ghosts, identities } = useClientState();
-  const h3 = viewState.stop === "room" && viewState.focus ? viewState.focus : null;
+  const h3 = viewState.stop === "room"
+    ? (viewState.focus ?? centerH3(tiles) ?? null)
+    : null;
 
   const disk = useMemo(() => (h3 ? cellDisk(h3, AREA_DISK_K) : new Set<string>()), [h3]);
 
@@ -17,7 +21,7 @@ export function AreaPanel() {
     [h3, disk, ghosts],
   );
 
-  if (!h3) {
+  if (viewState.stop !== "room") {
     return null;
   }
 

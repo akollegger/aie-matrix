@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * One-terminal PoC: combined server → Vite spectator → ghost house → random-agent.
+ * One-terminal PoC: combined server → ghost house → random-agent.
  * Ctrl+C stops all child processes.
+ *
+ * Open Intermedium at http://127.0.0.1:5180/ to watch ghosts (run separately via `pnpm --filter @aie-matrix/intermedium dev`).
  *
  * ## Required env (repo root `.env` / `.env.local` — this script calls `loadRootEnv()` like
  * ghost-house / random-agent; child processes inherit the same merged `process.env`.)
@@ -18,9 +20,8 @@
  * ## Startup order
  *
  * 1. `pnpm run server` — world + Colyseus + registry (HTTP `8787`, spectator meta).
- * 2. `pnpm run spectator` — Vite (default `5174`).
- * 3. `pnpm --filter @aie-matrix/ghost-house dev` — A2A + catalog.
- * 4. `pnpm --filter @aie-matrix/random-agent dev` — Wanderer card + endpoint.
+ * 2. `pnpm --filter @aie-matrix/ghost-house dev` — A2A + catalog.
+ * 3. `pnpm --filter @aie-matrix/random-agent dev` — Wanderer card + endpoint.
  *
  * After the ghost house and random-agent respond, the script runs the same HTTP flow as
  * `specs/009-ghost-house-a2a/quickstart.md` §5–7 (catalog register, registry adopt, spawn)
@@ -340,7 +341,7 @@ try {
     "[demo] --- If you never see [demo] lines, you are not running `pnpm run demo` (e.g. you used `pnpm run server` instead). ---",
   );
   console.info(
-    "[demo] 1/5 building @aie-matrix/server in the parent (same as prestart: `tsc --build` so the child can skip a second tsc)…",
+    "[demo] 1/4 building @aie-matrix/server in the parent (same as prestart: `tsc --build` so the child can skip a second tsc)…",
   );
   execSync("pnpm exec tsc --build tsconfig.json", {
     cwd: serverRoot,
@@ -348,29 +349,26 @@ try {
     env: { ...process.env },
   });
   console.info(
-    "[demo] 1/5 starting combined server via start:dist (no second tsc in the child) — Colyseus + aie-matrix output follows…",
+    "[demo] 1/4 starting combined server via start:dist (no second tsc in the child) — Colyseus + aie-matrix output follows…",
   );
   start("server", "pnpm", ["--filter", "@aie-matrix/server", "run", "start:dist"]);
 
   console.info(
-    "[demo] 2/5 waiting for GET " + readyUrl + " (then spectator + ghost house + random-agent start)…",
+    "[demo] 2/4 waiting for GET " + readyUrl + " (then ghost house + random-agent start)…",
   );
   await waitUntilReady(readyUrl, "HTTP + spectator meta");
 
-  console.info("[demo] 3/5 starting Phaser spectator (Vite — look for a Local: http://… URL)…");
-  start("spectator", "pnpm", ["run", "spectator"]);
-
-  console.info("[demo] 4/5 starting @aie-matrix/ghost-house (dev)…");
+  console.info("[demo] 3/4 starting @aie-matrix/ghost-house (dev)…");
   start("ghost-house", "pnpm", ["--filter", "@aie-matrix/ghost-house", "dev"]);
 
-  console.info("[demo] 5/5 starting @aie-matrix/random-agent (dev)…");
+  console.info("[demo] 4/4 starting @aie-matrix/random-agent (dev)…");
   start("random-agent", "pnpm", ["--filter", "@aie-matrix/random-agent", "dev"]);
 
   await waitForHouseAndAgent();
   await autoBootstrap(ghostCount);
 
   console.info(
-    "[demo] all processes running. Vite (default http://127.0.0.1:5174/). Ctrl+C to stop.",
+    "[demo] all processes running. Intermedium: http://127.0.0.1:5180/ · Ctrl+C to stop.",
   );
 
   const { code, signal } = await waitFirstExit();

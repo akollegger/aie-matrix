@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { parseMapGramToTiles } from "../services/gramParser.js";
+import { parseMapGramToTiles, type TileTypeStyles } from "../services/gramParser.js";
 import type { WorldTile } from "../types/worldTile.js";
 import type { MapGramStatus } from "../types/spectator.js";
 
@@ -21,11 +21,13 @@ function currentMapUrl(base: string): string {
 export function useMapGram(): {
   readonly status: MapGramStatus;
   readonly tiles: ReadonlyMap<string, WorldTile>;
+  readonly tileTypeStyles: TileTypeStyles;
   readonly error: string | null;
   readonly retry: () => void;
 } {
   const [status, setStatus] = useState<MapGramStatus>("loading");
   const [tiles, setTiles] = useState<ReadonlyMap<string, WorldTile>>(() => new Map());
+  const [tileTypeStyles, setTileTypeStyles] = useState<TileTypeStyles>(() => new Map());
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -45,8 +47,9 @@ export function useMapGram(): {
           throw new Error(`Map fetch failed: HTTP ${res.status}`);
         }
         const text = await res.text();
-        const m = await parseMapGramToTiles(text);
+        const { tiles: m, tileTypeStyles: s } = await parseMapGramToTiles(text);
         setTiles(m);
+        setTileTypeStyles(s);
         setStatus("ready");
         return;
       } catch (e) {
@@ -66,5 +69,5 @@ export function useMapGram(): {
     void load();
   }, [load]);
 
-  return { status, tiles, error, retry: load };
+  return { status, tiles, tileTypeStyles, error, retry: load };
 }

@@ -1,12 +1,21 @@
 import { H3HexagonLayer } from "@deck.gl/geo-layers";
+import { gridDistance } from "h3-js";
 import type { WorldTile } from "../types/worldTile.js";
+import type { TileTypeStyles } from "../services/gramParser.js";
 
 const VOID_TILE = "void" as const;
 
-function tileTypeColor(tileType: string): [number, number, number, number] {
-  if (tileType === VOID_TILE) {
-    return [0, 0, 0, 0] as [number, number, number, number];
-  }
+function hexToRgba(hex: string, alpha: number): [number, number, number, number] {
+  const h = hex.slice(1);
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const n = parseInt(full, 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255, alpha];
+}
+
+function tileTypeColor(tileType: string, tileStyles?: TileTypeStyles): [number, number, number, number] {
+  if (tileType === VOID_TILE) return [0, 0, 0, 0];
+  const hex = tileStyles?.get(tileType);
+  if (hex) return hexToRgba(hex, 200);
   let h = 0;
   for (let i = 0; i < tileType.length; i++) {
     h = (h * 31 + tileType.charCodeAt(i)) | 0;
@@ -17,17 +26,10 @@ function tileTypeColor(tileType: string): [number, number, number, number] {
   return [r, g, b, 160];
 }
 
-function lineColor(tileType: string): [number, number, number, number] {
-  if (tileType === VOID_TILE) {
-    return [100, 140, 200, 160] as [number, number, number, number];
-  }
-  const [r, g, b] = tileTypeColor(tileType);
-  return [
-    Math.min(255, r + 60),
-    Math.min(255, g + 60),
-    Math.min(255, b + 80),
-    255,
-  ];
+function lineColor(tileType: string, tileStyles?: TileTypeStyles): [number, number, number, number] {
+  if (tileType === VOID_TILE) return [100, 140, 200, 160];
+  const [r, g, b] = tileTypeColor(tileType, tileStyles);
+  return [Math.min(255, r + 60), Math.min(255, g + 60), Math.min(255, b + 80), 255];
 }
 
 /** "Freeplay"-like area: steel blue field, one red focus hex. */
@@ -68,6 +70,10 @@ export function createHexGridLayer(
     readonly areaFocusH3?: string;
     /** Flat backdrop for world context — "faint" plate under room/situational. */
     readonly uniformBackdrop?: { r: number; g: number; b: number; a: number };
+    /** Color map from gram style field; overrides hash-based fallback. */
+    readonly tileStyles?: TileTypeStyles;
+    /** Fade alpha to 0 approaching outerK; full opacity within innerK rings of focusH3. */
+    readonly distanceFade?: { focusH3: string; innerK: number; outerK: number };
   } = {},
 ): H3HexagonLayer<WorldTile> {
   const data = Array.isArray(tiles) ? tiles : Array.from(tiles.values());
@@ -76,6 +82,15 @@ export function createHexGridLayer(
   const elevation = options.elevation ?? 10;
   const areaFocusH3 = options.areaFocusH3;
   const backdrop = options.uniformBackdrop;
+  const tileStyles = options.tileStyles;
+  const fade = options.distanceFade;
+
+  function fadeOpacity(h3: string): number {
+    if (!fade) return 1;
+    let dist = 0;
+    try { dist = gridDistance(h3, fade.focusH3); } catch { dist = fade.outerK; }
+    return Math.max(0, 1 - Math.max(0, dist - fade.innerK) / (fade.outerK - fade.innerK));
+  }
 
   if (isExtruded) {
     return new H3HexagonLayer<WorldTile>({
@@ -98,7 +113,7 @@ export function createHexGridLayer(
         if (areaFocusH3 !== undefined) {
           return areaPalette(d, op, areaFocusH3).fill;
         }
-        const [r, g, b, a0] = tileTypeColor(d.tileType);
+        const [r, g, b, a0] = tileTypeColor(d.tileType, tileStyles);
         return [r, g, b, Math.floor(a0 * op)] as [number, number, number, number];
       },
       getLineColor: () => [80, 120, 180, Math.floor(200 * op)] as [number, number, number, number],
@@ -117,32 +132,41 @@ export function createHexGridLayer(
     stroked: true,
     filled: true,
     getFillColor: (d) => {
+      const fop = fadeOpacity(d.h3Index) * op;
       if (backdrop !== undefined) {
-        return [backdrop.r, backdrop.g, backdrop.b, Math.floor(backdrop.a * 255 * op)] as [number, number, number, number];
+        return [backdrop.r, backdrop.g, backdrop.b, Math.floor(backdrop.a * 255 * fop)] as [number, number, number, number];
       }
       if (areaFocusH3 !== undefined) {
-        return areaPalette(d, op, areaFocusH3).fill;
+        const c = areaPalette(d, op, areaFocusH3).fill;
+        return [c[0], c[1], c[2], Math.floor(c[3] * fadeOpacity(d.h3Index))] as [number, number, number, number];
       }
-      const [r, g, b, a0] = tileTypeColor(d.tileType);
-      return [r, g, b, Math.floor(a0 * op)] as [number, number, number, number];
+      const [r, g, b, a0] = tileTypeColor(d.tileType, tileStyles);
+      return [r, g, b, Math.floor(a0 * fop)] as [number, number, number, number];
     },
     getLineColor: (d) => {
+      const fop = fadeOpacity(d.h3Index) * op;
       if (backdrop !== undefined) {
         return [
           Math.min(255, backdrop.r + 40),
           Math.min(255, backdrop.g + 40),
           Math.min(255, backdrop.b + 50),
-          Math.floor(200 * op),
+          Math.floor(200 * fop),
         ] as [number, number, number, number];
       }
       if (areaFocusH3 !== undefined) {
-        return areaPalette(d, op, areaFocusH3).line;
+        const c = areaPalette(d, op, areaFocusH3).line;
+        return [c[0], c[1], c[2], Math.floor(c[3] * fadeOpacity(d.h3Index))] as [number, number, number, number];
       }
-      const [r, g, b, a0] = lineColor(d.tileType);
-      return [r, g, b, Math.floor(a0 * op)] as [number, number, number, number];
+      const [r, g, b, a0] = lineColor(d.tileType, tileStyles);
+      return [r, g, b, Math.floor(a0 * fop)] as [number, number, number, number];
     },
+    lineWidthUnits: "pixels",
     getLineWidth: 1,
     lineWidthMinPixels: 1,
+    updateTriggers: {
+      getFillColor: fade?.focusH3,
+      getLineColor: fade?.focusH3,
+    },
   });
 }
 

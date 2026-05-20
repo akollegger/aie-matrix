@@ -1,7 +1,7 @@
 { kind: "matrix-map", name: "freeplay", elevation: 0 }
 
-(blue:TileType:Blue { name: "Blue" })
-(red:TileType:Red { name: "Red" })
+(blue:TileType:Blue { name: "Blue", style: css`background: #66F` })
+(red:TileType:Red { name: "Red", style: css`background: #F66` })
 
 (badge-sponsor:ItemType:Badge { name: "Sponsor Badge", glyph: "🎫" })
 (key-brass:ItemType:Key { name: "Brass Key", glyph: "🔑" })

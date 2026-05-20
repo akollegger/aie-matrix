@@ -1,5 +1,27 @@
 import type { WorldTile } from "../../types/worldTile.js";
 
+export function LandmarkTooltip({ name, x, y }: { readonly name: string; readonly x: number; readonly y: number }) {
+  return (
+    <div
+      style={{
+        position: "fixed",
+        left: x + 12,
+        top: y + 12,
+        pointerEvents: "none",
+        background: "rgba(12, 14, 20, 0.92)",
+        color: "#e6edf3",
+        fontSize: 12,
+        padding: "6px 10px",
+        borderRadius: 6,
+        border: "1px solid rgba(0, 200, 210, 0.45)",
+        zIndex: 50,
+      }}
+    >
+      {name}
+    </div>
+  );
+}
+
 export function TileTooltip({
   tile,
   x,
