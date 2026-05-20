@@ -52,6 +52,7 @@ export function ToolPanel() {
     try {
       await publishMap(mapId, exportGram(state))
       dispatch({ type: "SET_HINT", hint: `Saved to server as "${mapId}"` })
+      dispatch({ type: "SET_PUBLISHED_MAP_ID", mapId })
     } catch (e) {
       dispatch({ type: "SET_HINT", hint: `Save failed: ${e instanceof Error ? e.message : String(e)}` })
     } finally {

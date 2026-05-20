@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "map-editor",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/map-editor", "dev"],
+      "port": 5182
+    },
+    {
+      "name": "intermedium",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/intermedium", "dev"],
+      "port": 5180
+    }
+  ]
+}

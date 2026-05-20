@@ -38,46 +38,45 @@ export function App() {
         <button onClick={() => setMode("admin")} style={modeBtn(mode === "admin")}>Admin</button>
       </div>
 
-      {/* Content */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-        {mode === "admin" ? (
-          <>
-            <AdminPanel />
-            <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-              <MapView />
-            </div>
-          </>
-        ) : (
-          <>
-            {/* Left: map canvas */}
-            <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
-              <MapView />
-            </div>
+      {/* Content — map is always full-size, panels float as overlays */}
+      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+        {/* Map canvas — always full size */}
+        <div style={{ position: "absolute", inset: 0 }}>
+          <MapView />
+        </div>
 
-            {/* Right: authoring sidebar */}
-            <div
-              style={{
-                width: 280,
-                display: "flex",
-                flexDirection: "column",
-                borderLeft: "1px solid #2a2a3e",
-                background: "#16162a",
-                overflow: "hidden",
-              }}
-            >
-              <ToolPanel />
-              <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "60%" }}>
-                <LayerPanel />
-                <TileTypePalette />
-                <PolygonParamsPanel />
-                <ItemTypePalette />
-              </div>
-              <div style={{ flex: 1, overflow: "auto", borderTop: "1px solid #2a2a3e" }}>
-                <PropertyEditor />
-              </div>
-            </div>
-          </>
-        )}
+        {/* Admin panel — left overlay */}
+        <div style={{
+          position: "absolute", top: 0, left: 0, bottom: 0,
+          display: mode === "admin" ? "flex" : "none",
+          zIndex: 10,
+          boxShadow: "4px 0 16px rgba(0,0,0,0.6)",
+        }}>
+          <AdminPanel />
+        </div>
+
+        {/* Edit sidebar — right overlay */}
+        <div style={{
+          position: "absolute", top: 0, right: 0, bottom: 0, width: 280,
+          display: mode === "edit" ? "flex" : "none",
+          flexDirection: "column",
+          borderLeft: "1px solid #2a2a3e",
+          background: "#16162a",
+          overflow: "hidden",
+          zIndex: 10,
+          boxShadow: "-4px 0 16px rgba(0,0,0,0.6)",
+        }}>
+          <ToolPanel />
+          <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "60%" }}>
+            <LayerPanel />
+            <TileTypePalette />
+            <PolygonParamsPanel />
+            <ItemTypePalette />
+          </div>
+          <div style={{ flex: 1, overflow: "auto", borderTop: "1px solid #2a2a3e" }}>
+            <PropertyEditor />
+          </div>
+        </div>
       </div>
     </div>
   )

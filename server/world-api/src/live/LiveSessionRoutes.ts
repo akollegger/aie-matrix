@@ -8,6 +8,9 @@ import type {
   LiveSessionMapNotPublishedError,
   LiveSessionNotFoundError,
 } from "./live-errors.js";
+import { MapManagementService } from "../map/MapManagementService.js";
+import type { MapNotFoundError } from "../map/map-errors.js";
+import type { GcsError } from "../gcs/GcsService.js";
 
 const LIVE_SINGLE_SEGMENT = /^\/live\/([^/]+)$/;
 const LIVE_MAPS_SEGMENT = /^\/live\/([^/]+)\/maps$/;
@@ -71,10 +74,46 @@ export function tryHandleLiveSession(
   | AdminAuthError
   | LiveSessionNotFoundError
   | LiveSessionMapNotPublishedError
-  | LiveSessionAlreadyEndedError,
-  LiveSessionService
+  | LiveSessionAlreadyEndedError
+  | MapNotFoundError
+  | GcsError,
+  LiveSessionService | MapManagementService
 > {
   const { pathname } = url;
+
+  // GET /live/@current/map — gram of the primary map of the current live session
+  if (req.method === "GET" && (pathname === "/live/@current/map" || pathname === "/live/@current/map/")) {
+    return Effect.gen(function* () {
+      const liveSvc = yield* LiveSessionService;
+      const sessions = yield* liveSvc.list("active");
+      const session = sessions[0];
+      if (!session) {
+        sendJson(res, 404, { error: "NoActiveSession", message: "No active live session." }, corsHeaders);
+        return true as const;
+      }
+      const primaryMap = session.maps.find(m => m.role === "primary") ?? session.maps[0];
+      if (!primaryMap) {
+        sendJson(res, 404, { error: "NoActiveMap", message: "Active session has no maps." }, corsHeaders);
+        return true as const;
+      }
+      const mapSvc = yield* MapManagementService;
+      const bytes = yield* mapSvc.download(primaryMap.mapId).pipe(
+        Effect.catchTag("MapError.NotFound", () => {
+          sendJson(res, 404, { error: "MapNotFoundError", mapId: primaryMap.mapId }, corsHeaders);
+          return Effect.succeed(null as Buffer | null);
+        }),
+        Effect.catchTag("GcsError", (e) => {
+          sendJson(res, 500, { error: "GcsError", message: e.message }, corsHeaders);
+          return Effect.succeed(null as Buffer | null);
+        }),
+      );
+      if (bytes !== null && !res.headersSent && !res.writableEnded) {
+        res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders });
+        res.end(bytes);
+      }
+      return true as const;
+    });
+  }
 
   // POST /live
   if (req.method === "POST" && (pathname === "/live" || pathname === "/live/")) {

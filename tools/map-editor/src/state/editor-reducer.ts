@@ -1,3 +1,4 @@
+import { cellToLatLng } from "h3-js"
 import { computeCellsFromVertices, polygonAnchorCells } from "../map/polygon-geometry"
 import { h3Index } from "../types/map-gram"
 import type {
@@ -89,6 +90,8 @@ export function makeInitialState(): MapEditorState {
       draggedPolygon: null,
       editingPolygon: null,
       vertexDragPreview: null,
+      pendingFitBounds: null,
+      publishedMapId: null,
     },
   }
 }
@@ -161,6 +164,8 @@ export type EditorAction =
   | { type: "SET_BOUNDING_BOX_VISIBILITY"; visible: boolean }
   // Import
   | { type: "IMPORT_MAP"; state: MapEditorState }
+  | { type: "CLEAR_FIT_BOUNDS" }
+  | { type: "SET_PUBLISHED_MAP_ID"; mapId: string | null }
 
 // ---------------------------------------------------------------------------
 // Reducer
@@ -676,8 +681,30 @@ export function editorReducer(
       return { ...state, ui: { ...state.ui, showBoundingBox: action.visible } }
 
     // --- Import ---
-    case "IMPORT_MAP":
-      return action.state
+    case "IMPORT_MAP": {
+      const allCells = action.state.layers.flatMap(l => {
+        if (l.kind === "tile") return Array.from(l.tiles.keys()) as string[]
+        if (l.kind === "polygon") return l.committed.flatMap(p => p.cells as string[])
+        if (l.kind === "items") return l.items.map(i => i.h3Index as string)
+        return []
+      })
+      if (allCells.length === 0) return action.state
+      let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity
+      for (const cell of allCells) {
+        const [lat, lng] = cellToLatLng(cell)
+        if (lat < south) south = lat
+        if (lat > north) north = lat
+        if (lng < west) west = lng
+        if (lng > east) east = lng
+      }
+      return { ...action.state, ui: { ...action.state.ui, pendingFitBounds: { west, south, east, north } } }
+    }
+
+    case "CLEAR_FIT_BOUNDS":
+      return { ...state, ui: { ...state.ui, pendingFitBounds: null } }
+
+    case "SET_PUBLISHED_MAP_ID":
+      return { ...state, ui: { ...state.ui, publishedMapId: action.mapId } }
 
     default:
       return state

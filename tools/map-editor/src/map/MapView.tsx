@@ -342,6 +342,18 @@ export function MapView() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [dispatch])
 
+  // Fly to imported content when pendingFitBounds is set
+  useEffect(() => {
+    const map = mapRef.current
+    const bounds = state.ui.pendingFitBounds
+    if (!map || !bounds) return
+    map.fitBounds(
+      [[bounds.west, bounds.south], [bounds.east, bounds.north]],
+      { padding: 80, duration: 500 },
+    )
+    dispatch({ type: "CLEAR_FIT_BOUNDS" })
+  }, [state.ui.pendingFitBounds, dispatch])
+
   // Sync layer updates with MapLibre whenever editor state changes
   useEffect(() => {
     const map = mapRef.current

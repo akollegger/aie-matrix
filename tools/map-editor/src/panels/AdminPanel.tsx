@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import type { CSSProperties } from "react"
+import { exportGram } from "../io/export-gram"
 import { importGram } from "../io/import-gram"
 import {
   archiveMap,
@@ -7,11 +8,16 @@ import {
   listMaps,
   listSessions,
   loadMapGram,
+  publishMap,
   startSession,
   switchSessionMap,
 } from "../services/mapServer"
 import type { ServerMapRecord, ServerSessionRecord } from "../services/mapServer"
 import { useEditor } from "../state/editor-context"
+
+function slugId(s: string): string {
+  return s.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+}
 
 const actionBtn: CSSProperties = {
   background: "#1c1c30",
@@ -28,12 +34,13 @@ const dangerBtn: CSSProperties = { ...actionBtn, background: "#661122", color: "
 const ghostBtn: CSSProperties = { ...actionBtn, background: "none", border: "1px solid transparent" }
 
 export function AdminPanel() {
-  const { dispatch } = useEditor()
+  const { state, dispatch } = useEditor()
 
   const [maps, setMaps] = useState<ServerMapRecord[]>([])
   const [sessions, setSessions] = useState<ServerSessionRecord[]>([])
   const [filterStatus, setFilterStatus] = useState<"published" | "archived" | undefined>("published")
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const [expandedMapId, setExpandedMapId] = useState<string | null>(null)
   const [hoveredMapId, setHoveredMapId] = useState<string | null>(null)
@@ -42,6 +49,28 @@ export function AdminPanel() {
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null)
   const [switchingSessionId, setSwitchingSessionId] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+
+  // Editor buffer identity
+  const editorMapId = slugId(state.meta.name) || "untitled"
+  const editorIsPublished = state.ui.publishedMapId !== null
+  const editorSessions = useMemo(
+    () => sessions.filter(s => (s.maps.find(m => m.role === "primary") ?? s.maps[0])?.mapId === editorMapId),
+    [sessions, editorMapId],
+  )
+
+  async function handleEditorSave() {
+    setSaving(true)
+    try {
+      await publishMap(editorMapId, exportGram(state))
+      dispatch({ type: "SET_HINT", hint: `Saved as "${editorMapId}"` })
+      dispatch({ type: "SET_PUBLISHED_MAP_ID", mapId: editorMapId })
+      void refresh()
+    } catch (e) {
+      dispatch({ type: "SET_HINT", hint: `Save failed: ${e instanceof Error ? e.message : String(e)}` })
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -191,13 +220,110 @@ export function AdminPanel() {
 
       {/* Map list */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {maps.length === 0 && !loading && (
-          <div style={{ padding: "16px 10px", fontSize: 11, color: "#444", textAlign: "center" }}>
-            No maps
-          </div>
-        )}
+        {/* Editor buffer — always shown at top */}
+        {(() => {
+          const isHovered = hoveredMapId === "@editor"
+          const isExpanded = expandedMapId === "@editor"
+          return (
+            <div>
+              <div
+                onMouseEnter={() => setHoveredMapId("@editor")}
+                onMouseLeave={() => setHoveredMapId(null)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4,
+                  padding: "5px 8px", borderBottom: "1px solid #1a1a2e",
+                  background: isHovered ? "#1a1a2e" : "#0f0f1e",
+                  minHeight: 28,
+                }}
+              >
+                <button
+                  onClick={() => setExpandedMapId(isExpanded ? null : "@editor")}
+                  style={{
+                    ...ghostBtn, padding: "0 2px", fontSize: 9,
+                    color: editorSessions.length > 0 ? "#77aaff" : "#333",
+                    visibility: (editorSessions.length > 0 || isExpanded) ? "visible" : "hidden",
+                  }}
+                >{isExpanded ? "▼" : "▶"}</button>
 
-        {maps.map(map => {
+                <span style={{ flex: 1, overflow: "hidden" }}>
+                  <span style={{ fontSize: 11, color: "#ddf", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {state.meta.name || "untitled-map"}
+                  </span>
+                  <span style={{ fontSize: 9, color: "#445" }}>{editorMapId}</span>
+                </span>
+
+                <span style={{
+                  fontSize: 9, padding: "1px 5px", borderRadius: 3,
+                  background: editorIsPublished ? "#1a3366" : "#2a1a00",
+                  color: editorIsPublished ? "#7799ff" : "#cc8833",
+                  border: `1px solid ${editorIsPublished ? "#2244aa" : "#443300"}`,
+                }}>
+                  {editorIsPublished ? "saved" : "local"}
+                </span>
+
+                {editorSessions.length > 0 && (
+                  <span style={{
+                    background: "#1a3366", color: "#7799ff", border: "1px solid #2244aa",
+                    borderRadius: 8, fontSize: 9, padding: "0 5px", lineHeight: "14px", fontWeight: 600, cursor: "pointer",
+                  }} onClick={() => setExpandedMapId(isExpanded ? null : "@editor")}>
+                    {editorSessions.length}
+                  </span>
+                )}
+
+                {isHovered && (
+                  <div style={{ display: "flex", gap: 3 }}>
+                    <button onClick={() => void handleEditorSave()} disabled={saving} style={primaryBtn}>
+                      {saving ? "…" : "Save"}
+                    </button>
+                    {editorIsPublished && (
+                      <button
+                        onClick={() => { setStartFormMapId("@editor"); setExpandedMapId("@editor"); setSessionName("") }}
+                        style={primaryBtn}
+                      >+ Session</button>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* New session form for editor buffer */}
+              {isExpanded && startFormMapId === "@editor" && (
+                <div style={{
+                  padding: "6px 8px 6px 24px", background: "#0f0f22",
+                  borderBottom: "1px solid #1a1a2e", display: "flex", gap: 4, alignItems: "center",
+                }}>
+                  <input
+                    type="text" placeholder="Session name" value={sessionName}
+                    onChange={e => setSessionName(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") void handleStartSession(editorMapId) }}
+                    autoFocus
+                    style={{
+                      flex: 1, background: "#0e0e1c", border: "1px solid #2a2a3e",
+                      borderRadius: 3, color: "#ccc", fontSize: 11, padding: "3px 6px", outline: "none",
+                    }}
+                  />
+                  <button onClick={() => void handleStartSession(editorMapId)} disabled={busy === `start-${editorMapId}`} style={primaryBtn}>Start</button>
+                  <button onClick={() => { setStartFormMapId(null); setSessionName("") }} style={actionBtn}>✕</button>
+                </div>
+              )}
+
+              {isExpanded && editorSessions.map(session => (
+                <div key={session.id} style={{
+                  padding: "5px 8px 5px 24px", borderBottom: "1px solid #1a1a2e",
+                  background: "#12122a", display: "flex", flexDirection: "column", gap: 3,
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ flex: 1, fontSize: 11, color: "#99bbff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.name}</span>
+                    <button onClick={() => void handleEndSession(session.id)} disabled={busy === `end-${session.id}`} style={dangerBtn}>End</button>
+                  </div>
+                  <div style={{ fontSize: 9, color: "#444" }}>started {new Date(session.startedAt).toLocaleTimeString()}</div>
+                </div>
+              ))}
+            </div>
+          )
+        })()}
+
+        {/* Server maps — excluding any that match the editor buffer */}
+        {maps.filter(m => m.mapId !== editorMapId).map(map => {
           const mapSessions = sessionsByMapId.get(map.mapId) ?? []
           const sessionCount = mapSessions.length
           const isExpanded = expandedMapId === map.mapId
