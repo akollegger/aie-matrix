@@ -5,7 +5,8 @@
       "name": "World Server",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@aie-matrix/server", "run", "dev"],
-      "port": 8787
+      "port": 8787,
+      "autoPort": false
     },
     {
       "name": "Intermedium",
