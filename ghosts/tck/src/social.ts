@@ -101,7 +101,7 @@ async function main() {
     fail("register", "expected ok");
   }
 
-  const { ghostHouseId } = await postJson<{ ghostHouseId: string }>("/registry/houses", {
+  const { agentHostId } = await postJson<{ agentHostId: string }>("/registry/houses", {
     displayName: "tck-social-house",
   });
   const { caretakerId } = await postJson<{ caretakerId: string }>("/registry/caretakers", {
@@ -110,7 +110,7 @@ async function main() {
   const adopt = (await postJson<{
     ghostId: string;
     credential: { token: string; worldApiBaseUrl: string };
-  }>("/registry/adopt", { caretakerId, ghostHouseId })) as {
+  }>("/registry/adopt", { caretakerId, agentHostId })) as {
     ghostId: string;
     credential: { token: string; worldApiBaseUrl: string };
   };
@@ -178,7 +178,7 @@ async function main() {
     const thread = (await getJson<{
       messages: Array<{ content: string; role: string; thread_id: string }>;
     }>(`${registryBase}/threads/${encodeURIComponent(spawn.ghostId)}?limit=20`, {
-      headers: { authorization: `Bearer ${ghostHouseId}` },
+      headers: { authorization: `Bearer ${agentHostId}` },
     })) as { messages: Array<{ content: string }> };
     if (thread.messages?.some((m) => m.content === testText)) {
       foundInThread = true;

@@ -1,6 +1,6 @@
 # A2A ghost agent protocol — spike sandbox
 
-This directory is the **only** allowed location for throwaway code for feature **008-a2a-ghost-house-spike** (A2A Ghost House proof-of-concept).
+This directory is the **only** allowed location for throwaway code for feature **008-a2a-agent-host-spike** (A2A Agent Host proof-of-concept).
 
 ## Rules
 
@@ -20,12 +20,12 @@ This directory is the **only** allowed location for throwaway code for feature *
 
 ## Specs and proposals
 
-- Spec: `specs/008-a2a-ghost-house-spike/spec.md`
-- Plan / contracts / quickstart: `specs/008-a2a-ghost-house-spike/`
-- Charter: `proposals/spikes/spike-a2a-ghost-house-poc.md`
+- Spec: `specs/008-a2a-agent-host-spike/spec.md`
+- Plan / contracts / quickstart: `specs/008-a2a-agent-host-spike/`
+- Charter: `proposals/spikes/spike-a2a-agent-host-poc.md`
 - ADR (gated): `proposals/adr/0004-a2a-ghost-agent-protocol.md`
-- RFC: `proposals/rfc/0007-ghost-house-architecture.md`
+- RFC: `proposals/rfc/0007-agent-host-architecture.md`
 
 Sub-project READMEs, `package.json`, and `npm run smoke` / `npm run dev` flows are in each `spike-*` directory. Start from [`spike-a-sdk-exercise/README.md`](spike-a-sdk-exercise/README.md) (SDK) then [`spike-b-skeleton-house/README.md`](spike-b-skeleton-house/README.md) (house + curls).
 
-Quickstart (repo-relative paths): [`specs/008-a2a-ghost-house-spike/quickstart.md`](../../specs/008-a2a-ghost-house-spike/quickstart.md).
+Quickstart (repo-relative paths): [`specs/008-a2a-agent-host-spike/quickstart.md`](../../specs/008-a2a-agent-host-spike/quickstart.md).

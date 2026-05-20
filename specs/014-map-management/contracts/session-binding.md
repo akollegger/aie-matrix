@@ -4,7 +4,7 @@
 
 ## IC-005: `LIVE_SESSION_ID` — Server Process Session Binding
 
-**Consumers**: `server/world-api/`, `server/colyseus/`, `ghosts/ghost-house/`  
+**Consumers**: `server/world-api/`, `server/colyseus/`, `server/agent-host/`  
 **Set by**: Kubernetes `Deployment` env (Tier 3) or `docker-compose.yml` env (Tier 2)
 
 ### Startup resolution order
@@ -35,7 +35,7 @@ Added to `@aie-matrix/root-env` alongside `GCS_BUCKET` and `ADMIN_TOKEN`.
 
 ## IC-006: `/health` — Readiness Endpoint
 
-**Owners**: `server/world-api/`, `server/colyseus/`, `ghosts/ghost-house/`  
+**Owners**: `server/world-api/`, `server/colyseus/`, `server/agent-host/`  
 **Consumer**: Kubernetes `readinessProbe` (and docker-compose `healthcheck`)
 
 ### Contract

@@ -3,20 +3,20 @@
 **Contract ID**: IC-002  
 **Feature**: `011-intermedium-client`  
 **Status**: Gap — MVP uses placeholder stub  
-**Related**: [RFC-0008 §Open Question 2](../../../proposals/rfc/0008-human-spectator-client.md), [RFC-0007](../../../proposals/rfc/0007-ghost-house-architecture.md), [IC-002 (spec-009)](../../009-ghost-house-a2a/contracts/ic-002-a2a-protocol.md)  
+**Related**: [RFC-0008 §Open Question 2](../../../proposals/rfc/0008-human-spectator-client.md), [RFC-0007](../../../proposals/rfc/0007-agent-host-architecture.md), [IC-002 (spec-009)](../../009-agent-host-a2a/contracts/ic-002-a2a-protocol.md)  
 **Consumers**: `clients/intermedium/src/hooks/useA2AConversation.ts`
 
 ## Purpose
 
-Documents the interface the intermedium needs from the ghost house to read and write the paired-ghost conversation thread. This contract is a **gap artifact** — the exact mechanism is not yet defined by the ghost house team. This document records the expected contract shape so the ghost house team can design to it, and so the intermedium can be implemented against a stub in the meantime.
+Documents the interface the intermedium needs from the agent host to read and write the paired-ghost conversation thread. This contract is a **gap artifact** — the exact mechanism is not yet defined by the agent host team. This document records the expected contract shape so the agent host team can design to it, and so the intermedium can be implemented against a stub in the meantime.
 
 ## Context
 
-RFC-0007 and ADR-0004 establish that the ghost house manages conversation threads via A2A. The A2A protocol (IC-002 in spec-009) is designed for agent-to-agent interaction; the intermedium is a browser client, not an A2A agent. The ghost house must expose a separate, browser-accessible interface for human spectators to read and write conversation history.
+RFC-0007 and ADR-0004 establish that the agent host manages conversation threads via A2A. The A2A protocol (IC-002 in spec-009) is designed for agent-to-agent interaction; the intermedium is a browser client, not an A2A agent. The agent host must expose a separate, browser-accessible interface for human spectators to read and write conversation history.
 
 ## Expected Contract Shape (target)
 
-The ghost house MUST expose the following HTTP routes for human spectator access:
+The agent host MUST expose the following HTTP routes for human spectator access:
 
 ### Read conversation history
 
@@ -91,11 +91,11 @@ Server-Sent Events stream. Each event is a `ConversationMessage` JSON object. Th
 
 ## MVP Stub Behaviour
 
-Until the ghost house team implements this API:
+Until the agent host team implements this API:
 
 1. The intermedium attempts `GET /conversation/:ghostId/messages`.
 2. If the response is `404` or the connection fails, `ConversationThread.isAvailable` is set to `false`.
-3. The Partner scale panel renders a placeholder: *"Conversation not yet available — ghost house API pending."*
+3. The Partner scale panel renders a placeholder: *"Conversation not yet available — agent host API pending."*
 4. Sending a message is disabled (the input field is shown but grayed out with a tooltip).
 
 ## Authentication

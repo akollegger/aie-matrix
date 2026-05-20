@@ -1,6 +1,6 @@
 import type { AgentCard } from "@a2a-js/sdk";
 
-/** In-memory + catalog — see `specs/009-ghost-house-a2a/data-model.md` */
+/** In-memory + catalog — see `specs/009-agent-host-a2a/data-model.md` */
 export type CatalogEntry = {
   readonly agentId: string;
   readonly baseUrl: string;
@@ -30,10 +30,10 @@ export type GhostCard = {
 };
 
 /**
- * @see `specs/009-ghost-house-a2a/contracts/ic-006-spawn-context.md`
+ * @see `specs/009-agent-host-a2a/contracts/ic-006-spawn-context.md`
  */
 export type SpawnContext = {
-  readonly schema: "aie-matrix.ghost-house.spawn-context.v1";
+  readonly schema: "aie-matrix.agent-host.spawn-context.v1";
   readonly ghostId: string;
   readonly ghostCard: GhostCard;
   readonly worldEntryPoint: string;

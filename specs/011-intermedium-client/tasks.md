@@ -93,7 +93,7 @@ New work starts at **Phase 9**.
 
 - [X] T027 Implement `PairingContext` in `clients/intermedium/src/context/PairingContext.tsx` — read `?ghost=<ghostId>`; `HumanPairing | null` (FR-013)
 - [X] T075 [P] Create `clients/intermedium/src/components/PanelView/AreaPanel.tsx`, `NeighborPanel.tsx`, `PartnerPanel.tsx`, `GhostPanel.tsx` — each exports a **minimal placeholder** (empty fragment or one-line "—" for devtools); Phases 5–7 **replace** with real components (same file paths)
-- [X] T072 Implement `useGhostIdentity` in `clients/intermedium/src/hooks/useGhostIdentity.ts` — `GET` catalog from ghost house base URL; build `Map<string, GhostIdentity>`; refresh on demand; tolerate failure with empty map (per `data-model.md` / spec-009 `GET /catalog`)
+- [X] T072 Implement `useGhostIdentity` in `clients/intermedium/src/hooks/useGhostIdentity.ts` — `GET` catalog from agent host base URL; build `Map<string, GhostIdentity>`; refresh on demand; tolerate failure with empty map (per `data-model.md` / spec-009 `GET /catalog`)
 - [X] T073 Create `clients/intermedium/src/components/PanelView/PanelView.tsx` — props: `viewState`, `pairing` (and any pass-throughs Phase 4+ need); at `map` render `null`; at `area`/`neighbor`/`partner`/`ghost` render corresponding stub from T075; layout is **overlays** only (no flex sidebar that shrinks the future deck.gl canvas; FR-003)
 - [X] T028 Implement `clients/intermedium/src/App.tsx` — wrap `PairingContext` + `ClientStateProvider`; top-level `scale` switch with placeholder `<div data-scale=…>` (or `PanelView` with `viewState` fixed to `map` for Phase 3); **no** `DeckGL` yet
 - [X] T029 Wire `clients/intermedium/src/main.tsx` — `createRoot` + `StrictMode`; import `index.css`

@@ -21,9 +21,9 @@
       "port": 5182
     },
     {
-      "name": "Ghost House",
+      "name": "Agent Host",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@aie-matrix/ghost-house", "run", "dev"],
+      "runtimeArgs": ["--filter", "@aie-matrix/server-agent-host", "run", "dev"],
       "port": 4000
     },
     {

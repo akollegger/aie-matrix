@@ -89,7 +89,7 @@ export interface RunHouseOptions {
    */
   readonly label?: string;
   /**
-   * Pre-registered ghost-house id. When running multiple peppers
+   * Pre-registered agent-host id. When running multiple peppers
    * ghosts in one process, register the house ONCE in the CLI and pass
    * the same id to all `runHouse` calls — otherwise ghosts can't read
    * each other's conversation messages (the conversation router only
@@ -99,13 +99,13 @@ export interface RunHouseOptions {
   /**
    * Pre-provisioned ghost credentials from an A2A spawn context (IC-006).
    * When set, skips the registry register/adopt flow and uses these
-   * values directly — the MCP URL and token come from ghost-house's proxy.
+   * values directly — the MCP URL and token come from agent-host's proxy.
    */
   readonly preProvisionedGhost?: {
     readonly ghostId: string;
     readonly worldApiBaseUrl: string;
     readonly token: string;
-    readonly ghostHouseId?: string;
+    readonly agentHostId?: string;
   };
   /**
    * Optional AbortSignal. When aborted the stimulus loop exits cleanly
@@ -193,7 +193,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         return Promise.resolve({
           ghostId: p.ghostId,
           caretakerId: "a2a",
-          ghostHouseId: p.ghostHouseId ?? "a2a",
+          agentHostId: p.agentHostId ?? "a2a",
           worldApiBaseUrl: p.worldApiBaseUrl,
           token: p.token,
         } satisfies AdoptedGhost);
@@ -203,7 +203,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         log(`adopting under shared house ${opts.preRegisteredHouseId} …`);
         return adoptUnderHouse({
           registryBase: opts.registryBase,
-          ghostHouseId: opts.preRegisteredHouseId,
+          agentHostId: opts.preRegisteredHouseId,
         });
       })()
     : (() => {
@@ -238,7 +238,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   const ctx: StimulusContext = emptyStimulusContext(
     adopted.ghostId,
     opts.registryBase,
-    adopted.ghostHouseId,
+    adopted.agentHostId,
     tag,
   );
   let stimuliRun = 0;

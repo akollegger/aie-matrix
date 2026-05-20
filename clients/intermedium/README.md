@@ -33,7 +33,7 @@ Navigation moves through seven discrete camera stops in two rendering regimes:
 ### Prerequisites
 
 - Node.js 24 + pnpm 10
-- Backend running: `pnpm dev` from repo root (world-api + Colyseus + ghost house)
+- Backend running: `pnpm dev` from repo root (world-api + Colyseus + agent host)
 - Freeplay map available at `GET /maps/freeplay?format=gram`
 
 ### Setup

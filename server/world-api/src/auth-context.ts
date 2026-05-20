@@ -61,7 +61,7 @@ export function authenticateGhostRequestEffect(
       extra: {
         ghostId: claims.ghostId,
         caretakerId: claims.caretakerId,
-        ghostHouseId: claims.ghostHouseId,
+        agentHostId: claims.agentHostId,
       },
     })),
   );

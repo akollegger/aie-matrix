@@ -4,7 +4,7 @@ import type { AgentCard } from "@a2a-js/sdk";
 export function buildHouseAgentCard(houseBaseUrl: string): AgentCard {
   const u = houseBaseUrl.replace(/\/$/, "");
   return {
-    name: "aie-matrix-ghost-house",
+    name: "aie-matrix-agent-host",
     description: "Ghost house: A2A host, MCP proxy, and agent catalog for aie-matrix.",
     protocolVersion: "0.3.0",
     version: "0.0.0",

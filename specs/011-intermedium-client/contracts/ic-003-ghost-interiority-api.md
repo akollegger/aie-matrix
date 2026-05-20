@@ -3,22 +3,22 @@
 **Contract ID**: IC-003  
 **Feature**: `011-intermedium-client`  
 **Status**: Placeholder — Ghost scale content stubbed in MVP  
-**Related**: [RFC-0008 §Open Question 4](../../../proposals/rfc/0008-human-spectator-client.md), [RFC-0007](../../../proposals/rfc/0007-ghost-house-architecture.md)  
+**Related**: [RFC-0008 §Open Question 4](../../../proposals/rfc/0008-human-spectator-client.md), [RFC-0007](../../../proposals/rfc/0007-agent-host-architecture.md)  
 **Consumers**: `clients/intermedium/src/components/GhostInteriority/`
 
 ## Purpose
 
-Documents the interface the intermedium needs from the ghost house to display a ghost's inner state at Ghost scale: **inventory**, **active goal** (user-facing: not "quest" or RPG-quest diction; see `spec.md` US4), and **memories** (not "memory log"). This is a **placeholder contract** — the data model for ghost interiority is not yet defined in RFC-0007. This document records the expected shape so the ghost house team can design to it.
+Documents the interface the intermedium needs from the agent host to display a ghost's inner state at Ghost scale: **inventory**, **active goal** (user-facing: not "quest" or RPG-quest diction; see `spec.md` US4), and **memories** (not "memory log"). This is a **placeholder contract** — the data model for ghost interiority is not yet defined in RFC-0007. This document records the expected shape so the agent host team can design to it.
 
 ## Context
 
-RFC-0008 §Design: "The Ghost scale is the only scale with no hex grid. It presents the ghost's inner state as a structured document: what it carries, what it is trying to do, what it remembers. The data source is the ghost's MCP state, surfaced via the ghost house API."
+RFC-0008 §Design: "The Ghost scale is the only scale with no hex grid. It presents the ghost's inner state as a structured document: what it carries, what it is trying to do, what it remembers. The data source is the ghost's MCP state, surfaced via the agent host API."
 
-RFC-0008 §Open Question 4: "This is not yet defined in RFC-0007. Ghost scale is in scope for this RFC as a navigation destination but its content is blocked on a follow-up contract with the ghost house."
+RFC-0008 §Open Question 4: "This is not yet defined in RFC-0007. Ghost scale is in scope for this RFC as a navigation destination but its content is blocked on a follow-up contract with the agent host."
 
 ## Expected Contract Shape (target)
 
-The ghost house MUST expose either an HTTP endpoint or an MCP tool for reading ghost interiority.
+The agent host MUST expose either an HTTP endpoint or an MCP tool for reading ghost interiority.
 
 ### Option A: HTTP endpoint (preferred for browser clients)
 
@@ -62,7 +62,7 @@ If MCP is chosen, the intermedium would require an MCP client dependency — exp
 
 ## MVP Stub Behaviour
 
-Until the ghost house team implements this API:
+Until the agent host team implements this API:
 
 1. `GhostInteriority.isAvailable` is set to `false` for all ghosts.
 2. The Ghost scale panel renders a structured placeholder showing the data categories (inventory, active goal, memories) with "loading…" states.

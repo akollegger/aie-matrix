@@ -2,7 +2,7 @@
 
 Derived from [spec.md](./spec.md) key entities and functional requirements. Field names are indicative; exact JSON keys belong in [contracts/](./contracts/).
 
-## GhostHouse (provider registration)
+## AgentHost (provider registration)
 
 | Field | Description |
 |-------|-------------|
@@ -27,7 +27,7 @@ Derived from [spec.md](./spec.md) key entities and functional requirements. Fiel
 | Field | Description |
 |-------|-------------|
 | `id` | Ghost instance id |
-| `ghostHouseId` | Owning provider |
+| `agentHostId` | Owning provider |
 | `caretakerId` | Adopting caretaker |
 | `tileId` | Current authoritative tile (also exposed via MCP) |
 | `credentialRef` | Opaque handle or embedded dev token reference (implementation detail; must map to Ghost Session Credential) |
@@ -39,7 +39,7 @@ Derived from [spec.md](./spec.md) key entities and functional requirements. Fiel
 | Field | Description |
 |-------|-------------|
 | `caretakerId` | Caretaker |
-| `ghostHouseId` | Provider |
+| `agentHostId` | Provider |
 | `ghostId` | Adopted ghost |
 | `sessionId` or `runId` | PoC local session scope |
 | `status` | `active` / `closed` |
@@ -48,7 +48,7 @@ Derived from [spec.md](./spec.md) key entities and functional requirements. Fiel
 
 ## Ghost Session Credential
 
-Artifact returned to the GhostHouse (or ghost runtime) after adoption. Minimum conceptual contents:
+Artifact returned to the AgentHost (or ghost runtime) after adoption. Minimum conceptual contents:
 
 - Token or secret authorizing MCP calls as that ghost
 - MCP endpoint address for `world-api`

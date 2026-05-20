@@ -2,7 +2,7 @@
 
 **Channel**: `aie-matrix:world-events`  
 **Publisher**: `server/world-api/src/redis/RedisPublishService.ts`  
-**Subscribers**: Colyseus (`server/colyseus/`), ghost-house (`ghosts/ghost-house/`)  
+**Subscribers**: Colyseus (`server/colyseus/`), agent-host (`server/agent-host/`)  
 **Constant location**: `@aie-matrix/shared-types` — `WORLD_EVENTS_CHANNEL = "aie-matrix:world-events"`
 
 All messages are JSON-serialised strings. Subscribers parse with `JSON.parse`.
@@ -24,7 +24,7 @@ Published by `POST /live` after session record is created.
 
 **Subscriber behaviour**:
 - **Colyseus**: loads movement graph for the primary map from Neo4j. Updates `/:spectator/room` metadata.
-- **ghost-house**: records session context for agent event delivery.
+- **agent-host**: records session context for agent event delivery.
 
 ---
 
@@ -45,7 +45,7 @@ Published by `PATCH /live/:id/maps` after `[:USES]` edges are updated.
 **Subscriber behaviour**:
 - **world-api** (self): rebuilds in-memory movement graph and cell index. Rejects `go` on `removedCells` with `CELL_NOT_IN_MAP`. Triggers ghost evacuation.
 - **Colyseus**: removes `ghostTiles` entries for ghosts on `removedCells`. Broadcasts `message.map-changed` room event to WebSocket clients.
-- **ghost-house**: delivers `aie-matrix.world-event.v1` of type `world.map-changed` to each adopted ghost agent.
+- **agent-host**: delivers `aie-matrix.world-event.v1` of type `world.map-changed` to each adopted ghost agent.
 
 ---
 
@@ -63,7 +63,7 @@ Published by `DELETE /live/:id`.
 
 **Subscriber behaviour**:
 - **Colyseus**: marks session ended in room metadata.
-- **ghost-house**: stops delivering world events to agents for this session.
+- **agent-host**: stops delivering world events to agents for this session.
 
 ---
 

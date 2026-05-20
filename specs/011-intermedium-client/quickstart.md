@@ -6,7 +6,7 @@
 ## Prerequisites
 
 - Node.js 24 + pnpm 10 (workspace monorepo)
-- The backend stack running locally (world-api + Colyseus server + ghost house):
+- The backend stack running locally (world-api + Colyseus server + agent host):
   ```bash
   pnpm dev   # from repo root — starts all servers in watch mode
   ```
@@ -110,4 +110,4 @@ All internal paths in the debugger are relative; the top-level rename has no eff
 
 - The intermedium has no shared framework code with the debugger. Each client is an independent Vite project.
 - `VITE_DEV_GHOST_ID` sets the pairing ghost ID without going through the pairing flow — useful for testing Partner and Ghost scales locally.
-- The A2A conversation panel (`ConversationThread`) renders a stub by default. When `VITE_GHOST_HOUSE_URL` is set and the ghost house exposes `GET /conversation/:ghostId/messages`, the stub is replaced with live data.
+- The A2A conversation panel (`ConversationThread`) renders a stub by default. When `VITE_GHOST_HOUSE_URL` is set and the agent host exposes `GET /conversation/:ghostId/messages`, the stub is replaced with live data.

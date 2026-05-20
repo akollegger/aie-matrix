@@ -8,7 +8,7 @@
 ## Proposal Context *(mandatory)*
 
 - **Related Proposals**: [`proposals/rfc/0005-ghost-conversation-model.md`](../../proposals/rfc/0005-ghost-conversation-model.md) (authoritative design), [`proposals/adr/0003-conversation-server.md`](../../proposals/adr/0003-conversation-server.md) (authoritative architecture decision)
-- **Scope Boundary**: The `server/conversation/` package (notification bridge + conversation store), the `say` MCP tool in `server/world-api/`, Colyseus signal delivery, and the HTTP endpoints that ghost house services use to read message history for their registered ghost instances.
+- **Scope Boundary**: The `server/conversation/` package (notification bridge + conversation store), the `say` MCP tool in `server/world-api/`, Colyseus signal delivery, and the HTTP endpoints that agent host services use to read message history for their registered ghost instances.
 - **Out of Scope**: Memory modules, information decay, social graph recording, variable cluster radius ("shouting"), Neo4j store implementation, proximity event signals (`ghost.entered_cluster`, `ghost.left_cluster`), and any ghost behavior beyond issuing `say`.
 
 > **Tight coupling notice**: This specification is intentionally synchronized with RFC-0005 and ADR-0003. Any deviation between this document and those proposals is a defect and must be discussed before implementation proceeds. The proposals are the authoritative source of truth; this document translates them into testable requirements.
@@ -49,22 +49,22 @@ A ghost in conversational mode finishes speaking and issues `bye`. The engine re
 
 ---
 
-### User Story 3 — Ghost House Monitors Ghost Conversation History (Priority: P3)
+### User Story 3 — Agent Host Monitors Ghost Conversation History (Priority: P3)
 
-A ghost house is an external service that operates multiple ghost instances, each paired with a single IRL user. It needs to read conversation history for any of its registered ghost instances — to update ghost goals, inform agent strategy, or relay context back to the IRL user — without requiring a live Colyseus connection. It authenticates with its registered API key and queries the conversation store over HTTP, specifying a `ghost_id` for each instance it wants to inspect.
+A agent host is an external service that operates multiple ghost instances, each paired with a single IRL user. It needs to read conversation history for any of its registered ghost instances — to update ghost goals, inform agent strategy, or relay context back to the IRL user — without requiring a live Colyseus connection. It authenticates with its registered API key and queries the conversation store over HTTP, specifying a `ghost_id` for each instance it wants to inspect.
 
-**Why this priority**: Ghost house autonomy depends on async access to conversation history per ghost instance. Without it, a ghost house cannot build strategies, react to what a ghost heard, or surface information back to the IRL user it represents.
+**Why this priority**: Ghost house autonomy depends on async access to conversation history per ghost instance. Without it, a agent host cannot build strategies, react to what a ghost heard, or surface information back to the IRL user it represents.
 
-**Independent Test**: After ghost instance A and ghost instance B (both operated by the same ghost house) have each issued `say` commands, the ghost house calls `GET /threads/{ghost_id_A}` and `GET /threads/{ghost_id_B}` with its single API key and receives the correct records for each. No Colyseus connection is required.
+**Independent Test**: After ghost instance A and ghost instance B (both operated by the same agent host) have each issued `say` commands, the agent host calls `GET /threads/{ghost_id_A}` and `GET /threads/{ghost_id_B}` with its single API key and receives the correct records for each. No Colyseus connection is required.
 
 **Acceptance Scenarios**:
 
-1. **Given** a ghost instance has sent five messages, **When** its ghost house calls `GET /threads/{ghost_id}` with a valid API key, **Then** the response contains all five message records in chronological order.
-2. **Given** a known `message_id`, **When** the ghost house calls `GET /threads/{ghost_id}/{message_id}` with a valid API key, **Then** the response returns exactly that record.
-3. **Given** an invalid or missing API key, **When** the ghost house calls either endpoint, **Then** the request is rejected with an authorization error.
-4. **Given** a ghost house operates two ghost instances, **When** it calls `GET /threads/{ghost_id}` for each using the same API key, **Then** both calls succeed and return the correct records for their respective instances.
-5. **Given** a large thread, **When** the ghost house calls `GET /threads/{ghost_id}?after={message_id}&limit={n}`, **Then** the response returns at most `n` records newer than `message_id`, enabling "fetch since last seen" pagination.
-6. **Given** a server restart occurred, **When** the ghost house calls `GET /threads/{ghost_id}`, **Then** all messages written before the restart are still returned (persistence survives restart).
+1. **Given** a ghost instance has sent five messages, **When** its agent host calls `GET /threads/{ghost_id}` with a valid API key, **Then** the response contains all five message records in chronological order.
+2. **Given** a known `message_id`, **When** the agent host calls `GET /threads/{ghost_id}/{message_id}` with a valid API key, **Then** the response returns exactly that record.
+3. **Given** an invalid or missing API key, **When** the agent host calls either endpoint, **Then** the request is rejected with an authorization error.
+4. **Given** a agent host operates two ghost instances, **When** it calls `GET /threads/{ghost_id}` for each using the same API key, **Then** both calls succeed and return the correct records for their respective instances.
+5. **Given** a large thread, **When** the agent host calls `GET /threads/{ghost_id}?after={message_id}&limit={n}`, **Then** the response returns at most `n` records newer than `message_id`, enabling "fetch since last seen" pagination.
+6. **Given** a server restart occurred, **When** the agent host calls `GET /threads/{ghost_id}`, **Then** all messages written before the restart are still returned (persistence survives restart).
 
 ---
 
@@ -72,9 +72,9 @@ A ghost house is an external service that operates multiple ghost instances, eac
 
 A developer runs the ghost-cli to directly operate a ghost during development or debugging. They issue `say` to enter conversational mode, observe the state change reflected in the CLI (movement commands are rejected with a clear message), send additional messages, and issue `bye` to return to normal state. The CLI provides unambiguous feedback on each state transition.
 
-**Why this priority**: The ghost-cli is the primary hands-on tool for exercising and debugging the conversation feature in isolation. Without CLI support, the only way to drive `say` and `bye` is through a full ghost house integration, which significantly slows development iteration. It also serves as the reference implementation for how conversation state should surface in any UI.
+**Why this priority**: The ghost-cli is the primary hands-on tool for exercising and debugging the conversation feature in isolation. Without CLI support, the only way to drive `say` and `bye` is through a full agent host integration, which significantly slows development iteration. It also serves as the reference implementation for how conversation state should surface in any UI.
 
-**Independent Test**: A developer with a running ghost-cli session issues `say "hello world"`, observes a conversational mode indicator, attempts a movement command (sees a clear rejection), issues `bye`, then successfully issues a movement command. Full round-trip validated without a ghost house.
+**Independent Test**: A developer with a running ghost-cli session issues `say "hello world"`, observes a conversational mode indicator, attempts a movement command (sees a clear rejection), issues `bye`, then successfully issues a movement command. Full round-trip validated without a agent host.
 
 **Acceptance Scenarios**:
 
@@ -144,7 +144,7 @@ A contributor replaces the JSONL store with a SQLite implementation. No changes 
 - **FR-012**: `message_id` MUST be a ULID — lexicographically sortable, collision-resistant, and coordination-free.
 - **FR-013**: System MUST expose `GET /threads/{ghost_id}` returning a paginated list of message records, supporting `after={message_id}` and `limit={n}` query parameters.
 - **FR-014**: System MUST expose `GET /threads/{ghost_id}/{message_id}` returning the single specified message record.
-- **FR-015**: Both HTTP endpoints MUST require authentication via the ghost house API key issued at registration. A valid key MUST grant access to all ghost instances registered under that ghost house, and only those instances.
+- **FR-015**: Both HTTP endpoints MUST require authentication via the agent host API key issued at registration. A valid key MUST grant access to all ghost instances registered under that agent host, and only those instances.
 - **FR-016**: The conversation store MUST implement the interface: `append(record): Promise<void>`, `get(thread_id, message_id): Promise<MessageRecord>`, `list(thread_id, options): Promise<MessageRecord[]>`. The interface MUST NOT require Effect-ts knowledge.
 - **FR-017**: Conversation responsibilities MUST be implemented in a dedicated `server/conversation/` package. Persistence and fan-out logic MUST NOT be inlined into `server/world-api/` or `server/colyseus/`.
 - **FR-018**: System MUST durably persist messages so that conversation history survives server restart.
@@ -163,7 +163,7 @@ A contributor replaces the JSONL store with a SQLite implementation. No changes 
 - **IC-001**: Conversation store interface (`append`, `get`, `list`) with `Promise<T>` return types — defined in `server/conversation/`. This is the primary extension point for third-party contributors.
 - **IC-002**: Message record schema — extends OpenAI chat completions message shape with `mx_`-prefixed fields. Both the Colyseus notification bridge and the HTTP endpoints depend on this schema.
 - **IC-003**: Colyseus signal contract — `message.new` signal with payload `{ thread_id: string, message_id: string }`. Target architecture for production delivery. In the PoC, ghost agents discover notifications via `inbox` polling instead (see research.md Decision 2).
-- **IC-004**: HTTP endpoint contract — `GET /threads/{ghost_id}` and `GET /threads/{ghost_id}/{message_id}` with ghost house API key auth. One API key grants access to all ghost instances registered under that ghost house. Consumed by ghost house services.
+- **IC-004**: HTTP endpoint contract — `GET /threads/{ghost_id}` and `GET /threads/{ghost_id}/{message_id}` with agent host API key auth. One API key grants access to all ghost instances registered under that agent host. Consumed by agent host services.
 - **IC-005**: `say { content: string }` and `bye` MCP tools — defined in `server/world-api/`. `say` manages the state transition to conversational mode and delegates to `server/conversation/` for persistence and fan-out. `bye` clears conversational mode and returns the ghost to normal state. Both are part of the ghost wire protocol (ADR-0001).
 
 ## Success Criteria *(mandatory)*
@@ -171,21 +171,21 @@ A contributor replaces the JSONL store with a SQLite implementation. No changes 
 ### Measurable Outcomes
 
 - **SC-001**: A ghost agent issuing `say` causes all ghosts within its 7-cell cluster to be notified within the same server-side request lifecycle. In the PoC, ghost agents discover notifications via `inbox` polling; Colyseus push delivery is the target architecture, deferred per research.md Decision 2.
-- **SC-002**: A ghost house service can retrieve messages for any of its registered ghost instances via HTTP within 500ms of the request, for thread sizes up to 100k records per ghost.
+- **SC-002**: A agent host service can retrieve messages for any of its registered ghost instances via HTTP within 500ms of the request, for thread sizes up to 100k records per ghost.
 - **SC-003**: All message records written by `say` are present and readable after a server restart — zero message loss on clean shutdown.
 - **SC-004**: Replacing the JSONL store with a conforming alternative implementation requires no changes outside `server/conversation/` — all upstream contracts remain identical.
 - **SC-005**: A third-party contributor can implement a conforming store backend without importing or understanding Effect-ts — the interface uses standard Promise-based types only.
-- **SC-006**: A ghost that has issued `say` cannot move until it issues `bye` — the engine enforces this without any action by the ghost house or the ghost agent.
+- **SC-006**: A ghost that has issued `say` cannot move until it issues `bye` — the engine enforces this without any action by the agent host or the ghost agent.
 - **SC-007**: Cluster membership for each message reflects whoever was in range at the moment that specific `say` was processed — no continuous background computation is required.
 
 ## Assumptions
 
 ### Actor model
 
-- A **ghost house** is an external service that registers and operates multiple ghost instances. It is the intermediary between the world engine and IRL users. A single ghost house may manage many ghost instances.
-- A **ghost instance** is an autonomous agent in the world, paired one-to-one with a single IRL user. The ghost house creates, governs, and observes ghost instances on behalf of those users.
-- An **IRL user** (ghost caretaker) cannot directly interact with their ghost. All interaction is mediated by the ghost house — for example, an IRL user changing a ghost's goal sends that intent to the ghost house, which relays it to the world server, which notifies the ghost instance.
-- A **ghost house API key** is scoped to the ghost house service and grants access to all ghost instances that ghost house has registered. It is not per-ghost and not per-IRL-user.
+- A **agent host** is an external service that registers and operates multiple ghost instances. It is the intermediary between the world engine and IRL users. A single agent host may manage many ghost instances.
+- A **ghost instance** is an autonomous agent in the world, paired one-to-one with a single IRL user. The agent host creates, governs, and observes ghost instances on behalf of those users.
+- An **IRL user** (ghost caretaker) cannot directly interact with their ghost. All interaction is mediated by the agent host — for example, an IRL user changing a ghost's goal sends that intent to the agent host, which relays it to the world server, which notifies the ghost instance.
+- A **agent host API key** is scoped to the agent host service and grants access to all ghost instances that agent host has registered. It is not per-ghost and not per-IRL-user.
 
 ### Technical assumptions
 

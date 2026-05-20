@@ -5,7 +5,7 @@
 
 ## Summary
 
-Implement Tier 2 of ADR-0007: a Docker Compose-based staging environment that runs the aie-matrix process topology from built container images, enforces startup dependency ordering via health checks, and gates every pull request via a GitHub Actions CI workflow. A prerequisite rename of `ghost-house` → `agent-host` runs first so container image names, compose service keys, and env vars are DevOps-legible before any Docker artifacts are authored.
+Implement Tier 2 of ADR-0007: a Docker Compose-based staging environment that runs the aie-matrix process topology from built container images, enforces startup dependency ordering via health checks, and gates every pull request via a GitHub Actions CI workflow. A prerequisite rename of `ghost-house` → `agent-host` (and relocation from `ghosts/` to `server/`) runs first so container image names, compose service keys, and env vars are DevOps-legible before any Docker artifacts are authored.
 
 **Topology note**: Research revealed that `server/colyseus`, `server/world-api`, and `server/registry` are library packages with no standalone entry points; the only runnable server process is the combined `server` package. The staging stack therefore runs **4 containers** — `server` (combined), `agent-host`, `neo4j`, `redis` — not the 6 described in ADR-0007. A future "service extraction" spec is needed to reach the full 6-container vision. `RedisPresence`/`RedisDriver` wiring is also deferred (currently only `LocalPresence` is wired in Colyseus); it is a Tier 3 / horizontal-scaling concern, not a single-replica staging requirement. See `research.md` for full findings.
 
@@ -53,13 +53,13 @@ specs/016-staging-deployment/
 
 ```text
 # Rename (P0 — prerequisite)
-ghosts/ghost-house/     →  ghosts/agent-host/
-  package.json            name: @aie-matrix/ghost-house → @aie-matrix/agent-host
+server/agent-host/     →  ghosts/agent-host/
+  package.json            name: @aie-matrix/server-agent-host → @aie-matrix/agent-host
   examples/observer-agent (path updated in workspace)
   examples/echo-agent     (path updated in workspace)
 
-pnpm-workspace.yaml     ghosts/ghost-house → ghosts/agent-host
-                        ghosts/ghost-house/examples/* → ghosts/agent-host/examples/*
+pnpm-workspace.yaml     server/agent-host → ghosts/agent-host
+                        server/agent-host/examples/* → ghosts/agent-host/examples/*
 
 # New files (Dockerfiles — one per runnable process)
 server/Dockerfile                 ← combined server (colyseus + world-api + registry)
@@ -88,21 +88,21 @@ ghosts/agent-host/src/main.ts    add /health HTTP route
 
 Ordered by dependency; each slice is independently demonstrable.
 
-### Slice 0 — Rename `ghost-house` → `agent-host` (Prerequisite)
+### Slice 0 — Rename `agent-host` → `agent-host` (Prerequisite)
 
 **Why first**: Container image names, compose service keys, and env-var prefixes must be correct before any Docker artifacts are authored. Renaming after is a find-and-replace across committed image tags and CI YAML.
 
 **Scope**:
-- Rename directory `ghosts/ghost-house/` → `ghosts/agent-host/`
-- Update `package.json` name: `@aie-matrix/ghost-house` → `@aie-matrix/agent-host`
+- Rename directory `server/agent-host/` → `ghosts/agent-host/`
+- Update `package.json` name: `@aie-matrix/server-agent-host` → `@aie-matrix/agent-host`
 - Update `pnpm-workspace.yaml` entries (directory + example sub-packages)
-- Update all `workspace:*` dependents that reference `@aie-matrix/ghost-house`
-- Update `ghosts/random-house/` (or any sibling package) if it imports ghost-house
+- Update all `workspace:*` dependents that reference `@aie-matrix/server-agent-host`
+- Update `ghosts/random-house/` (or any sibling package) if it imports agent-host
 - Update all prose references in `docs/`, `proposals/`, `specs/`, `CLAUDE.md`, `CONTRIBUTING.md`, `AGENTS.md`, `README.md`
 - Update ADR-0007 and any RFC that names the service
 - `pnpm install` must succeed cleanly; `pnpm typecheck` must pass
 
-**Verification**: `pnpm install && pnpm typecheck` green; `grep -r ghost-house . --include="*.json" --include="*.yaml" --include="*.md" --include="*.ts"` returns no matches outside of git history.
+**Verification**: `pnpm install && pnpm typecheck` green; `grep -r agent-host . --include="*.json" --include="*.yaml" --include="*.md" --include="*.ts"` returns no matches outside of git history.
 
 ---
 

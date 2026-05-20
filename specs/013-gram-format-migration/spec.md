@@ -9,7 +9,7 @@
 
 - **Related Proposal**: ADR-0005 (H3-Native Map Format), RFC-0009 (Map Format Pipeline), RFC-0010 (H3GeoJSON Map Editor)
 - **Scope Boundary**: Update all map-consuming and map-producing components to support the layered `.map.gram` format introduced by the map editor (exemplified by `maps/sandbox/canonical.map.gram`). This includes the intermedium client parser, the Colyseus map loader, and the tmj-to-gram conversion tool. All existing old-format `.map.gram` files are converted to the layered format as part of this migration.
-- **Out of Scope**: Multi-floor `.map.gram` wrapper format; Neo4j graph seeding from gram files; portal visualization in the intermedium client; movement-rule pathfinding in the client; map authoring UI changes; changes to the A2A ghost-house server.
+- **Out of Scope**: Multi-floor `.map.gram` wrapper format; Neo4j graph seeding from gram files; portal visualization in the intermedium client; movement-rule pathfinding in the client; map authoring UI changes; changes to the A2A agent-host server.
 
 ## Clarifications
 

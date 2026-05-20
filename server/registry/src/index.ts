@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect, ManagedRuntime } from "effect";
 import { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
-import { handleRegisterGhostHouseEffect } from "./routes/register-house.js";
+import { handleRegisterAgentHostEffect } from "./routes/register-house.js";
 import { createCaretakerId } from "./store.js";
 import type { WorldBridgeService } from "@aie-matrix/server-world-api";
 import { runWithRequestTrace } from "@aie-matrix/server-world-api";
@@ -12,7 +12,7 @@ import { RegistryBadJson } from "./registry-errors.js";
 
 export { createRegistryStore, createCaretakerId, type RegistryStore } from "./store.js";
 export { assertAdoptionAllowed } from "./session-guard.js";
-export { handleRegisterGhostHouseEffect } from "./routes/register-house.js";
+export { handleRegisterAgentHostEffect } from "./routes/register-house.js";
 export { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
 export * from "./registry-errors.js";
 export { RegistryStoreService, makeRegistryStoreLayer } from "@aie-matrix/server-world-api";
@@ -95,7 +95,7 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
         await config.runtime.runPromise(
           withRegistryRouteRecovery(
             res,
-            handleRegisterGhostHouseEffect(req, res, REGISTRY_CORS_HEADERS),
+            handleRegisterAgentHostEffect(req, res, REGISTRY_CORS_HEADERS),
             config.mapHttpError,
           ),
         );

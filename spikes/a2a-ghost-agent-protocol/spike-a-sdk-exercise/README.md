@@ -1,6 +1,6 @@
 # Spike A — `@a2a-js/sdk` maturity exercise
 
-Validates four patterns from `specs/008-a2a-ghost-house-spike/spec.md` (FR-001–FR-004) in one process: local Express A2A agent + in-process client (`npm run smoke`).
+Validates four patterns from `specs/008-a2a-agent-host-spike/spec.md` (FR-001–FR-004) in one process: local Express A2A agent + in-process client (`npm run smoke`).
 
 ## Prerequisites
 

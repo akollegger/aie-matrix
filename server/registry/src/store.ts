@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-export interface GhostHouseRecord {
+export interface AgentHostRecord {
   id: string;
   displayName: string;
   baseUrl?: string;
@@ -14,14 +14,14 @@ export interface CaretakerRecord {
 
 export interface GhostRecord {
   id: string;
-  ghostHouseId: string;
+  agentHostId: string;
   caretakerId: string;
   h3Index: string;
   status: "active" | "stopped";
 }
 
 export interface RegistryStore {
-  houses: Map<string, GhostHouseRecord>;
+  houses: Map<string, AgentHostRecord>;
   caretakers: Map<string, CaretakerRecord>;
   ghosts: Map<string, GhostRecord>;
   /** caretaker → active ghost id */
@@ -41,7 +41,7 @@ export function createCaretakerId(): string {
   return randomUUID();
 }
 
-export function createGhostHouseId(): string {
+export function createAgentHostId(): string {
   return randomUUID();
 }
 

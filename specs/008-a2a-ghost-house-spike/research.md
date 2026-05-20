@@ -1,4 +1,4 @@
-# Phase 0 Research: 008 A2A Ghost House Spike
+# Phase 0 Research: 008 A2A Agent Host Spike
 
 ## Decision: Spike code location
 

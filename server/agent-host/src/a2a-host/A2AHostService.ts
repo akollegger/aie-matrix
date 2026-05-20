@@ -58,7 +58,7 @@ export interface IA2AHostService {
   readonly cancelTask: (client: Client, taskId: string) => Effect.Effect<void>;
 }
 
-export class A2AHostService extends Context.Tag("ghost-house/A2AHostService")<
+export class A2AHostService extends Context.Tag("agent-host/A2AHostService")<
   A2AHostService,
   IA2AHostService
 >() {}
@@ -155,7 +155,7 @@ export const createA2AHostService = (devToken: string): IA2AHostService => {
             {
               taskId,
               pushNotificationConfig: {
-                id: "aie-matrix-ghost-house",
+                id: "aie-matrix-agent-host",
                 url: options.houseAgentPushIngestUrl,
                 token: options.pushToken,
               },

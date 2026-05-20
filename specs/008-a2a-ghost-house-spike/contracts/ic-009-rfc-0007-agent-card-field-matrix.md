@@ -1,7 +1,7 @@
 # IC-009: RFC-0007 Agent Card Field Matrix (Spike B Validation)
 
 **Status**: Draft  
-**Source of truth**: [`proposals/rfc/0007-ghost-house-architecture.md`](../../../proposals/rfc/0007-ghost-house-architecture.md) — Agent Card Schema (`matrix` object)  
+**Source of truth**: [`proposals/rfc/0007-agent-host-architecture.md`](../../../proposals/rfc/0007-agent-host-architecture.md) — Agent Card Schema (`matrix` object)  
 **Spec reference**: `spec.md` IC-001
 
 ## Purpose

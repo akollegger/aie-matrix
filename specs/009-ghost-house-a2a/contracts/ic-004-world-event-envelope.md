@@ -2,7 +2,7 @@
 
 **Status**: Accepted (Phase 2+)  
 **Consumers**: Colyseus bridge (produces), ghost agents Listener/Social tier (consume), TCK Listener/Social suites  
-**Supersedes**: [IC-008 spike-only synthetic event](../../008-a2a-ghost-house-spike/contracts/ic-008-spike-synthetic-world-event.md) — that was a draft placeholder; this is the production contract  
+**Supersedes**: [IC-008 spike-only synthetic event](../../008-a2a-agent-host-spike/contracts/ic-008-spike-synthetic-world-event.md) — that was a draft placeholder; this is the production contract  
 **Source of truth**: RFC-0007 §Colyseus Bridge
 
 ## Purpose

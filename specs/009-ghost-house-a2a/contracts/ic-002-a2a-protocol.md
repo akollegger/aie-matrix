@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Pin the A2A protocol version used between the ghost house and ghost agents, define SDK version constraints, and document the interaction patterns validated in spike-008 that agents must follow.
+Pin the A2A protocol version used between the agent host and ghost agents, define SDK version constraints, and document the interaction patterns validated in spike-008 that agents must follow.
 
 ## Protocol Version
 
@@ -14,11 +14,11 @@ Pin the A2A protocol version used between the ghost house and ghost agents, defi
 
 - Declared in agent cards' `protocolVersion` field: `"0.3.0"`
 - Negotiated via `A2A-Version: 0.3.0` HTTP header on all house↔agent requests
-- The ghost house serves as the A2A host; agents are A2A clients
+- The agent host serves as the A2A host; agents are A2A clients
 
 **SDK reference**: `@a2a-js/sdk` ≥ 0.3.13 (version exercised in spike-008 without patches)
 
-**Protocol upgrade path**: A2A v1.0.0 is in RC under Linux Foundation governance. Track SDK v1.0 adoption and plan upgrade when stable. The ghost house must bump `protocolVersion` in agent cards and update this contract when upgrading.
+**Protocol upgrade path**: A2A v1.0.0 is in RC under Linux Foundation governance. Track SDK v1.0 adoption and plan upgrade when stable. The agent host must bump `protocolVersion` in agent cards and update this contract when upgrading.
 
 ## Interaction Patterns
 

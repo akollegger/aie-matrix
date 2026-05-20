@@ -1,0 +1,35 @@
+# Docker build context exclusions
+# Prevents large/irrelevant directories from being sent to the Docker daemon.
+# The pnpm virtual store is populated inside the build stage via `pnpm fetch`.
+
+# Ignore all node_modules — pnpm install runs inside the build stage
+**/node_modules
+
+# Ignore all build outputs — rebuilt inside the build stage
+**/dist
+
+# Ignore git history — large and not needed at build time
+.git
+
+# Local env files — secrets must not enter the build context
+.env
+.env.*
+deploy/staging/.env.staging
+
+# Editor / OS noise
+.DS_Store
+**/.DS_Store
+.vscode
+.idea
+
+# Playwright / test artifacts
+playwright-report
+test-results
+
+# TypeScript incremental build state — must not enter Docker context or tsc will
+# treat every package as "up to date" and skip emission (no dist/ created)
+**/*.tsbuildinfo
+
+# Turbo / pnpm cache
+.turbo
+.pnpm-store

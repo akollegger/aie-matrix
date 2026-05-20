@@ -2,8 +2,8 @@
 
 **Status**: Accepted  
 **Consumers**: Ghost house catalog service (validates on registration), TCK (validates per tier), contributed agents (must produce), ghost-cli (may display)  
-**Source of truth**: [RFC-0007 §Agent Card Schema](../../../proposals/rfc/0007-ghost-house-architecture.md)  
-**Supersedes**: [IC-009 (spike-008)](../../008-a2a-ghost-house-spike/contracts/ic-009-rfc-0007-agent-card-field-matrix.md) — spike validation artifact; this is the production contract
+**Source of truth**: [RFC-0007 §Agent Card Schema](../../../proposals/rfc/0007-agent-host-architecture.md)  
+**Supersedes**: [IC-009 (spike-008)](../../008-a2a-agent-host-spike/contracts/ic-009-rfc-0007-agent-card-field-matrix.md) — spike validation artifact; this is the production contract
 
 ## Purpose
 

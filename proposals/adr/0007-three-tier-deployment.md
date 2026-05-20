@@ -9,7 +9,7 @@
 The project launched as a local PoC with all services running in a single Node.js process and in-memory state. Moving toward production for the AI Engineer World's Fair requires:
 
 - Stateful services: **Neo4j** (world graph, ghost positions, goal state) and **Redis** (Colyseus `RedisPresence` + `RedisDriver` for horizontal scaling)
-- Multiple independently deployable service processes (`colyseus`, `world-api`, `registry`, `ghost-house`)
+- Multiple independently deployable service processes (`colyseus`, `world-api`, `registry`, `agent-host`)
 - A clear path from a fast local-dev loop to a load-tested staging environment to a conference-day production cluster
 
 Without a documented deployment model, each developer makes incompatible local assumptions, staging diverges from production, and the CI/CD open question in `docs/architecture.md` stays open.
@@ -39,7 +39,7 @@ NEO4J_PASSWORD=<local>
 ### Tier 2 — Staging
 
 A `docker-compose.yml` at the repo root (or `deploy/staging/`) defines:
-- One container per service package (`colyseus`, `world-api`, `registry`, `ghost-house`)
+- One container per service package (`colyseus`, `world-api`, `registry`, `agent-host`)
 - A `redis:7` service
 - A `neo4j:5` service with persistent volume
 - A shared `aie-matrix` network
@@ -99,7 +99,7 @@ Redis ──────────────────┐               wo
                         │                      │
                         └──────────┬───────────┘
                                    ▼
-                             ghost-house (ready when
+                             agent-host (ready when
                              world-api + Colyseus answer)
 ```
 
@@ -112,15 +112,15 @@ Redis and Neo4j have different failure profiles and require different responses:
 | Store | What it owns | Failure impact | Recovery |
 |-------|-------------|----------------|----------|
 | **Redis** | Ephemeral coordination (presence, pub/sub, matchmaking) | Cross-replica pub/sub breaks; existing Colyseus room schema survives in process memory; ghost positions in Neo4j are intact | Redis restart → Colyseus reconnects automatically via `RedisPresence` retry; ghosts re-sync on next heartbeat. No data loss. |
-| **Neo4j Aura** | Live world state (cells, positions, relationships, active map, conversation history, agent catalog) | world-api rejects all tool calls; ghost movement and MCP proxy fail; ghost-house cannot resolve agent catalog | world-api and ghost-house enter a retry loop with exponential backoff. Colyseus continues accepting WebSocket connections but world calls error until Neo4j recovers. Neo4j Aura HA handles node failover transparently. |
+| **Neo4j Aura** | Live world state (cells, positions, relationships, active map, conversation history, agent catalog) | world-api rejects all tool calls; ghost movement and MCP proxy fail; agent-host cannot resolve agent catalog | world-api and agent-host enter a retry loop with exponential backoff. Colyseus continues accepting WebSocket connections but world calls error until Neo4j recovers. Neo4j Aura HA handles node failover transparently. |
 
 #### Stateless application services
 
-Colyseus, world-api, registry, and ghost-house carry **no authoritative state that is not already in Redis or Neo4j**. Any of these services can be killed and restarted at any time without data loss:
+Colyseus, world-api, registry, and agent-host carry **no authoritative state that is not already in Redis or Neo4j**. Any of these services can be killed and restarted at any time without data loss:
 
 - Colyseus restart: WebSocket clients reconnect; room state re-hydrates from ghost positions already stored in Neo4j.
 - world-api restart: no local state; resumes serving from Neo4j immediately after reconnect.
-- ghost-house restart: agent catalog read from Neo4j on startup; registered agents re-attach via A2A heartbeat.
+- agent-host restart: agent catalog read from Neo4j on startup; registered agents re-attach via A2A heartbeat.
 
 This property is what makes horizontal scaling (multiple Colyseus replicas) and rolling deploys (one replica at a time) safe.
 
@@ -160,7 +160,7 @@ The Effect-ts `Layer` for each stateful service reads these variables at startup
 - **Heroku / Fly.io for staging**: Easier initial setup but diverges from GKE topology (networking model, secrets management). Configuration differences that pass staging could fail in production.
 - **Skip staging; go dev → prod directly**: High risk for a live conference. Staging is the only place to validate multi-container wiring, volume mounts, and Redis failover before attendees connect.
 - **Single docker-compose for all environments**: Works at small scale but lacks the rolling-update, health-check, and autoscaling primitives needed for conference-day load spikes.
-- **Colyseus Cloud**: Managed hosting from the Colyseus team. Removes operational burden but constrains the ability to co-locate world-api and ghost-house in the same cluster, and adds a vendor dependency at the real-time core.
+- **Colyseus Cloud**: Managed hosting from the Colyseus team. Removes operational burden but constrains the ability to co-locate world-api and agent-host in the same cluster, and adds a vendor dependency at the real-time core.
 - **Neo4j self-hosted on GKE**: More control but adds StatefulSet management, backup procedures, and upgrade coordination. Neo4j Aura offloads this operationally without changing the driver or query surface.
 
 ## Consequences
@@ -178,7 +178,7 @@ The Effect-ts `Layer` for each stateful service reads these variables at startup
 - **Local Neo4j**: Developers must run Neo4j locally. A `docker-compose.dev.yml` providing only the stateful services (Redis + Neo4j) can reduce friction.
 - **Secrets hygiene**: Kubernetes `Secret` objects and `.env` files must never be committed. `@aie-matrix/root-env` already reads from the environment; this is an operational discipline requirement.
 - **Service discovery changes between tiers**: Localhost ports in Tier 1 become DNS names in Tier 2/3. Services must not hard-code `localhost`; all inter-service URLs must be configurable env vars.
-- **Filesystem-to-Neo4j migration for conversation history and agent catalog**: `server/conversation` (JSONL store) and `ghosts/ghost-house` (catalog.json) currently write to local disk. In production these must write to Neo4j Aura. Each will need an Effect-ts `Layer` implementation backed by Neo4j, selected when `CONVERSATION_DATA_DIR` / `CATALOG_FILE_PATH` are unset in the production config. This is new implementation work gated behind staging validation.
+- **Filesystem-to-Neo4j migration for conversation history and agent catalog**: `server/conversation` (JSONL store) and `server/agent-host` (catalog.json) currently write to local disk. In production these must write to Neo4j Aura. Each will need an Effect-ts `Layer` implementation backed by Neo4j, selected when `CONVERSATION_DATA_DIR` / `CATALOG_FILE_PATH` are unset in the production config. This is new implementation work gated behind staging validation.
 - **Map publish step**: A "publish map" operation (upload `.map.gram` + sidecar to GCS, seed Neo4j, update active-map pointer) is required before production can serve a new map. The interface for this is out of scope for this ADR; it is defined in [RFC-0013](../rfc/0013-map-management.md).
 - **world-api refactor**: Removing the local-file read path from world-api in favour of Neo4j is a non-trivial change to `MapService` and `ItemService`. This work is explicitly deferred until the local-file fallback is no longer required (i.e., when the map publish workflow exists).
 
@@ -200,7 +200,7 @@ This ADR resolves the **CI/CD Pipeline** open question in `docs/architecture.md`
 | [RFC-0002](../rfc/0002-rule-based-movement.md) | Rule-Based Movement | Movement rulesets follow the GCS artifact → Neo4j seed path; the `AIE_MATRIX_RULES` local file is a Tier 1 convenience only. |
 | [RFC-0005](../rfc/0005-ghost-conversation-model.md) | Ghost Conversation Model | The JSONL store is the Tier 1 implementation; a Neo4j-backed `ConversationStore` Layer is required at Tier 3, selected when `CONVERSATION_DATA_DIR` is unset. |
 | [RFC-0006](../rfc/0006-world-objects.md) | World Items | Item sidecars (`.items.json`) follow the GCS artifact path in Tier 3; `ItemService` must support GCS fetch when `AIE_MATRIX_ITEMS` is not a local path. |
-| [RFC-0007](../rfc/0007-ghost-house-architecture.md) | Ghost House Architecture | ghost-house is the last service in the startup dependency chain; its agent catalog must persist to Neo4j in Tier 3, not to `catalog.json` on disk. |
+| [RFC-0007](../rfc/0007-agent-host-architecture.md) | Agent Host Architecture | agent-host is the last service in the startup dependency chain; its agent catalog must persist to Neo4j in Tier 3, not to `catalog.json` on disk. |
 | [RFC-0008](../rfc/0008-human-spectator-client.md) | Intermedium Spectator Client | Reliable broadcast to spectators across Colyseus replicas requires `RedisPresence` + `RedisDriver`; this is a Tier 3 requirement. |
 | [RFC-0009](../rfc/0009-map-format-pipeline.md) | Map Format Pipeline | `.map.gram` artifacts are the input to the GCS upload step; `MapService` must support GCS fetch in Tier 3. |
 | [RFC-0010](../rfc/0010-h3geojson-map-editor.md) | H3GeoJSON Map Editor | Editor outputs are the "authored artifacts" in the source-of-truth hierarchy — they feed the publish-to-GCS workflow before world-api can serve them. |

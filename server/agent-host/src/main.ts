@@ -32,6 +32,9 @@ const worldHttpBase = (process.env.AIE_MATRIX_HTTP_BASE_URL ?? "http://127.0.0.1
   /\/$/,
   "",
 );
+// IC-002: inter-service URL contract — read directly from process.env (root-env is a file loader only)
+const worldApiUrl = (process.env.WORLD_API_URL ?? worldHttpBase).replace(/\/$/, "");
+const colyseusUrl = process.env.COLYSEUS_URL ?? worldHttpBase.replace(/^http/, "ws");
 
 if (devToken.length === 0) {
   console.error("GHOST_HOUSE_DEV_TOKEN is required");
@@ -74,6 +77,19 @@ app.use((_req, res, next) => {
   next();
 });
 app.options("*", (_req, res) => res.status(204).end());
+
+// IC-001: /health — checks world-api reachability; HTTP 200 = healthy, 503 = degraded
+app.get("/health", async (_req, res) => {
+  let worldApiOk = false;
+  try {
+    const r = await fetch(`${worldApiUrl}/health`, { signal: AbortSignal.timeout(3000) });
+    worldApiOk = r.status === 200;
+  } catch {
+    worldApiOk = false;
+  }
+  const status = worldApiOk ? "ok" : "degraded";
+  res.status(worldApiOk ? 200 : 503).json({ status, checks: { "world-api": worldApiOk } });
+});
 
 const handleMcpEffect = (req: Request, res: Response) =>
   Effect.gen(function* () {
@@ -358,7 +374,7 @@ let colyseusHandle: ColyseusWorldBridgeHandle | undefined;
 
 const server = app.listen(port, "0.0.0.0", () => {
   console.info(
-    JSON.stringify({ kind: "ghost-house.start", publicBase, port, catalog: catalogFilePath }),
+    JSON.stringify({ kind: "agent-host.start", publicBase, port, catalog: catalogFilePath, worldApiUrl, colyseusUrl }),
   );
   if (!isEnvTruthy(process.env.GHOST_HOUSE_DISABLE_COLYSEUS_BRIDGE)) {
     const roomIdOverride = process.env.GHOST_SPECTATOR_ROOM_ID?.trim() || undefined;

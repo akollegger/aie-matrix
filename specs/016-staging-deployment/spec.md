@@ -15,7 +15,7 @@
 
 ### User Story 1 — Operator brings up the full stack locally (Priority: P1)
 
-A developer or operator wants to validate that all aie-matrix services work together exactly as they will in production. They run a single compose command from the repo root and within a few minutes have a fully connected stack: Neo4j seeded, Colyseus accepting WebSocket connections, world-api serving MCP tools, ghost-house registering agents.
+A developer or operator wants to validate that all aie-matrix services work together exactly as they will in production. They run a single compose command from the repo root and within a few minutes have a fully connected stack: Neo4j seeded, Colyseus accepting WebSocket connections, world-api serving MCP tools, agent-host registering agents.
 
 **Why this priority**: This is the foundational deliverable. Everything else depends on a working compose definition. Without it, no CI integration or staging validation is possible.
 
@@ -23,7 +23,7 @@ A developer or operator wants to validate that all aie-matrix services work toge
 
 **Acceptance Scenarios**:
 
-1. **Given** a developer has Docker Desktop running and a `.env.staging` file with required credentials, **When** they run `docker compose up`, **Then** all six services (neo4j, redis, colyseus, world-api, registry, ghost-house) start in dependency order and each reports healthy within 3 minutes.
+1. **Given** a developer has Docker Desktop running and a `.env.staging` file with required credentials, **When** they run `docker compose up`, **Then** all six services (neo4j, redis, colyseus, world-api, registry, agent-host) start in dependency order and each reports healthy within 3 minutes.
 2. **Given** all services are healthy, **When** a client opens a WebSocket to the Colyseus port, **Then** the connection is accepted and a room can be joined.
 3. **Given** all services are healthy, **When** a client sends an HTTP request to world-api's `/health` endpoint, **Then** the response indicates Neo4j connectivity is confirmed.
 4. **Given** the stack is running, **When** the operator runs `docker compose down`, **Then** all containers stop cleanly and Neo4j data is preserved in a named volume.
@@ -73,10 +73,10 @@ A developer has changed only `world-api` and wants to validate the fix in the ru
 
 ### Functional Requirements
 
-- **FR-001**: The repository MUST provide a `docker-compose.yml` (or `deploy/staging/docker-compose.yml`) that defines all six services: `neo4j`, `redis`, `colyseus`, `world-api`, `registry`, and `ghost-house`.
-- **FR-002**: Each application service (`colyseus`, `world-api`, `registry`, `ghost-house`) MUST be built from a per-package multi-stage `Dockerfile` that produces a runnable artifact without mounting source code.
-- **FR-003**: The compose definition MUST declare a startup dependency order matching the chain: Neo4j → world-api → Redis → Colyseus → ghost-house, enforced via `depends_on: condition: service_healthy`.
-- **FR-004**: Each service MUST expose a `/health` HTTP endpoint that checks its own required dependencies (Neo4j connectivity for world-api; Redis + world-api for Colyseus; world-api + Colyseus for ghost-house).
+- **FR-001**: The repository MUST provide a `docker-compose.yml` (or `deploy/staging/docker-compose.yml`) that defines all six services: `neo4j`, `redis`, `colyseus`, `world-api`, `registry`, and `agent-host`.
+- **FR-002**: Each application service (`colyseus`, `world-api`, `registry`, `agent-host`) MUST be built from a per-package multi-stage `Dockerfile` that produces a runnable artifact without mounting source code.
+- **FR-003**: The compose definition MUST declare a startup dependency order matching the chain: Neo4j → world-api → Redis → Colyseus → agent-host, enforced via `depends_on: condition: service_healthy`.
+- **FR-004**: Each service MUST expose a `/health` HTTP endpoint that checks its own required dependencies (Neo4j connectivity for world-api; Redis + world-api for Colyseus; world-api + Colyseus for agent-host).
 - **FR-005**: The compose definition MUST declare a named volume for Neo4j data so that world state persists across `docker compose down` / `up` cycles.
 - **FR-006**: All services MUST share a single named Docker network (`aie-matrix`), and no service may hard-code `localhost` for inter-service communication.
 - **FR-007**: All configurable values (database URIs, passwords, ports) MUST be injectable via environment variables that match the contract defined in ADR-0007; the compose file MUST read these from an `.env.staging` file or shell environment.

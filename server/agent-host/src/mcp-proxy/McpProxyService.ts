@@ -40,7 +40,7 @@ type McpProxy = {
  * Enforces that agents only call MCP tools they declared in IC-001 `matrix.requiredTools`
  * (forwarded in {@link AgentSession#requiredTools} for the live session).
  */
-export class McpProxyService extends Context.Tag("ghost-house/McpProxyService")<
+export class McpProxyService extends Context.Tag("agent-host/McpProxyService")<
   McpProxyService,
   McpProxy
 >() {}

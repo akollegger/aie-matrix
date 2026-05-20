@@ -1,4 +1,4 @@
-# Specification Quality Checklist: A2A Ghost House Proof-of-Concept Spike
+# Specification Quality Checklist: A2A Agent Host Proof-of-Concept Spike
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning  
 **Created**: 2026-04-24  

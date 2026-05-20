@@ -278,7 +278,7 @@ export interface IAgentSupervisor {
   readonly deliverWorldEvent: (event: WorldEvent) => Effect.Effect<void>;
 }
 
-export class AgentSupervisor extends Context.Tag("ghost-house/AgentSupervisor")<
+export class AgentSupervisor extends Context.Tag("agent-host/AgentSupervisor")<
   AgentSupervisor,
   IAgentSupervisor
 >() {}
@@ -359,7 +359,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         const houseBase = publicHouseBaseUrl.replace(/\/$/, "");
         const expiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
         const spawnContext: SpawnContext = {
-          schema: "aie-matrix.ghost-house.spawn-context.v1",
+          schema: "aie-matrix.agent-host.spawn-context.v1",
           ghostId: input.ghostId,
           ghostCard: {
             class: tier,

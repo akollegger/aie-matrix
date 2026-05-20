@@ -1,8 +1,8 @@
 # Registry (`@aie-matrix/server-registry`)
 
-In-memory REST registry for **GhostHouse** registration and **caretaker → ghost** adoption (IC-001 / IC-002). Mounted on the combined PoC HTTP server under **`/registry/*`** (default base **`http://127.0.0.1:8787`**).
+In-memory REST registry for **AgentHost** registration and **caretaker → ghost** adoption (IC-001 / IC-002). Mounted on the combined PoC HTTP server under **`/registry/*`** (default base **`http://127.0.0.1:8787`**).
 
-For day-to-day demos, prefer **`pnpm run demo`** (server + Vite + ghost-house + random-agent; optional **`-- --ghosts N`** for multiple adoptions) or **`pnpm run ghost:house`** / **`pnpm --filter @aie-matrix/random-house start`** from the repository root for the legacy random-house path. To provision CLI credentials specifically, use **`pnpm run ghost:register`**.
+For day-to-day demos, prefer **`pnpm run demo`** (server + Vite + agent-host + random-agent; optional **`-- --ghosts N`** for multiple adoptions) or **`pnpm run ghost:house`** / **`pnpm --filter @aie-matrix/random-house start`** from the repository root for the legacy random-house path. To provision CLI credentials specifically, use **`pnpm run ghost:register`**.
 
 ## Script-first flow (pnpm + optional curl)
 
@@ -36,11 +36,11 @@ For day-to-day demos, prefer **`pnpm run demo`** (server + Vite + ghost-house + 
    curl -sS -X POST "$BASE/registry/houses" \
      -H 'Content-Type: application/json' \
      -d '{"displayName":"curl-house"}'
-   # → {"ghostHouseId":"...","registeredAt":"..."}  — save as HOUSE_ID
+   # → {"agentHostId":"...","registeredAt":"..."}  — save as HOUSE_ID
 
    curl -sS -X POST "$BASE/registry/adopt" \
      -H 'Content-Type: application/json' \
-     -d "{\"caretakerId\":\"$CARETAKER_ID\",\"ghostHouseId\":\"$HOUSE_ID\"}"
+     -d "{\"caretakerId\":\"$CARETAKER_ID\",\"agentHostId\":\"$HOUSE_ID\"}"
    # → 201 + ghostId, caretakerId, credential { token, worldApiBaseUrl, transport }
    ```
 
@@ -49,7 +49,7 @@ Use **`credential.worldApiBaseUrl`** and **`credential.token`** with an MCP clie
 ## Rules (PoC)
 
 - One **active** ghost per **caretaker**; a second `POST /registry/adopt` for the same caretaker returns **409** `CARETAKER_ALREADY_HAS_GHOST`.
-- A **GhostHouse** may serve multiple adoptions as long as each uses a **different** caretaker (see `ghosts/random-house` `--ghosts`).
+- A **AgentHost** may serve multiple adoptions as long as each uses a **different** caretaker (see `ghosts/random-house` `--ghosts`).
 
 ## Normative doc
 

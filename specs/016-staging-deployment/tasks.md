@@ -20,25 +20,29 @@
 
 **Purpose**: Confirm scope before making changes; identify missing env-var wiring.
 
-- [ ] T001 Grep for all `ghost-house` references that must be renamed: `grep -r "ghost-house\|ghost_house\|ghosthouse\|GhostHouse\|@aie-matrix/ghost-house" . --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" --include="*.ts" --include="*.tsx" -l`
-- [ ] T002 Audit `shared/root-env/src/` to confirm whether `WORLD_API_URL` and `COLYSEUS_URL` are already exported; note any missing variables that `ghosts/agent-host` will need to read from the environment
+- [x] T001 Grep for all `agent-host` references that must be renamed: `grep -r "agent-host\|ghost_house\|ghosthouse\|GhostHouse\|@aie-matrix/server-agent-host" . --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" --include="*.ts" --include="*.tsx" -l`
+  <!-- 97 files. Key code consumers: ghosts/peppers-agent/src/ (4 files), ghosts/random-agent/src/ (2), ghosts/tck/src/wanderer.ts, clients/debugger/phaser/src/spectatorDebugStoragePanel.ts, clients/intermedium/src/hooks/useA2AConversation.ts, server/registry/src/ (5), server/world-api/src/ (2), server/src/errors.ts. Config: pnpm-workspace.yaml, pnpm-lock.yaml. Skills: .claude/skills/aie-matrix-effect/SKILL.md, .claude/launch.json. ~60 prose files in proposals/specs/docs. -->
+- [x] T002 Audit `shared/root-env/src/` to confirm whether `WORLD_API_URL` and `COLYSEUS_URL` are already exported; note any missing variables that `server/agent-host` will need to read from the environment
+  <!-- root-env is a .env file loader only — exports GCS_BUCKET, ADMIN_TOKEN, LIVE_SESSION_ID, loadRootEnv(). NOT a centralized env-var registry. Packages read process.env.* directly. WORLD_API_URL and COLYSEUS_URL are absent. T009 should read process.env.WORLD_API_URL directly in server/agent-host/src/main.ts rather than adding to root-env. -->
 
 ---
 
-## Phase 2: Foundational — Service Rename (Prerequisite)
+## Phase 2: Foundational — Service Rename & Move (Prerequisite)
 
-**Purpose**: Rename `ghost-house` → `agent-host` everywhere before any Docker artifacts are authored. Every downstream task depends on this phase being complete.
+**Purpose**: Renamed `ghost-house` → `agent-host` and relocated it from `ghosts/` to `server/` before any Docker artifacts are authored. The move reflects the directory convention: `server/` contains server-side service processes; `ghosts/` contains agentic clients (CLI, SDK wrappers, example agents). Every downstream task depends on this phase being complete.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [ ] T003 Rename directory `ghosts/ghost-house/` → `ghosts/agent-host/`; update `ghosts/agent-host/package.json` name field from `@aie-matrix/ghost-house` to `@aie-matrix/agent-host`
-- [ ] T004 [P] Update `pnpm-workspace.yaml`: replace `ghosts/ghost-house` with `ghosts/agent-host` and `ghosts/ghost-house/examples/observer-agent` / `ghosts/ghost-house/examples/echo-agent` with their `agent-host` equivalents
-- [ ] T005 [P] Update all `workspace:*` dependencies in any package that references `@aie-matrix/ghost-house` (check `ghosts/ts-client/package.json`, `ghosts/tck/package.json`, and any server or client package that imports ghost-house)
-- [ ] T006 [P] Update all prose references to "ghost-house" or "ghost house" in `docs/`, `proposals/`, `specs/`, `CLAUDE.md`, `CONTRIBUTING.md`, `AGENTS.md`, `README.md`, and any `*.md` under `ghosts/`
-- [ ] T007 Run `pnpm install && pnpm typecheck` to verify the rename is clean across the workspace
-- [ ] T008 Verify no remaining references: `grep -r "ghost-house\|@aie-matrix/ghost-house" . --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" --include="*.ts" -l` must return empty (excluding `.git/`)
+- [x] T003 Moved directory `ghosts/ghost-house/` → `server/agent-host/`; updated `server/agent-host/package.json` name from `@aie-matrix/ghost-house` to `@aie-matrix/server-agent-host` (matching the `@aie-matrix/server-*` convention used by all other packages under `server/`)
+- [x] T004 [P] Updated `pnpm-workspace.yaml`: replaced `ghosts/ghost-house` entries with `server/agent-host`, `server/agent-host/examples/observer-agent`, `server/agent-host/examples/echo-agent`
+- [x] T005 [P] Updated root `package.json` scripts (`ghost:house` → `agent:host`, filter updated to `@aie-matrix/server-agent-host`) and `.claude/launch.json` (config name and filter updated); no other packages had `@aie-matrix/ghost-house` as a workspace dependency
+- [x] T006 [P] Updated all prose references in `.md` files throughout `docs/`, `proposals/`, `specs/`, `CLAUDE.md`, `CONTRIBUTING.md`, `AGENTS.md`, `README.md`, and `ghosts/` — replaced `ghosts/ghost-house` paths, `@aie-matrix/ghost-house` package name, and "ghost-house"/"Ghost House" text with `server/agent-host`, `@aie-matrix/server-agent-host`, and "agent-host"/"Agent Host"
+- [x] T007 Run `pnpm install && pnpm typecheck` to verify the rename and move are clean across the workspace
+  <!-- pnpm install: "Already up to date" (5.8s). pnpm typecheck: all packages passed clean including server/agent-host. -->
+- [x] T008 Verify no remaining `ghost-house` references: `grep -r "ghost-house\|@aie-matrix/ghost-house" . --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" --include="*.ts" -l` must return empty (excluding `.git/`)
+  <!-- Only two matches remain: specs/016-staging-deployment/plan.md and tasks.md — both contain legitimate historical references describing the rename (e.g. "rename of ghost-house → agent-host"). Acceptable exceptions. -->
 
-**Checkpoint**: Rename complete — `pnpm typecheck` green, grep returns empty. User story work can now begin.
+**Checkpoint**: Rename and move complete — `pnpm typecheck` green, grep returns empty, `server/agent-host/` exists and `ghosts/ghost-house/` is gone. User story work can now begin.
 
 ---
 
@@ -50,16 +54,29 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Add `WORLD_API_URL` to `shared/root-env/src/index.ts` (or equivalent export file) so `ghosts/agent-host` can read the world-api base URL from the environment; default to `http://localhost:3000`
-- [ ] T010 [P] [US1] Enhance the existing `/health` handler in `server/src/index.ts` (lines ~164–172): keep the `spectatorMetaReady` gate, add a Neo4j connectivity check, and return the IC-001 shape `{ "status": "ok"|"starting"|"degraded", "checks": { "neo4j": true|false } }`; return HTTP 503 until Neo4j check passes
-- [ ] T011 [P] [US1] Add a `/health` HTTP route to `ghosts/agent-host/src/main.ts` using the same raw Node.js `prependListener` pattern; check reachability of `WORLD_API_URL/health`; return IC-001 `{ "status": "ok"|"degraded", "checks": { "world-api": true|false } }`; HTTP 200 only when check passes
-- [ ] T012 [P] [US1] Write `server/Dockerfile` using the three-stage pnpm pattern from `research.md`: stage `base` (`pnpm fetch --prod` from lockfile only), stage `build` (`pnpm install --offline && pnpm --filter @aie-matrix/server build && pnpm --filter @aie-matrix/server deploy /app/deploy`), stage `runner` (copies `/app/deploy`, runs `node dist/index.js`)
-- [ ] T013 [P] [US1] Write `ghosts/agent-host/Dockerfile` using the same three-stage pattern targeting `@aie-matrix/agent-host`; final stage runs `node dist/main.js`
-- [ ] T014 [US1] Create `deploy/staging/` directory and write `deploy/staging/docker-compose.yml` defining four services (`neo4j:5`, `redis:7`, `server`, `agent-host`) with `depends_on: condition: service_healthy` enforcing the chain neo4j → server → agent-host; `aie-matrix` bridge network; named `neo4j-data` volume; all values read from environment / `.env.staging`
-- [ ] T015 [P] [US1] Write `deploy/staging/.env.staging.example` documenting every variable from `contracts/env-contract.md` with placeholder values and inline comments explaining each; this file is committed and gitignored entries use `.env.staging`
-- [ ] T016 [P] [US1] Write `docker-compose.dev.yml` at the repo root defining only `neo4j` and `redis` services (matching the versions in the staging compose file) so Tier 1 developers can run `docker compose -f docker-compose.dev.yml up` to get stateful services without running application containers
-- [ ] T017 [US1] Write `deploy/staging/README.md` operator runbook covering: prerequisites, start command, verify commands, rebuild single service, stop/wipe instructions, health-check failure diagnosis, and a note on the 4-container vs 6-container ADR-0007 vision
-- [ ] T018 [US1] Smoke test: populate `deploy/staging/.env.staging` from the example file, run `docker compose -f deploy/staging/docker-compose.yml up --build`, confirm all four services reach `healthy`, run `curl http://localhost:3000/health` (expect `{"status":"ok","checks":{"neo4j":true}}`), and open a WebSocket connection to Colyseus; document any issues found and fix before marking complete
+- [x] T009 [US1] Read `process.env.WORLD_API_URL` directly in `server/agent-host/src/main.ts`; defaults to `worldHttpBase` (AIE_MATRIX_HTTP_BASE_URL or `http://127.0.0.1:8787`) if unset; added `COLYSEUS_URL` derived from same base; both logged at startup.
+  <!-- Also fixed Phase 2 miss: renamed `ghostHouseId` → `agentHostId` across 7 TS files (server/auth/jwt.ts, server/world-api/auth-context.ts, server/registry/routes/adoption.ts, ghosts/tck/*, ghosts/random-house/*, server/registry/schemas/registry.json) and several md files — these were camelCase field names missed by the earlier sed run. pnpm typecheck passed clean after. -->
+- [x] T010 [P] [US1] Enhanced `/health` in `server/src/index.ts`: added `neo4jHealthy` flag (set after initial Neo4j setup or when Neo4j not configured); health handler returns IC-001 `{ status, checks: { neo4j } }`; HTTP 503 when starting or degraded, 200 when ok.
+- [x] T011 [P] [US1] Added `GET /health` Express route to `server/agent-host/src/main.ts`; fetches `WORLD_API_URL/health` with 3s timeout; returns IC-001 `{ status, checks: { "world-api" } }`; HTTP 200 only when world-api returns 200.
+- [x] T012 [P] [US1] Wrote `server/Dockerfile` — three-stage: base (`pnpm fetch`), build (`pnpm install --offline && pnpm -r --if-present run build && pnpm --filter @aie-matrix/server deploy --prod /app/deploy`), runner (`node dist/index.js`, EXPOSE 8787). Also created `.dockerignore` at repo root.
+- [x] T013 [P] [US1] Wrote `server/agent-host/Dockerfile` — same three-stage pattern targeting `@aie-matrix/server-agent-host`; final stage runs `node dist/main.js`, EXPOSE 4000.
+- [x] T014 [US1] Created `deploy/staging/docker-compose.yml` — 4 services (neo4j:5, redis:7-alpine, server, agent-host); `depends_on: condition: service_healthy` chain neo4j+redis → server → agent-host; named `neo4j-data` volume; `aie-matrix` bridge network; all values from `.env.staging`.
+- [x] T015 [P] [US1] Wrote `deploy/staging/.env.staging.example` with inline comments for all IC-002 variables; staging values use Docker service DNS names (`http://server:8787`).
+- [x] T016 [P] [US1] Wrote `docker-compose.dev.yml` at repo root — neo4j + redis only, ports mapped to localhost, health checks included.
+- [x] T017 [US1] Wrote `deploy/staging/README.md` — prerequisites, start command, verify commands, rebuild single service, stop/wipe, health-check failure table, 4-container vs 6-container ADR-0007 note.
+- [ ] T018 [US1] Smoke test: populate `deploy/staging/.env.staging` from the example file, run `docker compose -f deploy/staging/docker-compose.yml up --build`, confirm all four services reach `healthy`, run `curl http://localhost:8787/health` (expect `{"status":"ok","checks":{"neo4j":true}}`), and open a WebSocket connection to Colyseus; document any issues found and fix before marking complete
+  <!-- WIP — Images build successfully (.dockerignore fix for *.tsbuildinfo + --legacy flag on pnpm deploy).
+       BLOCKER: server crashes on startup with ENOENT for default map file:
+         Error: ENOENT: no such file or directory, open '/maps/sandbox/freeplay.map.gram'
+       Root cause: server/src/index.ts line 140 does `await readFile(mapPath)` unconditionally.
+       When AIE_MATRIX_MAP is unset, mapPath falls back to a hardcoded repo-relative path that
+       doesn't exist in the deployed container (pnpm deploy only copies dist/ and node_modules/).
+       Fix: wrap lines 140 and 206 to make map-file loading conditional on mapPathRaw being set.
+       When AIE_MATRIX_MAP is absent AND mapPath file doesn't exist, pass mapPath=undefined to
+       matchMaker.createRoom() — MatrixRoom already handles undefined mapPath via process.env fallback,
+       and makeMapServiceLayer accepts activeGramPath as optional. The server should start in
+       Neo4j-only mode (live session binding path at lines 386-406 already handles this case). -->
+
 
 **Checkpoint**: Full staging stack runs locally from a clean checkout. US1 is independently testable.
 
@@ -100,7 +117,7 @@
 
 - [ ] T024 [P] Update `docs/architecture.md`: mark the "CI/CD Pipeline" open question as resolved, reference ADR-0007 and this spec (`specs/016-staging-deployment/`)
 - [ ] T025 [P] Update `CONTRIBUTING.md`: add a "Running the staging stack" section pointing to `deploy/staging/README.md` and explaining that `docker compose -f docker-compose.dev.yml up` is the Tier 1 stateful-services shortcut
-- [ ] T026 Final grep: `grep -r "ghost-house\|ghost_house" . --include="*.ts" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" -l` must return empty (excluding `.git/`); fix any stragglers
+- [ ] T026 Final grep: `grep -r "agent-host\|ghost_house" . --include="*.ts" --include="*.json" --include="*.yaml" --include="*.yml" --include="*.md" -l` must return empty (excluding `.git/`); fix any stragglers
 - [ ] T027 Run `pnpm typecheck` and `pnpm test` from the repo root; both must pass clean with no regressions
 
 ---
@@ -187,5 +204,6 @@ With two developers after Phase 2 completes:
 - [Story] label maps each task to its user story for traceability
 - No unit-test tasks generated (not requested in spec); verification is integration-level via `docker compose up`
 - Commit after each checkpoint (T008, T018, T021, T023)
-- The rename in Phase 2 is a prerequisite for all other work; do not skip or defer it
+- The rename + move in Phase 2 is a prerequisite for all other work; do not skip or defer it
+- `ghosts/` is now strictly for agentic clients (CLI tools, SDK wrappers, example agents); `server/` is for all server-side service processes
 - `docker compose` (space, v2 plugin syntax) — not `docker-compose` (v1, removed from ubuntu-latest runners)

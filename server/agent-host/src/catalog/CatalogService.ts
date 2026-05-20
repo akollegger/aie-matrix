@@ -37,7 +37,7 @@ export interface ICatalogService {
   readonly deregister: (agentId: string) => Effect.Effect<void, AgentNotFound>;
 }
 
-export class CatalogService extends Context.Tag("ghost-house/CatalogService")<
+export class CatalogService extends Context.Tag("agent-host/CatalogService")<
   CatalogService,
   ICatalogService
 >() {}

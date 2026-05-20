@@ -1,10 +1,10 @@
 # @aie-matrix/random-agent
 
-**Wanderer**-tier reference agent: A2A **agent card** at `/.well-known/agent-card.json` and a JSON-RPC A2A endpoint; on spawn (IC-006) it runs a random `whereami` / `exits` / `go` loop through the house **MCP** proxy. Agent card shape: [IC-001](../../specs/009-ghost-house-a2a/contracts/ic-001-agent-card-schema.md).
+**Wanderer**-tier reference agent: A2A **agent card** at `/.well-known/agent-card.json` and a JSON-RPC A2A endpoint; on spawn (IC-006) it runs a random `whereami` / `exits` / `go` loop through the house **MCP** proxy. Agent card shape: [IC-001](../../specs/009-agent-host-a2a/contracts/ic-001-agent-card-schema.md).
 
 ## Environment
 
-Use the **monorepo root** `.env` (via `@aie-matrix/root-env`), same as the house. See [`../ghost-house/.env.example`](../ghost-house/.env.example) and [quickstart](../../specs/009-ghost-house-a2a/quickstart.md).
+Use the **monorepo root** `.env` (via `@aie-matrix/root-env`), same as the house. See [`../agent-host/.env.example`](../agent-host/.env.example) and [quickstart](../../specs/009-agent-host-a2a/quickstart.md).
 
 | Variable | Required | Default | Role |
 |----------|----------|---------|------|
@@ -27,11 +27,11 @@ For **hard isolation** between ghosts (separate crashes, memory, or CPU limits),
 
 ### Known limitations
 
-- The ghost house supervisor rejects a second **concurrent** session for the same `ghostId` while one is already active (`SpawnFailed: ghostId already has an active session`). The reference agent still implements same-`ghostId` replace for local tests or if house policy changes. N concurrent **distinct** `ghostId`s each with their own house session is the supported multi-ghost path.
+- The agent host supervisor rejects a second **concurrent** session for the same `ghostId` while one is already active (`SpawnFailed: ghostId already has an active session`). The reference agent still implements same-`ghostId` replace for local tests or if house policy changes. N concurrent **distinct** `ghostId`s each with their own house session is the supported multi-ghost path.
 
 ## Register with the house
 
-1. With both **world server** and **ghost house** running, `POST` to the house (bearer = `GHOST_HOUSE_DEV_TOKEN`):
+1. With both **world server** and **agent host** running, `POST` to the house (bearer = `GHOST_HOUSE_DEV_TOKEN`):
 
    ```bash
    curl -X POST http://127.0.0.1:4000/v1/catalog/register \
@@ -40,7 +40,7 @@ For **hard isolation** between ghosts (separate crashes, memory, or CPU limits),
      -d '{"agentId": "random-agent", "baseUrl": "http://127.0.0.1:4001"}'
    ```
 
-2. Adopt a ghost and spawn via the house as in [quickstart](../../specs/009-ghost-house-a2a/quickstart.md) (`POST /v1/sessions/spawn/random-agent`).
+2. Adopt a ghost and spawn via the house as in [quickstart](../../specs/009-agent-host-a2a/quickstart.md) (`POST /v1/sessions/spawn/random-agent`).
 
 ## Wanderer TCK
 

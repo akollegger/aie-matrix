@@ -4,22 +4,22 @@ import {
   type ExecutionEventBus,
   type RequestContext,
 } from "@a2a-js/sdk/server";
-import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import { randomUUID } from "node:crypto";
-import type { WorldEvent } from "./world-event.js";
 import type { SpawnContext } from "./spawn-types.js";
 
-const tckState = { mcpSayTexts: [] as string[], worldEvents: 0 };
+const maxTck = 200;
 
-export function getEchoTckState(): { readonly mcpSayTexts: readonly string[]; readonly worldEvents: number } {
-  return tckState;
+const worldEventLog: Array<Record<string, unknown>> = [];
+
+export function getTckState(): { readonly worldEvents: readonly unknown[]; readonly sayEmissions: 0 } {
+  return { worldEvents: worldEventLog.slice(-maxTck), sayEmissions: 0 };
 }
 
 function parseSpawnData(msg: Message | undefined): SpawnContext | null {
   for (const p of msg?.parts ?? []) {
     if (p.kind === "data" && "data" in p) {
       const d = p.data as Record<string, unknown>;
-      if (d.schema === "aie-matrix.ghost-house.spawn-context.v1") {
+      if (d.schema === "aie-matrix.agent-host.spawn-context.v1") {
         return d as unknown as SpawnContext;
       }
     }
@@ -27,12 +27,12 @@ function parseSpawnData(msg: Message | undefined): SpawnContext | null {
   return null;
 }
 
-function asWorldEvent(msg: Message | undefined): WorldEvent | null {
+function takeWorldEvent(msg: Message | undefined): Record<string, unknown> | null {
   for (const p of msg?.parts ?? []) {
     if (p.kind === "data" && "data" in p) {
       const d = p.data as Record<string, unknown>;
-      if (d.schema === "aie-matrix.world-event.v1" && d.kind === "world.message.new") {
-        return d as unknown as WorldEvent;
+      if (d.schema === "aie-matrix.world-event.v1") {
+        return d;
       }
     }
   }
@@ -48,52 +48,12 @@ function userText(userMessage: Message | undefined): string {
   return "";
 }
 
-let activeMcp: GhostMcpClient | null = null;
-
-function pushSay(text: string) {
-  void (async () => {
-    if (!activeMcp) {
-      return;
-    }
-    try {
-      if (!text || text.length === 0) {
-        return;
-      }
-      await activeMcp.say(text);
-      tckState.mcpSayTexts.push(text);
-    } catch (e) {
-      console.error(
-        JSON.stringify({
-          kind: "echo-agent.say-fail",
-          message: e instanceof Error ? e.message : String(e),
-        }),
-      );
-    }
-  })();
-}
-
-export class SocialEchoExecutor implements AgentExecutor {
+export class ObserverListenerExecutor implements AgentExecutor {
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
     const { userMessage, contextId, taskId, task } = requestContext;
     const tid = taskId ?? randomUUID();
     const sp = parseSpawnData(userMessage);
     if (sp) {
-      const mcp = new GhostMcpClient({
-        worldApiBaseUrl: sp.houseEndpoints.mcp,
-        token: sp.token,
-      });
-      try {
-        await mcp.connect();
-        activeMcp = mcp;
-      } catch (e) {
-        console.error(
-          JSON.stringify({
-            kind: "echo-agent.mcp-connect-fail",
-            message: e instanceof Error ? e.message : String(e),
-          }),
-        );
-        activeMcp = null;
-      }
       const t = task
         ? task
         : ({
@@ -118,14 +78,9 @@ export class SocialEchoExecutor implements AgentExecutor {
       eventBus.finished();
       return;
     }
-    const ev = asWorldEvent(userMessage);
+    const ev = takeWorldEvent(userMessage);
     if (ev) {
-      tckState.worldEvents += 1;
-      const pl = ev.payload as { text?: string; role?: string } | null;
-      const text = typeof pl?.text === "string" ? pl.text : "";
-      if (text.length > 0) {
-        pushSay(text);
-      }
+      worldEventLog.push(ev);
       eventBus.finished();
       return;
     }
@@ -145,10 +100,6 @@ export class SocialEchoExecutor implements AgentExecutor {
   }
 
   cancelTask = async (): Promise<void> => {
-    const m = activeMcp;
-    activeMcp = null;
-    if (m) {
-      await m.disconnect().catch(() => {});
-    }
+    /* no-op: nothing long-running in executor */
   };
 }

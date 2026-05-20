@@ -148,6 +148,8 @@ async function main(): Promise<void> {
   let roomIdForSpectators: string | undefined;
   /** Flipped true only after Neo4j / movement rules / Effect runtime wiring (registry + MCP). */
   let spectatorMetaReady = false;
+  /** IC-001: flipped true after initial Neo4j connectivity is confirmed (or when Neo4j is not configured). */
+  let neo4jHealthy = false;
   const worldApiBaseUrl = `http://127.0.0.1:${httpPort}/mcp`;
 
   // `scripts/demo.mjs` polls this as soon as the TCP port is open. Colyseus registers its HTTP
@@ -162,12 +164,14 @@ async function main(): Promise<void> {
       return;
     }
     if (url.pathname === "/health") {
+      // IC-001: { status, checks } — HTTP 200 = healthy, 503 = starting/degraded
       if (!spectatorMetaReady) {
         res.writeHead(503, { "Content-Type": "application/json", ...corsHeaders });
-        res.end(JSON.stringify({ status: "starting" }));
+        res.end(JSON.stringify({ status: "starting", checks: { neo4j: false } }));
       } else {
-        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
-        res.end(JSON.stringify({ status: "ok" }));
+        const status = neo4jHealthy ? "ok" : "degraded";
+        res.writeHead(neo4jHealthy ? 200 : 503, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ status, checks: { neo4j: neo4jHealthy } }));
       }
       return;
     }
@@ -285,12 +289,15 @@ async function main(): Promise<void> {
       await ensureMapManagementConstraints(neoDriver);
       await seedNeo4jGraphArtifacts(neoDriver, colyseusBridge.getLoadedMap());
       console.info("[aie-matrix] Neo4j: constraint + graph seeds applied");
+      neo4jHealthy = true; // IC-001: Neo4j connectivity confirmed
     } catch (e) {
       console.error("[aie-matrix] Neo4j setup failed:", e);
       await neoDriver.close();
       neoDriver = null;
       process.exit(1);
     }
+  } else {
+    neo4jHealthy = true; // Not configured — treat as healthy (dev/local mode without Neo4j)
   }
   const neo4jGraphLayer: Layer.Layer<Neo4jGraphService> = neoDriver
     ? makeLiveNeo4jGraphLayer(neoDriver)

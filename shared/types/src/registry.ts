@@ -1,19 +1,19 @@
-/** GhostHouse registration (IC-001). */
-export interface RegisterGhostHouseRequest {
+/** AgentHost registration (IC-001). */
+export interface RegisterAgentHostRequest {
   displayName: string;
   /** Optional callback or base URL for dev; PoC may omit. */
   baseUrl?: string;
 }
 
-export interface RegisterGhostHouseResponse {
-  ghostHouseId: string;
+export interface RegisterAgentHostResponse {
+  agentHostId: string;
   registeredAt: string;
 }
 
 /** Caretaker-scoped adoption (IC-001 / IC-002). */
 export interface AdoptGhostRequest {
   caretakerId: string;
-  ghostHouseId: string;
+  agentHostId: string;
   /** PoC may ignore when a single template ghost is implied. */
   ghostTemplateId?: string;
 }

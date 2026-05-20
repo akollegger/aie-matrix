@@ -47,7 +47,7 @@ async function postMessage(
 
 /**
  * Polls the world server's /threads/:ghostId endpoint for a human↔ghost conversation.
- * Uses the world API URL (VITE_WORLD_API_URL), not the ghost-house URL.
+ * Uses the world API URL (VITE_WORLD_API_URL), not the agent-host URL.
  */
 export function useA2AConversation(
   ghostId: string | null,

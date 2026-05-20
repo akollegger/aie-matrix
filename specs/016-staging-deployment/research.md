@@ -55,7 +55,7 @@ start_period: 30s
 
 **Decision**: The staging compose stack will run **4 containers**, not 6. A future "service extraction" spec is needed to reach the 6-container ADR-0007 vision.
 
-**Finding**: `server/colyseus` (`@aie-matrix/server-colyseus`), `server/world-api` (`@aie-matrix/server-world-api`), and `server/registry` (`@aie-matrix/server-registry`) are all **library packages** — they export TypeScript modules and have no standalone `start` script. The only runnable server process is the **combined `server` package** (`server/src/index.ts`), which imports and orchestrates all three as libraries within a single Node.js process. `ghosts/ghost-house` (→ `ghosts/agent-host` after the rename) is already a standalone service with its own `start` script.
+**Finding**: `server/colyseus` (`@aie-matrix/server-colyseus`), `server/world-api` (`@aie-matrix/server-world-api`), and `server/registry` (`@aie-matrix/server-registry`) are all **library packages** — they export TypeScript modules and have no standalone `start` script. The only runnable server process is the **combined `server` package** (`server/src/index.ts`), which imports and orchestrates all three as libraries within a single Node.js process. `server/agent-host` (→ `ghosts/agent-host` after the rename) is already a standalone service with its own `start` script.
 
 **Rationale**: ADR-0007 describes `colyseus`, `world-api`, and `registry` as separately deployable services. That is the correct long-term target but requires first extracting each library into an independent HTTP/WebSocket process with its own entry point, Effect runtime, and port. Doing so in this spec would dramatically expand scope. The staged approach — one combined-server container in Tier 2, separate containers in a later "service extraction" spec — maintains staging value (multi-process wiring, Neo4j + Redis integration, CI gate) without entangling two major changes in one branch.
 
@@ -76,7 +76,7 @@ start_period: 30s
 
 **Decision**: Add a `/health` route to `server/src/index.ts` (enhance the existing partial implementation) and add one to `ghosts/agent-host/src/main.ts`. No work is needed in `server/colyseus/`, `server/world-api/`, or `server/registry/` since they run inside the combined server process and do not expose their own ports.
 
-**Finding**: `server/src/index.ts` (lines 164–172) already handles `GET /health` via a raw Node.js `prependListener`. It returns 503 `{"status":"starting"}` until `spectatorMetaReady` is set, then 200 `{"status":"ok"}`. This is close to IC-001 but returns only `status`, not the `checks` map defined in the contract. `ghosts/ghost-house/src/` has no HTTP `/health` endpoint.
+**Finding**: `server/src/index.ts` (lines 164–172) already handles `GET /health` via a raw Node.js `prependListener`. It returns 503 `{"status":"starting"}` until `spectatorMetaReady` is set, then 200 `{"status":"ok"}`. This is close to IC-001 but returns only `status`, not the `checks` map defined in the contract. `server/agent-host/src/` has no HTTP `/health` endpoint.
 
 **Rationale**: Enhancing the existing combined-server health route to include a Neo4j connectivity check (required by compose `depends_on`) costs one extra query. Adding one to agent-host follows the same raw Node.js pattern. No new HTTP framework is introduced.
 

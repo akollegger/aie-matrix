@@ -1,6 +1,6 @@
 # random-house
 
-Reference GhostHouse process for the Minimal PoC: it registers with the REST registry, adopts a ghost for a dev caretaker, then drives movement **only** through `@aie-matrix/ghost-ts-client` (Streamable HTTP MCP to `world-api`).
+Reference AgentHost process for the Minimal PoC: it registers with the REST registry, adopts a ghost for a dev caretaker, then drives movement **only** through `@aie-matrix/ghost-ts-client` (Streamable HTTP MCP to `world-api`).
 
 ## Prerequisites
 
@@ -58,8 +58,8 @@ With **pnpm**, prefer passing flags directly after `start` as above. The form `p
 
 ## What it does
 
-1. `POST /registry/houses` — register this process as a GhostHouse (once per run).
-2. For each ghost (default 1, up to 32): `POST /registry/caretakers`, then `POST /registry/adopt` with the same `ghostHouseId` — obtain `ghostId` + JWT + MCP base URL per ghost (IC-002: one active ghost per caretaker).
+1. `POST /registry/houses` — register this process as a AgentHost (once per run).
+2. For each ghost (default 1, up to 32): `POST /registry/caretakers`, then `POST /registry/adopt` with the same `agentHostId` — obtain `ghostId` + JWT + MCP base URL per ghost (IC-002: one active ghost per caretaker).
 3. MCP per ghost: `whoami`, `whereami`, then a loop until SIGINT/SIGTERM:
    - `look` at the current tile; sometimes `say` when other ghosts are present (enters conversational mode).
    - With high probability (~88%), `inspect` one object on the **current** tile (`at: "here"` in the look payload) that has not been inspected yet this run (each `itemRef` is attempted at most once).

@@ -5,7 +5,7 @@
 
 ## Summary
 
-Implement the ghost conversation model defined in RFC-0005 and ADR-0003: a `say`/`bye` MCP tool pair that gates ghost movement behind engine-enforced conversational state, a `server/conversation/` package with a pluggable JSONL store and HTTP read endpoints, and updates to `random-house`, `ghost-cli`, and the debug panel to exercise and observe the new behavior. A lightweight `inbox` polling tool bridges the gap until ghost houses have persistent Colyseus connections.
+Implement the ghost conversation model defined in RFC-0005 and ADR-0003: a `say`/`bye` MCP tool pair that gates ghost movement behind engine-enforced conversational state, a `server/conversation/` package with a pluggable JSONL store and HTTP read endpoints, and updates to `random-house`, `ghost-cli`, and the debug panel to exercise and observe the new behavior. A lightweight `inbox` polling tool bridges the gap until agent hosts have persistent Colyseus connections.
 
 ## Technical Context
 
@@ -120,7 +120,7 @@ Each slice is independently demonstrable and maps to a spec user story.
 - Cluster computation: `h3.gridDisk(ghostCell, 1)` → `MatrixRoom.listOccupantsOnCell()` per cell → deduplicated ghost IDs excluding speaker.
 - `say` fails atomically: if `store.append()` throws, state transition does not occur.
 - `CONVERSATION_DATA_DIR` env var controls JSONL output directory (default: `./data/conversations/`).
-- Ghost house JWT claims need `ghostHouseId` for HTTP auth in Slice C — verify `server/auth/src/jwt.ts` before starting Slice C; add if absent.
+- Ghost house JWT claims need `agentHostId` for HTTP auth in Slice C — verify `server/auth/src/jwt.ts` before starting Slice C; add if absent.
 
 ### Slice B — inbox + random-house conversation (US-4, research Decision 8)
 
@@ -139,12 +139,12 @@ Each slice is independently demonstrable and maps to a spec user story.
 
 **Covers**: FR-013–FR-015
 
-**What**: `ConversationRouter` mounted at `/threads`; ghost house API key auth; ULID cursor pagination.
+**What**: `ConversationRouter` mounted at `/threads`; agent host API key auth; ULID cursor pagination.
 
 **Verify**: `quickstart.md` smoke test 3 — list, paginate, fetch single message by ID.
 
 **Key decisions**:
-- Auth: check `ghostId` belongs to calling ghost house via `RegistryStoreService`.
+- Auth: check `ghostId` belongs to calling agent host via `RegistryStoreService`.
 - JSONL `list()`: reads and parses the full `.jsonl` file, filters by `after` ULID cursor, returns up to `limit`. Adequate for PoC volume.
 
 ### Slice D — ghost-cli conversation support (US-4 ghost-cli)

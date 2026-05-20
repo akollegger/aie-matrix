@@ -210,7 +210,7 @@ End a live session.
 
 Session binding differs by consumer type:
 
-**Server processes** (world-api, Colyseus, ghost-house) are told their session at deploy time via `LIVE_SESSION_ID`. They do not discover sessions — they are assigned one.
+**Server processes** (world-api, Colyseus, agent-host) are told their session at deploy time via `LIVE_SESSION_ID`. They do not discover sessions — they are assigned one.
 
 ```
 if AIE_MATRIX_MAP is set:
@@ -247,7 +247,7 @@ Events are published to the Redis channel `aie-matrix:world-events`. This consta
 
 **Colyseus:** Removes `ghostTiles` entries for ghosts on `removedCells`. Broadcasts a `message.map-changed` room event to connected clients with `removedCells` and `addedCells`.
 
-**ghost-house:** Delivers `aie-matrix.world-event.v1` of type `world.map-changed` to each adopted ghost agent.
+**agent-host:** Delivers `aie-matrix.world-event.v1` of type `world.map-changed` to each adopted ghost agent.
 
 ### Ghost evacuation
 

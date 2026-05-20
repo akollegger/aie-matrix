@@ -1,7 +1,7 @@
-# Tasks: Ghost House A2A Coordination
+# Tasks: Agent Host A2A Coordination
 
-**Input**: Design documents from `/specs/009-ghost-house-a2a/`  
-**Branch**: `009-ghost-house-a2a`  
+**Input**: Design documents from `/specs/009-agent-host-a2a/`  
+**Branch**: `009-agent-host-a2a`  
 **User Stories**: US1 (P1) Wanderer contribution · US2 (P2) Event delivery · US3 (P3) Social speech · US4 (P2) Operational reliability
 
 ---
@@ -10,10 +10,10 @@
 
 **Purpose**: Scaffold the two new workspace packages and wire them into the monorepo.
 
-- [X] T001 Create `ghosts/ghost-house/` package — `src/`, `tests/unit/`, `tests/integration/`, `package.json` (`@aie-matrix/ghost-house`), `tsconfig.json`, `.env.example`, `README.md`
+- [X] T001 Create `server/agent-host/` package — `src/`, `tests/unit/`, `tests/integration/`, `package.json` (`@aie-matrix/server-agent-host`), `tsconfig.json`, `.env.example`, `README.md`
 - [X] T002 Create `ghosts/random-agent/` package — `src/`, `tests/`, `package.json` (`@aie-matrix/random-agent`), `tsconfig.json`, `.env.example`, `README.md`
-- [X] T003 Add `ghosts/ghost-house` and `ghosts/random-agent` to `pnpm-workspace.yaml`
-- [X] T004 [P] Configure `vitest` for `ghosts/ghost-house` in `ghosts/ghost-house/package.json` (scripts: `test`, `test:unit`, `test:integration`)
+- [X] T003 Add `server/agent-host` and `ghosts/random-agent` to `pnpm-workspace.yaml`
+- [X] T004 [P] Configure `vitest` for `server/agent-host` in `server/agent-host/package.json` (scripts: `test`, `test:unit`, `test:integration`)
 - [X] T005 [P] Configure `vitest` for `ghosts/random-agent` in `ghosts/random-agent/package.json` (script: `test`)
 
 ---
@@ -24,12 +24,12 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [X] T006 Define shared runtime types in `ghosts/ghost-house/src/types.ts` — `CatalogEntry`, `AgentSession`, `AgentSessionStatus`, `WorldEvent`, `WorldEventKind`, `SpawnContext` (from data-model.md)
-- [X] T007 Define `Data.TaggedError` subtypes in `ghosts/ghost-house/src/errors.ts` — `AgentCardInvalid`, `AgentAlreadyRegistered`, `AgentCardFetchFailed`, `AgentNotFound`, `SpawnFailed`, `SpawnTimeout`, `HealthCheckTimeout`, `RetryLimitExceeded`, `CapabilityUnmet`
-- [X] T008 [P] Add production deps to `ghosts/ghost-house/package.json`: `@a2a-js/sdk`, `@modelcontextprotocol/sdk`, `@colyseus/core`, `effect`, `zod`, `ulid`, `@aie-matrix/root-env`
+- [X] T006 Define shared runtime types in `server/agent-host/src/types.ts` — `CatalogEntry`, `AgentSession`, `AgentSessionStatus`, `WorldEvent`, `WorldEventKind`, `SpawnContext` (from data-model.md)
+- [X] T007 Define `Data.TaggedError` subtypes in `server/agent-host/src/errors.ts` — `AgentCardInvalid`, `AgentAlreadyRegistered`, `AgentCardFetchFailed`, `AgentNotFound`, `SpawnFailed`, `SpawnTimeout`, `HealthCheckTimeout`, `RetryLimitExceeded`, `CapabilityUnmet`
+- [X] T008 [P] Add production deps to `server/agent-host/package.json`: `@a2a-js/sdk`, `@modelcontextprotocol/sdk`, `@colyseus/core`, `effect`, `zod`, `ulid`, `@aie-matrix/root-env`
 - [X] T009 [P] Add production deps to `ghosts/random-agent/package.json`: `@a2a-js/sdk`, `@modelcontextprotocol/sdk`, `@aie-matrix/root-env`
-- [X] T010 Create Effect `ManagedRuntime` scaffold in `ghosts/ghost-house/src/main.ts` (empty service stubs composed into a runtime; HTTP server start on `GHOST_HOUSE_PORT`)
-- [X] T011 Verify A2A SDK types resolve and imports compile in both packages (`pnpm typecheck` on ghost-house and random-agent)
+- [X] T010 Create Effect `ManagedRuntime` scaffold in `server/agent-host/src/main.ts` (empty service stubs composed into a runtime; HTTP server start on `GHOST_HOUSE_PORT`)
+- [X] T011 Verify A2A SDK types resolve and imports compile in both packages (`pnpm typecheck` on agent-host and random-agent)
 
 **Checkpoint**: Package structure compiles — user story implementation can begin.
 
@@ -43,15 +43,15 @@
 
 ### Implementation
 
-- [X] T012 [P] [US1] Implement `CatalogService` in `ghosts/ghost-house/src/catalog/CatalogService.ts` — `register`, `list`, `get`, `deregister` methods; file-backed JSON persistence (`CATALOG_FILE_PATH`); IC-001 validation (tier, required tools, matrix schema version)
-- [X] T013 [P] [US1] Implement `ghosts/ghost-house/src/catalog/catalog.layer.ts` — `Layer` that provides `CatalogService` backed by the catalog JSON file
-- [X] T014 [US1] Implement `A2AHostService` in `ghosts/ghost-house/src/a2a-host/A2AHostService.ts` — wrap `@a2a-js/sdk` server; expose streaming + non-blocking send; IC-002 protocol version header; `GHOST_HOUSE_DEV_TOKEN` bearer auth
-- [X] T015 [US1] Implement `ghosts/ghost-house/src/a2a-host/a2a-host.layer.ts` — `Layer` providing `A2AHostService`
-- [X] T016 [US1] Implement `MCPProxyService` in `ghosts/ghost-house/src/mcp-proxy/MCPProxyService.ts` — forward MCP tool calls to world server (`WORLD_API_BASE_URL`) using ghost-scoped token; validate caller's `requiredTools` against IC-003; reject calls to undeclared tools
-- [X] T017 [US1] Implement `ghosts/ghost-house/src/mcp-proxy/mcp-proxy.layer.ts`
-- [X] T018 [US1] Implement `AgentSupervisor` (spawn + shutdown only) in `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — spawn: resolve catalog entry, mint token, send IC-006 spawn context as first A2A task, await ack, transition session to `running`; shutdown: graceful cancel via A2A then hard-kill after 10 s
-- [X] T019 [US1] Implement `ghosts/ghost-house/src/supervisor/supervisor.layer.ts`
-- [X] T020 [US1] Wire catalog + session HTTP routes in `ghosts/ghost-house/src/main.ts` per IC-005 — `POST /v1/catalog/register`, `GET /v1/catalog`, `GET /v1/catalog/:agentId`, `DELETE /v1/catalog/:agentId`, `POST /v1/sessions/spawn/:agentId`, `DELETE /v1/sessions/:sessionId`, `GET /.well-known/agent-card.json`
+- [X] T012 [P] [US1] Implement `CatalogService` in `server/agent-host/src/catalog/CatalogService.ts` — `register`, `list`, `get`, `deregister` methods; file-backed JSON persistence (`CATALOG_FILE_PATH`); IC-001 validation (tier, required tools, matrix schema version)
+- [X] T013 [P] [US1] Implement `server/agent-host/src/catalog/catalog.layer.ts` — `Layer` that provides `CatalogService` backed by the catalog JSON file
+- [X] T014 [US1] Implement `A2AHostService` in `server/agent-host/src/a2a-host/A2AHostService.ts` — wrap `@a2a-js/sdk` server; expose streaming + non-blocking send; IC-002 protocol version header; `GHOST_HOUSE_DEV_TOKEN` bearer auth
+- [X] T015 [US1] Implement `server/agent-host/src/a2a-host/a2a-host.layer.ts` — `Layer` providing `A2AHostService`
+- [X] T016 [US1] Implement `MCPProxyService` in `server/agent-host/src/mcp-proxy/MCPProxyService.ts` — forward MCP tool calls to world server (`WORLD_API_BASE_URL`) using ghost-scoped token; validate caller's `requiredTools` against IC-003; reject calls to undeclared tools
+- [X] T017 [US1] Implement `server/agent-host/src/mcp-proxy/mcp-proxy.layer.ts`
+- [X] T018 [US1] Implement `AgentSupervisor` (spawn + shutdown only) in `server/agent-host/src/supervisor/SupervisorService.ts` — spawn: resolve catalog entry, mint token, send IC-006 spawn context as first A2A task, await ack, transition session to `running`; shutdown: graceful cancel via A2A then hard-kill after 10 s
+- [X] T019 [US1] Implement `server/agent-host/src/supervisor/supervisor.layer.ts`
+- [X] T020 [US1] Wire catalog + session HTTP routes in `server/agent-host/src/main.ts` per IC-005 — `POST /v1/catalog/register`, `GET /v1/catalog`, `GET /v1/catalog/:agentId`, `DELETE /v1/catalog/:agentId`, `POST /v1/sessions/spawn/:agentId`, `DELETE /v1/sessions/:sessionId`, `GET /.well-known/agent-card.json`
 - [X] T021 [P] [US1] Implement `ghosts/random-agent/src/buildAgentCard.ts` — IC-001 compliant Wanderer agent card (`tier: "wanderer"`, `requiredTools: ["whereami","exits","go"]`, `capabilities.streaming: true`, `capabilities.pushNotifications: false`, `matrix.schemaVersion: 1`)
 - [X] T022 [US1] Implement MCP movement executor in `ghosts/random-agent/src/executor.ts` — connect to `houseEndpoints.mcp` from spawn context; call `whereami`, `exits`, `go` (random adjacent step); movement loop at configurable interval
 - [X] T023 [US1] Implement `ghosts/random-agent/src/agent.ts` — A2A endpoint served by `@a2a-js/sdk`; spawn task handler (parse IC-006 context, start movement loop, return ack); health-check ping responder; shutdown handler (stop movement loop)
@@ -63,19 +63,19 @@
 
 ---
 
-## Phase 4: User Story 4 — Core Team Operates Ghost House Reliably (Priority: P2)
+## Phase 4: User Story 4 — Core Team Operates Agent Host Reliably (Priority: P2)
 
-**Goal**: The ghost house detects crashed agents, restarts them per policy, and shuts sessions down cleanly — without human intervention.
+**Goal**: The agent host detects crashed agents, restarts them per policy, and shuts sessions down cleanly — without human intervention.
 
-**Independent Test**: Start ghost house with one agent registered. Kill the agent process. Confirm the supervisor logs a health-check failure, attempts restart with backoff, and other sessions are unaffected.
+**Independent Test**: Start agent host with one agent registered. Kill the agent process. Confirm the supervisor logs a health-check failure, attempts restart with backoff, and other sessions are unaffected.
 
 ### Implementation
 
-- [X] T027 [US4] Add health-check fiber to `SupervisorService` in `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — `Effect.forkScoped` per session; A2A ping on configurable interval (default 30 s timeout); on timeout: transition session to `unhealthy`, emit health-check failure log
+- [X] T027 [US4] Add health-check fiber to `SupervisorService` in `server/agent-host/src/supervisor/SupervisorService.ts` — `Effect.forkScoped` per session; A2A ping on configurable interval (default 30 s timeout); on timeout: transition session to `unhealthy`, emit health-check failure log
 - [X] T028 [US4] Add restart policy to `SupervisorService` — exponential backoff (start 5 s, double each retry); cap at 5 restarts per hour; on cap exceeded: transition to `failed`, emit permanent-failure log; restart resets on successful health check
 - [X] T029 [US4] Add per-agent action rate limiting in `SupervisorService` — configurable max actions/minute per session; log and drop excess actions without crashing the session
-- [X] T030 [US4] Unit tests for `SupervisorService` failure paths in `ghosts/ghost-house/tests/unit/supervisor.test.ts` — mock A2A ping; verify `unhealthy` → `restarting` → `running` transitions; verify `failed` state after retry limit; verify hard-kill timeout fires
-- [X] T031 [US4] Integration test: crash + restart in `ghosts/ghost-house/tests/integration/supervisor-crash.test.ts` — start house + agent; interrupt agent; verify supervisor restarts; verify parallel session unaffected
+- [X] T030 [US4] Unit tests for `SupervisorService` failure paths in `server/agent-host/tests/unit/supervisor.test.ts` — mock A2A ping; verify `unhealthy` → `restarting` → `running` transitions; verify `failed` state after retry limit; verify hard-kill timeout fires
+- [X] T031 [US4] Integration test: crash + restart in `server/agent-host/tests/integration/supervisor-crash.test.ts` — start house + agent; interrupt agent; verify supervisor restarts; verify parallel session unaffected
 
 **Checkpoint**: Supervisor health-check and retry loop verified by unit + integration tests. US4 independently testable.
 
@@ -89,14 +89,14 @@
 
 ### Implementation
 
-- [X] T032 [US2] Implement Colyseus world bridge in `ghosts/ghost-house/src/colyseus-bridge/ColyseusWorldBridge.ts` — subscribe to Colyseus world room as ghost house; receive Colyseus event fanouts for adopted ghosts
-- [X] T033 [US2] Implement `ghosts/ghost-house/src/colyseus-bridge/colyseus-bridge.layer.ts`
+- [X] T032 [US2] Implement Colyseus world bridge in `server/agent-host/src/colyseus-bridge/ColyseusWorldBridge.ts` — subscribe to Colyseus world room as agent host; receive Colyseus event fanouts for adopted ghosts
+- [X] T033 [US2] Implement `server/agent-host/src/colyseus-bridge/colyseus-bridge.layer.ts`
 - [X] T034 [US2] Translate `message.new` Colyseus events → `world.message.new` IC-004 envelopes in `Colyseusbridge.ts` (include `from`, `role`, `priority`, `text` in payload)
 - [X] T035 [P] [US2] Translate proximity events → `world.proximity.enter` / `world.proximity.exit` IC-004 envelopes in `Colyseusbridge.ts`
 - [X] T036 [P] [US2] Translate quest trigger events → `world.quest.trigger` IC-004 envelopes in `Colyseusbridge.ts`
 - [X] T037 [P] [US2] Translate session events → `world.session.start` / `world.session.end` IC-004 envelopes in `Colyseusbridge.ts`
 - [X] T038 [US2] Wire bridge → supervisor event routing in `SupervisorService` — receive `WorldEvent` from bridge, find session by `ghostId`, deliver as A2A push notification using non-blocking send + `setTaskPushNotificationConfig` (IC-002 push invariant)
-- [X] T039 [US2] Create `observer-agent` Listener example in `ghosts/ghost-house/examples/observer-agent/` — exposes A2A endpoint with `capabilities.pushNotifications: true`; logs all received IC-004 events; does NOT emit `say`
+- [X] T039 [US2] Create `observer-agent` Listener example in `server/agent-host/examples/observer-agent/` — exposes A2A endpoint with `capabilities.pushNotifications: true`; logs all received IC-004 events; does NOT emit `say`
 - [X] T040 [US2] Add Listener TCK suite in `ghosts/tck/src/listener.ts` — tests: agent card declares `tier: "listener"` and `pushNotifications: true`; house delivers IC-004 `world.message.new` event within observable latency; envelope passes IC-004 schema (schema literal, ULID eventId, valid sentAt); agent does NOT emit `say` in response (non-speech property)
 - [X] T041 [P] [US2] Add `tck:listener` script to `ghosts/tck/package.json`
 
@@ -106,16 +106,16 @@
 
 ## Phase 6: User Story 3 — Ghost Speaks and Converses (Priority: P3)
 
-**Goal**: A Social-tier agent emits `say` actions via A2A; the ghost house routes them into the Colyseus world as conversation records; ghost-to-ghost speech is delivered as `message.new` events to nearby Social agents.
+**Goal**: A Social-tier agent emits `say` actions via A2A; the agent host routes them into the Colyseus world as conversation records; ghost-to-ghost speech is delivered as `message.new` events to nearby Social agents.
 
 **Independent Test**: Deploy a Social echo-agent. Send a message to the ghost. Confirm the echo appears in the world conversation log. Run `tck:social`.
 
 ### Implementation
 
 - [X] T042 [US3] Outbound social speech — Social agents use MCP `say` via the house proxy; world `ConversationService` persists; `ColyseusWorldBridge#fanoutWorldV1` in `server/world-api` + doc in `social-say-routing.ts`
-- [X] T043 [US3] `say` routing — MCP `say` in world server runs `fanoutWorldV1` to each `mx_listener` (ghost house Colyseus client → IC-004 → supervisor)
+- [X] T043 [US3] `say` routing — MCP `say` in world server runs `fanoutWorldV1` to each `mx_listener` (agent host Colyseus client → IC-004 → supervisor)
 - [X] T044 [US3] Implement capability manifest query in `AgentSupervisor` — expose available house capabilities (initially `telemetry.otlp` if configured); validate `matrix.capabilitiesRequired` at spawn; return `CapabilityUnmet` error if a required capability is unavailable
-- [X] T045 [US3] Create Social echo-agent example in `ghosts/ghost-house/examples/echo-agent/` — receives `world.message.new` events; emits a `say` action echoing the received text; validates the full Social round-trip
+- [X] T045 [US3] Create Social echo-agent example in `server/agent-host/examples/echo-agent/` — receives `world.message.new` events; emits a `say` action echoing the received text; validates the full Social round-trip
 - [X] T046 [US3] Add Social TCK suite in `ghosts/tck/src/social.ts` — tests: agent card declares `tier: "social"` and `pushNotifications: true`; agent receives `world.message.new` event; agent emits `say` action; `say` appears in world conversation log attributed to the ghost; ghost-to-ghost message delivery round-trip
 - [X] T047 [P] [US3] Add `tck:social` script to `ghosts/tck/package.json`
 
@@ -127,14 +127,14 @@
 
 **Purpose**: Documentation sync, proposal updates, and final integration verification.
 
-- [X] T048 [P] Update RFC-0007 `proposals/rfc/0007-ghost-house-architecture.md` — mark all §Open Questions resolved (catalog paths → IC-005, event envelope → IC-004, spawn contract → IC-006, catalog persistence → file-backed JSON, task model → streaming + discrete, push notification prerequisites → documented in IC-002); update §Spawn and Supervision Contract step 4 to reference A2A task delivery
-- [X] T049 [P] Update `docs/architecture.md` component map — add ghost house service block and its connections to world server (MCP proxy), Colyseus (bridge), and ghost agents
+- [X] T048 [P] Update RFC-0007 `proposals/rfc/0007-agent-host-architecture.md` — mark all §Open Questions resolved (catalog paths → IC-005, event envelope → IC-004, spawn contract → IC-006, catalog persistence → file-backed JSON, task model → streaming + discrete, push notification prerequisites → documented in IC-002); update §Spawn and Supervision Contract step 4 to reference A2A task delivery
+- [X] T049 [P] Update `docs/architecture.md` component map — add agent host service block and its connections to world server (MCP proxy), Colyseus (bridge), and ghost agents
 - [X] T050 [P] Update `CONTRIBUTING.md` with ghost agent contribution path — tier tiers, IC-001 agent card format, catalog registration endpoint (IC-005), TCK invocation per tier, localhost Phase 1 requirement
-- [X] T051 [P] Update `ghosts/ghost-house/README.md` — environment variables table, `pnpm dev` startup, catalog file location, relationship to `random-agent` and TCK
+- [X] T051 [P] Update `server/agent-host/README.md` — environment variables table, `pnpm dev` startup, catalog file location, relationship to `random-agent` and TCK
 - [X] T052 [P] Update `ghosts/random-agent/README.md` — environment variables, startup, how to register with the house, Wanderer TCK invocation
-- [X] T053 Run `pnpm typecheck` across all workspace packages; fix any type errors introduced by ghost-house or random-agent
+- [X] T053 Run `pnpm typecheck` across all workspace packages; fix any type errors introduced by agent-host or random-agent
 - [X] T054 Run full `quickstart.md` on a clean shell one final time; confirm every step succeeds with the production packages (not the spike)
-- [X] T055 [P] **Gate: start after T026 (or T054) when the A2A flow is demoable.** Update root `package.json` `demo` target and `scripts/demo.mjs` to orchestrate **@aie-matrix/ghost-house** + **@aie-matrix/random-agent** (and the world / registry steps needed) instead of legacy `pnpm --filter @aie-matrix/ghost-random-house start`; preserve one-command `pnpm run demo` for a visible wanderer. Document required env, ports, and startup order in the demo script comment block or a short note the demo touches.
+- [X] T055 [P] **Gate: start after T026 (or T054) when the A2A flow is demoable.** Update root `package.json` `demo` target and `scripts/demo.mjs` to orchestrate **@aie-matrix/server-agent-host** + **@aie-matrix/random-agent** (and the world / registry steps needed) instead of legacy `pnpm --filter @aie-matrix/ghost-random-house start`; preserve one-command `pnpm run demo` for a visible wanderer. Document required env, ports, and startup order in the demo script comment block or a short note the demo touches.
 
 ---
 
@@ -148,9 +148,9 @@
 
 ### Implementation
 
-- [X] T056 [Ref] Refactor `ghosts/random-agent/src/executor.ts` (and any minimal wiring in `agent.ts` if required) — replace the single `globalLoop` with a **registry keyed by `ghostId`** from `aie-matrix.ghost-house.spawn-context.v1`; **one** `GhostMcpClient` + movement loop per active `ghostId`; on a **new** spawn for the **same** `ghostId`, **cancel and replace** the previous loop (explicit policy); on spawn for a **new** `ghostId`, run **in parallel**; ensure shutdown / cancel paths do not leak timers or clients; add logs that include `ghostId` for each loop
+- [X] T056 [Ref] Refactor `ghosts/random-agent/src/executor.ts` (and any minimal wiring in `agent.ts` if required) — replace the single `globalLoop` with a **registry keyed by `ghostId`** from `aie-matrix.agent-host.spawn-context.v1`; **one** `GhostMcpClient` + movement loop per active `ghostId`; on a **new** spawn for the **same** `ghostId`, **cancel and replace** the previous loop (explicit policy); on spawn for a **new** `ghostId`, run **in parallel**; ensure shutdown / cancel paths do not leak timers or clients; add logs that include `ghostId` for each loop
 - [X] T057 [P] [Ref] Add or extend **unit tests** in `ghosts/random-agent/` — cover at least: (a) two distinct `ghostId` values can both be “active” without the second cancelling the first; (b) a second spawn with the **same** `ghostId` cancels only that key’s previous loop. Use test doubles or minimal mocks; no new E2E harness required in this task
-- [X] T058 [P] [Ref] **Documentation** — update `ghosts/random-agent/README.md` and add a short **“Multiple ghosts (same `random-agent` process)”** subsection to `specs/009-ghost-house-a2a/quickstart.md`: registry adopt per human ghost, spawn per `ghostId`, one catalog `baseUrl`; note **optional** N-process deployment for hard isolation; keep scope honest (reference agent, not a production SLO)
+- [X] T058 [P] [Ref] **Documentation** — update `ghosts/random-agent/README.md` and add a short **“Multiple ghosts (same `random-agent` process)”** subsection to `specs/009-agent-host-a2a/quickstart.md`: registry adopt per human ghost, spawn per `ghostId`, one catalog `baseUrl`; note **optional** N-process deployment for hard isolation; keep scope honest (reference agent, not a production SLO)
 - [X] T059 [P] [Ref] **Contributor path** — add a compact subsection under the ghost agent section in `CONTRIBUTING.md` pointing to the README + quickstart for multi-ghost behavior (do not duplicate the full walkthrough in CONTRIBUTING)
 - [X] T060 [Ref] **Regression gate** — `pnpm typecheck` at repo root; `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` (single-ghost) passes unchanged; if verification surfaces a **house** limitation (e.g. serialization of spawns to one agent), document in `ghosts/random-agent/README.md` **Known limitations** in this task — **no** house code change in Phase 8 scope
 
@@ -204,9 +204,9 @@
 
 ```bash
 # After T010 (ManagedRuntime scaffold), launch concurrently:
-Task A: "T012 CatalogService in ghosts/ghost-house/src/catalog/CatalogService.ts"
-Task B: "T014 A2AHostService in ghosts/ghost-house/src/a2a-host/A2AHostService.ts"
-Task C: "T016 MCPProxyService in ghosts/ghost-house/src/mcp-proxy/MCPProxyService.ts"
+Task A: "T012 CatalogService in server/agent-host/src/catalog/CatalogService.ts"
+Task B: "T014 A2AHostService in server/agent-host/src/a2a-host/A2AHostService.ts"
+Task C: "T016 MCPProxyService in server/agent-host/src/mcp-proxy/MCPProxyService.ts"
 Task D: "T021 buildAgentCard.ts in ghosts/random-agent/src/buildAgentCard.ts"
 
 # After T018 (AgentSupervisor) and T023 (agent.ts), launch concurrently:
@@ -239,7 +239,7 @@ Task F: "T026 quickstart.md end-to-end verification"
 ### Parallel Team Strategy
 
 With two developers after Phase 2:
-- Developer A: Phase 3 (US1) — ghost house services + random-agent
+- Developer A: Phase 3 (US1) — agent host services + random-agent
 - Developer B: Phase 3 (US1) — Wanderer TCK + quickstart verification
 
 After Phase 3:

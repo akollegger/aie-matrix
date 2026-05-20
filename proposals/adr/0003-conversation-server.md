@@ -8,7 +8,7 @@
 
 RFC-0005 defines the ghost conversation model: each ghost owns a persistent broadcast thread, utterances are delivered as Colyseus signals, and full content is persisted to a pluggable store. This introduces two new responsibilities that do not belong cleanly in any existing server package:
 
-1. **Utterance persistence** — writing and serving JSONL records keyed by `thread_id` and `utterance_id`, accessible to ghost house managers via HTTP.
+1. **Utterance persistence** — writing and serving JSONL records keyed by `thread_id` and `utterance_id`, accessible to agent host managers via HTTP.
 2. **Cluster subscription management** — tracking which ghosts are within each other's 7-cell cluster and signaling `ghost.entered_cluster`, `ghost.left_cluster`, and `utterance.new` events through Colyseus.
 
 The existing server packages are `server/colyseus/` (world state and spectator sync), `server/world-api/` (MCP tools and movement), and `server/registry/` (ghost registration and adoption). None of these is an appropriate host for conversation concerns without creating cross-cutting dependencies that would be costly to untangle later.
@@ -26,7 +26,7 @@ The `say` MCP tool is added to `server/world-api/` (consistent with where all ot
 
 ## Rationale
 
-**Colyseus is a notification bus, not a content store.** Colyseus is optimized for real-time state sync across connected clients. Persisting utterance content there would couple content lifetime to room lifecycle, lose content on restart, and make async reads by ghost house managers impossible. Keeping Colyseus as signal-only and routing content to a separate store is the architecturally honest split.
+**Colyseus is a notification bus, not a content store.** Colyseus is optimized for real-time state sync across connected clients. Persisting utterance content there would couple content lifetime to room lifecycle, lose content on restart, and make async reads by agent host managers impossible. Keeping Colyseus as signal-only and routing content to a separate store is the architecturally honest split.
 
 **`server/world-api/` already owns the MCP surface.** Adding `say` alongside `go`, `exits`, and `look` is consistent with the existing pattern. The tool implementation delegates persistence and fan-out to `server/conversation/` rather than handling it inline — this keeps `world-api` focused on the ghost wire protocol (ADR-0001) without absorbing store or notification concerns.
 
@@ -57,4 +57,4 @@ The `say` MCP tool is added to `server/world-api/` (consistent with where all ot
 - Cluster snapshot computation runs in the notification bridge on each `say` call. Because `say` also transitions the speaker into conversational mode — where movement is suspended — the speaker's position is guaranteed stable for the conversation's lifetime. Cluster calculation is never triggered by position updates, only by messages. Performance characteristics should still be validated during load testing.
 - A third contributor surface is introduced. `server/conversation/` needs its own README, interface documentation, and quickstart — scope that does not exist yet.
 
-**Reversibility:** Moderate cost. The `speak` tool and the HTTP store endpoints will be consumed by ghost house managers from the first implementation. Changing the package boundary or merging conversation concerns back into world-api or Colyseus would require coordination with third-party integrators. The store interface is the most important contract to get right before external consumption begins.
+**Reversibility:** Moderate cost. The `speak` tool and the HTTP store endpoints will be consumed by agent host managers from the first implementation. Changing the package boundary or merging conversation concerns back into world-api or Colyseus would require coordination with third-party integrators. The store interface is the most important contract to get right before external consumption begins.

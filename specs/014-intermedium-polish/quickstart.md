@@ -5,7 +5,7 @@
 ## Prerequisites
 
 - `pnpm install` from repo root
-- Backend running (`pnpm dev` from repo root starts Colyseus + World API + Ghost House)
+- Backend running (`pnpm dev` from repo root starts Colyseus + World API + Agent Host)
 - `clients/intermedium/.env.local` present with correct URLs (see `clients/intermedium/README.md`)
 
 ## Running the client

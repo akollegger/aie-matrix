@@ -44,7 +44,7 @@ function parseSpawnData(msg: Message | undefined): SpawnContext | null {
   for (const p of msg?.parts ?? []) {
     if (p.kind === "data" && "data" in p) {
       const d = p.data as Record<string, unknown>;
-      if (d.schema === "aie-matrix.ghost-house.spawn-context.v1") {
+      if (d.schema === "aie-matrix.agent-host.spawn-context.v1") {
         return d as unknown as SpawnContext;
       }
     }

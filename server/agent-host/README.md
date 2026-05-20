@@ -1,6 +1,6 @@
-# @aie-matrix/ghost-house
+# @aie-matrix/server-agent-host
 
-Canonical **ghost house**: file-backed **catalog**, **A2A** host, **MCP** proxy to the world server, **Colyseus** bridge, and **agent supervisor** (spawn, health, world events, shutdown). See [`specs/009-ghost-house-a2a/`](../../specs/009-ghost-house-a2a/) and [RFC-0007](../../proposals/rfc/0007-ghost-house-architecture.md).
+Canonical **agent host**: file-backed **catalog**, **A2A** host, **MCP** proxy to the world server, **Colyseus** bridge, and **agent supervisor** (spawn, health, world events, shutdown). See [`specs/009-agent-host-a2a/`](../../specs/009-agent-host-a2a/) and [RFC-0007](../../proposals/rfc/0007-agent-host-architecture.md).
 
 ## Environment
 
@@ -15,24 +15,24 @@ Config is loaded with `@aie-matrix/root-env` from the **monorepo root** `.env` /
 
 The Streamable world MCP URL used to forward tools is **`credential.worldApiBaseUrl`** from each registry **/adopt** response (per session), not a single env var.
 
-`./catalog.json` is typically created under `ghosts/ghost-house/` when you run the house from that filter; use an absolute path if you start from the repo root.
+`./catalog.json` is typically created under `server/agent-host/` when you run the house from that filter; use an absolute path if you start from the repo root.
 
 ## Develop
 
 ```bash
 # World server must be up first, e.g. from repo root:
 # pnpm dev
-pnpm --filter @aie-matrix/ghost-house dev
+pnpm --filter @aie-matrix/server-agent-host dev
 # Default: http://127.0.0.1:4000 — catalog, sessions, A2A
 ```
 
 ## Relationship to `random-agent` and TCK
 
 - **[`@aie-matrix/random-agent`](../random-agent/)** is the **Wanderer** reference: it serves an A2A card and movement loop. Register its `baseUrl` with the house, adopt a ghost via the world **registry**, then `POST /v1/sessions/spawn/:agentId` on the house.
-- **Contract tests** live in `@aie-matrix/ghost-tck` — e.g. `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` (see [quickstart](../../specs/009-ghost-house-a2a/quickstart.md)).
+- **Contract tests** live in `@aie-matrix/ghost-tck` — e.g. `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` (see [quickstart](../../specs/009-agent-host-a2a/quickstart.md)).
 
 ## Tests
 
 ```bash
-pnpm --filter @aie-matrix/ghost-house test
+pnpm --filter @aie-matrix/server-agent-host test
 ```

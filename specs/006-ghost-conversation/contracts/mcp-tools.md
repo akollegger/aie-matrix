@@ -125,7 +125,7 @@ Empty array if no pending notifications.
 
 ### Notes
 
-- `inbox` does not appear in RFC-0005. It is a PoC bridge enabling pull-based message discovery until ghost houses have persistent Colyseus connections.
+- `inbox` does not appear in RFC-0005. It is a PoC bridge enabling pull-based message discovery until agent hosts have persistent Colyseus connections.
 - The result gives `thread_id` + `message_id`. The caller fetches full content via `GET /threads/{ghost_id}/{message_id}`.
 
 ---

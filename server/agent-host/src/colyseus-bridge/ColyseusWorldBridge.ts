@@ -42,7 +42,7 @@ export async function startColyseusWorldBridge(options: {
   const roomId = options.roomIdOverride ?? (await resolveMatrixRoomId(options.worldHttpBase));
   const ws = httpBaseToWsBase(options.worldHttpBase);
   const client = new Client(ws);
-  const room = await client.joinById(roomId, { name: options.clientName ?? "ghost-house-a2a-bridge" });
+  const room = await client.joinById(roomId, { name: options.clientName ?? "agent-host-a2a-bridge" });
   const handler = (raw: unknown) => {
     const e = translateColyseusWorldV1(raw);
     if (e) {

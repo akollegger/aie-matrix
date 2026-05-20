@@ -20,18 +20,18 @@ enforces behavioral contracts.
 
 **Third-party contributors** (vendors, speakers, individuals) want to contribute
 ghost agents without needing to understand Colyseus internals, the world server,
-or the ghost house implementation. They want to ship a self-contained agent and
+or the agent host implementation. They want to ship a self-contained agent and
 have it run in the world.
 
 A further constraint emerged from the conversation model (RFC-0005): user
 messages to a ghost travel through the same notification channel as ghost-to-ghost
 messages — flagged by `role: "partner"` and `priority: PARTNER`. There is no
-separate human-facing API. The ghost house does not sit in the user↔ghost path.
+separate human-facing API. The agent host does not sit in the user↔ghost path.
 
 The existing ghost wire protocol (ADR-0001) already defines MCP as the interface
 between a ghost and the world server — covering position queries, movement, and
 world state inspection. The question this ADR resolves is what sits *above* that:
-the interface between the ghost house and the agents it runs.
+the interface between the agent host and the agents it runs.
 
 **Current limitations of the MCP-only architecture.** MCP is purpose-built for
 synchronous agent→tool interaction. It has no native concept of agent lifecycle
@@ -45,7 +45,7 @@ the two protocols as complementary ("MCP for tools, A2A for agents").
 ## Decision
 
 Adopt **A2A (Agent-to-Agent protocol)** as the coordination and communication
-interface between the ghost house and ghost agents, alongside the existing **MCP**
+interface between the agent host and ghost agents, alongside the existing **MCP**
 world interface defined in ADR-0001. The two protocols serve distinct, complementary
 roles:
 
@@ -81,16 +81,16 @@ would require them to either emit no-ops or stay silent under conditions the TCK
 cannot verify. Making Listener a named tier makes non-speaking behavior testable
 as a positive conformance property rather than an implementation omission.
 
-The ghost house is the **sole A2A host**. It is not a protocol for others to
+The agent host is the **sole A2A host**. It is not a protocol for others to
 implement — it is canonical infrastructure maintained by the core team. There is
 no multi-house federation.
 
 Ghost agents are **A2A agents**. Third parties contribute by implementing an
-agent at their chosen tier, publishing an agent card to the ghost house catalog,
-and providing a reachable endpoint. The ghost house spawns and supervises their
+agent at their chosen tier, publishing an agent card to the agent host catalog,
+and providing a reachable endpoint. The agent host spawns and supervises their
 agent for any ghost configured to use it.
 
-The Colyseus bridge is an **internal implementation detail** of the ghost house.
+The Colyseus bridge is an **internal implementation detail** of the agent host.
 Third-party agents never interact with Colyseus directly. MCP tools are proxied
 through the house; A2A events are translated from Colyseus notifications by the
 house.
@@ -103,7 +103,7 @@ contributed agents are measured.
 
 **Protocol version.** This ADR adopts **A2A protocol version 0.3.0**, matching
 the current release of the official TypeScript SDK (`@a2a-js/sdk`). A2A v1.0.0
-is in release-candidate stage under Linux Foundation governance; the ghost house
+is in release-candidate stage under Linux Foundation governance; the agent host
 should track v1.0 adoption in the SDK and plan a version upgrade when stable.
 Protocol version is negotiated via the `A2A-Version` header and declared in agent
 cards' `protocolVersion` field.
@@ -130,8 +130,8 @@ environment).
 ## Rationale
 
 **A2A fits the coordination problem natively.** A2A defines an agent host that
-manages agent cards and exposes a task/message interface. The ghost house is
-exactly an agent host. Ghost agents are exactly A2A agents. The ghost house
+manages agent cards and exposes a task/message interface. The agent host is
+exactly an agent host. Ghost agents are exactly A2A agents. The agent host
 catalog is exactly an A2A agent registry. The mapping is 1:1 rather than an
 adaptation.
 
@@ -180,7 +180,7 @@ overhead for what are synchronous reads and simple mutations. MCP is purpose-bui
 for this interaction pattern. The benefit (one protocol for agent implementors)
 does not outweigh the fit penalty.
 
-**Multiple ghost house implementations** — allowing third parties to run their
+**Multiple agent host implementations** — allowing third parties to run their
 own houses would maximize flexibility. The coordination overhead — federation
 protocol, shared ghost identity, cross-house presence — was judged not worth it
 for a conference-scoped deployment. If the project continues beyond AIEWF 2026,
@@ -205,14 +205,14 @@ with growing tooling and ecosystem support.
   within A2A; conversational agents never need to touch MCP
 
 **Harder:**
-- The ghost house must implement and maintain two protocol bridges: MCP proxy
+- The agent host must implement and maintain two protocol bridges: MCP proxy
   (world queries and movement) and A2A host (lifecycle, events, speech)
 - Social-tier agents emit state-mutating actions through two channels: `go` via
   MCP, `say` via A2A. Agent implementations need a routing layer that selects
   the correct protocol per action type; this is a real implementation cost the
   boundary imposes
 - A2A is a relatively new protocol; tooling and library support varies by language
-- The ghost house becomes a single point of failure; no redundancy through
+- The agent host becomes a single point of failure; no redundancy through
   competing implementations
 
 **Open questions deferred to implementation:**
@@ -221,7 +221,7 @@ with growing tooling and ecosystem support.
   spike-008**: use streaming for the autonomous movement loop, discrete tasks
   for partner message interrupts. The hybrid is natural and validated end-to-end.
 - The `matrix` agent card extension object (tier, ghost classes, tools, profile,
-  authors, etc.) — defined in the ghost house RFC and validated by spike-008.
+  authors, etc.) — defined in the agent host RFC and validated by spike-008.
 - Capability manifest format: what the house advertises as available to agents it
   spawns (memory backends, available MCP tools, notification types)
 

@@ -19,7 +19,7 @@
 
 ## What we learned (ADR / RFC deltas)
 
-- **ADR-0004:** Evidence supports adopting `@a2a-js/sdk` for the ghost-house coordination layer for v0.3.0-style JSON-RPC; add appendix pointer to this file. Call out push pattern: **non-blocking task + push config** before completion.
+- **ADR-0004:** Evidence supports adopting `@a2a-js/sdk` for the agent-host coordination layer for v0.3.0-style JSON-RPC; add appendix pointer to this file. Call out push pattern: **non-blocking task + push config** before completion.
 - **RFC-0007:** Implementation can assume Express middleware (`jsonRpcHandler`, `agentCardHandler`) + `DefaultRequestHandler` + optional `DefaultPushNotificationSender` as the reference stack for the A2A Host component.
 
 ## Recommendation

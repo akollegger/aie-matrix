@@ -1,13 +1,13 @@
-# RFC-0007: Ghost House Architecture
+# RFC-0007: Agent Host Architecture
 
-**Status:** accepted (implementation specs: `specs/009-ghost-house-a2a/`; catalog API IC-005, world events IC-004, spawn IC-006, A2A push IC-002)  
+**Status:** accepted (implementation specs: `specs/009-agent-host-a2a/`; catalog API IC-005, world events IC-004, spawn IC-006, A2A push IC-002)  
 **Date:** 2026-04-23; **Updated:** 2026-04-24 (Phase 7 — open questions closed against ICs)  
 **Authors:** @akollegger  
 **Related:** [ADR-0004](../adr/0004-a2a-ghost-agent-protocol.md) · [ADR-0001](../adr/0001-mcp-ghost-wire-protocol.md) · [RFC-0005](0005-ghost-conversation-model.md)
 
 ## Summary
 
-Define the architecture of the canonical ghost house: the A2A host, MCP proxy,
+Define the architecture of the canonical agent host: the A2A host, MCP proxy,
 Colyseus bridge, agent supervisor, and catalog service that together run ghost
 agents in the Matrix world. Ghost agents — spawned, supervised, and fed events
 by the house — are the unit of third-party contribution, per ADR-0004.
@@ -16,7 +16,7 @@ by the house — are the unit of third-party contribution, per ADR-0004.
 
 ADR-0004 adopts A2A as the ghost agent protocol and establishes behavioral tiers
 (Wanderer, Listener, Social). The ADR decides *that* A2A is used; this RFC
-decides *how* the ghost house is built to host agents at each tier and to
+decides *how* the agent host is built to host agents at each tier and to
 translate between their A2A interface and the Colyseus world.
 
 Three audiences need this architecture to be legible:
@@ -34,7 +34,7 @@ where the implementation risks concentrate.
 
 ### Component Breakdown
 
-The ghost house is a single service composed of five internal components:
+The agent host is a single service composed of five internal components:
 
 **A2A Host**
 The public-facing A2A server. Accepts agent card publications, exposes the
@@ -51,7 +51,7 @@ see the house's MCP endpoint.
 
 **Colyseus Bridge**
 The internal translation layer between world events and A2A events. Subscribes
-to Colyseus rooms as the ghost house, receives proximity changes, message
+to Colyseus rooms as the agent host, receives proximity changes, message
 fanouts, quest triggers, and session notifications, and translates each into
 an A2A event pushed to the relevant agent. Outbound: receives `say` actions
 from agents via A2A and emits them into Colyseus as conversation records.
@@ -106,7 +106,7 @@ parties).
 Ghost agents extend the standard A2A agent card with a single top-level object
 `matrix` holding all Matrix-specific catalog metadata. Standard A2A fields
 unchanged; `matrix` is optional for generic A2A tooling and **required** by the
-ghost house catalog for contributed agents. Field names inside `matrix` use
+agent host catalog for contributed agents. Field names inside `matrix` use
 camelCase (no `mx_` prefix).
 
 ```json
@@ -115,7 +115,7 @@ camelCase (no `mx_` prefix).
   "description": "Reference Wanderer agent: random movement, no memory, no speech.",
   "protocolVersion": "0.3.0",
   "version": "0.1.0",
-  "url": "http://ghost-house.matrix.local/agents/random-agent",
+  "url": "http://agent-host.matrix.local/agents/random-agent",
   "capabilities": {
     "streaming": true,
     "pushNotifications": false
@@ -167,7 +167,7 @@ are not satisfied.
 Initial capabilities:
 
 - `telemetry.otlp` — OpenTelemetry collector endpoint for shared tracing and
-  metrics across world server, ghost house, and spawned agents. Required for
+  metrics across world server, agent host, and spawned agents. Required for
   cross-boundary trace correlation.
 
 **What the manifest intentionally does not include:**
@@ -199,8 +199,8 @@ to implementation.
 1. Catalog lookup: resolve agent card by `agentId`
 2. Capability validation: check `matrix.capabilitiesRequired` against manifest
 3. Credential provisioning: mint an ephemeral token scoped to this ghost
-4. **A2A task delivery (IC-006, IC-002)**: the house is the A2A **client** to the agent. It sends a `message/send` request whose `data` part contains the **spawn context** (`aie-matrix.ghost-house.spawn-context.v1`). Wanderer agents use a **blocking** `sendMessage` until the task reaches a terminal state (spawn ack). Listener/Social agents use a **non-blocking** first `sendMessage`, then `setTaskPushNotificationConfig` on that task (IC-002 invariant) before the task can complete, so the session stays open for **push** and follow-up `data` parts (IC-004 world events).
-5. **Subscription (Listener/Social)**: the Colyseus bridge (ghost house) connects a `colyseus.js` client to the `matrix` room, receives `world-v1` fanouts from the world server, translates to IC-004, and the supervisor **delivers** to the long-lived A2A task. **Social outbound speech** uses the world MCP `say` tool (via the house proxy); the world server persists the line and **fanouts** `world-v1` `message.new` to `mx_listeners` for nearby sessions.
+4. **A2A task delivery (IC-006, IC-002)**: the house is the A2A **client** to the agent. It sends a `message/send` request whose `data` part contains the **spawn context** (`aie-matrix.agent-host.spawn-context.v1`). Wanderer agents use a **blocking** `sendMessage` until the task reaches a terminal state (spawn ack). Listener/Social agents use a **non-blocking** first `sendMessage`, then `setTaskPushNotificationConfig` on that task (IC-002 invariant) before the task can complete, so the session stays open for **push** and follow-up `data` parts (IC-004 world events).
+5. **Subscription (Listener/Social)**: the Colyseus bridge (agent host) connects a `colyseus.js` client to the `matrix` room, receives `world-v1` fanouts from the world server, translates to IC-004, and the supervisor **delivers** to the long-lived A2A task. **Social outbound speech** uses the world MCP `say` tool (via the house proxy); the world server persists the line and **fanouts** `world-v1` `message.new` to `mx_listeners` for nearby sessions.
 
 **Supervision policy:**
 
@@ -236,19 +236,19 @@ if the timeline tightens.
 
 ## Open Questions (historical; resolved in 009)
 
-The following were **design choices** for the 009 implementation; they are **not** open anymore. Source of truth is the IC set under `specs/009-ghost-house-a2a/contracts/`.
+The following were **design choices** for the 009 implementation; they are **not** open anymore. Source of truth is the IC set under `specs/009-agent-host-a2a/contracts/`.
 
 | Topic | Resolution |
 |--------|------------|
-| **Authentication model (Phase 1)** | `GHOST_HOUSE_DEV_TOKEN` static bearer, both directions; **localhost only** — [IC-002 §Authentication](../../specs/009-ghost-house-a2a/contracts/ic-002-a2a-protocol.md); follow-up **non-local** auth stays a separate ADR. |
-| **Task model vs. streaming** | [IC-002 — Interaction patterns](../../specs/009-ghost-house-a2a/contracts/ic-002-a2a-protocol.md) — streaming (long task), discrete spawn, **push** (non-blocking + `setTaskPushNotificationConfig` before terminal state). Enforced in ghost house A2A host. |
-| **Catalog persistence** | **File-backed JSON** at `CATALOG_FILE_PATH` — [IC-005](../../specs/009-ghost-house-a2a/contracts/ic-005-catalog-api.md). |
-| **Catalog HTTP paths** | Canonical under ghost house: `POST /v1/catalog/register`, `GET /v1/catalog`, `GET/DELETE /v1/catalog/:agentId`, `POST/DELETE` sessions — [IC-005](../../specs/009-ghost-house-a2a/contracts/ic-005-catalog-api.md). |
-| **Event envelope to agents** | [IC-004](../../specs/009-ghost-house-a2a/contracts/ic-004-world-event-envelope.md) `aie-matrix.world-event.v1` delivered as A2A `data` parts. |
-| **Spawn contract** | [IC-006](../../specs/009-ghost-house-a2a/contracts/ic-006-spawn-context.md) `aie-matrix.ghost-house.spawn-context.v1`. |
-| **Push notification prerequisites** | [IC-002 — Push](../../specs/009-ghost-house-a2a/contracts/ic-002-a2a-protocol.md) + spike — `setTaskPushNotificationConfig` before terminal; non-blocking `sendMessage` when expecting push. |
+| **Authentication model (Phase 1)** | `GHOST_HOUSE_DEV_TOKEN` static bearer, both directions; **localhost only** — [IC-002 §Authentication](../../specs/009-agent-host-a2a/contracts/ic-002-a2a-protocol.md); follow-up **non-local** auth stays a separate ADR. |
+| **Task model vs. streaming** | [IC-002 — Interaction patterns](../../specs/009-agent-host-a2a/contracts/ic-002-a2a-protocol.md) — streaming (long task), discrete spawn, **push** (non-blocking + `setTaskPushNotificationConfig` before terminal state). Enforced in agent host A2A host. |
+| **Catalog persistence** | **File-backed JSON** at `CATALOG_FILE_PATH` — [IC-005](../../specs/009-agent-host-a2a/contracts/ic-005-catalog-api.md). |
+| **Catalog HTTP paths** | Canonical under agent host: `POST /v1/catalog/register`, `GET /v1/catalog`, `GET/DELETE /v1/catalog/:agentId`, `POST/DELETE` sessions — [IC-005](../../specs/009-agent-host-a2a/contracts/ic-005-catalog-api.md). |
+| **Event envelope to agents** | [IC-004](../../specs/009-agent-host-a2a/contracts/ic-004-world-event-envelope.md) `aie-matrix.world-event.v1` delivered as A2A `data` parts. |
+| **Spawn contract** | [IC-006](../../specs/009-agent-host-a2a/contracts/ic-006-spawn-context.md) `aie-matrix.agent-host.spawn-context.v1`. |
+| **Push notification prerequisites** | [IC-002 — Push](../../specs/009-agent-host-a2a/contracts/ic-002-a2a-protocol.md) + spike — `setTaskPushNotificationConfig` before terminal; non-blocking `sendMessage` when expecting push. |
 | **Contributor networking (Phase 1)** | Unchanged: **local** dev and reachable agent `baseUrl` in catalog; **production** HTTPS + TLS remain follow-ups. |
-| **Observability (shared)** | `telemetry.otlp` in house capability manifest when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — [IC-001](../../specs/009-ghost-house-a2a/contracts/ic-001-agent-card-schema.md) `matrix.capabilitiesRequired` validation. |
+| **Observability (shared)** | `telemetry.otlp` in house capability manifest when `OTEL_EXPORTER_OTLP_ENDPOINT` is set — [IC-001](../../specs/009-agent-host-a2a/contracts/ic-001-agent-card-schema.md) `matrix.capabilitiesRequired` validation. |
 
 **Still open (out of 009 scope)**
 
@@ -265,13 +265,13 @@ decomposition and build one module. Tempting at this scope but loses the
 testability and phased-delivery benefits. The components above map cleanly to
 Phase 1/2/3 scope.
 
-**Agent hosting outside the ghost house** — defer the sandbox question by
+**Agent hosting outside the agent host** — defer the sandbox question by
 requiring all third parties to host their own endpoints. This is simpler but
 may limit contribution. Flagged as open question above.
 
 ## Deployment Constraints
 
-- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — ghost-house is the last service in the startup dependency chain (world-api and Colyseus must be ready before ghost-house is marked ready). The agent catalog (`catalog.json`) must persist to Neo4j Aura in Tier 3; the `CATALOG_FILE_PATH` env var selects the backing implementation. ghost-house is designed to be stateless: killed and restarted at any time, with registered agents re-attaching via A2A heartbeat after a restart.
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — agent-host is the last service in the startup dependency chain (world-api and Colyseus must be ready before agent-host is marked ready). The agent catalog (`catalog.json`) must persist to Neo4j Aura in Tier 3; the `CATALOG_FILE_PATH` env var selects the backing implementation. agent-host is designed to be stateless: killed and restarted at any time, with registered agents re-attaching via A2A heartbeat after a restart.
 
 ## References
 
