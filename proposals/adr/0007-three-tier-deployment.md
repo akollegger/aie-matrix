@@ -206,7 +206,7 @@ The following is the concrete procedure for standing up the GCP/GKE production e
 | 4 | Helm charts | ✅ complete |
 | 5 | CI/CD — image push + deploy | ✅ complete |
 | 6 | DNS and TLS | ✅ complete |
-| 7 | First deploy and verification | ⬜ not started |
+| 7 | First deploy and verification | ✅ complete |
 
 ---
 

@@ -34,7 +34,8 @@
     "test:e2e:autostart": "pnpm run test:e2e",
     "test:tck": "pnpm --filter @aie-matrix/ghost-tck test",
     "tmj-to-gram": "node ./tools/tmj-to-gram/dist/main.js",
-    "map:compare-svg": "pnpm --filter @aie-matrix/tmj-to-gram run gallery:parity"
+    "map:compare-svg": "pnpm --filter @aie-matrix/tmj-to-gram run gallery:parity",
+    "map:editor": "pnpm --filter @aie-matrix/map-editor dev"
   },
   "dependencies": {
     "@aie-matrix/root-env": "workspace:*"
