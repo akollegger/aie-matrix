@@ -14,7 +14,7 @@ jobs:
       # Unique project name per run — prevents volume/network conflicts on shared runners
       COMPOSE_PROJECT_NAME: aie-matrix-ci-${{ github.run_id }}
       # Neo4j
-      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_URI: bolt://invalid-host:9999
       NEO4J_USER: neo4j
       NEO4J_PASSWORD: ci-test-pw
       NEO4J_AUTH: neo4j/ci-test-pw

@@ -53,6 +53,8 @@ neo4j  →  redis  →  server  →  agent-host
 
 Each container only starts once its dependency reports healthy. Full cold-start (including image builds) takes **under 5 minutes** on a standard broadband connection.
 
+**CI observed duration**: ~1m53s on `ubuntu-latest` (GitHub Actions, 2026-05-21).
+
 ---
 
 ## Verify the Stack is Healthy

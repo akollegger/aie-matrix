@@ -88,8 +88,10 @@
 
 ### Implementation for User Story 2
 
-- [ ] T019 [US2] Write `.github/workflows/staging-ci.yml`: trigger `pull_request` targeting `main`; steps: checkout → `docker compose -f deploy/staging/docker-compose.yml build` → `docker compose up -d` → poll `/health` endpoints until healthy or timeout (5 min) → assert HTTP 200 → `docker compose down -v`; set `COMPOSE_PROJECT_NAME` to avoid conflicts; use `docker compose` (v2 plugin, not `docker-compose`)
-- [ ] T020 [US2] Open a test PR with the CI workflow file and at least one staging-stack file; confirm the GitHub Actions check runs and passes; record the job duration in `deploy/staging/README.md` for reference
+- [x] T019 [US2] Write `.github/workflows/staging-ci.yml`: trigger `workflow_dispatch` or `push: tags: ["v*"]`; steps: checkout → build → `docker compose up -d` → poll agent-host `/health` until healthy or 5-min timeout → assert both health endpoints → `docker compose down -v`; `COMPOSE_PROJECT_NAME` set per run_id; uses `docker compose` v2 plugin
+  <!-- Trigger changed from pull_request to workflow_dispatch + v* tag push (too heavy for every PR). -->
+- [x] T020 [US2] Open a test PR with the CI workflow file and at least one staging-stack file; confirm the GitHub Actions check runs and passes; record the job duration in `deploy/staging/README.md` for reference
+  <!-- Triggered via tag v0.1.0-staging-test on branch 016-staging-deployment. Run 26211449353: success in 1m53s. Duration recorded in README. -->
 - [ ] T021 [US2] Verify CI failure case: temporarily set an invalid env var in the CI config, push to the test PR branch, confirm the check fails and the log identifies the unhealthy service; revert the breakage
 
 **Checkpoint**: CI gating is live. US2 independently verifiable via PR history.
