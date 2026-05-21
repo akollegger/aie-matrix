@@ -24,7 +24,7 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write   # required for Workload Identity Federation
+      id-token: write # required for Workload Identity Federation
 
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +43,9 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Show authenticated identity
+        run: gcloud auth list
 
       - name: Set up gcloud SDK
         uses: google-github-actions/setup-gcloud@v2
