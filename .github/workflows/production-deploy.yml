@@ -1,0 +1,117 @@
+name: Production Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (e.g. v1.0.0 or git SHA)"
+        required: true
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+
+env:
+  REGISTRY: us-central1-docker.pkg.dev
+  PROJECT: aie-matrix
+  REPO: aie-matrix
+  REGION: us-central1
+  CLUSTER: aie-matrix-prod
+  NAMESPACE: aie-matrix
+
+jobs:
+  build-push-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      contents: read
+      id-token: write   # required for Workload Identity Federation
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve image tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "value=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Authenticate to GCP via Workload Identity
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Set up kubectl
+        uses: google-github-actions/get-gke-credentials@v2
+        with:
+          cluster_name: ${{ env.CLUSTER }}
+          location: ${{ env.REGION }}
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+
+      # ── Build & push server image ──────────────────────────────────────────
+
+      - name: Build server image
+        run: |
+          docker build \
+            -f server/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/server:${{ steps.tag.outputs.value }} \
+            .
+
+      - name: Push server image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/server:${{ steps.tag.outputs.value }}
+
+      # ── Build & push agent-host image ──────────────────────────────────────
+
+      - name: Build agent-host image
+        run: |
+          docker build \
+            -f server/agent-host/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-host:${{ steps.tag.outputs.value }} \
+            .
+
+      - name: Push agent-host image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-host:${{ steps.tag.outputs.value }}
+
+      # ── Deploy via Helm ────────────────────────────────────────────────────
+
+      - name: Deploy server
+        run: |
+          helm upgrade --install server deploy/k8s/charts/server \
+            --namespace ${{ env.NAMESPACE }} \
+            --set image.tag=${{ steps.tag.outputs.value }} \
+            -f deploy/k8s/values-production.yaml \
+            --wait \
+            --timeout 5m
+
+      - name: Deploy agent-host
+        run: |
+          helm upgrade --install agent-host deploy/k8s/charts/agent-host \
+            --namespace ${{ env.NAMESPACE }} \
+            --set image.tag=${{ steps.tag.outputs.value }} \
+            -f deploy/k8s/values-production.yaml \
+            --wait \
+            --timeout 5m
+
+      # ── Verify ────────────────────────────────────────────────────────────
+
+      - name: Verify rollout
+        run: |
+          kubectl rollout status deployment/server -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/agent-host -n ${{ env.NAMESPACE }}
+
+      - name: Dump logs on failure
+        if: failure()
+        run: |
+          kubectl logs -l app.kubernetes.io/name=server -n ${{ env.NAMESPACE }} --tail=50 || true
+          kubectl logs -l app.kubernetes.io/name=agent-host -n ${{ env.NAMESPACE }} --tail=50 || true

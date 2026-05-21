@@ -192,6 +192,224 @@ This ADR resolves the **CI/CD Pipeline** open question in `docs/architecture.md`
 2. **Neo4j Aura** (managed) is the production Neo4j target — not self-hosted on GKE.
 3. **`@aie-matrix/root-env`** provides the env-loading contract and will be extended to cover all variables listed above if not already present.
 
+## Tier 3 Deployment Plan
+
+The following is the concrete procedure for standing up the GCP/GKE production environment from scratch. It assumes a GCP project exists with billing enabled and `gcloud` is authenticated.
+
+### Status
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| 1 | GCP infrastructure | ✅ complete |
+| 2 | Neo4j Aura | ✅ complete |
+| 3 | Kubernetes secrets | ✅ complete |
+| 4 | Helm charts | ✅ complete |
+| 5 | CI/CD — image push + deploy | ✅ complete |
+| 6 | DNS and TLS | ✅ complete |
+| 7 | First deploy and verification | ⬜ not started |
+
+---
+
+### Phase 1 — GCP Infrastructure
+
+**Enable required APIs:**
+```bash
+gcloud services enable \
+  container.googleapis.com \
+  artifactregistry.googleapis.com \
+  redis.googleapis.com \
+  secretmanager.googleapis.com
+```
+
+**Set default region** (us-central1 recommended — co-located with Neo4j Aura free tier):
+```bash
+gcloud config set compute/region us-central1
+```
+
+**Create Artifact Registry repository** (stores built container images):
+```bash
+gcloud artifacts repositories create aie-matrix \
+  --repository-format=docker \
+  --location=us-central1 \
+  --description="aie-matrix container images"
+```
+
+Images will be tagged as `us-central1-docker.pkg.dev/aie-matrix/aie-matrix/<service>:<tag>`.
+
+**Create GKE Autopilot cluster** (Autopilot manages node pools; no manual node sizing):
+```bash
+gcloud container clusters create-auto aie-matrix-prod \
+  --region=us-central1 \
+  --release-channel=stable
+```
+
+**Create GCP Memorystore Redis instance** (1 GB Basic tier is sufficient for presence + pub/sub):
+```bash
+gcloud redis instances create aie-matrix-redis \
+  --size=1 \
+  --region=us-central1 \
+  --redis-version=redis_7_0 \
+  --tier=basic
+```
+
+Record the host IP:
+```bash
+gcloud redis instances describe aie-matrix-redis --region=us-central1 --format="value(host)"
+```
+
+`REDIS_URL` will be `redis://<host>:6379`. GKE pods access Memorystore via VPC peering — no public IP needed.
+
+**GCS bucket for map artifacts** (may already exist; skip if so):
+```bash
+gcloud storage buckets create gs://aie-matrix-maps \
+  --location=us-central1 \
+  --uniform-bucket-level-access
+```
+
+---
+
+### Phase 2 — Neo4j Aura
+
+1. Create an **AuraDB Professional** (or Free for testing) instance at [neo4j.io/cloud/aura](https://neo4j.io/cloud/aura/).
+2. Choose region closest to `us-central1` (e.g., `us-east-1` on Aura).
+3. Note the connection URI (`neo4j+s://...`), username (`neo4j`), and generated password.
+4. Store these in Secret Manager (Phase 3).
+
+Aura Free is limited to one instance and 200K nodes — sufficient for the conference. Upgrade to Professional if load testing reveals limits.
+
+---
+
+### Phase 3 — Kubernetes Secrets
+
+Store all credentials in GCP Secret Manager and sync to Kubernetes via [External Secrets Operator](https://external-secrets.io/) or create them directly with `kubectl`. Direct `kubectl` is simpler for a first deployment:
+
+```bash
+# Point kubectl at the new cluster
+gcloud container clusters get-credentials aie-matrix-prod --region=us-central1
+
+kubectl create namespace aie-matrix
+
+kubectl create secret generic aie-matrix-secrets \
+  --namespace=aie-matrix \
+  --from-literal=NEO4J_URI="neo4j+s://<aura-host>" \
+  --from-literal=NEO4J_USER="neo4j" \
+  --from-literal=NEO4J_PASSWORD="<aura-password>" \
+  --from-literal=REDIS_URL="redis://<memorystore-host>:6379" \
+  --from-literal=GCS_BUCKET="aie-matrix-maps" \
+  --from-literal=ADMIN_TOKEN="<strong-random-token>" \
+  --from-literal=GHOST_HOUSE_DEV_TOKEN="<strong-random-token>" \
+  --from-literal=AIE_MATRIX_INTERNAL_FANOUT_TOKEN="<strong-random-token>"
+```
+
+Never commit these values to the repo.
+
+---
+
+### Phase 4 — Helm Charts
+
+Charts live under `deploy/k8s/charts/`. Each service chart follows the same pattern: `Deployment` + `Service` + optional `HorizontalPodAutoscaler`. Values files parameterise image tags, replica counts, and resource limits.
+
+```
+deploy/k8s/
+  charts/
+    server/          # combined server (Colyseus + world-api + registry)
+    agent-host/      # A2A agent host
+  values-production.yaml
+```
+
+Key chart decisions:
+- **`readinessProbe`**: HTTP GET `/health` — enforces the startup dependency order at the Kubernetes layer (mirrors `depends_on: service_healthy` in Compose).
+- **`secretRef`**: All env vars sourced from `aie-matrix-secrets` (Phase 3) — no plaintext values in chart files.
+- **`HPA`**: `server` scales 2–8 replicas on CPU ≥ 60%; `agent-host` scales 1–4 replicas.
+- **Colyseus horizontal scaling**: `REDIS_URL` being set activates `RedisPresence` + `RedisDriver` automatically — no code changes needed.
+
+See `deploy/k8s/` once charts are authored for full manifest detail.
+
+---
+
+### Phase 5 — CI/CD: Image Push and Deploy
+
+Extend `.github/workflows/staging-ci.yml` (or create a separate `production-deploy.yml`) triggered on `v*` tag push:
+
+1. **Build** images (reuses the multi-stage Dockerfiles from Tier 2).
+2. **Push** to Artifact Registry:
+   ```bash
+   gcloud auth configure-docker us-central1-docker.pkg.dev
+   docker tag aie-matrix-staging-server us-central1-docker.pkg.dev/aie-matrix/aie-matrix/server:$TAG
+   docker push us-central1-docker.pkg.dev/aie-matrix/aie-matrix/server:$TAG
+   ```
+3. **Deploy** via Helm:
+   ```bash
+   helm upgrade --install server deploy/k8s/charts/server \
+     --namespace aie-matrix \
+     --set image.tag=$TAG \
+     -f deploy/k8s/values-production.yaml
+   ```
+
+GKE Workload Identity should be used to authenticate the GitHub Actions runner — avoids long-lived service account keys.
+
+---
+
+### Phase 6 — DNS and TLS
+
+1. **Reserve a static external IP**:
+   ```bash
+   gcloud compute addresses create aie-matrix-ingress --global
+   ```
+2. **Point DNS** for `aie-matrix.example.com` at the reserved IP (A record).
+3. **Create a Google-managed TLS certificate** via GKE Ingress annotation — GCP provisions and rotates automatically:
+   ```yaml
+   # In the Ingress manifest
+   annotations:
+     networking.gke.io/managed-certificates: "aie-matrix-cert"
+   ```
+
+WebSocket (`wss://`) requires the Ingress to pass through WebSocket upgrades — set `nginx.ingress.kubernetes.io/proxy-read-timeout` appropriately if using nginx ingress, or use the GKE native Ingress which handles WebSocket transparently.
+
+---
+
+### Phase 7 — First Deploy and Verification
+
+1. **`helm install`** both charts (server, agent-host).
+2. **Verify readiness**:
+   ```bash
+   kubectl rollout status deployment/server -n aie-matrix
+   kubectl rollout status deployment/agent-host -n aie-matrix
+   ```
+3. **Check health endpoints**:
+   ```bash
+   curl https://aie-matrix.example.com/health
+   # expect: {"status":"ok","checks":{"neo4j":true}}
+   curl https://aie-matrix.example.com:4000/health   # or via Ingress path
+   # expect: {"status":"ok","checks":{"world-api":true}}
+   ```
+4. **Publish a map and start a live session** (same workflow as Tier 2 — see `deploy/staging/README.md`):
+   ```bash
+   curl -X POST https://aie-matrix.example.com/maps \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -F "mapId=freeplay" -F "file=@maps/sandbox/freeplay.map.gram"
+   curl -X POST https://aie-matrix.example.com/live \
+     -H "Authorization: Bearer $ADMIN_TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"name":"production","maps":[{"mapId":"freeplay","role":"primary"}]}'
+   curl https://aie-matrix.example.com/live/@current/map | head -3
+   ```
+
+---
+
+### Deferred work (required before conference day)
+
+These items from the ADR consequences section must be completed before the production deployment is load-ready:
+
+| Item | Blocking | Notes |
+|------|---------|-------|
+| Conversation history → Neo4j store | Agent conversations lost on restart | Implement Neo4j `ConversationStore` Layer, activate when `CONVERSATION_DATA_DIR` unset |
+| Agent catalog → Neo4j store | Registered agents lost on `agent-host` restart | Implement Neo4j-backed catalog Layer, activate when `CATALOG_FILE_PATH` unset |
+| `RedisPresence` + `RedisDriver` validation | Multi-replica Colyseus correctness | Integration test with 2+ server replicas before conference day |
+| Load test | Unknown capacity ceiling | `k6` or similar against staging stack before provisioning prod replica counts |
+
+---
+
 ## Related RFCs
 
 | RFC | Title | Relationship |

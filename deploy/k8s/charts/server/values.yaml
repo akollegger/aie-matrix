@@ -1,0 +1,42 @@
+replicaCount: 2
+
+image:
+  repository: us-central1-docker.pkg.dev/aie-matrix/aie-matrix/server
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8787
+
+# Non-secret environment variables
+env:
+  NODE_ENV: production
+  AIE_MATRIX_HTTP_PORT: "8787"
+  AIE_MATRIX_DEBUG: "false"
+
+# Name of the Kubernetes Secret created in Phase 3
+secretName: aie-matrix-secrets
+
+# Keys from the secret to inject as env vars
+secretKeys:
+  - NEO4J_URI
+  - NEO4J_USER
+  - NEO4J_PASSWORD
+  - REDIS_URL
+  - GCS_BUCKET
+  - ADMIN_TOKEN
+  - AIE_MATRIX_INTERNAL_FANOUT_TOKEN
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 60

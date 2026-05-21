@@ -1,0 +1,51 @@
+# GKE Ingress + Google-managed TLS for matrix.relateby.dev
+#
+# Apply order matters:
+#   1. Apply this file: kubectl apply -f deploy/k8s/ingress.yaml -n aie-matrix
+#   2. Add DNS A record: matrix.relateby.dev → 8.233.117.99
+#   3. Certificate provisioning takes ~15 min after DNS propagates
+#
+# Check cert status:
+#   kubectl describe managedcertificate aie-matrix-cert -n aie-matrix
+
+---
+# Redirect HTTP → HTTPS
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: aie-matrix-frontend
+  namespace: aie-matrix
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT
+
+---
+# Google-managed TLS certificate
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: aie-matrix-cert
+  namespace: aie-matrix
+spec:
+  domains:
+    - matrix.relateby.dev
+
+---
+# Ingress — routes matrix.relateby.dev to the server service
+# GKE native Ingress handles WebSocket upgrades transparently (no extra annotation needed)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: aie-matrix
+  namespace: aie-matrix
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "aie-matrix-ingress"
+    networking.gke.io/managed-certificates: "aie-matrix-cert"
+    networking.gke.io/v1beta1.FrontendConfig: "aie-matrix-frontend"
+spec:
+  defaultBackend:
+    service:
+      name: server
+      port:
+        number: 8787
