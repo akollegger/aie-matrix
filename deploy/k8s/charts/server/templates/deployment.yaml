@@ -15,6 +15,7 @@ spec:
       labels:
         {{- include "server.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: server
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
