@@ -1,4 +1,4 @@
-# Specification Quality Checklist: Ghost House A2A Coordination
+# Specification Quality Checklist: Agent Host A2A Coordination
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-04-24

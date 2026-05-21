@@ -1,14 +1,14 @@
-# Implementation Plan: A2A Ghost House Proof-of-Concept Spike
+# Implementation Plan: A2A Agent Host Proof-of-Concept Spike
 
-**Branch**: `008-a2a-ghost-house-spike` | **Date**: 2026-04-24 | **Spec**: [`spec.md`](./spec.md)  
-**Input**: Feature specification from `/specs/008-a2a-ghost-house-spike/spec.md`  
+**Branch**: `008-a2a-agent-host-spike` | **Date**: 2026-04-24 | **Spec**: [`spec.md`](./spec.md)  
+**Input**: Feature specification from `/specs/008-a2a-agent-host-spike/spec.md`  
 **User constraint**: All throwaway spike code and sub-projects live under `spikes/a2a-ghost-agent-protocol/` only — **no** new packages under `packages/`, **no** edits inside `server/`, `ghost-cli/`, or other production workspaces.
 
 **Note**: This file is produced by `/speckit.plan`. Phase 2 task list is `/speckit.tasks` → `tasks.md` (not created here).
 
 ## Summary
 
-Time-boxed research (two one-day spikes) validates whether the TypeScript A2A SDK (`@a2a-js/sdk`) supports the four coordination patterns the ghost house needs (sync task, streaming task, push notification, agent-card publish/discover), and whether a cold contributor can register, spawn, and handle one simulated event within four hours using a skeleton house + sample agent.
+Time-boxed research (two one-day spikes) validates whether the TypeScript A2A SDK (`@a2a-js/sdk`) supports the four coordination patterns the agent host needs (sync task, streaming task, push notification, agent-card publish/discover), and whether a cold contributor can register, spawn, and handle one simulated event within four hours using a skeleton house + sample agent.
 
 All executable artifacts are **isolated** under `spikes/a2a-ghost-agent-protocol/` as sibling sub-projects (each with its own `package.json`, local `node_modules`, and scripts). Durable outputs are **Markdown reports** under `spikes/a2a-ghost-agent-protocol/reports/` (and summarized back into ADR-0004 / RFC-0007 per the spec).
 
@@ -43,7 +43,7 @@ All executable artifacts are **isolated** under `spikes/a2a-ghost-agent-protocol
 ### Documentation (this feature)
 
 ```text
-specs/008-a2a-ghost-house-spike/
+specs/008-a2a-agent-host-spike/
 ├── spec.md
 ├── plan.md              # this file
 ├── research.md          # Phase 0

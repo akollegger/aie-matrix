@@ -50,7 +50,7 @@ function mkBus(): ExecutionEventBus {
 
 function baseCtx(ghostId: string): SpawnContext {
   return {
-    schema: "aie-matrix.ghost-house.spawn-context.v1",
+    schema: "aie-matrix.agent-host.spawn-context.v1",
     ghostId,
     houseEndpoints: { mcp: "http://127.0.0.1:9/mcp", a2a: "http://127.0.0.1:9/" },
     token: `tok-${ghostId}`,

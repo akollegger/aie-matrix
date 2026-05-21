@@ -6,7 +6,7 @@
 
 ## Purpose
 
-Define the payload sent by the ghost house to a ghost agent immediately after the agent session is created. The spawn context gives the agent everything it needs to begin operating: its ghost identity, starting position, house endpoints, and authentication token.
+Define the payload sent by the agent host to a ghost agent immediately after the agent session is created. The spawn context gives the agent everything it needs to begin operating: its ghost identity, starting position, house endpoints, and authentication token.
 
 ## Delivery Mechanism
 
@@ -18,7 +18,7 @@ This replaces the raw POST described in RFC-0007 §Spawn step 4 with the A2A SDK
 
 ```json
 {
-  "schema": "aie-matrix.ghost-house.spawn-context.v1",
+  "schema": "aie-matrix.agent-host.spawn-context.v1",
   "ghostId": "01JXXXXXXXXXXXXXXXXXXXXXXX",
   "ghostCard": {
     "class": "wanderer",
@@ -27,8 +27,8 @@ This replaces the raw POST described in RFC-0007 §Spawn step 4 with the A2A SDK
   },
   "worldEntryPoint": "8f2830828052d25",
   "houseEndpoints": {
-    "mcp": "http://ghost-house.local/v1/mcp",
-    "a2a": "http://ghost-house.local/"
+    "mcp": "http://agent-host.local/v1/mcp",
+    "a2a": "http://agent-host.local/"
   },
   "token": "eyJ...",
   "expiresAt": "2026-04-25T12:00:00.000Z"
@@ -39,7 +39,7 @@ This replaces the raw POST described in RFC-0007 §Spawn step 4 with the A2A SDK
 
 | Field | Type | Rule |
 |-------|------|------|
-| `schema` | string | Must be `"aie-matrix.ghost-house.spawn-context.v1"` |
+| `schema` | string | Must be `"aie-matrix.agent-host.spawn-context.v1"` |
 | `ghostId` | ULID string | The ghost this session serves; unique per ghost |
 | `ghostCard.class` | string | Ghost class (e.g., `"wanderer"`, `"scavenger"`, `"scholar"`) |
 | `ghostCard.displayName` | string | Human-readable ghost name for display purposes |

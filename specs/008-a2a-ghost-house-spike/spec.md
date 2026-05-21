@@ -1,21 +1,21 @@
-# Feature Specification: A2A Ghost House Proof-of-Concept Spike
+# Feature Specification: A2A Agent Host Proof-of-Concept Spike
 
-**Feature Branch**: `008-a2a-ghost-house-spike`  
+**Feature Branch**: `008-a2a-agent-host-spike`  
 **Created**: 2026-04-24  
 **Status**: Draft  
-**Input**: User description: "A spike of the a2a protocol as described in `proposals/spikes/spike-a2a-ghost-house-poc.md` — validate TypeScript A2A SDK maturity and third-party contributor model before ADR-0004 acceptance and RFC-0007 implementation."
+**Input**: User description: "A spike of the a2a protocol as described in `proposals/spikes/spike-a2a-agent-host-poc.md` — validate TypeScript A2A SDK maturity and third-party contributor model before ADR-0004 acceptance and RFC-0007 implementation."
 
 > **Specification type**: Time-boxed **research spike**. Primary deliverables are **written reports** that gate architecture decisions; any executable artifacts are explicitly throwaway and **must not** ship into the production codebase.
 
 ## Proposal Context *(mandatory)*
 
 - **Related Proposal**:
-  - Spike charter: [`proposals/spikes/spike-a2a-ghost-house-poc.md`](../../proposals/spikes/spike-a2a-ghost-house-poc.md)
+  - Spike charter: [`proposals/spikes/spike-a2a-agent-host-poc.md`](../../proposals/spikes/spike-a2a-agent-host-poc.md)
   - Decision record (gated by this spike): [`proposals/adr/0004-a2a-ghost-agent-protocol.md`](../../proposals/adr/0004-a2a-ghost-agent-protocol.md)
-  - Target architecture: [`proposals/rfc/0007-ghost-house-architecture.md`](../../proposals/rfc/0007-ghost-house-architecture.md)
+  - Target architecture: [`proposals/rfc/0007-agent-host-architecture.md`](../../proposals/rfc/0007-agent-host-architecture.md)
 - **Scope Boundary**:
   - **Spike A (1 day)**: Exercise the chosen TypeScript A2A client/server SDK against four interaction patterns: one synchronous task round-trip, one streaming task with multiple agent-side updates, one push-style notification from host to an agent webhook, and agent-card publish plus discover.
-  - **Spike B (1 day, reusing Spike A scaffold where practical)**: Skeleton “ghost house” (A2A host + catalog only — no Colyseus bridge, no MCP proxy) plus a minimal contributed agent (single deployable unit) that declares an agent card, registers with the catalog, is spawned by the house, receives one simulated world-style event, and emits one structured response.
+  - **Spike B (1 day, reusing Spike A scaffold where practical)**: Skeleton “agent host” (A2A host + catalog only — no Colyseus bridge, no MCP proxy) plus a minimal contributed agent (single deployable unit) that declares an agent card, registers with the catalog, is spawned by the house, receives one simulated world-style event, and emits one structured response.
   - **Reporting**: Each spike produces a 1–2 page writeup (what worked, what did not, learnings for ADR/RFC, recommendation: proceed / proceed with changes / reconsider). Combined findings are suitable for appendix material in ADR-0004 and cross-reference from RFC-0007 Open Questions.
 - **Out of Scope**:
   - Colyseus bridge, live world integration, MCP proxy (per spike charter).
@@ -27,7 +27,7 @@
 
 ### User Story 1 — Core Team Validates SDK Readiness (Priority: P1)
 
-A maintainer runs Spike A and records whether the reference SDK supports the four interaction patterns end-to-end without undocumented workarounds, whether the programming model is legible, and whether any defects block the ghost-house use cases called out in ADR-0004 / RFC-0007.
+A maintainer runs Spike A and records whether the reference SDK supports the four interaction patterns end-to-end without undocumented workarounds, whether the programming model is legible, and whether any defects block the agent-host use cases called out in ADR-0004 / RFC-0007.
 
 **Why this priority**: If the SDK is immature, implementation effort and schedule in RFC-0007 are wrong; this is the primary technical risk the spike exists to surface.
 
@@ -42,7 +42,7 @@ A maintainer runs Spike A and records whether the reference SDK supports the fou
 
 ### User Story 2 — Simulated Third Party Validates Contribution Friction (Priority: P2)
 
-A contributor with no prior ghost-house context follows only the spike-provided scaffold and instructions, implements the minimal agent, registers it, and reaches a successful spawn plus one event/response cycle.
+A contributor with no prior agent-host context follows only the spike-provided scaffold and instructions, implements the minimal agent, registers it, and reaches a successful spawn plus one event/response cycle.
 
 **Why this priority**: Vendor adoption for AI Engineer World's Fair 2026 depends on low friction; Spike B measures real calendar time and procedural clarity.
 
@@ -50,7 +50,7 @@ A contributor with no prior ghost-house context follows only the spike-provided 
 
 **Acceptance Scenarios**:
 
-1. **Given** the skeleton ghost house and contributor readme from Spike B, **When** a participant not on the core team performs the exercise, **Then** the Spike B report records whether wall-clock time stayed under four hours.
+1. **Given** the skeleton agent host and contributor readme from Spike B, **When** a participant not on the core team performs the exercise, **Then** the Spike B report records whether wall-clock time stayed under four hours.
 2. **Given** the exercise completes within the time box, **When** the contributor reviews required infrastructure, **Then** the report confirms whether anything beyond a Node.js runtime and a reachable HTTP endpoint was necessary for local development.
 
 ---
@@ -101,7 +101,7 @@ Project leads read both spike reports and know whether to accept ADR-0004 as-is,
 ### Interface Contracts *(mandatory when crossing package/process/language boundaries)*
 
 - **IC-001**: Agent card fields assumed by RFC-0007 MUST be enumerated during Spike B and marked *supported*, *supported with workaround*, *missing*, or *not applicable* — with implications called out for the RFC.
-- **IC-002**: Event + response payload shapes used in Spike B MUST be captured in the report (appendix tables encouraged) so RFC-0007 authors can diff them against the proposed ghost-house message contracts.
+- **IC-002**: Event + response payload shapes used in Spike B MUST be captured in the report (appendix tables encouraged) so RFC-0007 authors can diff them against the proposed agent-host message contracts.
 
 ## Success Criteria *(mandatory)*
 
@@ -115,7 +115,7 @@ Project leads read both spike reports and know whether to accept ADR-0004 as-is,
 ## Assumptions
 
 - Investigators have permission to install packages and run local HTTP services on developer machines.
-- “Production-ready” in the spike charter is interpreted as **fit for the ghost-house coordination layer** described in ADR-0004, not certification for arbitrary enterprise deployments.
+- “Production-ready” in the spike charter is interpreted as **fit for the agent-host coordination layer** described in ADR-0004, not certification for arbitrary enterprise deployments.
 - Wanderer-tier depth is enough; deeper tier behaviors are explicitly out of scope.
 - Authentication may be stubbed; absence of auth MUST still appear as a tracked open question in the report, not silently ignored.
 
@@ -123,4 +123,4 @@ Project leads read both spike reports and know whether to accept ADR-0004 as-is,
 
 - **ADR-0004**: Add spike appendix (combined report) prior to acceptance; link from main ADR body as evidence for the decision.
 - **RFC-0007**: Update Open Questions / assumptions section to reference the spike appendix where findings apply.
-- **Spike charter** (`proposals/spikes/spike-a2a-ghost-house-poc.md`): Optional status flip from *proposed* to *completed* once reports land — only if maintainers want the spike file to mirror execution state.
+- **Spike charter** (`proposals/spikes/spike-a2a-agent-host-poc.md`): Optional status flip from *proposed* to *completed* once reports land — only if maintainers want the spike file to mirror execution state.

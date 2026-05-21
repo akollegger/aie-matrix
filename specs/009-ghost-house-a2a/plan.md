@@ -1,11 +1,11 @@
-# Implementation Plan: Ghost House A2A Coordination
+# Implementation Plan: Agent Host A2A Coordination
 
-**Branch**: `009-ghost-house-a2a` | **Date**: 2026-04-24 | **Spec**: [spec.md](spec.md)
-**Input**: Feature specification from `/specs/009-ghost-house-a2a/spec.md`
+**Branch**: `009-agent-host-a2a` | **Date**: 2026-04-24 | **Spec**: [spec.md](spec.md)
+**Input**: Feature specification from `/specs/009-agent-host-a2a/spec.md`
 
 ## Summary
 
-Build the canonical ghost house service — A2A host, MCP proxy, Colyseus bridge, agent supervisor, and catalog — so third-party ghost agents can be registered, spawned, supervised, and fed world events. Delivered in three independent phases: Phase 1 (Wanderer: catalog + supervisor + MCP proxy + `random-agent` reference), Phase 2 (Listener: Colyseus bridge inbound + push events), Phase 3 (Social: Colyseus bridge outbound + `say` routing). ADR-0004 and RFC-0007 are the authority; this plan elaborates the RFC phased delivery into concrete packages, interfaces, and verification steps.
+Build the canonical agent host service — A2A host, MCP proxy, Colyseus bridge, agent supervisor, and catalog — so third-party ghost agents can be registered, spawned, supervised, and fed world events. Delivered in three independent phases: Phase 1 (Wanderer: catalog + supervisor + MCP proxy + `random-agent` reference), Phase 2 (Listener: Colyseus bridge inbound + push events), Phase 3 (Social: Colyseus bridge outbound + `say` routing). ADR-0004 and RFC-0007 are the authority; this plan elaborates the RFC phased delivery into concrete packages, interfaces, and verification steps.
 
 ## Technical Context
 
@@ -14,18 +14,18 @@ Build the canonical ghost house service — A2A host, MCP proxy, Colyseus bridge
 **Storage**: File-backed JSON (`catalog.json`) for agent registration; in-memory `Map` for active agent sessions  
 **Testing**: `ghosts/tck/` (TCK tier suites added per phase), `vitest` unit tests per package, smoke test in `quickstart.md`  
 **Target Platform**: Node.js 24, macOS/Linux; localhost Phase 1, public HTTPS Phase 2+  
-**Project Type**: Service (`ghosts/ghost-house/`) + Agent library (`ghosts/random-agent/`)  
+**Project Type**: Service (`server/agent-host/`) + Agent library (`ghosts/random-agent/`)  
 **Performance Goals**: Event delivery latency tuned empirically (target: human-perceptible responsiveness); rate limits tuned empirically  
 **Constraints**: `GHOST_HOUSE_DEV_TOKEN` static bearer — localhost Phase 1 only; auth ADR gates any non-local deployment; A2A protocol v0.3.0 for this feature (v1.0 upgrade tracked separately)  
-**Scale/Scope**: AIEWF 2026 weekend event; hundreds of concurrent ghost agents; single ghost house instance (no federation)
+**Scale/Scope**: AIEWF 2026 weekend event; hundreds of concurrent ghost agents; single agent host instance (no federation)
 
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
 - **Proposal linkage**: ADR-0004 and RFC-0007 are the primary authorities; scope matches RFC-0007 phased delivery exactly. ✓
-- **Boundary preservation**: `ghosts/ghost-house/` and `ghosts/random-agent/` are new packages in the existing `ghosts/` convention. Existing `server/` packages are not modified. The Colyseus bridge is internal to the ghost house; the world-api package is consumed read-only. ✓
-- **Contract artifacts**: IC-001 through IC-006 defined in `specs/009-ghost-house-a2a/contracts/`; each crosses a package or process boundary. ✓
+- **Boundary preservation**: `server/agent-host/` and `ghosts/random-agent/` are new packages in the existing `ghosts/` convention. Existing `server/` packages are not modified. The Colyseus bridge is internal to the agent host; the world-api package is consumed read-only. ✓
+- **Contract artifacts**: IC-001 through IC-006 defined in `specs/009-agent-host-a2a/contracts/`; each crosses a package or process boundary. ✓
 - **Verifiable increments**: Each phase produces a working system. Phase 1 = `random-agent` passes Wanderer TCK. Phase 2 = `observer-agent` receives events and passes Listener TCK. Phase 3 = Social TCK with first contributed agent. ✓
 - **Documentation impact**: RFC-0007 open questions resolved and updated per IC findings; `docs/architecture.md` component map updated; `CONTRIBUTING.md` and `ghosts/README.md` updated; `CLAUDE.md` updated with new packages. ✓
 
@@ -36,7 +36,7 @@ Build the canonical ghost house service — A2A host, MCP proxy, Colyseus bridge
 ### Documentation (this feature)
 
 ```text
-specs/009-ghost-house-a2a/
+specs/009-agent-host-a2a/
 ├── plan.md              # This file
 ├── research.md          # Phase 0 output
 ├── data-model.md        # Phase 1 output
@@ -55,7 +55,7 @@ specs/009-ghost-house-a2a/
 
 ```text
 ghosts/
-├── ghost-house/                      # New: canonical ghost house service
+├── agent-host/                      # New: canonical agent host service
 │   ├── src/
 │   │   ├── catalog/
 │   │   │   ├── CatalogService.ts     # Effect service: CRUD + tier validation
@@ -99,7 +99,7 @@ ghosts/
 └── ghost-cli/                        # Existing: may add catalog commands later
 ```
 
-**Structure Decision**: Two new pnpm workspace packages (`ghosts/ghost-house/`, `ghosts/random-agent/`) added to `pnpm-workspace.yaml`. Existing `ghosts/random-house/` is preserved untouched (pre-A2A reference; different use case). Ghost-house follows the Effect-ts service/layer pattern from ADR-0002.
+**Structure Decision**: Two new pnpm workspace packages (`server/agent-host/`, `ghosts/random-agent/`) added to `pnpm-workspace.yaml`. Existing `ghosts/random-house/` is preserved untouched (pre-A2A reference; different use case). Ghost-house follows the Effect-ts service/layer pattern from ADR-0002.
 
 ## Complexity Tracking
 
@@ -116,7 +116,7 @@ Key resolved questions from spike-008 evidence and RFC-0007 open questions:
 1. **Catalog HTTP paths**: Canonicalized from spike `/v1/catalog/*` — see IC-005.
 2. **World event envelope**: Production schema `aie-matrix.world-event.v1` — see IC-004.
 3. **Spawn context payload**: A2A task delivery with rich JSON payload — see IC-006.
-4. **Package placement**: `ghosts/ghost-house/` and `ghosts/random-agent/` follow monorepo convention.
+4. **Package placement**: `server/agent-host/` and `ghosts/random-agent/` follow monorepo convention.
 5. **Effect-ts integration**: Ghost house uses `Context.Tag` / `Layer` / `ManagedRuntime`; A2A SDK callbacks surface via `Effect.tryPromise`.
 6. **Spawn mechanism**: Deliver spawn context as first A2A task (not raw POST), consistent with A2A SDK patterns validated in spike-008.
 
@@ -132,8 +132,8 @@ Key resolved questions from spike-008 evidence and RFC-0007 open questions:
 
 | Milestone | Deliverable | Verification |
 |-----------|------------|-------------|
-| P1-M1 | `ghosts/ghost-house/`: catalog + A2A host + supervisor (no bridge) | `GET /v1/catalog` returns built-in agents |
-| P1-M2 | `ghosts/ghost-house/`: MCP proxy forwarding to world server | `ghost-tck` adopts via proxy; `whereami` returns H3 res-15 |
+| P1-M1 | `server/agent-host/`: catalog + A2A host + supervisor (no bridge) | `GET /v1/catalog` returns built-in agents |
+| P1-M2 | `server/agent-host/`: MCP proxy forwarding to world server | `ghost-tck` adopts via proxy; `whereami` returns H3 res-15 |
 | P1-M3 | `ghosts/random-agent/`: Wanderer agent with full agent card | TCK Wanderer suite passes |
 | P1-M4 | Registration flow end-to-end | `quickstart.md` verified on a clean machine in < 30 min |
 

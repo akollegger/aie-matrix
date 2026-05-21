@@ -12,7 +12,7 @@ After **`pnpm install`**:
 pnpm run demo
 ```
 
-This runs **`pnpm run server`** (combined server), waits until **`GET /spectator/room`** succeeds, then starts **`pnpm run spectator`** (Phaser), **`@aie-matrix/ghost-house`**, and **`@aie-matrix/random-agent`**. Open the Vite URL from the terminal; **Ctrl+C** stops all child processes. Pass **`pnpm run demo -- --ghosts N`** to provision *N* registry caretakers + wanderer sessions (default `1`; see `scripts/demo.mjs --help`). Use separate **`pnpm run server`**, **`pnpm run spectator`**, and ghost-house / random-agent terminals when you want cleaner logs or to restart one surface without the others.
+This runs **`pnpm run server`** (combined server), waits until **`GET /spectator/room`** succeeds, then starts **`pnpm run spectator`** (Phaser), **`@aie-matrix/server-agent-host`**, and **`@aie-matrix/random-agent`**. Open the Vite URL from the terminal; **Ctrl+C** stops all child processes. Pass **`pnpm run demo -- --ghosts N`** to provision *N* registry caretakers + wanderer sessions (default `1`; see `scripts/demo.mjs --help`). Use separate **`pnpm run server`**, **`pnpm run spectator`**, and agent-host / random-agent terminals when you want cleaner logs or to restart one surface without the others.
 
 ---
 

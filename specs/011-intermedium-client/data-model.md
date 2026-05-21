@@ -70,7 +70,7 @@ interface GhostIdentity {
 }
 ```
 
-**Source**: `GET /catalog` on the ghost house server (spec-009 IC-005). The intermedium fetches the catalog once at startup and refreshes on demand. Implemented via `useGhostIdentity` hook in `clients/intermedium/src/hooks/useGhostIdentity.ts`.
+**Source**: `GET /catalog` on the agent host server (spec-009 IC-005). The intermedium fetches the catalog once at startup and refreshes on demand. Implemented via `useGhostIdentity` hook in `clients/intermedium/src/hooks/useGhostIdentity.ts`.
 
 ---
 
@@ -158,7 +158,7 @@ interface GhostInteriority {
   inventory: InventoryItem[];
   activeGoal: Goal | null;
   memories: Memory[];
-  isAvailable: boolean;   // false until ghost house read API is defined (IC-003)
+  isAvailable: boolean;   // false until agent host read API is defined (IC-003)
 }
 ```
 

@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Room } from "@colyseus/core";
@@ -52,12 +53,17 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     // PoC world room must stay in matchmaker with zero clients; default autoDispose
     // removes it after the seat-reservation window, breaking joinById + /spectator/room.
     this.autoDispose = false;
+    const _mapPathFallback = join(process.cwd(), "maps/sandbox/freeplay.map.gram");
     const mapPath =
       options.mapPath ??
       process.env.AIE_MATRIX_MAP ??
-      join(process.cwd(), "maps/sandbox/freeplay.map.gram");
+      (existsSync(_mapPathFallback) ? _mapPathFallback : undefined);
     const itemsPath = options.itemsPath ?? process.env.AIE_MATRIX_ITEMS;
-    this.loadedMap = await loadHexMap(mapPath, { itemsPath });
+    if (mapPath) {
+      this.loadedMap = await loadHexMap(mapPath, { itemsPath });
+    } else {
+      this.loadedMap = { width: 0, height: 0, anchorH3: "", cells: new Map(), itemSidecar: new Map() };
+    }
     this.setState(new WorldSpectatorState());
     for (const [cellId, rec] of this.loadedMap.cells) {
       const tc = new TileCoord(rec.col, rec.row);

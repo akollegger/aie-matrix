@@ -7,7 +7,7 @@
 
 ## Summary
 
-Each ghost is composed of two cooperating sub-agents: a **Surface** that acts in the world via MCP, and a reflective **Id** that interprets every event, writes a first-person inner monologue the Surface reads as its own stream of consciousness, adjusts a set of two-dimensional emotional sliders, and distills narrative memory over time. The architecture is designed for N≥2 (future sub-agents — time-awareness, narrative-identity, planning — plug in via the same event substrate). All memory lives in a dedicated ghost-minds Neo4j instance: an event-granular substrate via the Neo4j Agent Memory package, and a Karpathy-style wiki for distilled self-narrative via Tomasonjo's Aura Agents Management MCP. Sub-agents are hosted as Neo4j Aura Agents (small models). No server, Colyseus, or world-API MCP changes are required — this is a purely agent-layer contribution that can be adopted as an RFC only, as a library only, as a complete ghost house, or not at all.
+Each ghost is composed of two cooperating sub-agents: a **Surface** that acts in the world via MCP, and a reflective **Id** that interprets every event, writes a first-person inner monologue the Surface reads as its own stream of consciousness, adjusts a set of two-dimensional emotional sliders, and distills narrative memory over time. The architecture is designed for N≥2 (future sub-agents — time-awareness, narrative-identity, planning — plug in via the same event substrate). All memory lives in a dedicated ghost-minds Neo4j instance: an event-granular substrate via the Neo4j Agent Memory package, and a Karpathy-style wiki for distilled self-narrative via Tomasonjo's Aura Agents Management MCP. Sub-agents are hosted as Neo4j Aura Agents (small models). No server, Colyseus, or world-API MCP changes are required — this is a purely agent-layer contribution that can be adopted as an RFC only, as a library only, as a complete agent host, or not at all.
 
 ## Motivation
 
@@ -17,7 +17,7 @@ Two things are missing today, and this RFC addresses both.
 
 **An inner life that drifts.** Ghosts need personality that evolves in response to experience rather than being scripted. A ghost that joins a conversation, is dismissed, and tries again differently is more useful — as a demo, as an attendee companion, and as a research surface — than one that samples from fixed behavior tables. Drifting personality also gives attendees an organic reason to check on their ghost: *what has it become?*
 
-**A contribution surface that is modular on purpose.** The user building this ([@henrardo](https://github.com/henrardo)) is contributing as a friend, not as a vendor claiming a product slot. The design has to let the project lead adopt any one of {RFC only, library only, complete ghost house} without forcing the others. That constraint is a feature, not a compromise: it also means other houses — vendor-contributed or community — can reuse the inner-world library with their own surface behavior.
+**A contribution surface that is modular on purpose.** The user building this ([@henrardo](https://github.com/henrardo)) is contributing as a friend, not as a vendor claiming a product slot. The design has to let the project lead adopt any one of {RFC only, library only, complete agent host} without forcing the others. That constraint is a feature, not a compromise: it also means other houses — vendor-contributed or community — can reuse the inner-world library with their own surface behavior.
 
 The mechanic itself is pilfered rather than invented: two-axis trait sliders are a Sims-adjacent pattern, OCEAN facets give us a grounded decomposition, and the Id/Surface split is an actor-critic shape. None of those traditions is load-bearing in the spec — they are source material for a mechanism, cited once in acknowledgments.
 
@@ -33,7 +33,7 @@ The mechanic itself is pilfered rather than invented: two-axis trait sliders are
 - Two-layer memory: Neo4j Agent Memory event substrate plus Karpathy-wiki distilled narrative.
 - Aura Agents hosting for Id and Surface via the Aura Agents Management MCP.
 - McGuffin stand-in goal system, piggybacking on [RFC-0006](0006-world-objects.md) world items.
-- Reference ghost-house package that runs ghosts with this architecture.
+- Reference agent-host package that runs ghosts with this architecture.
 
 **Not in scope (deferred to future RFCs):**
 
@@ -213,7 +213,7 @@ Remaining OCEAN facets (Openness, Conscientiousness, Extraversion, Agreeableness
 
 #### Starting values
 
-At birth, each (Internal, External) pair is sampled independently from a truncated distribution around the midpoint — independently per facet. This yields distinct birth personalities from the same ghost-house configuration. A `personality_seed` parameter makes sampling reproducible per ghost.
+At birth, each (Internal, External) pair is sampled independently from a truncated distribution around the midpoint — independently per facet. This yields distinct birth personalities from the same agent-host configuration. A `personality_seed` parameter makes sampling reproducible per ghost.
 
 Future extension (reserved hook, not implemented in this RFC): user-conversation-driven personality seeding, where the caretaker speaks with their ghost at adoption time and the resulting conversation is used to weight the initial slider distribution.
 
@@ -302,7 +302,7 @@ The Id writes **deliberately**, not automatically on every event. A page write r
 
 ### Hosting via Aura Agents
 
-Both Id and Surface are Neo4j **Aura Agents** (small models; Aura does not expose model-class choice). The ghost house provisions the pair at adoption time via the Aura Agents Management MCP:
+Both Id and Surface are Neo4j **Aura Agents** (small models; Aura does not expose model-class choice). The agent host provisions the pair at adoption time via the Aura Agents Management MCP:
 
 ```
 on adopt(ghost):
@@ -329,7 +329,7 @@ on retire(ghost):
   mcp.call("delete_agent", { id: id_agent.id })
 ```
 
-The ghost house retains the agent IDs and invokes each in the interaction loop via `invoke_agent`. Invocation cost per stimulus is the dominant scaling variable; the reflection budget bounds it.
+The agent host retains the agent IDs and invokes each in the interaction loop via `invoke_agent`. Invocation cost per stimulus is the dominant scaling variable; the reflection budget bounds it.
 
 ### McGuffin stand-in goal system
 
@@ -384,7 +384,7 @@ No changes to `server/`, no Colyseus schema additions, no new world-api MCP tool
 The RFC is structured so that @akollegger (or any downstream consumer) can adopt any subset:
 
 - **RFC only.** The design contracts — event typing, slider-as-logit, inner-monologue-as-narrative, two-layer memory — can be cited by other houses, vendors, or future RFCs without any of this code being merged.
-- **Library only.** Another ghost house may depend on `ghosts/<name>-inner/` and implement its own runner, its own Aura Agents layout, or even its own hosting substrate. The library is free of runner-specific wiring.
+- **Library only.** Another agent host may depend on `ghosts/<name>-inner/` and implement its own runner, its own Aura Agents layout, or even its own hosting substrate. The library is free of runner-specific wiring.
 - **Complete house.** The reference runner is added and invoked via `pnpm run ghost:<name>-house`. It is **not** added to `scripts/demo.mjs`; the demo continues to start `random-house` by default. The house runs only when explicitly invoked.
 - **None.** Workspace exclusion is the merge-time lever. Omitting the packages from [`pnpm-workspace.yaml`](../../pnpm-workspace.yaml) makes the RFC a written record without compiled code.
 
@@ -410,7 +410,7 @@ Required environment variables (added to `.env.example` when the library lands):
 
 ### Demo scenario
 
-With the combined server running, the reference ghost house configured, and McGuffins placed in a sandbox map:
+With the combined server running, the reference agent host configured, and McGuffins placed in a sandbox map:
 
 1. Start the server (`pnpm dev`) and the reference house (`pnpm run ghost:<name>-house`).
 2. The house registers, adopts one ghost, provisions Id + Surface Aura Agents, and samples initial slider values from the starter 8-facet set.
@@ -442,7 +442,7 @@ With the combined server running, the reference ghost house configured, and McGu
 
 **Custom agent-memory implementation.** Design our own event schema on top of bare Neo4j. Rejected per author directive: `neo4j/labs/agent-memory` already provides exactly the primitives needed (POLE+O, ReasoningTrace, GraphRAG). Reinvention is a red flag.
 
-**Host Id and Surface outside Aura Agents.** Call LLM APIs directly from the ghost house. Rejected for v1: Aura Agents provides managed lifecycle, MCP-native tool wiring, and sub-agent orchestration that would otherwise have to be hand-rolled. Direct hosting remains a future option if cost or latency characteristics require it; this RFC does not preclude it.
+**Host Id and Surface outside Aura Agents.** Call LLM APIs directly from the agent host. Rejected for v1: Aura Agents provides managed lifecycle, MCP-native tool wiring, and sub-agent orchestration that would otherwise have to be hand-rolled. Direct hosting remains a future option if cost or latency characteristics require it; this RFC does not preclude it.
 
 **Three-or-more fixed sub-agents from v1 (Id / Ego / Superego).** Larger fixed composition from the outset. Rejected: N=2 is enough to validate the composition pattern and the event-substrate contract. Adding further sub-agents — time-awareness, narrative-identity, planning — is done by future RFCs that plug into the same substrate. Locking a fixed N>2 now constrains future design without payoff.
 

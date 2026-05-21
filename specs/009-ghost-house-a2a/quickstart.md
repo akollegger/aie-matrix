@@ -1,19 +1,19 @@
-# Quickstart: Ghost House A2A Coordination
+# Quickstart: Agent Host A2A Coordination
 
-**Branch**: `009-ghost-house-a2a`  
+**Branch**: `009-agent-host-a2a`  
 **Prerequisite**: World server running — `pnpm dev` from repo root (starts Colyseus + world-api + registry)
 
-This guide walks through Phase 1 verification: start the ghost house, register the `random-agent` reference implementation, spawn it for a ghost, and run the Wanderer TCK.
+This guide walks through Phase 1 verification: start the agent host, register the `random-agent` reference implementation, spawn it for a ghost, and run the Wanderer TCK.
 
 ---
 
 ## 1. Configure environment
 
-Both `ghost-house` and `random-agent` call `loadRootEnv()` from `@aie-matrix/root-env`, which loads the **monorepo root** `.env` and `.env.local` (not the file under `ghosts/ghost-house/` or `ghosts/random-agent/`). Copy the examples below into the **repository root** `.env`, or `export` the same variables in your shell before starting the processes.
+Both `agent-host` and `random-agent` call `loadRootEnv()` from `@aie-matrix/root-env`, which loads the **monorepo root** `.env` and `.env.local` (not the file under `server/agent-host/` or `ghosts/random-agent/`). Copy the examples below into the **repository root** `.env`, or `export` the same variables in your shell before starting the processes.
 
 ```bash
 # Reference copies (optional — for documentation only; not loaded by default):
-cp ghosts/ghost-house/.env.example ghosts/ghost-house/.env
+cp server/agent-host/.env.example server/agent-host/.env
 cp ghosts/random-agent/.env.example ghosts/random-agent/.env
 ```
 
@@ -38,10 +38,10 @@ pnpm install
 
 ---
 
-## 3. Start the ghost house
+## 3. Start the agent host
 
 ```bash
-pnpm --filter @aie-matrix/ghost-house dev
+pnpm --filter @aie-matrix/server-agent-host dev
 # Ghost house listening at http://localhost:4000
 ```
 
@@ -97,15 +97,15 @@ CARETAKER_ID=$(curl -sX POST http://localhost:8787/registry/caretakers \
   -H "Content-Type: application/json" \
   -d '{ "label": "quickstart" }' | jq -r .caretakerId)
 
-# Register ghost house
+# Register agent host
 GHOST_HOUSE_ID=$(curl -sX POST http://localhost:8787/registry/houses \
   -H "Content-Type: application/json" \
-  -d '{ "displayName": "quickstart-house" }' | jq -r .ghostHouseId)
+  -d '{ "displayName": "quickstart-house" }' | jq -r .agentHostId)
 
 # Adopt a ghost (save full body for spawn credential)
 ADOPT=$(curl -sX POST http://localhost:8787/registry/adopt \
   -H "Content-Type: application/json" \
-  -d "{\"caretakerId\": \"$CARETAKER_ID\", \"ghostHouseId\": \"$GHOST_HOUSE_ID\"}")
+  -d "{\"caretakerId\": \"$CARETAKER_ID\", \"agentHostId\": \"$GHOST_HOUSE_ID\"}")
 GHOST_ID=$(echo $ADOPT | jq -r .ghostId)
 
 echo "Ghost ID: $GHOST_ID"
@@ -172,10 +172,10 @@ curl -X DELETE "http://localhost:4000/v1/sessions/$SESSION_ID" \
 
 | Variable | Package | Required | Default | Description |
 |----------|---------|----------|---------|-------------|
-| `GHOST_HOUSE_DEV_TOKEN` | ghost-house, random-agent | yes | — | Static bearer token for Phase 1 auth (localhost only) |
-| `AIE_MATRIX_HTTP_BASE_URL` | ghost-house | no | `http://127.0.0.1:8787` | World HTTP origin for the Colyseus bridge (not the `/mcp` URL) |
-| `GHOST_HOUSE_PORT` | ghost-house | no | `4000` | HTTP port |
-| `CATALOG_FILE_PATH` | ghost-house | no | `./catalog.json` | Agent catalog persistence file |
+| `GHOST_HOUSE_DEV_TOKEN` | agent-host, random-agent | yes | — | Static bearer token for Phase 1 auth (localhost only) |
+| `AIE_MATRIX_HTTP_BASE_URL` | agent-host | no | `http://127.0.0.1:8787` | World HTTP origin for the Colyseus bridge (not the `/mcp` URL) |
+| `GHOST_HOUSE_PORT` | agent-host | no | `4000` | HTTP port |
+| `CATALOG_FILE_PATH` | agent-host | no | `./catalog.json` | Agent catalog persistence file |
 | `AGENT_PORT` | random-agent | no | `4001` | HTTP port for agent A2A endpoint |
 | `GHOST_HOUSE_URL` | random-agent | yes | — | Ghost house URL for registration and health checks |
 
@@ -197,6 +197,6 @@ curl -X DELETE "http://localhost:4000/v1/sessions/$SESSION_ID" \
 
 ## Phase 7 verification (maintainers)
 
-- Use **`@aie-matrix/ghost-house`** and **`@aie-matrix/random-agent`** (not the spike under `spikes/a2a-ghost-agent-protocol/`). Repo gate: **`pnpm typecheck`** at root.
+- Use **`@aie-matrix/server-agent-host`** and **`@aie-matrix/random-agent`** (not the spike under `spikes/a2a-ghost-agent-protocol/`). Repo gate: **`pnpm typecheck`** at root.
 - Run §1–8 in **separate shells** (or `pnpm run demo` with `GHOST_HOUSE_DEV_TOKEN` set — `scripts/demo.mjs` runs quickstart §5–7 after the house and agent are up; set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip that) on a host where default ports are free. Conflicting listeners cause `EADDRINUSE` on 8787 / 4000 / 4001.
 - Last structure check: all quickstart HTTP steps and `tck:wanderer` exercised against the workspace packages; intermittent `MOVEMENT_BLOCKED` / `RULESET_DENY` is an environmental flake, not a spec deviation.

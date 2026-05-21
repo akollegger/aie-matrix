@@ -15,7 +15,7 @@ function parseSpawnContext(msg: import("@a2a-js/sdk").Message | undefined): Spaw
   for (const p of msg?.parts ?? []) {
     if (p.kind === "data" && "data" in p) {
       const d = p.data as Record<string, unknown>;
-      if (d.schema === "aie-matrix.ghost-house.spawn-context.v1") {
+      if (d.schema === "aie-matrix.agent-host.spawn-context.v1") {
         return d as unknown as SpawnContext;
       }
     }
@@ -93,7 +93,7 @@ export class PeppersAgentExecutor implements AgentExecutor {
     const initialPersonality = samplePersonality({ seed, stddev: 1.8 });
 
     // Run the personality loop in background; keep the task open (final: false)
-    // so ghost-house can send world events to this task while the loop runs.
+    // so agent-host can send world events to this task while the loop runs.
     void runHouse({
       registryBase: ctx.houseEndpoints.a2a,
       memoryConnection,
@@ -140,7 +140,7 @@ export class PeppersAgentExecutor implements AgentExecutor {
       });
 
     // Return immediately; the task stays open (status: working, final: false)
-    // so ghost-house can push world events while the loop runs.
+    // so agent-host can push world events while the loop runs.
   };
 
   cancelTask = async (taskId: string, eventBus: ExecutionEventBus): Promise<void> => {

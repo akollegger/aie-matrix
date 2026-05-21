@@ -1,0 +1,40 @@
+replicaCount: 1
+
+image:
+  repository: us-central1-docker.pkg.dev/aie-matrix/aie-matrix/agent-host
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 4000
+
+# Non-secret environment variables
+env:
+  NODE_ENV: production
+  GHOST_HOUSE_PORT: "4000"
+  GHOST_HOUSE_PUBLIC_BASE_URL: "https://matrix.relateby.dev"
+  # Inter-service URLs — use Kubernetes Service DNS within the same namespace
+  WORLD_API_URL: "http://server:8787"
+  COLYSEUS_URL: "ws://server:8787"
+  AIE_MATRIX_HTTP_BASE_URL: "http://server:8787"
+
+# Name of the Kubernetes Secret created in Phase 3
+secretName: aie-matrix-secrets
+
+# Keys from the secret to inject as env vars
+secretKeys:
+  - GHOST_HOUSE_DEV_TOKEN
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 60

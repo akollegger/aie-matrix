@@ -13,7 +13,7 @@
 - Q: Which write happens first during `POST /maps`, and what is the failure behavior? → A: GCS upload first, then Neo4j cell sync. If GCS upload fails, nothing is written and the error is returned cleanly. If GCS succeeds but Neo4j sync fails, the map is NOT marked published and the operator must retry; the retry overwrites the GCS object idempotently.
 - Q: Does re-publishing an archived map with identical content restore it to published, or does idempotency leave it archived? → A: Re-publishing always reverts an archived map to `published`, regardless of whether the content changed. Idempotency (no re-upload, no re-sync) applies only to already-published maps with unchanged content.
 - Q: Should `POST /maps` enforce an application-level upload size limit, and is the `.items.json` sidecar parameter needed? → A: No application-level size limit — infrastructure (reverse proxy / load balancer) enforces it; document expected size range in Assumptions. The `itemsSidecar` parameter is dropped entirely: `.map.gram` files already encode item types, item placements, tile types, rules, and layers inline (see `maps/sandbox/canonical.map.gram`). No separate sidecar format is needed or supported.
-- Q: Which services block their `/health` readiness on session binding, and what HTTP status indicates not-ready? → A: All three server processes (world-api, Colyseus, ghost-house) return `503` from `/health` until their session binding is established. Kubernetes `readinessProbe` withholds traffic until the endpoint returns `200`.
+- Q: Which services block their `/health` readiness on session binding, and what HTTP status indicates not-ready? → A: All three server processes (world-api, Colyseus, agent-host) return `503` from `/health` until their session binding is established. Kubernetes `readinessProbe` withholds traffic until the endpoint returns `200`.
 
 ## Proposal Context *(mandatory)*
 
@@ -61,7 +61,7 @@ With at least one published map (whose cells are already in Neo4j), the operator
 
 The world is live with attendees connected. The operator needs to change the active map — for example, moving from a conference-lobby map to a main-stage map — without dropping any WebSocket connections.
 
-**Why this priority**: The live map switch is the highest-risk operation. It requires coordinated state changes across Neo4j, Redis pub/sub, world-api, Colyseus, and ghost-house. It can be deferred to a follow-on if the session start/end path is solid.
+**Why this priority**: The live map switch is the highest-risk operation. It requires coordinated state changes across Neo4j, Redis pub/sub, world-api, Colyseus, and agent-host. It can be deferred to a follow-on if the session start/end path is solid.
 
 **Independent Test**: With a running session and a second published map, PATCH the session's maps. Confirm `world.map-changed` is broadcast, `removedCells` are rejected by world-api's movement check, and any ghost on a removed cell is evacuated or enters limbo.
 
@@ -116,7 +116,7 @@ The event is over. The operator ends the live session and archives the map so it
 - **FR-010**: The system MUST allow an operator to archive a map. Archiving a map referenced by an active session MUST be rejected with `409 Conflict`.
 - **FR-011**: The system MUST allow an operator to end a live session. Ending a session MUST NOT archive its maps.
 - **FR-012**: All `/maps/` and `/live/` endpoints MUST require authentication via `Authorization: Bearer {ADMIN_TOKEN}`.
-- **FR-013**: Server processes (world-api, Colyseus, ghost-house) MUST load their assigned map from the session specified by `LIVE_SESSION_ID` when that variable is set, and MUST NOT read map data from local disk in Tier 2/3 deployments.
+- **FR-013**: Server processes (world-api, Colyseus, agent-host) MUST load their assigned map from the session specified by `LIVE_SESSION_ID` when that variable is set, and MUST NOT read map data from local disk in Tier 2/3 deployments.
 - **FR-014**: When `LIVE_SESSION_ID` is not set and exactly one active session exists, server processes MUST load that session's primary map automatically. When multiple sessions exist, the absence of `LIVE_SESSION_ID` MUST be a startup error.
 
 ### Key Entities
@@ -131,8 +131,8 @@ The event is over. The operator ends the live session and archives the map so it
 - **IC-002**: `POST /live` — JSON body: `{ name: string, maps: [{ mapId, role }] }`. Response: full session object.
 - **IC-003**: `PATCH /live/:id/maps` — JSON body: `{ maps: [{ mapId, role }] }`. Response: updated session object.
 - **IC-004**: `world.map-changed` event on Redis channel `aie-matrix:world-events` — payload: `{ type, sessionId, maps, removedCells, addedCells }`. Channel constant MUST be extracted into `@aie-matrix/shared-types`.
-- **IC-005**: `LIVE_SESSION_ID` env var — consumed by world-api, Colyseus, and ghost-house at startup to identify the assigned session.
-- **IC-006**: `/health` on world-api, Colyseus, and ghost-house MUST return `503` until session binding is established (session loaded and map context available). Once ready, `/health` returns `200`. Kubernetes `readinessProbe` targets this endpoint; no traffic is routed to a service until it passes.
+- **IC-005**: `LIVE_SESSION_ID` env var — consumed by world-api, Colyseus, and agent-host at startup to identify the assigned session.
+- **IC-006**: `/health` on world-api, Colyseus, and agent-host MUST return `503` until session binding is established (session loaded and map context available). Once ready, `/health` returns `200`. Kubernetes `readinessProbe` targets this endpoint; no traffic is routed to a service until it passes.
 
 ## Success Criteria *(mandatory)*
 

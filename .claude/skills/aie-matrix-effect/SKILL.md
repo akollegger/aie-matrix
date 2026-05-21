@@ -1,11 +1,11 @@
 ---
 name: aie-matrix-effect
-description: Effect-ts coding standard for all server-side packages in aie-matrix (ghosts/ghost-house/ and server/*). Use when writing or reviewing services, route handlers, error types, logging, configuration, or background fibers in any of these packages.
+description: Effect-ts coding standard for all server-side packages in aie-matrix (server/agent-host/ and server/*). Use when writing or reviewing services, route handlers, error types, logging, configuration, or background fibers in any of these packages.
 ---
 
 # Effect-ts Standard — aie-matrix server packages
 
-Applies to: `ghosts/ghost-house/`, `server/world-api/`, `server/registry/`, `server/conversation/`, `server/src/`.
+Applies to: `server/agent-host/`, `server/world-api/`, `server/registry/`, `server/conversation/`, `server/src/`.
 
 The authoritative narrative is `docs/guides/effect-ts.md`. This skill adds the concrete decisions and canonical file references needed to write new code consistently.
 
@@ -23,8 +23,8 @@ export interface IMyService {
 ```
 
 **Canonical examples:**
-- `ghosts/ghost-house/src/catalog/CatalogService.ts` — `get`, `register`, `deregister`
-- `ghosts/ghost-house/src/a2a-host/A2AHostService.ts` — `pingAgent`, `sendSpawnContext`
+- `server/agent-host/src/catalog/CatalogService.ts` — `get`, `register`, `deregister`
+- `server/agent-host/src/a2a-host/A2AHostService.ts` — `pingAgent`, `sendSpawnContext`
 - `server/conversation/src/ConversationService.ts` — `ConversationServiceShape`
 
 ---
@@ -32,7 +32,7 @@ export interface IMyService {
 ## 2. Service definition: `Context.Tag` + unique string identifier
 
 ```typescript
-export class MyService extends Context.Tag("ghost-house/MyService")<
+export class MyService extends Context.Tag("agent-host/MyService")<
   MyService,
   IMyService
 >() {}
@@ -78,7 +78,7 @@ function toHttpResponse(e: HouseError): { status: number; body: unknown } {
 
 **Canonical examples:**
 - `server/src/errors.ts` — `errorToResponse` with `assertNever` (the target pattern)
-- `ghosts/ghost-house/src/http-error-map.ts` — instanceof chain (known migration target)
+- `server/agent-host/src/http-error-map.ts` — instanceof chain (known migration target)
 
 ---
 
@@ -113,7 +113,7 @@ process.on("SIGTERM", () => void runtime.dispose().finally(() => process.exit(0)
 **Never call `Effect.runPromise` or `Effect.runSync` inside a service method.** Run only at the process boundary via `runtime.runPromise` or `runtime.runFork`.
 
 **Canonical examples:**
-- `ghosts/ghost-house/src/main.ts` — `ManagedRuntime.make(appLayer)` + route handlers
+- `server/agent-host/src/main.ts` — `ManagedRuntime.make(appLayer)` + route handlers
 - `server/src/index.ts` — combined server runtime
 
 ---
@@ -173,7 +173,7 @@ runtime.runFork(
 ```
 
 **Canonical examples (migration targets — not yet using Effect logging):**
-- `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — `slog` helper
+- `server/agent-host/src/supervisor/SupervisorService.ts` — `slog` helper
 - `server/src/index.ts` — `console.info(JSON.stringify({kind: ...}))`
 - `server/world-api/src/mcp-server.ts` — `logJson` helper
 
@@ -195,7 +195,7 @@ yield* Fiber.interrupt(fiber);
 Do not call `Effect.runFork` inside an `Effect.gen` block — use `Effect.forkDaemon` instead. `Effect.runFork` is only for bootstrapping at the process entry point.
 
 **Canonical example:**
-- `ghosts/ghost-house/src/supervisor/SupervisorService.ts` — `startHealth` / `Effect.forkDaemon`
+- `server/agent-host/src/supervisor/SupervisorService.ts` — `startHealth` / `Effect.forkDaemon`
 
 ---
 
@@ -213,7 +213,7 @@ function parseConfig(env: NodeJS.ProcessEnv): AppConfig {
   };
 }
 
-export class AppConfig extends Context.Tag("ghost-house/AppConfig")<AppConfig, AppConfig>() {}
+export class AppConfig extends Context.Tag("agent-host/AppConfig")<AppConfig, AppConfig>() {}
 export const AppConfigLayer = Layer.sync(AppConfig, () => parseConfig(process.env));
 ```
 
@@ -300,8 +300,8 @@ load = (): Effect.Effect<CatalogFile> =>
 - Use `Effect.orElse(() => Effect.succeed(fallback))` when a missing/corrupt file should degrade gracefully rather than crash the fiber.
 
 **Canonical targets for migration:**
-- `ghosts/ghost-house/src/catalog/CatalogService.ts` — `load()` uses `JSON.parse` + manual shape guard → replace with `Schema.parseJson(CatalogFileSchema)`
-- `ghosts/ghost-house/src/catalog/agent-card-schema.ts` — `parseAndValidateAgentCard` uses Zod → replace with `Schema.decodeUnknown(AgentCardSchema)`
+- `server/agent-host/src/catalog/CatalogService.ts` — `load()` uses `JSON.parse` + manual shape guard → replace with `Schema.parseJson(CatalogFileSchema)`
+- `server/agent-host/src/catalog/agent-card-schema.ts` — `parseAndValidateAgentCard` uses Zod → replace with `Schema.decodeUnknown(AgentCardSchema)`
 - Any route handler that reads `req.body as SomeType` without validation → add `Schema.decodeUnknown` before using the value
 
 ---
@@ -324,12 +324,12 @@ load = (): Effect.Effect<CatalogFile> =>
 
 ---
 
-## Known gaps (as of branch 009-ghost-house-a2a)
+## Known gaps (as of branch 009-agent-host-a2a)
 
 Do not replicate these in new code — they are tracked migration targets:
 
-- `ghosts/ghost-house/src/http-error-map.ts` — instanceof chain → `switch(_tag)` + `assertNever`
-- `ghosts/ghost-house/src/supervisor/SupervisorService.ts` `slog` — `console.error` → `Effect.logWarning` / `Effect.logError`
+- `server/agent-host/src/http-error-map.ts` — instanceof chain → `switch(_tag)` + `assertNever`
+- `server/agent-host/src/supervisor/SupervisorService.ts` `slog` — `console.error` → `Effect.logWarning` / `Effect.logError`
 - `server/src/index.ts`, `server/world-api/src/mcp-server.ts` — `console.info(JSON.stringify(...))` → `Effect.logInfo` + `annotateLogs`
-- `ghosts/ghost-house/src/main.ts` — inline `process.env` reads → `AppConfigLayer`
+- `server/agent-host/src/main.ts` — inline `process.env` reads → `AppConfigLayer`
 - `server/*` — no `Logger.replace` in root Layer (logs go through default pretty-printer instead of `Logger.json`)

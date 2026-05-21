@@ -53,9 +53,11 @@ export function parseMultipart(
           if (name === "mapId") mapId = value.trim();
         });
 
-        bb.on("file", (_name, stream) => {
-          fileReceived = true;
-          stream.on("data", (chunk) => fileChunks.push(chunk));
+        bb.on("file", (name, stream) => {
+          if (name === "file") {
+            fileReceived = true;
+            stream.on("data", (chunk) => fileChunks.push(chunk));
+          }
           stream.on("end", () => { /* wait for bb "finish" */ });
         });
 

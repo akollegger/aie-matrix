@@ -27,7 +27,7 @@ export interface StimulusContext {
   /** Registry base URL — needed to fetch message content for inbox notifications. */
   registryBase: string;
   /** Ghost-house id — used as the bearer for `/threads/{tid}/{mid}` reads. */
-  ghostHouseId: string;
+  agentHostId: string;
   /** Notifications fetched but not yet replayed as stimuli. */
   pendingMessages: Array<{ from: string; text: string }>;
   /** Log prefix passed to fetchMessage so diagnostics carry the ghost label. */
@@ -37,7 +37,7 @@ export interface StimulusContext {
 export function emptyStimulusContext(
   selfGhostId: string,
   registryBase: string,
-  ghostHouseId: string,
+  agentHostId: string,
   logTag = "peppers-house",
 ): StimulusContext {
   return {
@@ -47,7 +47,7 @@ export function emptyStimulusContext(
     inspectedItems: new Set(),
     selfGhostId,
     registryBase,
-    ghostHouseId,
+    agentHostId,
     pendingMessages: [],
     logTag,
   };
@@ -61,14 +61,14 @@ function shortenGhostId(id: string): string {
  * Fetch the actual content of a message via the conversation server's
  * REST API. The MCP `inbox` tool only returns notification pointers
  * (`{thread_id, message_id}`) — the message body lives in the
- * conversation store and is read with the ghost-house's API key.
+ * conversation store and is read with the agent-host's API key.
  *
  * Logs every failure path because silent drops here are the most
  * common source of "no incoming chat" reports.
  */
 async function fetchMessage(
   registryBase: string,
-  ghostHouseId: string,
+  agentHostId: string,
   threadId: string,
   messageId: string,
   logTag: string,
@@ -77,7 +77,7 @@ async function fetchMessage(
   let res: Response;
   try {
     res = await fetch(url, {
-      headers: { Authorization: `Bearer ${ghostHouseId}` },
+      headers: { Authorization: `Bearer ${agentHostId}` },
     });
   } catch (err) {
     console.warn(
@@ -156,7 +156,7 @@ export async function pollNextStimulus(
   // 1. Utterances waiting in the inbox. Notifications are pointers
   //    (`thread_id` + `message_id`); the message body is fetched
   //    separately from the conversation server's `/threads/...`
-  //    endpoint using the ghost-house API key.
+  //    endpoint using the agent-host API key.
   if (ctx.pendingMessages.length === 0) {
     try {
       const inbox = (await client.inbox()) as InboxResult;
@@ -170,7 +170,7 @@ export async function pollNextStimulus(
         if (typeof n.thread_id !== "string" || typeof n.message_id !== "string") continue;
         const msg = await fetchMessage(
           ctx.registryBase,
-          ctx.ghostHouseId,
+          ctx.agentHostId,
           n.thread_id,
           n.message_id,
           ctx.logTag,

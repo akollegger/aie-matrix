@@ -5,7 +5,7 @@
 
 ## Summary
 
-Implement `/maps/` (artifact CRUD) and `/live/` (live session management) HTTP routes in `server/world-api/`, backed by GCS (artifact storage) and Neo4j (map cell sync + session state). Map publish is a two-step write: GCS upload then Neo4j `(:Tile)` merge. Session activation is lightweight — cells are already in Neo4j at publish time, so `POST /live` only creates the session record and `[:USES]` edges. A Redis pub/sub broadcast over `aie-matrix:world-events` notifies Colyseus and ghost-house of session and map-change events. All management endpoints require `ADMIN_TOKEN` bearer auth via a new Effect-ts middleware. The existing file-based `MapService` (Tier 1 local dev) is unchanged.
+Implement `/maps/` (artifact CRUD) and `/live/` (live session management) HTTP routes in `server/world-api/`, backed by GCS (artifact storage) and Neo4j (map cell sync + session state). Map publish is a two-step write: GCS upload then Neo4j `(:Tile)` merge. Session activation is lightweight — cells are already in Neo4j at publish time, so `POST /live` only creates the session record and `[:USES]` edges. A Redis pub/sub broadcast over `aie-matrix:world-events` notifies Colyseus and agent-host of session and map-change events. All management endpoints require `ADMIN_TOKEN` bearer auth via a new Effect-ts middleware. The existing file-based `MapService` (Tier 1 local dev) is unchanged.
 
 ## Deployment Scope
 

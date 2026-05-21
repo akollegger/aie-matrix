@@ -1,4 +1,4 @@
-# Spike B — skeleton ghost house (catalog + spawn + synthetic event)
+# Spike B — skeleton agent host (catalog + spawn + synthetic event)
 
 ## Primary registration path (FR-005)
 

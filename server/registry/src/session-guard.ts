@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import {
   registryCaretakerAlreadyHasGhost,
   registryUnknownCaretaker,
-  registryUnknownGhostHouse,
+  registryUnknownAgentHost,
   type RegistryHttpError,
 } from "./registry-errors.js";
 
@@ -13,13 +13,13 @@ import {
 export function assertAdoptionAllowed(
   store: RegistryStore,
   caretakerId: string,
-  ghostHouseId: string,
+  agentHostId: string,
 ): Effect.Effect<void, RegistryHttpError> {
   if (!store.caretakers.has(caretakerId)) {
     return Effect.fail(registryUnknownCaretaker("Unknown caretaker"));
   }
-  if (!store.houses.has(ghostHouseId)) {
-    return Effect.fail(registryUnknownGhostHouse("Unknown ghost house"));
+  if (!store.houses.has(agentHostId)) {
+    return Effect.fail(registryUnknownAgentHost("Unknown ghost house"));
   }
   if (store.activeByCaretaker.has(caretakerId)) {
     return Effect.fail(

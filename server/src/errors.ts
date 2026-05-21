@@ -1,7 +1,7 @@
 import type {
   RegistryCaretakerAlreadyHasGhost,
   RegistryUnknownCaretaker,
-  RegistryUnknownGhostHouse,
+  RegistryUnknownAgentHost,
 } from "@aie-matrix/server-registry";
 import type {
   AdminAuthError,
@@ -32,7 +32,7 @@ export {
 export {
   RegistryCaretakerAlreadyHasGhost,
   RegistryUnknownCaretaker,
-  RegistryUnknownGhostHouse,
+  RegistryUnknownAgentHost,
 } from "@aie-matrix/server-registry";
 export type { RegistryHttpError as RegistryError } from "@aie-matrix/server-registry";
 export {
@@ -60,7 +60,7 @@ export {
   type WorldApiError,
 } from "@aie-matrix/server-world-api";
 
-type RegistryErrorUnion = RegistryUnknownCaretaker | RegistryUnknownGhostHouse | RegistryCaretakerAlreadyHasGhost;
+type RegistryErrorUnion = RegistryUnknownCaretaker | RegistryUnknownAgentHost | RegistryCaretakerAlreadyHasGhost;
 
 /** Union matched exhaustively by {@link errorToResponse}. */
 export type HttpMappingError =

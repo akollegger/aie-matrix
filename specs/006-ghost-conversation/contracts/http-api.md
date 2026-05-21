@@ -1,10 +1,10 @@
 # HTTP API Contract: Conversation Store
 
 **Base path**: `/threads`  
-**Auth**: `Authorization: Bearer <ghost_house_api_key>`  
+**Auth**: `Authorization: Bearer <agent_host_api_key>`  
 **Content-Type**: `application/json`
 
-One API key is scoped to a ghost house and grants read access to all ghost instances registered under that house. The key is issued by `server/registry/` at ghost house registration time.
+One API key is scoped to a agent host and grants read access to all ghost instances registered under that house. The key is issued by `server/registry/` at agent host registration time.
 
 ---
 
@@ -47,7 +47,7 @@ List messages on a ghost's thread, newest-last, with optional cursor-based pagin
 | Status | When |
 |---|---|
 | 401 | Missing or invalid API key |
-| 403 | Ghost not registered under this ghost house |
+| 403 | Ghost not registered under this agent host |
 | 404 | Ghost not found |
 
 ---
@@ -76,5 +76,5 @@ Fetch a single message record by ID.
 | Status | When |
 |---|---|
 | 401 | Missing or invalid API key |
-| 403 | Ghost not registered under this ghost house |
+| 403 | Ghost not registered under this agent host |
 | 404 | Ghost or message not found |

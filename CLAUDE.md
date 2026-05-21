@@ -9,9 +9,9 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Neo4j (world graph — cell identity property changes to `h3Index`); in-memory Colyseus schema (005-h3-coordinate-system)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `ulid` (new — message IDs) (006-ghost-conversation)
 - JSONL on disk (`{ghost_id}.jsonl` per thread); in-memory ghost state in `ConversationService` (006-ghost-conversation)
-- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` per ADR-0004 / RFC-0007; minimal additional npm deps only where the SDK does not cover HTTP serving (spike-local choice — document in `research.md` if changed) (008-a2a-ghost-house-spike)
-- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` 0.3.13+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `effect` v3+, `zod` 3, `ulid` (event IDs), `@aie-matrix/root-env` (shared env loading) (009-ghost-house-a2a)
-- File-backed JSON (`catalog.json`) for agent registration; in-memory `Map` for active agent sessions (009-ghost-house-a2a)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` per ADR-0004 / RFC-0007; minimal additional npm deps only where the SDK does not cover HTTP serving (spike-local choice — document in `research.md` if changed) (008-a2a-agent-host-spike)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` 0.3.13+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `effect` v3+, `zod` 3, `ulid` (event IDs), `@aie-matrix/root-env` (shared env loading) (009-agent-host-a2a)
+- File-backed JSON (`catalog.json`) for agent registration; in-memory `Map` for active agent sessions (009-agent-host-a2a)
 - TypeScript 5.7 (browser target), React 18, Node.js 24 (build/dev only) + deck.gl ≥ 9 (H3HexagonLayer, PointCloudLayer, IconLayer), `h3-js` ≥ 4, `colyseus.js` (matches `@colyseus/core` 0.15.57), `@relateby/pattern` (gram parsing, per IC-002 consumer note in spec-010), `@aie-matrix/shared-types` (existing workspace package) (011-intermedium-client) — **full-bleed** H3 scene; **overlay** panels; interiority = inventory / **goals** / **memories** (observability copy, not RPG-quest; RFC-0008)
 - None — stateless client; reads from Colyseus (live positions), HTTP (map topology at startup), A2A (conversation stream) (011-intermedium-client)
 - TypeScript 5.7 (browser target, ESM) + React 18, Vite 6, MapLibre GL 5 (base map), h3-js 4 (cell math), `@relateby/pattern` (gram import parsing) (012-h3geojson-map-editor)
@@ -22,6 +22,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - N/A — stateless browser client (014-intermedium-polish)
 - TypeScript 5.7 / Node.js 24, ESM (`"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@google-cloud/storage` v7 (new), `busboy` v1 (new — multipart parsing), `ioredis` v5 (new — world-api pub/sub), `ulid` (new — session IDs), `zod` v3 (015-map-management)
 - Neo4j (`:Map`, `:LiveSession`, `:Cell` nodes); GCS (`.map.gram` artifact blobs) (015-map-management)
+- TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`); pnpm 10 workspace monorepo + Effect v3+, `@colyseus/core` 0.15.57, Docker Compose v2, GitHub Actions (016-staging-deployment)
+- Neo4j 5 container (named volume for persistence), Redis 7 container (016-staging-deployment)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -69,7 +71,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 016-staging-deployment: Added TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`); pnpm 10 workspace monorepo + Effect v3+, `@colyseus/core` 0.15.57, Docker Compose v2, GitHub Actions
 - 015-map-management: Added TypeScript 5.7 / Node.js 24, ESM (`"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@google-cloud/storage` v7 (new), `busboy` v1 (new — multipart parsing), `ioredis` v5 (new — world-api pub/sub), `ulid` (new — session IDs), `zod` v3
 - 014-intermedium-polish: Added TypeScript 5.7 (browser target, ESM) + React 18, deck.gl ≥ 9 (`H3HexagonLayer`, `ScatterplotLayer`, `_GlobeView`), h3-js ≥ 4, colyseus.js, `@react-three/fiber`, `three`, Vite 6
-- 013-gram-format-migration: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@relateby/pattern` (Gram AST), `h3-js` 4 (polygon fill, cell math), `effect` v3+ (async plumbing), `@colyseus/core` 0.15.57 (consumer), `vitest` (tests)
-- 012-h3geojson-map-editor: Added TypeScript 5.7 (browser target, ESM) + React 18, Vite 6, MapLibre GL 5 (base map), h3-js 4 (cell math), `@relateby/pattern` (gram import parsing)

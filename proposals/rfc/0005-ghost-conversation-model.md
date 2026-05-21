@@ -7,7 +7,7 @@
 
 ## Summary
 
-Each ghost owns a single persistent broadcast thread. Ghosts within a 7-cell cluster (the speaker's cell plus its six immediate neighbors) auto-subscribe to that thread and auto-unsubscribe when they leave range — position always determines membership, no explicit leave command required. Conversation is emergent and opt-in: a ghost that says something may get a response from nearby ghosts who choose to engage; ghosts that don't wish to converse simply ignore incoming messages. Messages are delivered as Colyseus notifications (signal) and persisted to a per-ghost JSONL file (record). The record format extends the OpenAI chat completions message shape with `mx_`-prefixed fields carrying spatial context. Third-party ghost houses receive both the real-time signal stream and access to the full conversation store.
+Each ghost owns a single persistent broadcast thread. Ghosts within a 7-cell cluster (the speaker's cell plus its six immediate neighbors) auto-subscribe to that thread and auto-unsubscribe when they leave range — position always determines membership, no explicit leave command required. Conversation is emergent and opt-in: a ghost that says something may get a response from nearby ghosts who choose to engage; ghosts that don't wish to converse simply ignore incoming messages. Messages are delivered as Colyseus notifications (signal) and persisted to a per-ghost JSONL file (record). The record format extends the OpenAI chat completions message shape with `mx_`-prefixed fields carrying spatial context. Third-party agent hosts receive both the real-time signal stream and access to the full conversation store.
 
 ## Motivation
 
@@ -16,7 +16,7 @@ The foundational conference experience requires ghosts to speak and listen. With
 - A speaker agent addressing an audience in a session room
 - Two ghosts stopping in a hallway to exchange information
 - A vendor NPC greeting a ghost that enters a booth
-- A ghost house reading what their ghost heard and said
+- A agent host reading what their ghost heard and said
 
 The model is intentionally minimal. It defines *how messages flow*, not what they contain. Memory modules, information decay, and social graph recording are built on top of this layer.
 
@@ -116,7 +116,7 @@ Ghost agents interact via one new MCP tool:
 
 `listen` is passive — ghosts receive messages via Colyseus `message.new` signals and fetch content from the conversation store. No explicit `listen` tool is needed.
 
-### Third-party ghost house access
+### Third-party agent host access
 
 Ghost houses receive an API key scoped to their ghost(s) at registration time. This key grants:
 
@@ -130,7 +130,7 @@ GET /threads/{ghost_id}                        # list messages (paginated)
 GET /threads/{ghost_id}/{message_id}           # fetch single message
 ```
 
-Auth is handled via the ghost house API key. The store implementation is pluggable; the interface above is the contract.
+Auth is handled via the agent host API key. The store implementation is pluggable; the interface above is the contract.
 
 ### Pluggable store backend
 
@@ -142,7 +142,7 @@ The interface requires:
 - `get(thread_id: string, message_id: string): Promise<MessageRecord>`
 - `list(thread_id: string, options: { after?: string, limit?: number }): Promise<MessageRecord[]>`
 
-`Promise<T>` return types are intentional. The project uses Effect-ts for server orchestration (ADR-0002), but the store interface is a public extension point consumed by third-party ghost houses. Requiring Effect-ts knowledge would raise the barrier for contributors providing alternative store implementations. The Effect wrapping is an internal concern for `server/conversation/` and does not belong in this contract.
+`Promise<T>` return types are intentional. The project uses Effect-ts for server orchestration (ADR-0002), but the store interface is a public extension point consumed by third-party agent hosts. Requiring Effect-ts knowledge would raise the barrier for contributors providing alternative store implementations. The Effect wrapping is an internal concern for `server/conversation/` and does not belong in this contract.
 
 ## Open Questions
 
@@ -158,7 +158,7 @@ The interface requires:
 
 **Room-owned channels instead of ghost-owned threads** — a session room or tile zone owns the broadcast channel; all ghosts in the room subscribe to it. Simpler in some ways, but ownership becomes ambiguous when ghosts move, rooms have no natural identity outside the map, and post-conference replay by ghost is not possible. Ghost-owned threads preserve a clean audit trail per ghost.
 
-**Full content in Colyseus** — message text delivered directly in the Colyseus signal, no separate store. Works for low volume but Colyseus is not a system of record; content is lost on restart and not queryable. Not appropriate for ghost houses that need async access.
+**Full content in Colyseus** — message text delivered directly in the Colyseus signal, no separate store. Works for low volume but Colyseus is not a system of record; content is lost on restart and not queryable. Not appropriate for agent hosts that need async access.
 
 **Full content in Neo4j** — messages as nodes in the world graph. Highly queryable and graph-traversable, but adds write latency to every message and may not scale to conference volume without dedicated tuning. Deferred as a potential future store implementation behind the pluggable interface.
 

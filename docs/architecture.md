@@ -25,7 +25,7 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 
 **Note on the ghost agent layer:** Ghosts do not require Phaser. The game client visualizes the world; agents move through it via Colyseus and Neo4j. These are separable concerns.
 
-**Note on the ghost house (`@aie-matrix/ghost-house`, spec `009-ghost-house-a2a`):** The canonical house is an out-of-process service that **hosts** third-party ghost agents over **A2A** (per ADR-0004 and RFC-0007). It does not replace the world’s MCP surface; it **proxies** tool calls to the world server, **subscribes** to Colyseus as a ghost house client to receive `world.*` event fanouts, and **supervises** registered agents (spawn, health, world-event delivery, shutdown).
+**Note on the agent host (`@aie-matrix/server-agent-host`, spec `009-agent-host-a2a`):** The canonical house is an out-of-process service that **hosts** third-party ghost agents over **A2A** (per ADR-0004 and RFC-0007). It does not replace the world’s MCP surface; it **proxies** tool calls to the world server, **subscribes** to Colyseus as a agent host client to receive `world.*` event fanouts, and **supervises** registered agents (spawn, health, world-event delivery, shutdown).
 
 ---
 
@@ -132,7 +132,7 @@ How does an IRL conference badge become a ghost? Options range from simple email
 IRL talks could feed speaker agents via live transcription (Whisper or similar). This touches live A/V infrastructure at the venue, which is operationally complex. Whether this is in scope for v1, and what the fallback is (slides + abstract), needs a decision.
 
 ### CI/CD Pipeline
-**Resolved by [ADR-0007](../proposals/adr/0007-three-tier-deployment.md).** GitHub Actions for CI; `docker compose` for staging validation; GKE (GCP) for production. Helm charts under `deploy/k8s/`; Neo4j Aura (managed) and GCP Memorystore (Redis) as the stateful backing services.
+**Resolved by [ADR-0007](../proposals/adr/0007-three-tier-deployment.md) and implemented in [spec 016](../specs/016-staging-deployment/).** GitHub Actions for CI (`.github/workflows/staging-ci.yml` — builds images and runs the full compose stack on every PR targeting `main`); `docker compose` for Tier 2 staging validation (`deploy/staging/`); GKE (GCP) for production. Helm charts under `deploy/k8s/`; Neo4j Aura (managed) and GCP Memorystore (Redis) as the stateful backing services.
 
 ---
 
@@ -181,7 +181,7 @@ IRL talks could feed speaker agents via live transcription (Whisper or similar).
               └─────────────────────┘
 ```
 
-**Ghost house (A2A contributor path, `009`):** The diagram above is the long-horizon “agent layer” view. Today’s third-party **ghost agents** attach through an explicit **ghost house** service with four concrete north–south links:
+**Ghost house (A2A contributor path, `009`):** The diagram above is the long-horizon “agent layer” view. Today’s third-party **ghost agents** attach through an explicit **agent host** service with four concrete north–south links:
 
 ```
                     ┌────────────────────────┐
@@ -191,7 +191,7 @@ IRL talks could feed speaker agents via live transcription (Whisper or similar).
                                 │ proxy (IC-003) — ghost token
                     ┌───────────▼────────────┐
   Colyseus  ◄────── │   @aie-matrix/         │
-  room fanout       │   ghost-house          │ ──────►  Contributor agents
+  room fanout       │   agent-host          │ ──────►  Contributor agents
   (IC-004 in)      │  bridge · A2A host     │         (A2A, /.well-known)
                     │  catalog · supervisor │
                     └────────────────────────┘
@@ -201,11 +201,11 @@ IRL talks could feed speaker agents via live transcription (Whisper or similar).
 
 | Connection | What crosses it |
 |------------|-------------------|
-| **World server (`server/world-api`, MCP at `/mcp`) ↔ Ghost house** | MCP tool calls the agent requested on its card (`matrix.requiredTools`); ghost-scoped token from the registry. Outbound `say` (Social tier) is written in the world then **fan-out** to ghost house Colyseus bridge clients, which become IC-004 envelopes inside the house. |
+| **World server (`server/world-api`, MCP at `/mcp`) ↔ Ghost house** | MCP tool calls the agent requested on its card (`matrix.requiredTools`); ghost-scoped token from the registry. Outbound `say` (Social tier) is written in the world then **fan-out** to agent host Colyseus bridge clients, which become IC-004 envelopes inside the house. |
 | **Colyseus ↔ Ghost house** | Bridge client in the house subscribes as the adopted ghost; room events and `message.new` fan-out become `aie-matrix.world-event.v1` (IC-004) inside the house and are delivered to agents as A2A data/push per tier. |
 | **Ghost house ↔ External agents** | HTTPS A2A: agent card at `/.well-known/agent-card.json`, `message/send` for tasks and world events, catalog and session control on the house HTTP API (IC-005). Phase 1 assumes **localhost**-reachable `baseUrl` in the catalog. |
 
-**Contracts:** `specs/009-ghost-house-a2a/contracts/` — in particular **IC-001** (agent card `matrix` block), **IC-002** (A2A + push invariants), **IC-003** (MCP tool surface), **IC-004** (world event envelope), **IC-005** (catalog HTTP), **IC-006** (spawn context).
+**Contracts:** `specs/009-agent-host-a2a/contracts/` — in particular **IC-001** (agent card `matrix` block), **IC-002** (A2A + push invariants), **IC-003** (MCP tool surface), **IC-004** (world event envelope), **IC-005** (catalog HTTP), **IC-006** (spawn context).
 
 ---
 
@@ -222,7 +222,7 @@ The [Minimal PoC](../specs/001-minimal-poc/) combines several packages in **one 
 | **Ghost credentials** | `server/auth/` | Dev JWT mint/verify for adopted ghosts. |
 | **Contracts & shared types** | `shared/types/`, `specs/001-minimal-poc/contracts/` | Source of truth for REST/MCP shapes; keep docs and code aligned. |
 | **Phaser debugger (spectator)** | `clients/debugger/phaser/` | Loads `maps/` assets; **no** move RPC. |
-| **Ghost house (A2A) + reference Wanderer** | `ghosts/ghost-house/`, `ghosts/random-agent/` | Canonical house: catalog, MCP proxy, Colyseus bridge, A2A supervisor. Reference agent serves an A2A card and movement loop. Legacy `ghosts/ghost-random-house/` remains for older PoC flows; new work targets `009` packages. |
+| **Ghost house (A2A) + reference Wanderer** | `server/agent-host/`, `ghosts/random-agent/` | Canonical house: catalog, MCP proxy, Colyseus bridge, A2A supervisor. Reference agent serves an A2A card and movement loop. Legacy `ghosts/ghost-random-house/` remains for older PoC flows; new work targets `009` packages. |
 
 ---
 

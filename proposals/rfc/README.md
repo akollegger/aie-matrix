@@ -53,7 +53,7 @@ What other approaches were considered?
 | [RFC-0004](0004-h3-geospatial-coordinate-system.md) | H3 Geospatial Coordinate System | accepted |
 | [RFC-0005](0005-ghost-conversation-model.md) | Ghost Conversation Model | accepted |
 | [RFC-0006](0006-world-objects.md) | World Items | under review |
-| [RFC-0007](0007-ghost-house-architecture.md) | Ghost House Architecture | accepted |
+| [RFC-0007](0007-agent-host-architecture.md) | Agent Host Architecture | accepted |
 | [RFC-0008](0008-human-spectator-client.md) | Intermedium — Human Spectator Client | draft |
 | [RFC-0009](0009-map-format-pipeline.md) | Map Format Pipeline (.tmj → .map.gram → HTTP) | draft |
 | [RFC-0010](0010-h3geojson-map-editor.md) | H3 GeoJSON Map Editor | draft |

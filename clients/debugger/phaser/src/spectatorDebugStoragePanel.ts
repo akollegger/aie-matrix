@@ -3,7 +3,7 @@ const POLL_INTERVAL_MS = 5_000;
 export interface StoragePanelOptions {
   /** Base URL of the game server (e.g. http://localhost:8787). */
   serverBase: string;
-  /** Bearer token — ghost-house API key. Sourced from SPECTATOR_DEBUG_TOKEN. */
+  /** Bearer token — agent-host API key. Sourced from SPECTATOR_DEBUG_TOKEN. */
   token: string | undefined;
   /** Returns current ghost IDs in the room for the dropdown. */
   getGhostIds: () => string[];

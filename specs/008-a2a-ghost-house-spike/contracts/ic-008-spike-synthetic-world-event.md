@@ -2,7 +2,7 @@
 
 **Status**: Draft (spike-only)  
 **Consumers**: Spike B house → sample agent push path; Spike B report appendix  
-**Normative RFC**: [`proposals/rfc/0007-ghost-house-architecture.md`](../../../proposals/rfc/0007-ghost-house-architecture.md) (diff actual payloads against future house↔agent contracts)
+**Normative RFC**: [`proposals/rfc/0007-agent-host-architecture.md`](../../../proposals/rfc/0007-agent-host-architecture.md) (diff actual payloads against future house↔agent contracts)
 
 ## Purpose
 

@@ -518,7 +518,7 @@ async function main(): Promise<void> {
   const cli = parseRandomHouseCli(process.argv.slice(2));
   const { ghostCount, walkIntervalMs, itemDropProb, registryBase } = cli;
 
-  const { ghostHouseId } = await postJson<{ ghostHouseId: string }>(registryBase, "/registry/houses", {
+  const { agentHostId } = await postJson<{ agentHostId: string }>(registryBase, "/registry/houses", {
     displayName: "random-house",
   });
 
@@ -531,7 +531,7 @@ async function main(): Promise<void> {
       ghostId: string;
       caretakerId: string;
       credential: { token: string; worldApiBaseUrl: string; transport: string };
-    }>(registryBase, "/registry/adopt", { caretakerId, ghostHouseId });
+    }>(registryBase, "/registry/adopt", { caretakerId, agentHostId });
 
     const mcp = new GhostMcpClient({
       worldApiBaseUrl: adopt.credential.worldApiBaseUrl,

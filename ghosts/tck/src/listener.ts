@@ -126,13 +126,13 @@ async function main() {
     const { caretakerId } = await postJson<{ caretakerId: string }>("/registry/caretakers", {
       label: "tck-listener",
     });
-    const { ghostHouseId } = await postJson<{ ghostHouseId: string }>("/registry/houses", {
+    const { agentHostId } = await postJson<{ agentHostId: string }>("/registry/houses", {
       displayName: "tck-listener-house",
     });
     adopt = (await postJson<{
       ghostId: string;
       credential: { token: string; worldApiBaseUrl: string };
-    }>("/registry/adopt", { caretakerId, ghostHouseId })) as {
+    }>("/registry/adopt", { caretakerId, agentHostId })) as {
       ghostId: string;
       credential: { token: string; worldApiBaseUrl: string };
     };

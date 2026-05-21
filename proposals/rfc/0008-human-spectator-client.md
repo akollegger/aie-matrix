@@ -5,7 +5,7 @@
 **Authors:** @akollegger  
 **Related:** [RFC-0004](0004-h3-geospatial-coordinate-system.md) (H3 coordinate system),
 [RFC-0005](0005-ghost-conversation-model.md) (ghost conversation model),
-[RFC-0007](0007-ghost-house-architecture.md) (ghost house architecture),
+[RFC-0007](0007-agent-host-architecture.md) (agent host architecture),
 [ADR-0005](../adr/0005-h3-native-map-format.md) (H3-native map format),
 [ADR-0006](../adr/0006-personal-stop-renderer.md) (Personal-stop rendering stack)
 
@@ -233,8 +233,8 @@ the ghost as a 3D subject; ghost interiority — what it carries, what it is
 trying to accomplish (**goals**), and what it **remembers** — appears as ambient
 annotation around the point-cloud figure, framed for **observability of an
 agent**, not a player-inventory screen. The data source is the ghost's MCP
-state, surfaced via the ghost house API. This is the most speculative component
-— the exact data model depends on RFC-0007 ghost house implementation. It is
+state, surfaced via the agent host API. This is the most speculative component
+— the exact data model depends on RFC-0007 agent host implementation. It is
 scoped here as a placeholder and deferred to a follow-up spec.
 
 ### Repository Structure
@@ -270,7 +270,7 @@ responsibility.
 |---|---|---|
 | Ghost positions (live broadcast) | Colyseus | Fanout to all spectators is Colyseus's native mode; neither MCP nor A2A has a broadcast primitive |
 | World map and tile topology | HTTP (`GET /:mapId?format=gram`) | Static artifact endpoint per [ADR-0005](../adr/0005-h3-native-map-format.md); the intermedium parses `.map.gram` directly |
-| Paired conversation thread | A2A | The ghost house already manages this via A2A; the intermedium reads the same stream |
+| Paired conversation thread | A2A | The agent host already manages this via A2A; the intermedium reads the same stream |
 | Ghost interiority (partner/ghost scale) | A2A or MCP | A2A push for live updates; MCP for on-demand state reads |
 
 **Colyseus** remains the source of truth for ghost positions. Per RFC-0004
@@ -288,9 +288,9 @@ shape fits an HTTP fetch better than a tool call, and it keeps the intermedium
 free of an MCP client dependency.
 
 **A2A conversation** is the natural fit for the paired-ghost chat panel.
-RFC-0007 and ADR-0004 establish that the ghost house manages conversation
+RFC-0007 and ADR-0004 establish that the agent host manages conversation
 threads via A2A. The intermedium subscribes to the paired ghost's conversation
-stream through the ghost house rather than through a separate channel, keeping
+stream through the agent host rather than through a separate channel, keeping
 the protocol boundary clean. This also means the intermedium demonstrates A2A
 in use from the human side, not just the agent side — a useful property for a
 showcase at AIEWF 2026.
@@ -303,9 +303,9 @@ showcase at AIEWF 2026.
    tool is introduced.
 
 2. **A2A conversation subscription.** The intermedium reads the paired
-   conversation thread via the ghost house A2A interface. The exact mechanism —
+   conversation thread via the agent host A2A interface. The exact mechanism —
    whether via streaming task, push notification, or a dedicated read endpoint
-   — depends on how RFC-0007's ghost house exposes conversation history to
+   — depends on how RFC-0007's agent host exposes conversation history to
    non-agent consumers. This contract gap should be resolved with the ghost
    house team before the interaction panel is implemented.
 
@@ -319,7 +319,7 @@ showcase at AIEWF 2026.
    for ghost inventory, **goal** state, and **memories**. This is not yet
    defined in RFC-0007. The Personal stop is in scope for this RFC as a
    navigation destination but its content is blocked on a follow-up contract
-   with the ghost house.
+   with the agent host.
 
 5. **Pairing flow.** How does a human establish a paired ghost? Sign-up and
    pairing are mentioned in the project overview but not yet specified in an

@@ -235,4 +235,4 @@ client/phaser (spectator)
 
 ## Related Decisions
 
-- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — The single-process layout described here is an explicit Tier 1 (local dev) convenience. ADR-0007 governs how these service packages (`colyseus`, `world-api`, `registry`, `ghost-house`) separate into independently deployable units at Tier 2 (staging) and Tier 3 (production).
+- **[ADR-0007: Three-Tier Deployment Strategy](../adr/0007-three-tier-deployment.md)** — The single-process layout described here is an explicit Tier 1 (local dev) convenience. ADR-0007 governs how these service packages (`colyseus`, `world-api`, `registry`, `agent-host`) separate into independently deployable units at Tier 2 (staging) and Tier 3 (production).

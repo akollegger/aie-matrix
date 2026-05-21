@@ -19,14 +19,14 @@
 
 **Decision**: For the PoC, add an `inbox` MCP tool that returns pending `message.new` notifications for the calling ghost. `random-house` and `ghost-cli` poll this tool to discover incoming messages. The Colyseus push model described in RFC-0005 is deferred.
 
-**Rationale**: Ghost agents connect via MCP over HTTP (stateless per request). They do not have a persistent Colyseus WebSocket connection. Implementing a full ghost-side Colyseus client for the PoC would require substantial new infrastructure (ghost house Colyseus connection lifecycle, auth, reconnection). Polling via `inbox` achieves the same behavioral outcome — random-house responds to messages, ghost-cli shows them in the log — with far less complexity. The `inbox` tool is additive; when ghost houses get real Colyseus connections, it can be deprecated without changing `say`, `bye`, or the store.
+**Rationale**: Ghost agents connect via MCP over HTTP (stateless per request). They do not have a persistent Colyseus WebSocket connection. Implementing a full ghost-side Colyseus client for the PoC would require substantial new infrastructure (agent host Colyseus connection lifecycle, auth, reconnection). Polling via `inbox` achieves the same behavioral outcome — random-house responds to messages, ghost-cli shows them in the log — with far less complexity. The `inbox` tool is additive; when agent hosts get real Colyseus connections, it can be deprecated without changing `say`, `bye`, or the store.
 
 **Alternatives considered**:
 - Server-sent events (SSE) from world-api: requires persistent HTTP connections and changes to ghost HTTP client.
 - Ghost-side Colyseus client: correct target architecture but too large a scope for PoC — deferred to a future RFC.
 - Embed message notifications in `look` response: conflates presence with conversation, complicates `look` semantics.
 
-**PoC deviation note**: `inbox` does not appear in RFC-0005. It is an implementation bridge that satisfies the user-observable behavior (ghost house responds to messages) without requiring the Colyseus push infrastructure the RFC describes. The `inbox` tool and its server-side notification queue are `server/conversation/` internals — they do not appear in any public contract.
+**PoC deviation note**: `inbox` does not appear in RFC-0005. It is an implementation bridge that satisfies the user-observable behavior (agent host responds to messages) without requiring the Colyseus push infrastructure the RFC describes. The `inbox` tool and its server-side notification queue are `server/conversation/` internals — they do not appear in any public contract.
 
 ---
 
@@ -69,7 +69,7 @@
 
 ## Decision 7: HTTP Endpoint Placement
 
-**Decision**: Conversation HTTP routes (`GET /threads/:ghostId`, `GET /threads/:ghostId/:messageId`) are registered in `server/src/index.ts` by mounting the `ConversationRouter` from `server/conversation/`. Auth middleware (JWT ghost house key verification) reuses the existing `server/auth/` service.
+**Decision**: Conversation HTTP routes (`GET /threads/:ghostId`, `GET /threads/:ghostId/:messageId`) are registered in `server/src/index.ts` by mounting the `ConversationRouter` from `server/conversation/`. Auth middleware (JWT agent host key verification) reuses the existing `server/auth/` service.
 
 **Rationale**: The combined server entry point already mounts `server/registry/` and `server/world-api/` routes. Mounting `server/conversation/` routes follows the same pattern without requiring a separate deployable.
 
@@ -85,4 +85,4 @@
 
 `inbox` is polled on the same interval as the walk loop (`AIE_MATRIX_WALK_INTERVAL_MS`, default 1500ms). When in conversational mode, the walk step is skipped and only `inbox` + possible `say`/`bye` is executed.
 
-**Rationale**: Simple probabilistic behavior produces observable and varied conversation patterns. Canned messages are sufficient for the PoC; the ghost house is not expected to generate natural language at this stage.
+**Rationale**: Simple probabilistic behavior produces observable and varied conversation patterns. Canned messages are sufficient for the PoC; the agent host is not expected to generate natural language at this stage.

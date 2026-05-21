@@ -44,7 +44,7 @@
 
 **Decision**: `ulid` npm package (already used in `server/world-api` per CLAUDE.md)  
 **Rationale**: ULIDs are lexicographically sortable and URL-safe — appropriate for `(:LiveSession { id })` where sort order by creation time is useful for `GET /live?status=active` ordering. Already in the dep tree.  
-**Alternatives considered**: `randomUUID()` from Node.js crypto — simpler, but not sortable. `nanoid` — shorter but no time ordering. ULID is already the project standard (ghost conversation message IDs, ghost-house event IDs).
+**Alternatives considered**: `randomUUID()` from Node.js crypto — simpler, but not sortable. `nanoid` — shorter but no time ordering. ULID is already the project standard (ghost conversation message IDs, agent-host event IDs).
 
 ---
 

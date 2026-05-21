@@ -1,6 +1,6 @@
 /**
  * Wanderer A2A tier TCK (IC-001, IC-002, IC-003, IC-006).
- * Requires: combined server, ghost-house, random-agent, registered agent, active spawn session.
+ * Requires: combined server, agent-host, random-agent, registered agent, active spawn session.
  */
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import { loadRootEnv, isEnvTruthy } from "@aie-matrix/root-env";
@@ -119,13 +119,13 @@ async function main() {
     const { caretakerId } = await postJson<{ caretakerId: string }>("/registry/caretakers", {
       label: "tck-wanderer",
     });
-    const { ghostHouseId } = await postJson<{ ghostHouseId: string }>("/registry/houses", {
+    const { agentHostId } = await postJson<{ agentHostId: string }>("/registry/houses", {
       displayName: "tck-wanderer-house",
     });
     adopt = (await postJson<{
       ghostId: string;
       credential: { token: string; worldApiBaseUrl: string };
-    }>("/registry/adopt", { caretakerId, ghostHouseId })) as {
+    }>("/registry/adopt", { caretakerId, agentHostId })) as {
       ghostId: string;
       credential: { token: string; worldApiBaseUrl: string };
     };

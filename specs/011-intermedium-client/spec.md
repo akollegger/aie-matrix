@@ -9,7 +9,7 @@
 
 - **Related Proposal**: [RFC-0008](../../proposals/rfc/0008-human-spectator-client.md) — Intermedium Human Spectator Client
 - **Scope Boundary**: A new React-based web client (`clients/intermedium/`) that gives conference attendees a human-facing view into the ghost world: a hex-geometry spatial display with seven discrete camera stops, smooth animated transitions, and a paired-ghost conversation panel. Includes restructuring `client/` → `clients/` and renaming the Phaser client to `clients/debugger/`.
-- **Out of Scope**: Ghost agent logic, ghost house server internals, human pairing flow (sign-up and matching — a separate RFC), mobile layout (deferred post-MVP), ghost interiority data contract (blocked on ghost house team), basemap vs. void decision (deferred to implementation iteration).
+- **Out of Scope**: Ghost agent logic, agent host server internals, human pairing flow (sign-up and matching — a separate RFC), mobile layout (deferred post-MVP), ghost interiority data contract (blocked on agent host team), basemap vs. void decision (deferred to implementation iteration).
 
 ## Clarifications
 
@@ -77,9 +77,9 @@ A paired attendee navigates to the Personal stop. The deck.gl world gives way to
 
 A paired attendee at the Personal stop sees their ghost’s inner state surfaced as ambient annotation in the R3F scene: what it carries (inventory), what it is currently pursuing (active goal), and what it remembers (memories). Copy is **game-inspired** (structure borrows from game UIs) but the product is **not** a game: avoid “quest” / “quest log” tone in user-facing text.
 
-**Why this priority**: Ghost interiority is the deepest observability level and the most speculative — its data contract depends on the ghost house team delivering a read API. It is in scope as a destination but its content is a placeholder pending that contract.
+**Why this priority**: Ghost interiority is the deepest observability level and the most speculative — its data contract depends on the agent host team delivering a read API. It is in scope as a destination but its content is a placeholder pending that contract.
 
-**Independent Test**: Can be stubbed with mock ghost interiority data. Delivers the “interiority view” observability level even before the ghost house API is finalised.
+**Independent Test**: Can be stubbed with mock ghost interiority data. Delivers the “interiority view” observability level even before the agent host API is finalised.
 
 **Acceptance Scenarios**:
 
@@ -113,7 +113,7 @@ A paired attendee at the Personal stop sees their ghost’s inner state surfaced
 - **FR-008**: The client MUST display at the Situational stop a proximity panel listing all ghosts within the 7-hex cluster around the focused tile or ghost, showing each ghost’s name, class, and current tile type. If the attendee’s paired ghost is within the cluster, the panel appends a compact view of the most recent conversation message below the ghost list.
 - **FR-009**: The client MUST display the full paired-ghost conversation thread at the Personal stop, with a minimal ghost location **status** readout (tile type, last move direction) **inside the Personal panel overlay** — not in a separate “mini-map” column. The R3F scene fills the portion of the viewport not covered by the panel.
 - **FR-010**: The client MUST allow the attendee to send messages to their paired ghost from the Personal stop panel.
-- **FR-011**: The client MUST consume the paired ghost’s conversation thread via the ghost house conversation interface (IC-003). In MVP, this is implemented as HTTP polling (`GET /conversation/:ghostId/messages?since=<timestamp>` every 5 seconds). When IC-003 is resolved and the ghost house exposes a streaming endpoint, the polling implementation MUST be replaceable with a Server-Sent Events subscription without changes to `ConversationThread` or `PersonalPanel`.
+- **FR-011**: The client MUST consume the paired ghost’s conversation thread via the agent host conversation interface (IC-003). In MVP, this is implemented as HTTP polling (`GET /conversation/:ghostId/messages?since=<timestamp>` every 5 seconds). When IC-003 is resolved and the agent host exposes a streaming endpoint, the polling implementation MUST be replaceable with a Server-Sent Events subscription without changes to `ConversationThread` or `PersonalPanel`.
 - **FR-012**: The client MUST display ghost interiority (inventory, active goal, memories) at the Personal stop as ambient annotation within the R3F scene, using product copy that is observability-first (not RPG-quest phrasing; see US4).
 - **FR-013**: Navigation to the Personal stop MUST be gated on the presence of a pairing; unmatched attendees MUST see a clear unavailability message.
 - **FR-014**: Navigation between stops MUST be triggered by: zoom-in / zoom-out keyboard keys cycling through stops in sequence; double-click or `Enter` on a focused tile or ghost to jump directly to the next meaningful stop; on-screen back button or `Escape` key to return to the previous stop.
@@ -139,14 +139,14 @@ A paired attendee at the Personal stop sees their ghost’s inner state surfaced
 - **Ghost**: An autonomous agent with a current H3 tile index, identity (name, class), and optionally an interiority state (inventory, goals, memories). Ghosts arrive as live position broadcasts and as conversation participants.
 - **Tile**: An H3 cell in the world grid with a type (open floor, vendor booth, session room, etc.) and optional item placements. Tiles are loaded once at startup from the map topology endpoint.
 - **ViewState**: The top-level client navigation state `{ stop, focus }`. `stop` is one of seven named stops (Global, Regional, Neighborhood, Plan, Room, Situational, Personal); `focus` is null for fixed-center stops, or a tile H3 index or ghost ID for Situational and Personal.
-- **Conversation Thread**: An ordered sequence of messages between a human attendee and their paired ghost, delivered via the ghost house A2A interface.
+- **Conversation Thread**: An ordered sequence of messages between a human attendee and their paired ghost, delivered via the agent host A2A interface.
 - **Human Pairing**: An association between a human attendee and exactly one ghost, required for Personal stop access. Established by an external pairing flow (out of scope for this feature).
 
 ### Interface Contracts
 
 - **IC-001**: Colyseus `ghostTiles` broadcast — H3 index array per ghost, consumed directly as layer inputs without coordinate conversion. Backward-compat `tileCoords` field is ignored by the intermedium.
 - **IC-002**: HTTP `GET /:mapId?format=gram` — world map topology as a `.map.gram` payload per ADR-0005. Parsed at startup.
-- **IC-003**: Ghost house A2A conversation stream — the mechanism (streaming task, push notification, or dedicated read endpoint) for subscribing to and sending messages in the paired conversation thread. Contract gap pending RFC-0007 ghost house team resolution.
+- **IC-003**: Ghost house A2A conversation stream — the mechanism (streaming task, push notification, or dedicated read endpoint) for subscribing to and sending messages in the paired conversation thread. Contract gap pending RFC-0007 agent host team resolution.
 - **IC-004**: Ghost interiority read API — the A2A or MCP endpoint for reading a ghost's inventory, active goal, and memories at the Personal stop. Not yet defined; Personal stop interiority content is a placeholder pending this contract.
 
 ## Success Criteria *(mandatory)*
@@ -165,7 +165,7 @@ A paired attendee at the Personal stop sees their ghost’s inner state surfaced
 - Pairing (sign-up and human-to-ghost matching) is handled by a separate flow not implemented in this feature; the intermedium only reads a pairing token and gates Personal stop access on its presence.
 - MVP targets desktop and tablet browsers; mobile layout (pull-up drawer model) is deferred.
 - Stop-to-stop transitions animate zoom, pitch, and pan simultaneously (FR-028); the LOD flip (extruded ↔ flat) and the deck.gl ↔ R3F swap are hard cuts within the transition.
-- Ghost interiority (Personal stop content) is stubbed with placeholder UI pending the ghost house team defining the read API contract.
+- Ghost interiority (Personal stop content) is stubbed with placeholder UI pending the agent host team defining the read API contract.
 - The void aesthetic (dark background, no building-footprint basemap) is the MVP default; basemap integration via MapLibre is deferred to implementation iteration.
 - `clients/intermedium/` depends on both `@deck.gl/*` and `@react-three/fiber` + `three`; no framework code is shared with `clients/debugger/`.
 - The existing Phaser debugger client continues to function unchanged after the `client/` → `clients/debugger/` rename.

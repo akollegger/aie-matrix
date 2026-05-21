@@ -28,7 +28,7 @@ PORT=4731 npm run dev
 ## Behavior
 
 - User text `house:spawn` → agent replies `spawn-ack` (spawn handshake for logs).
-- User `data` part with `schema: "aie-matrix.spike.synthetic-world-event.v1"` → agent replies with `aie-matrix.spike.agent-response.v1` (see `specs/008-a2a-ghost-house-spike/contracts/ic-008-spike-synthetic-world-event.md`).
+- User `data` part with `schema: "aie-matrix.spike.synthetic-world-event.v1"` → agent replies with `aie-matrix.spike.agent-response.v1` (see `specs/008-a2a-agent-host-spike/contracts/ic-008-spike-synthetic-world-event.md`).
 
 ## Auth
 

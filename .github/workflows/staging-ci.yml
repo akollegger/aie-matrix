@@ -1,0 +1,77 @@
+name: Staging Stack CI
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+jobs:
+  staging-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Unique project name per run — prevents volume/network conflicts on shared runners
+      COMPOSE_PROJECT_NAME: aie-matrix-ci-${{ github.run_id }}
+      # Neo4j
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ci-test-pw
+      NEO4J_AUTH: neo4j/ci-test-pw
+      # Redis
+      REDIS_URL: redis://redis:6379
+      # Combined server
+      AIE_MATRIX_HTTP_PORT: "8787"
+      AIE_MATRIX_INTERNAL_FANOUT_TOKEN: ""
+      AIE_MATRIX_DEBUG: "false"
+      ADMIN_TOKEN: ci-admin
+      NODE_ENV: production
+      # Agent Host
+      GHOST_HOUSE_DEV_TOKEN: ci-test-token
+      GHOST_HOUSE_PORT: "4000"
+      GHOST_HOUSE_PUBLIC_BASE_URL: http://localhost:4000
+      WORLD_API_URL: http://server:8787
+      COLYSEUS_URL: ws://server:8787
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build staging images
+        run: docker compose -f deploy/staging/docker-compose.yml build
+
+      - name: Start staging stack
+        # depends_on: condition: service_healthy chains neo4j+redis → server → agent-host
+        run: docker compose -f deploy/staging/docker-compose.yml up -d
+
+      - name: Wait for agent-host healthy (up to 5 min)
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:4000/health | grep -q '"status":"ok"'; then
+              echo "Agent-host healthy after $((i * 10))s"
+              exit 0
+            fi
+            echo "Waiting... attempt $i/30"
+            sleep 10
+          done
+          echo "ERROR: agent-host did not become healthy within 5 minutes"
+          exit 1
+
+      - name: Assert server health
+        run: |
+          response=$(curl -sf http://localhost:8787/health)
+          echo "$response"
+          echo "$response" | grep -q '"status":"ok"'
+
+      - name: Assert agent-host health
+        run: |
+          response=$(curl -sf http://localhost:4000/health)
+          echo "$response"
+          echo "$response" | grep -q '"status":"ok"'
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f deploy/staging/docker-compose.yml logs --no-color
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f deploy/staging/docker-compose.yml down -v

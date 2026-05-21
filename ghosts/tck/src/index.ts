@@ -88,13 +88,13 @@ async function stepRegistryAndMcp(): Promise<void> {
     const { caretakerId } = await postJson<{ caretakerId: string }>("/registry/caretakers", {
       label: "ghost-tck",
     });
-    const { ghostHouseId } = await postJson<{ ghostHouseId: string }>("/registry/houses", {
+    const { agentHostId } = await postJson<{ agentHostId: string }>("/registry/houses", {
       displayName: "ghost-tck-house",
     });
     adopt = await postJson<{
       ghostId: string;
       credential: { token: string; worldApiBaseUrl: string };
-    }>("/registry/adopt", { caretakerId, ghostHouseId });
+    }>("/registry/adopt", { caretakerId, agentHostId });
     console.error(`[tck] adopt ok (ghostId=${adopt.ghostId.slice(0, 8)}…)`);
   } catch (e) {
     fail("adopt", "Registry caretaker/house/adopt chain failed.", e);

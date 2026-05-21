@@ -1,0 +1,21 @@
+# Production overrides — applied on top of each chart's values.yaml
+# Usage:
+#   helm upgrade --install server deploy/k8s/charts/server \
+#     --namespace aie-matrix \
+#     --set image.tag=$TAG \
+#     -f deploy/k8s/values-production.yaml
+#
+# Set image.tag at deploy time via --set image.tag=<git-sha-or-semver>
+# Do NOT commit image tags here — they are CI/CD artefacts, not config.
+
+image:
+  pullPolicy: Always
+
+# GKE Autopilot Workload Identity requires explicit resource requests.
+# These are sized for conference-day load; tune after load testing.
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    memory: 1Gi

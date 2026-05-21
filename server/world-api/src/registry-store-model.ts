@@ -3,7 +3,7 @@
  * `@aie-matrix/server-world-api` does not depend on `@aie-matrix/server-registry`
  * (pnpm workspace cycle). Update both files together if the store shape changes.
  */
-export interface GhostHouseRecord {
+export interface AgentHostRecord {
   id: string;
   displayName: string;
   baseUrl?: string;
@@ -17,14 +17,14 @@ export interface CaretakerRecord {
 
 export interface GhostRecord {
   id: string;
-  ghostHouseId: string;
+  agentHostId: string;
   caretakerId: string;
   h3Index: string;
   status: "active" | "stopped";
 }
 
 export interface RegistryStoreLike {
-  houses: Map<string, GhostHouseRecord>;
+  houses: Map<string, AgentHostRecord>;
   caretakers: Map<string, CaretakerRecord>;
   ghosts: Map<string, GhostRecord>;
   /** caretaker → active ghost id */

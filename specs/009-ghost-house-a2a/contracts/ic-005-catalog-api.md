@@ -1,12 +1,12 @@
 # IC-005: Catalog HTTP API
 
 **Status**: Accepted  
-**Consumers**: Third-party contributors (register/deregister agents), ghost assignment tooling (list agents), ghost adoption flow (trigger spawn), ghost house supervisor (shutdown sessions)  
+**Consumers**: Third-party contributors (register/deregister agents), ghost assignment tooling (list agents), ghost adoption flow (trigger spawn), agent host supervisor (shutdown sessions)  
 **Source of truth**: RFC-0007 §Open Questions — "Catalog HTTP paths" (resolved by research.md §1)
 
 ## Purpose
 
-Define the canonical HTTP API paths for the ghost house catalog service. These paths supersede the non-normative spike-008 placeholders.
+Define the canonical HTTP API paths for the agent host catalog service. These paths supersede the non-normative spike-008 placeholders.
 
 ## Endpoints
 
@@ -151,7 +151,7 @@ Gracefully shut down an active agent session. Called when a ghost is released.
 
 #### `GET /.well-known/agent-card.json`
 
-The ghost house's own A2A agent card. Allows the house to participate in standard A2A agent discovery. Returns the house's capabilities, not the catalog of agents it hosts.
+The agent host's own A2A agent card. Allows the house to participate in standard A2A agent discovery. Returns the house's capabilities, not the catalog of agents it hosts.
 
 ---
 

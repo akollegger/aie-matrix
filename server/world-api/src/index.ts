@@ -58,7 +58,7 @@ export {
 } from "./RegistryStoreService.js";
 export type {
   CaretakerRecord,
-  GhostHouseRecord,
+  AgentHostRecord,
   GhostRecord,
   RegistryStoreLike,
 } from "./registry-store-model.js";

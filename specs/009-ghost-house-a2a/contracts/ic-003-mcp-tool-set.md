@@ -1,12 +1,12 @@
-# IC-003: MCP Tool Set (Ghost House Proxy)
+# IC-003: MCP Tool Set (Agent Host Proxy)
 
 **Status**: Accepted  
-**Consumers**: Ghost agents (call these tools), ghost house MCP proxy (validates and forwards), catalog service (validates `matrix.requiredTools` at registration)  
+**Consumers**: Ghost agents (call these tools), agent host MCP proxy (validates and forwards), catalog service (validates `matrix.requiredTools` at registration)  
 **Source of truth**: [ADR-0001: MCP Ghost Wire Protocol](../../../proposals/adr/0001-mcp-ghost-wire-protocol.md), world-api package (`server/world-api/src/mcp-server.ts`)
 
 ## Purpose
 
-Define the set of MCP tools the ghost house MCP proxy re-exposes to spawned agents. Agents declare which tools they require in `matrix.requiredTools` (IC-001); the proxy validates availability at registration and forwards calls to the world server using the ghost's credentials.
+Define the set of MCP tools the agent host MCP proxy re-exposes to spawned agents. Agents declare which tools they require in `matrix.requiredTools` (IC-001); the proxy validates availability at registration and forwards calls to the world server using the ghost's credentials.
 
 Third-party agents never interact with the world server directly — they only see the house MCP endpoint.
 
@@ -29,7 +29,7 @@ Third-party agents never interact with the world server directly — they only s
 
 ## MCP Proxy Behavior
 
-The ghost house MCP proxy:
+The agent host MCP proxy:
 
 1. **Authenticates the agent** via `Authorization: Bearer <ghost-token>` on inbound calls
 2. **Resolves the ghost identity** from the active session (maps token → ghostId → world server credentials)

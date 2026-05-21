@@ -2,7 +2,7 @@
 
 A ghost agent with a two-agent personality system. Each ghost has an 8-facet OCEAN personality (internal × external sliders) that drifts in response to lived experience. An LLM-driven Id pipeline composes a stream-of-consciousness monologue every cascade; a slider-blind Surface picks one MCP-shaped action against the live world-api.
 
-Registers with `ghost-house` via the A2A protocol. `ghost-house` manages discovery, spawn, and MCP proxying.
+Registers with `agent-host` via the A2A protocol. `agent-host` manages discovery, spawn, and MCP proxying.
 
 Companion packages:
 - [`peppers-inner`](../peppers-inner) — pure logic (slider math, facet types, cascade builder)
@@ -15,7 +15,7 @@ Companion packages:
 Add to your repo-root `.env` before starting anything:
 
 ```bash
-# A2A shared token — must match what ghost-house uses
+# A2A shared token — must match what agent-host uses
 GHOST_HOUSE_DEV_TOKEN=dev-secret
 
 # OpenAI — drives Id (8 parallel facet agents) and Surface
@@ -32,11 +32,11 @@ GHOST_MINDS_NEO4J_PASSWORD=...
 
 ## Quickstart — two commands
 
-### Terminal 1 — world server + ghost-house + random-agent
+### Terminal 1 — world server + agent-host + random-agent
 
 ```bash
 pnpm run demo
-# starts: server (8787) · spectator (5174) · ghost-house (4000) · random-agent (4001)
+# starts: server (8787) · spectator (5174) · agent-host (4000) · random-agent (4001)
 # wait for: "all processes running"
 ```
 
@@ -47,7 +47,7 @@ pnpm run peppers:demo              # 2 peppers ghosts (default)
 pnpm run peppers:demo -- --ghosts 4  # or more
 ```
 
-This starts the peppers-agent A2A server (port 4002), waits for ghost-house to respond, registers peppers-agent with the catalog, then adopts and spawns N peppers ghosts. Each ghost receives a spawn context from ghost-house and begins its personality loop.
+This starts the peppers-agent A2A server (port 4002), waits for agent-host to respond, registers peppers-agent with the catalog, then adopts and spawns N peppers ghosts. Each ghost receives a spawn context from agent-host and begins its personality loop.
 
 Watch terminal 2 for cascade output. Spectator: `http://127.0.0.1:5174/`
 
@@ -61,11 +61,11 @@ If you only want to iterate on the personality engine without the full stack:
 # terminal 1 — world server only
 pnpm run server
 
-# terminal 2 — single peppers ghost, direct connection (no ghost-house)
+# terminal 2 — single peppers ghost, direct connection (no agent-host)
 node --import tsx ghosts/peppers-agent/src/peppers-house-cli.ts
 ```
 
-This bypasses ghost-house entirely — useful for tuning Id prompts, slider math, and cascade timing without the A2A layer in the way.
+This bypasses agent-host entirely — useful for tuning Id prompts, slider math, and cascade timing without the A2A layer in the way.
 
 ---
 

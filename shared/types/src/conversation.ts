@@ -26,7 +26,7 @@ export interface PendingNotification {
 /** Sender of a conversation message in the intermedium conversation log. */
 export type ConversationMessageSender = "human" | "ghost";
 
-/** A single message in the ghost-house conversation log (served to the intermedium client). */
+/** A single message in the agent-host conversation log (served to the intermedium client). */
 export interface ConversationMessage {
   readonly messageId: string;
   readonly sender: ConversationMessageSender;

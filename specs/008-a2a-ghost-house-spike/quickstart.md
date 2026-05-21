@@ -1,4 +1,4 @@
-# Quickstart: 008 A2A Ghost House Spike
+# Quickstart: 008 A2A Agent Host Spike
 
 Paths below are relative to the **repository root**.
 
@@ -13,7 +13,7 @@ Paths below are relative to the **repository root**.
 |------|---------|
 | `spikes/a2a-ghost-agent-protocol/` | **Only** runnable spike code |
 | `spikes/a2a-ghost-agent-protocol/reports/` | Spike A / B written reports |
-| `specs/008-a2a-ghost-house-spike/` | Spec, plan, contracts (this quickstart) |
+| `specs/008-a2a-agent-host-spike/` | Spec, plan, contracts (this quickstart) |
 
 ## Spike A — SDK maturity (after sub-project exists)
 

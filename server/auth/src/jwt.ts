@@ -13,7 +13,7 @@ export interface GhostClaims {
   sub: string;
   ghostId: string;
   caretakerId: string;
-  ghostHouseId: string;
+  agentHostId: string;
 }
 
 export function mintGhostToken(claims: GhostClaims, ttlSeconds = 60 * 60 * 8): string {
@@ -21,7 +21,7 @@ export function mintGhostToken(claims: GhostClaims, ttlSeconds = 60 * 60 * 8): s
     {
       ghostId: claims.ghostId,
       caretakerId: claims.caretakerId,
-      ghostHouseId: claims.ghostHouseId,
+      agentHostId: claims.agentHostId,
     },
     getJwtSecret(),
     {
@@ -46,11 +46,11 @@ export function verifyGhostToken(token: string): Effect.Effect<GhostClaims, JwtE
     if (
       typeof decoded.ghostId !== "string" ||
       typeof decoded.caretakerId !== "string" ||
-      typeof decoded.ghostHouseId !== "string"
+      typeof decoded.agentHostId !== "string"
     ) {
       return yield* Effect.fail(
         new JwtMissingGhostClaims({
-          message: "JWT missing ghostId/caretakerId/ghostHouseId claims",
+          message: "JWT missing ghostId/caretakerId/agentHostId claims",
         }),
       );
     }
@@ -58,7 +58,7 @@ export function verifyGhostToken(token: string): Effect.Effect<GhostClaims, JwtE
       sub: decoded.sub,
       ghostId: decoded.ghostId,
       caretakerId: decoded.caretakerId,
-      ghostHouseId: decoded.ghostHouseId,
+      agentHostId: decoded.agentHostId,
     };
   });
 }

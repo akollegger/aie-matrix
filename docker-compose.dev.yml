@@ -1,0 +1,40 @@
+# Tier 1 helper: stateful services only (Neo4j + Redis)
+# Starts Neo4j and Redis without application containers so developers can run
+# `pnpm dev` (or `pnpm server`) outside Docker against real infrastructure.
+#
+# Usage:
+#   docker compose -f docker-compose.dev.yml up -d
+#   pnpm dev        # runs the combined server locally against Neo4j + Redis
+#   docker compose -f docker-compose.dev.yml down
+#
+# See: deploy/staging/README.md for the full staging stack.
+
+services:
+  neo4j:
+    image: neo4j:5
+    environment:
+      NEO4J_AUTH: "${NEO4J_AUTH:-neo4j/devpassword}"
+    ports:
+      - "7474:7474"   # Neo4j Browser (HTTP console)
+      - "7687:7687"   # Bolt (application connection)
+    volumes:
+      - neo4j-dev-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u $${NEO4J_AUTH%%/*} -p $${NEO4J_AUTH##*/} 'RETURN 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  neo4j-dev-data:

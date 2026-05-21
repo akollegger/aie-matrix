@@ -4,7 +4,7 @@
   "title": "aie-matrix registry (PoC)",
   "description": "JSON Schema fragments for IC-001 / IC-002 bodies; HTTP paths finalized in implementation.",
   "$defs": {
-    "RegisterGhostHouseRequest": {
+    "RegisterAgentHostRequest": {
       "type": "object",
       "required": ["displayName"],
       "properties": {
@@ -13,21 +13,21 @@
       },
       "additionalProperties": false
     },
-    "RegisterGhostHouseResponse": {
+    "RegisterAgentHostResponse": {
       "type": "object",
-      "required": ["ghostHouseId", "registeredAt"],
+      "required": ["agentHostId", "registeredAt"],
       "properties": {
-        "ghostHouseId": { "type": "string" },
+        "agentHostId": { "type": "string" },
         "registeredAt": { "type": "string", "format": "date-time" }
       },
       "additionalProperties": true
     },
     "AdoptGhostRequest": {
       "type": "object",
-      "required": ["caretakerId", "ghostHouseId"],
+      "required": ["caretakerId", "agentHostId"],
       "properties": {
         "caretakerId": { "type": "string" },
-        "ghostHouseId": { "type": "string" },
+        "agentHostId": { "type": "string" },
         "ghostTemplateId": { "type": "string" }
       },
       "additionalProperties": false
@@ -60,7 +60,7 @@
           "type": "string",
           "enum": [
             "UNKNOWN_CARETAKER",
-            "UNKNOWN_GHOST_HOUSE",
+            "UNKNOWN_AGENT_HOST",
             "CARETAKER_ALREADY_HAS_GHOST",
             "GHOST_ALREADY_ADOPTED",
             "REASSIGNMENT_NOT_ALLOWED"

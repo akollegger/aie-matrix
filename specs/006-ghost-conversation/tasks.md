@@ -65,18 +65,18 @@
 
 ---
 
-## Phase 5: User Story 3 — Ghost House Monitors Conversation History (Priority: P3)
+## Phase 5: User Story 3 — Agent Host Monitors Conversation History (Priority: P3)
 
 **Goal**: Ghost house authenticates with its API key and reads message history for any of its registered ghost instances via HTTP.
 
 **Independent Test**: After ghost has sent messages, `curl -H "Authorization: Bearer <key>" /threads/<ghost_id>` returns records with correct fields; pagination via `?after=<ulid>` works.
 
-- [X] T021 [US3] Verify `GhostClaims` in `server/auth/src/jwt.ts` includes `ghostHouseId`; add it if absent and update token issuance in `server/registry/`
-- [X] T022 [US3] Implement `ConversationRouter` in `server/conversation/src/router.ts`: `GET /threads/:ghostId` (list + pagination) and `GET /threads/:ghostId/:messageId` (single); auth checks ghost belongs to calling ghost house via `RegistryStoreService`
+- [X] T021 [US3] Verify `GhostClaims` in `server/auth/src/jwt.ts` includes `agentHostId`; add it if absent and update token issuance in `server/registry/`
+- [X] T022 [US3] Implement `ConversationRouter` in `server/conversation/src/router.ts`: `GET /threads/:ghostId` (list + pagination) and `GET /threads/:ghostId/:messageId` (single); auth checks ghost belongs to calling agent host via `RegistryStoreService`
 - [X] T023 [US3] Mount `ConversationRouter` at `/threads` in `server/src/index.ts`
 - [X] T024 [US3] Verify smoke test 3: list, paginate with `after` cursor, fetch single message; document result in `quickstart.md`
 
-**Checkpoint**: US3 independently functional — ghost house can read full thread history over HTTP.
+**Checkpoint**: US3 independently functional — agent host can read full thread history over HTTP.
 
 ---
 
@@ -160,7 +160,7 @@
 - Models/types before services
 - Services before tools
 - Tools before client wrappers
-- Client wrappers before CLI and ghost house consumers
+- Client wrappers before CLI and agent host consumers
 
 ### Parallel Opportunities
 
@@ -227,7 +227,7 @@ Task T034: "random-house conversation loop"          # ghosts/random-house/src/i
 ## Notes
 
 - T001 and T002 (proposal status updates) require human review of RFC-0005 and ADR-0003 before marking complete
-- T021 (JWT ghostHouseId check) may be a no-op if already present, or may require a registry change — investigate before starting Phase 5
+- T021 (JWT agentHostId check) may be a no-op if already present, or may require a registry change — investigate before starting Phase 5
 - `[P]` = different files, no incomplete dependencies; safe to run in parallel
 - `[USn]` = maps task to spec user story for traceability
 - Commit after each phase checkpoint at minimum

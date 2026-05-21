@@ -50,16 +50,16 @@ pnpm --filter @aie-matrix/random-house start -- --ghosts=3
 
 **Status (Phase 6 — US4)**: `random-house` uses `look` → 20% `say` when occupants present; while conversational it polls `inbox` every tick, always `say`s when notifications arrive, and 15% `bye` per tick when the inbox is empty; `go` is skipped until `bye`. Verified against `pnpm dev` + `pnpm --filter @aie-matrix/random-house start -- --ghosts=3` (build/typecheck gate).
 
-## Smoke test 3: ghost house HTTP read
+## Smoke test 3: agent host HTTP read
 
-Use the combined server HTTP port (default `8787`, or `AIE_MATRIX_HTTP_PORT`). The ghost house credential is the `ghostHouseId` returned from `POST /registry/houses` (Bearer treats that UUID as the house API key for this PoC).
+Use the combined server HTTP port (default `8787`, or `AIE_MATRIX_HTTP_PORT`). The agent host credential is the `agentHostId` returned from `POST /registry/houses` (Bearer treats that UUID as the house API key for this PoC).
 
 When calling `POST /mcp` from `curl`, send `Accept: application/json, text/event-stream` (Streamable HTTP transport).
 
 ```bash
 BASE=http://127.0.0.1:8787
 HOUSE_ID=$(curl -sS -X POST "$BASE/registry/houses" -H "Content-Type: application/json" \
-  -d '{"displayName":"thread-read-test"}' | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s).ghostHouseId))")
+  -d '{"displayName":"thread-read-test"}' | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s).agentHostId))")
 # Adopt a ghost (caretaker + house from registry README); then send at least one MCP `say` so JSONL has rows.
 
 curl -sS -H "Authorization: Bearer $HOUSE_ID" "$BASE/threads/<ghost_id>"
@@ -72,7 +72,7 @@ curl -sS -H "Authorization: Bearer $HOUSE_ID" \
   "$BASE/threads/<ghost_id>/<message_id>"
 ```
 
-**Status (Phase 5 — US3)**: `GET /threads/:ghostId` and `GET /threads/:ghostId/:messageId` are mounted on the combined server. Bearer must be a registered `ghostHouseId`; the path `ghost_id` must belong to that house or the API returns 403. List supports `after` (ULID exclusive, lexicographic) and `limit` (default 50, max 200); `next_cursor` is the last returned `message_id` when another page exists. `JsonlStore.list` filters by `message_id > after` for stable pagination. Verified against local `pnpm dev` with adopt + `say` + curl list/single/paginate.
+**Status (Phase 5 — US3)**: `GET /threads/:ghostId` and `GET /threads/:ghostId/:messageId` are mounted on the combined server. Bearer must be a registered `agentHostId`; the path `ghost_id` must belong to that house or the API returns 403. List supports `after` (ULID exclusive, lexicographic) and `limit` (default 50, max 200); `next_cursor` is the last returned `message_id` when another page exists. `JsonlStore.list` filters by `message_id > after` for stable pagination. Verified against local `pnpm dev` with adopt + `say` + curl list/single/paginate.
 
 ## Smoke test 4: debug panel conversational state
 
@@ -127,4 +127,4 @@ curl -sS -H "Authorization: Bearer $HOUSE_ID" \
 | `inbox` always empty | ClusterComputation not enqueuing notifications — check `mx_listeners` in stored records |
 | B never gets `message.new` when expect yes | B not in `gridDisk(A,1)` at **say** time — re-check `whereami` / `look here` on both ghosts (smoke test 5) |
 | B gets notifications when expect no | B still inside cluster ring — move B farther or wait for a `say` after B left the cluster |
-| HTTP 403 on `/threads/` | Ghost not registered under the calling ghost house key |
+| HTTP 403 on `/threads/` | Ghost not registered under the calling agent host key |

@@ -110,7 +110,7 @@ Missing or invalid `h3_anchor` causes `loadHexMap` to reject with a typed `MapLo
 ```typescript
 export interface GhostRecord {
   id: string;
-  ghostHouseId: string;
+  agentHostId: string;
   caretakerId: string;
   tileId: string;        // CellId "col,row" format
   status: "active" | "stopped";
@@ -121,7 +121,7 @@ export interface GhostRecord {
 ```typescript
 export interface GhostRecord {
   id: string;
-  ghostHouseId: string;
+  agentHostId: string;
   caretakerId: string;
   h3Index: string;       // H3 res-15 index string (was tileId)
   status: "active" | "stopped";

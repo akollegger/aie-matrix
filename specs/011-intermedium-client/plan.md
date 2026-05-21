@@ -5,7 +5,7 @@
 
 ## Summary
 
-Build `clients/intermedium/` — a React SPA that serves as the human-facing observability interface to the ghost world. The client renders H3 hex geometry and ghost point-clouds via deck.gl, subscribes to live ghost positions via Colyseus, fetches world topology over HTTP, and hosts a paired-ghost conversation panel driven by the ghost house A2A stream. Navigation between five discrete zoom scales (Map → Area → Neighbor → Partner → Ghost) exposes the multi-agent observability hierarchy at AIEWF 2026. The existing Phaser client is mechanically renamed from `client/` to `clients/debugger/` with no internal changes.
+Build `clients/intermedium/` — a React SPA that serves as the human-facing observability interface to the ghost world. The client renders H3 hex geometry and ghost point-clouds via deck.gl, subscribes to live ghost positions via Colyseus, fetches world topology over HTTP, and hosts a paired-ghost conversation panel driven by the agent host A2A stream. Navigation between five discrete zoom scales (Map → Area → Neighbor → Partner → Ghost) exposes the multi-agent observability hierarchy at AIEWF 2026. The existing Phaser client is mechanically renamed from `client/` to `clients/debugger/` with no internal changes.
 
 ## Technical Context
 
@@ -27,7 +27,7 @@ Build `clients/intermedium/` — a React SPA that serves as the human-facing obs
 |------|--------|-------|
 | Proposal linkage (`proposals/rfc/…` or `proposals/adr/…`) | ✅ | RFC-0008 covers full scope; ADR-0005 covers map format; ADR-0004 covers A2A protocol role; ADR-0006 covers Personal-stop renderer decision |
 | Planned structure preserves documented architectural boundaries | ✅ | New `clients/intermedium/` package; `client/` → `clients/debugger/` is mechanical rename with no internal changes |
-| Shared interfaces have contract artifacts planned under `contracts/` | ⚠️ | IC-001 (Colyseus) and HTTP map endpoint (IC-002 in spec-010) are defined; IC-002 (A2A conversation) and IC-003 (ghost interiority) are gap contracts pending ghost house team |
+| Shared interfaces have contract artifacts planned under `contracts/` | ⚠️ | IC-001 (Colyseus) and HTTP map endpoint (IC-002 in spec-010) are defined; IC-002 (A2A conversation) and IC-003 (ghost interiority) are gap contracts pending agent host team |
 | Verification covers each user slice; runnable code includes smoke test and local run instructions | ✅ | 4 user stories define independent acceptance scenarios; quickstart.md documents local run |
 | Documentation impact enumerated for affected files | ✅ | Listed in spec: `docs/architecture.md`, `docs/project-overview.md`, `clients/debugger/README.md`, `clients/intermedium/README.md`, `CONTRIBUTING.md` |
 
@@ -109,8 +109,8 @@ See [research.md](research.md) for findings. Key decisions resolved:
 1. **deck.gl H3 integration** — H3HexagonLayer accepts H3 index strings natively; no coordinate conversion path needed. PointCloudLayer positioned at `h3.cellToLatLng()` centroid per ghost. Running deck.gl without a MapView (standalone OrthographicView or a flat MapView with no basemap tiles) keeps the void aesthetic.
 2. **Colyseus JS client** — `colyseus.js` matches `@colyseus/core` 0.15.57 already in the monorepo. The intermedium joins the same Colyseus room the debugger uses; it reads `ghostTiles` (H3 index strings) and ignores `tileCoords`.
 3. **Gram parsing** — `@relateby/pattern` is already listed as a downstream consumer in IC-002 (spec-010). The gram document is fetched once at startup and parsed into a `WorldTile[]` map keyed by H3 index.
-4. **A2A conversation** — No stable non-agent consumer API exists yet. MVP stubs the conversation panel with a polling HTTP fallback against the ghost house `/conversation/:ghostId` route (if implemented) or renders a "conversation unavailable" placeholder. IC-002 documents the gap and the expected contract shape.
-5. **Ghost interiority** — Fully stubbed for MVP; IC-003 documents the placeholder and expected ghost house read API shape.
+4. **A2A conversation** — No stable non-agent consumer API exists yet. MVP stubs the conversation panel with a polling HTTP fallback against the agent host `/conversation/:ghostId` route (if implemented) or renders a "conversation unavailable" placeholder. IC-002 documents the gap and the expected contract shape.
+5. **Ghost interiority** — Fully stubbed for MVP; IC-003 documents the placeholder and expected agent host read API shape.
 6. **Rename `client/` → `clients/`** — Mechanical shell rename; all internal paths within the Phaser client are relative and do not reference the top-level directory name. The pnpm workspace `packages` glob in `pnpm-workspace.yaml` must be updated from `client/**` to `clients/**`.
 
 ---

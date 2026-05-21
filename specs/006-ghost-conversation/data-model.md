@@ -54,7 +54,7 @@ interface MessageRecord {
 
 ## ConversationStore Interface
 
-Public extension point for third-party ghost houses. No Effect-ts required.
+Public extension point for third-party agent hosts. No Effect-ts required.
 
 ```typescript
 interface ConversationStore {

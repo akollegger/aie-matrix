@@ -31,6 +31,6 @@
 
 ## Notes
 
-- IC-003 (A2A conversation stream) and IC-004 (ghost interiority API) are noted as contract gaps blocked on the ghost house team — Ghost scale content is explicitly stubbed in the spec as a placeholder.
+- IC-003 (A2A conversation stream) and IC-004 (ghost interiority API) are noted as contract gaps blocked on the agent host team — Ghost scale content is explicitly stubbed in the spec as a placeholder.
 - Human pairing flow is a pre-condition for Partner/Ghost scale testing; FR-013 gates those scales on pairing presence.
 - Spec is ready for `/speckit.plan`.

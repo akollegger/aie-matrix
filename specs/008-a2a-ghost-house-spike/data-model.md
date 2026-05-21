@@ -1,4 +1,4 @@
-# Data Model: 008 A2A Ghost House Spike
+# Data Model: 008 A2A Agent Host Spike
 
 Spike-only logical entities. Not persisted to Neo4j or production stores.
 

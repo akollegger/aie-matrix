@@ -11,7 +11,7 @@ export class RegistryUnknownCaretaker extends Data.TaggedError("RegistryError.UN
   readonly message: string;
 }> {}
 
-export class RegistryUnknownGhostHouse extends Data.TaggedError("RegistryError.UNKNOWN_GHOST_HOUSE")<{
+export class RegistryUnknownAgentHost extends Data.TaggedError("RegistryError.UNKNOWN_GHOST_HOUSE")<{
   readonly code: "UNKNOWN_GHOST_HOUSE";
   readonly httpStatus: 404;
   readonly message: string;
@@ -27,7 +27,7 @@ export class RegistryCaretakerAlreadyHasGhost extends Data.TaggedError(
 
 export type RegistryHttpError =
   | RegistryUnknownCaretaker
-  | RegistryUnknownGhostHouse
+  | RegistryUnknownAgentHost
   | RegistryCaretakerAlreadyHasGhost;
 
 export function registryUnknownCaretaker(message: string): RegistryUnknownCaretaker {
@@ -38,8 +38,8 @@ export function registryUnknownCaretaker(message: string): RegistryUnknownCareta
   });
 }
 
-export function registryUnknownGhostHouse(message: string): RegistryUnknownGhostHouse {
-  return new RegistryUnknownGhostHouse({
+export function registryUnknownAgentHost(message: string): RegistryUnknownAgentHost {
+  return new RegistryUnknownAgentHost({
     code: "UNKNOWN_GHOST_HOUSE",
     httpStatus: 404,
     message,

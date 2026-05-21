@@ -31,22 +31,22 @@ export function handleAdoptGhostEffect(
     }
     const body = yield* readJsonBody(req);
     const parsed = body as Partial<AdoptGhostRequest>;
-    if (!parsed.caretakerId || !parsed.ghostHouseId) {
+    if (!parsed.caretakerId || !parsed.agentHostId) {
       yield* sendJson(res, corsHeaders, 400, {
         error: "VALIDATION",
-        message: "caretakerId and ghostHouseId are required",
+        message: "caretakerId and agentHostId are required",
       });
       return;
     }
     const store = yield* RegistryStoreService;
-    yield* assertAdoptionAllowed(store, parsed.caretakerId, parsed.ghostHouseId);
+    yield* assertAdoptionAllowed(store, parsed.caretakerId, parsed.agentHostId);
     console.info(
       JSON.stringify({
         kind: "registry.adopt",
         phase: "start",
         traceId: getRequestTraceId() ?? null,
         caretakerId: parsed.caretakerId,
-        ghostHouseId: parsed.ghostHouseId,
+        agentHostId: parsed.agentHostId,
       }),
     );
     const bridge = yield* WorldBridgeService;
@@ -64,7 +64,7 @@ export function handleAdoptGhostEffect(
     bridge.setGhostCell(ghostId, spawnCell);
     store.ghosts.set(ghostId, {
       id: ghostId,
-      ghostHouseId: parsed.ghostHouseId,
+      agentHostId: parsed.agentHostId,
       caretakerId: parsed.caretakerId,
       h3Index: spawnCell,
       status: "active",
@@ -74,7 +74,7 @@ export function handleAdoptGhostEffect(
       sub: ghostId,
       ghostId,
       caretakerId: parsed.caretakerId,
-      ghostHouseId: parsed.ghostHouseId,
+      agentHostId: parsed.agentHostId,
     });
     const out: AdoptGhostResponse = {
       ghostId,

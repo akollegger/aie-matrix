@@ -1,0 +1,6 @@
+apiVersion: v2
+name: server
+description: aie-matrix combined server (Colyseus + world-api + registry)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,9 +1,9 @@
-# Spike: A2A Ghost House Proof-of-Concept
+# Spike: A2A Agent Host Proof-of-Concept
 
 **Status:** completed (implementation report: `spikes/a2a-ghost-agent-protocol/reports/`)  
 **Date:** 2026-04-23  
 **Authors:** @akollegger  
-**Related:** [ADR-0004](../adr/0004-a2a-ghost-agent-protocol.md) · [RFC-0007](../rfc/0007-ghost-house-architecture.md)
+**Related:** [ADR-0004](../adr/0004-a2a-ghost-agent-protocol.md) · [RFC-0007](../rfc/0007-agent-host-architecture.md)
 
 ## Purpose
 
@@ -12,7 +12,7 @@ five-component architecture to implement it. Both contain assumptions that can
 only be validated by writing code, not by argument:
 
 1. **The TypeScript A2A SDK is ready to use in production today.** If it isn't,
-   the ghost house implementation will be dominated by protocol plumbing rather
+   the agent host implementation will be dominated by protocol plumbing rather
    than ghost logic, and the timeline assumption in RFC-0007 is wrong.
 
 2. **A third-party contributor can ship a working ghost agent in an afternoon.**
@@ -43,12 +43,12 @@ house use case.
 **Success criteria:**
 - All four exchanges work end-to-end without SDK workarounds or custom patches
 - Types are coherent and the SDK's API surface is legible
-- No showstopper bugs in features the ghost house depends on (streaming, push,
+- No showstopper bugs in features the agent host depends on (streaming, push,
   agent cards)
 
 **Failure signals (escalate to the ADR):**
 - SDK requires significant custom work to support streaming or push notifications
-- Agent card schema is missing fields the ghost house needs
+- Agent card schema is missing fields the agent host needs
 - TypeScript types are incomplete or incorrect in ways that will compound
 
 ### Spike B: Third-Party Contribution Model
@@ -56,7 +56,7 @@ house use case.
 **Goal:** Validate that a third-party contributor can ship a working ghost
 agent in an afternoon.
 
-**Deliverable:** A skeleton ghost house (A2A host + catalog, no Colyseus
+**Deliverable:** A skeleton agent host (A2A host + catalog, no Colyseus
 integration, no MCP proxy) plus a one-file Node service implementing a
 contributed agent that:
 - Declares an agent card
@@ -69,7 +69,7 @@ contributed agent that:
 **Success criteria:**
 - Total time for "contributor" to go from zero to running agent: under 4 hours
 - Contribution requires no infrastructure beyond Node.js and an HTTP endpoint
-- The skeleton ghost house has a single clear entry point for registering an agent
+- The skeleton agent host has a single clear entry point for registering an agent
 - Authentication is a named open question but not a blocker for local development
 
 **Failure signals (escalate to ADR/RFC):**

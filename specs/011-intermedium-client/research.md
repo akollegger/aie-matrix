@@ -40,9 +40,9 @@
 
 ## R-004: A2A Conversation Stream (Gap)
 
-**Decision**: MVP stubs the conversation panel. The intermedium will poll a `GET /conversation/:ghostId` route on the ghost house if that route is implemented, or render a "conversation unavailable" placeholder if not. The production contract (IC-002 of this feature) documents the expected streaming or push-notification mechanism for a future implementation.
+**Decision**: MVP stubs the conversation panel. The intermedium will poll a `GET /conversation/:ghostId` route on the agent host if that route is implemented, or render a "conversation unavailable" placeholder if not. The production contract (IC-002 of this feature) documents the expected streaming or push-notification mechanism for a future implementation.
 
-**Rationale**: RFC-0008 §Open Question 2 acknowledges this gap: "The exact mechanism — whether via streaming task, push notification, or a dedicated read endpoint — depends on how RFC-0007's ghost house exposes conversation history to non-agent consumers." The ghost house A2A protocol (IC-002 in spec-009) is designed for agent-to-agent interaction, not browser clients. A stable non-agent consumer API does not yet exist.
+**Rationale**: RFC-0008 §Open Question 2 acknowledges this gap: "The exact mechanism — whether via streaming task, push notification, or a dedicated read endpoint — depends on how RFC-0007's agent host exposes conversation history to non-agent consumers." The agent host A2A protocol (IC-002 in spec-009) is designed for agent-to-agent interaction, not browser clients. A stable non-agent consumer API does not yet exist.
 
 **Expected production contract shape**:
 - **Read history**: `GET /conversation/:ghostId/messages?since=<timestamp>` → `ConversationMessage[]`
@@ -50,14 +50,14 @@
 - **Live updates**: Server-Sent Events at `GET /conversation/:ghostId/stream` or WebSocket upgrade
 
 **Alternatives considered**:
-- Full A2A task from browser: requires an A2A client in the browser and a ghost house route that accepts tasks from non-agent (human) senders; not yet specified.
+- Full A2A task from browser: requires an A2A client in the browser and a agent host route that accepts tasks from non-agent (human) senders; not yet specified.
 - Colyseus for conversation: violates protocol role separation per ADR-0004.
 
 ---
 
 ## R-005: Ghost Interiority Read API (Placeholder)
 
-**Decision**: Ghost scale is implemented as a placeholder panel for MVP. The interiority data contract is blocked on the ghost house team.
+**Decision**: Ghost scale is implemented as a placeholder panel for MVP. The interiority data contract is blocked on the agent host team.
 
 **Rationale**: RFC-0008 §Open Question 4: "The Ghost scale requires a read API for ghost inventory, goal state, and memories." This is not yet defined in RFC-0007. Ghost scale is a navigation destination and its UI shell is implemented; content is stubbed.
 
