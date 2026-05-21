@@ -59,6 +59,11 @@ jobs:
       - name: Set up Helm
         uses: azure/setup-helm@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       # ── Build & push server image ──────────────────────────────────────────
 
       - name: Build server image

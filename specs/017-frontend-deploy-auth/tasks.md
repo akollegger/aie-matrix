@@ -28,11 +28,11 @@
 
 **⚠️ CRITICAL**: No user story infrastructure can be provisioned until this phase is complete.
 
-- [ ] T004 Reserve second global static IP `aie-matrix-frontend` (separate from the GKE Ingress IP); record the address in `deploy/frontend/README.md`
-- [ ] T005 [P] Create `gs://aie-matrix-intermedium` GCS bucket (us-central1, uniform access) and grant `allUsers roles/storage.objectViewer` — document command in `deploy/frontend/README.md`
-- [ ] T006 [P] Create `gs://aie-matrix-admin` GCS bucket (us-central1, uniform access, no public access) — document command in `deploy/frontend/README.md`
-- [ ] T007 Grant the CI service account (`GCP_SERVICE_ACCOUNT` secret) `roles/storage.objectAdmin` on both new buckets — document command in `deploy/frontend/README.md`
-- [ ] T008 Add `VITE_API_BASE_URL` secret (`https://matrix.relateby.dev`) to the GitHub Actions repository secrets; document the secret name in `deploy/frontend/README.md`
+- [x] T004 Reserve second global static IP `aie-matrix-frontend` (separate from the GKE Ingress IP); record the address in `deploy/frontend/README.md`
+- [x] T005 [P] Create `gs://aie-matrix-intermedium` GCS bucket (us-central1, uniform access) and grant `allUsers roles/storage.objectViewer` — document command in `deploy/frontend/README.md`
+- [x] T006 [P] Create `gs://aie-matrix-admin` GCS bucket (us-central1, uniform access, no public access) — document command in `deploy/frontend/README.md`
+- [x] T007 Grant the CI service account (`GCP_SERVICE_ACCOUNT` secret) `roles/storage.objectAdmin` on both new buckets — document command in `deploy/frontend/README.md`
+- [x] T008 Add `VITE_API_BASE_URL` secret (`https://matrix.relateby.dev`) to the GitHub Actions repository secrets; document the secret name in `deploy/frontend/README.md`
 
 **Checkpoint**: Both GCS buckets exist, static IP is reserved, CI SA can write to buckets, `VITE_API_BASE_URL` secret is available. ✅
 
@@ -46,11 +46,11 @@
 
 ### Implementation
 
-- [ ] T009 [US1] Create GCP backend bucket resource `intermedium-backend` pointing at `gs://aie-matrix-intermedium` with Cloud CDN enabled — document gcloud command in `deploy/frontend/README.md`
-- [ ] T010 [US1] Create URL map `aie-matrix-frontend` with `play.matrix.relateby.dev` host rule routing to `intermedium-backend`; import from `deploy/frontend/url-map.yaml`
-- [ ] T011 [US1] Create Google-managed TLS certificate `aie-matrix-frontend-cert` covering **both** `play.matrix.relateby.dev` and `admin.matrix.relateby.dev` — Google-managed certs are immutable after creation; provision both subdomains now even though `admin-backend` does not exist until Phase 4; document command in `deploy/frontend/README.md`
-- [ ] T012 [US1] Create HTTPS target proxy `aie-matrix-frontend-proxy` referencing the URL map and cert; create global forwarding rule on port 443 pointing at `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
-- [ ] T013 [US1] Add DNS A record `play.matrix.relateby.dev` → `aie-matrix-frontend` static IP; document in `deploy/frontend/README.md` (manual step — script prints IP)
+- [x] T009 [US1] Create GCP backend bucket resource `intermedium-backend` pointing at `gs://aie-matrix-intermedium` with Cloud CDN enabled — document gcloud command in `deploy/frontend/README.md`
+- [x] T010 [US1] Create URL map `aie-matrix-frontend` with `play.matrix.relateby.dev` host rule routing to `intermedium-backend`; import from `deploy/frontend/url-map.yaml`
+- [x] T011 [US1] Create Google-managed TLS certificate `aie-matrix-frontend-cert` covering **both** `play.matrix.relateby.dev` and `admin.matrix.relateby.dev` — Google-managed certs are immutable after creation; provision both subdomains now even though `admin-backend` does not exist until Phase 4; document command in `deploy/frontend/README.md`
+- [x] T012 [US1] Create HTTPS target proxy `aie-matrix-frontend-proxy` referencing the URL map and cert; create global forwarding rule on port 443 pointing at `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
+- [x] T013 [US1] Add DNS A record `play.matrix.relateby.dev` → `aie-matrix-frontend` static IP; document in `deploy/frontend/README.md` (manual step — script prints IP)
 - [ ] T014 [US1] Smoke test: navigate to `https://play.matrix.relateby.dev` in a private browser; confirm Intermedium loads with no auth prompt; record result in `deploy/frontend/README.md` under Verification
 
 **Checkpoint**: Intermedium is publicly reachable via CDN. US1 acceptance scenarios pass. ✅
@@ -65,12 +65,12 @@
 
 ### Implementation
 
-- [ ] T015 [US2] **IAP verification gate**: run `gcloud compute backend-buckets update admin-backend --iap=enabled,...` against a test backend bucket; confirm command succeeds or triggers fallback path (Cloud Run nginx:alpine) — record the chosen implementation path ("backend-bucket IAP" or "Cloud Run fallback") in a **"Chosen IAP Implementation"** section in `deploy/frontend/README.md` before proceeding to T016
-- [ ] T016 [US2] Create GCP backend bucket resource `admin-backend` (IAP path) **OR** Cloud Run service `admin-frontend` serving `gs://aie-matrix-admin` via nginx (fallback path) per the decision recorded in T015 — document chosen approach in `deploy/frontend/README.md`
-- [ ] T017 [US2] Configure IAP OAuth consent screen (Internal, GCP org) and create OAuth client ID in the GCP project — document one-time setup steps in `deploy/frontend/README.md`
-- [ ] T018 [US2] Enable IAP on `admin-backend` (or Cloud Run backend) using OAuth credentials from T017 — document command in `deploy/frontend/README.md`
-- [ ] T019 [US2] Add `admin.matrix.relateby.dev` host rule to URL map `aie-matrix-frontend` pointing at `admin-backend` — update `deploy/frontend/url-map.yaml` to add the admin host rule and re-import (cert already covers `admin.*` from T011; no cert update needed)
-- [ ] T020 [US2] Add DNS A record `admin.matrix.relateby.dev` → same `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
+- [x] T015 [US2] **IAP verification gate**: run `gcloud compute backend-buckets update admin-backend --iap=enabled,...` against a test backend bucket; confirm command succeeds or triggers fallback path (Cloud Run nginx:alpine) — record the chosen implementation path ("backend-bucket IAP" or "Cloud Run fallback") in a **"Chosen IAP Implementation"** section in `deploy/frontend/README.md` before proceeding to T016
+- [x] T016 [US2] Create GCP backend bucket resource `admin-backend` (IAP path) **OR** Cloud Run service `admin-frontend` serving `gs://aie-matrix-admin` via nginx (fallback path) per the decision recorded in T015 — document chosen approach in `deploy/frontend/README.md`
+- [x] T017 [US2] Configure IAP OAuth consent screen (Internal, GCP org) and create OAuth client ID in the GCP project — document one-time setup steps in `deploy/frontend/README.md`
+- [x] T018 [US2] Enable IAP on `admin-backend` (or Cloud Run backend) using OAuth credentials from T017 — document command in `deploy/frontend/README.md`
+- [x] T019 [US2] Add `admin.matrix.relateby.dev` host rule to URL map `aie-matrix-frontend` pointing at `admin-backend` — update `deploy/frontend/url-map.yaml` to add the admin host rule and re-import (cert already covers `admin.*` from T011; no cert update needed)
+- [x] T020 [US2] Add DNS A record `admin.matrix.relateby.dev` → same `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
 - [ ] T021 [US2] Add initial `roles/iap.httpsResourceAccessor` IAM binding for at least one operator account; document the add/remove commands in `deploy/frontend/README.md` and confirm they match `specs/017-frontend-deploy-auth/quickstart.md`
 - [x] T022 [US2] Verify `name` fields in `clients/intermedium/package.json` and `tools/map-editor/package.json`; record the correct pnpm filter expressions to use in T024 (prefer `--filter ./clients/intermedium` directory form over package name to avoid silent mismatches)
 - [ ] T023 [US2] Smoke test: verify IAP redirect (unauthorized private browser), authorized login lands on Admin UI, unauthorized login receives 403 — record results in `deploy/frontend/README.md` under Verification
