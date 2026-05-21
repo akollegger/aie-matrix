@@ -19,6 +19,8 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 | Horizontal scaling | [Redis](https://redis.io/) (`RedisPresence` + `RedisDriver`) | Colyseus multi-process pub/sub and matchmaking |
 | World model | [Neo4j](https://neo4j.com/) | Tile graph, ghost positions, social graph, goal state, quest progress |
 | Blob storage | S3 (or compatible) | Session recordings, slide assets, post-processed artifacts |
+| Front-end hosting | GCS backend buckets + Cloud CDN + Cloud Load Balancer | Static SPA hosting: `play.matrix.relateby.dev` (Intermedium, public CDN) and `admin.matrix.relateby.dev` (Admin, IAP-gated); separate from GKE Ingress ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)) |
+| Operator access control | Google Identity-Aware Proxy (IAP) | Authenticates operators to the Admin client via Google Identity at the load-balancer layer; no application code required ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)) |
 | Deployment | Docker + Kubernetes | Containerized services, scalable cluster deployment |
 
 **Note on Colyseus + Redis:** Redis is the official Colyseus horizontal scaling mechanism. `RedisPresence` handles pub/sub and shared state across processes; `RedisDriver` handles distributed matchmaking. Single-process development can use the default in-memory presence.
@@ -126,7 +128,9 @@ Which models power ghost reasoning, speaker agents, and vendor NPCs? Multiple pr
 The Matrix generates continuous streams: ghost movements, card exchanges, checkpoint events, quest completions, session attendance. These need to be captured for leaderboards, eval, and post-conference analysis. Options include ClickHouse, TimescaleDB, structured logs to S3 + query layer, or similar. Open.
 
 ### Authentication and Identity
-How does an IRL conference badge become a ghost? Options range from simple email-based JWT to OAuth via a conference identity provider to full SSO. Okta/Auth0 (an AIEWF sponsor) is a natural candidate. Privacy and consent for ghost card sharing is a related concern.
+**Operator use case resolved** ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)): operators authenticate to the Admin client via Google Identity-Aware Proxy (IAP) at the load-balancer layer. No application code required; access is managed via IAM bindings.
+
+**Attendee use case open**: How does an IRL conference badge become a ghost? Options range from simple email-based JWT to OAuth via a conference identity provider to full SSO. Okta/Auth0 (an AIEWF sponsor) is a natural candidate. Privacy and consent for ghost card sharing is a related concern.
 
 ### Voice Transcription for Speaker Agents
 IRL talks could feed speaker agents via live transcription (Whisper or similar). This touches live A/V infrastructure at the venue, which is operationally complex. Whether this is in scope for v1, and what the fallback is (slides + abstract), needs a decision.

@@ -103,6 +103,37 @@ jobs:
             --wait \
             --timeout 5m
 
+      # ── Build & deploy front-ends ─────────────────────────────────────────
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Intermedium
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: |
+          [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL secret is not set"; exit 1; }
+          pnpm --filter ./clients/intermedium build
+
+      - name: Build Admin
+        env:
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+        run: |
+          pnpm --filter ./tools/map-editor build
+
+      - name: Sync Intermedium to GCS
+        run: gsutil -m rsync -r -d clients/intermedium/dist/ gs://aie-matrix-intermedium/
+
+      - name: Sync Admin to GCS
+        run: gsutil -m rsync -r -d tools/map-editor/dist/ gs://aie-matrix-admin/
+
+      - name: Invalidate Intermedium CDN cache
+        run: |
+          gcloud compute url-maps invalidate-cdn-cache aie-matrix-frontend \
+            --path "/*" \
+            --host play.matrix.relateby.dev \
+            --async
+
       # ── Verify ────────────────────────────────────────────────────────────
 
       - name: Verify rollout

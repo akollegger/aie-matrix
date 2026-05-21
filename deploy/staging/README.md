@@ -146,3 +146,32 @@ pnpm dev
 ```
 
 This starts only Neo4j and Redis — no application containers.
+
+---
+
+## Front-End Validation (Tier 2)
+
+The staging Compose stack does not include front-end containers. Validate the Intermedium and Admin builds locally using `vite preview` against the staging backend host.
+
+### Build and preview
+
+```bash
+# Replace <staging-host> with the IP or hostname of your staging VM
+export VITE_API_BASE_URL=http://<staging-host>:8787
+
+# Intermedium
+pnpm --filter ./clients/intermedium build
+pnpm --filter ./clients/intermedium preview   # http://localhost:4173
+
+# Admin (map editor)
+pnpm --filter ./tools/map-editor build
+pnpm --filter ./tools/map-editor preview      # http://localhost:4174
+```
+
+### What to verify
+
+- Intermedium loads and connects to Colyseus WebSocket at `<staging-host>:8787`
+- Admin client loads and the `/maps/` API calls reach `<staging-host>:8787` (requires `ADMIN_TOKEN` in browser localStorage or `.env.local`)
+- No CORS errors in the browser console
+
+> **Note**: IAP is not replicated in staging (Cloud-only). The staging host must not be publicly reachable — access is controlled by network. See `specs/017-frontend-deploy-auth/quickstart.md` for the full production verification checklist.

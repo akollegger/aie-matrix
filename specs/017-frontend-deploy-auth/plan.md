@@ -171,13 +171,13 @@ New job `build-deploy-frontend` (runs in parallel with the container build jobs;
     VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
   run: |
     [ -n "$VITE_API_BASE_URL" ] || { echo "VITE_API_BASE_URL is required"; exit 1; }
-    pnpm --filter @aie-matrix/intermedium build
+    pnpm --filter ./clients/intermedium build
 
 - name: Build Admin
   env:
     VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
   run: |
-    pnpm --filter @aie-matrix/map-editor build
+    pnpm --filter ./tools/map-editor build
 
 - name: Sync Intermedium to GCS
   run: gsutil -m rsync -r -d clients/intermedium/dist/ gs://aie-matrix-intermedium/

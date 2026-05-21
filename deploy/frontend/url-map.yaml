@@ -1,0 +1,26 @@
+# Cloud Load Balancer URL map for aie-matrix front-ends
+#
+# Apply with:
+#   gcloud compute url-maps import aie-matrix-frontend \
+#     --source=deploy/frontend/url-map.yaml --global
+#
+# Phase 6 Step 1: import with intermedium host rule only
+# Phase 6 Step 2: add admin host rule (uncomment below) after admin-backend exists
+
+defaultService: https://www.googleapis.com/compute/v1/projects/aie-matrix/global/backendBuckets/intermedium-backend
+
+hostRules:
+  - hosts:
+      - play.matrix.relateby.dev
+    pathMatcher: intermedium-paths
+  # Uncomment after admin-backend (or Cloud Run backend) is created in Phase 5:
+  # - hosts:
+  #     - admin.matrix.relateby.dev
+  #   pathMatcher: admin-paths
+
+pathMatchers:
+  - name: intermedium-paths
+    defaultService: https://www.googleapis.com/compute/v1/projects/aie-matrix/global/backendBuckets/intermedium-backend
+  # Uncomment together with the admin host rule above:
+  # - name: admin-paths
+  #   defaultService: https://www.googleapis.com/compute/v1/projects/aie-matrix/global/backendBuckets/admin-backend

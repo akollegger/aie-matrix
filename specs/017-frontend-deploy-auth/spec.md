@@ -98,7 +98,7 @@ A new team member needs access to the Admin client. An existing GCP project admi
 - **FR-007**: Both front-ends MUST be built with `VITE_API_BASE_URL` pointing at the production backend origin; builds with an unset `VITE_API_BASE_URL` MUST fail.
 - **FR-008**: The Cloud CDN cache for Intermedium's `index.html` MUST be invalidated after each successful sync.
 - **FR-009**: Adding or removing operator access MUST require only an IAM binding change — no code change, no redeployment.
-- **FR-010**: URL routing MUST support path-based routing on a single domain initially; the infrastructure MUST be capable of switching to subdomain routing via URL map configuration alone.
+- **FR-010**: URL routing MUST use subdomain-based routing (`play.matrix.relateby.dev` for Intermedium, `admin.matrix.relateby.dev` for Admin) from initial provisioning; the URL map MUST be capable of evolving to different subdomain assignments via host-rule configuration alone, without requiring an infrastructure rebuild.
 - **FR-011**: The single Cloud Load Balancer MUST serve both Intermedium and Admin on port 443 with TLS.
 
 ### Key Entities

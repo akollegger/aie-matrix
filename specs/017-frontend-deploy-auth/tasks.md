@@ -16,9 +16,9 @@
 
 **Purpose**: Establish the deploy/frontend/ runbook directory and document the IAP verification gate before any GCP resources are created.
 
-- [ ] T001 Create `deploy/frontend/` directory and stub `deploy/frontend/README.md` with section headings (Prerequisites, Phase order, IAP verification, Resources, Runbook)
-- [ ] T002 Document IAP-on-backend-bucket verification step in `deploy/frontend/README.md` — gcloud command to test, expected success output, and Cloud Run fallback procedure (per research.md Finding 1)
-- [ ] T003 [P] Add `deploy/frontend/url-map.yaml` with host-rule skeleton for `play.matrix.relateby.dev` → `intermedium-backend` and `admin.matrix.relateby.dev` → `admin-backend`
+- [x] T001 Create `deploy/frontend/` directory and stub `deploy/frontend/README.md` with section headings (Prerequisites, Phase order, IAP verification, Resources, Runbook)
+- [x] T002 Document IAP-on-backend-bucket verification step in `deploy/frontend/README.md` — gcloud command to test, expected success output, and Cloud Run fallback procedure (per research.md Finding 1)
+- [x] T003 [P] Add `deploy/frontend/url-map.yaml` with **intermedium-only** host-rule skeleton: `play.matrix.relateby.dev` → `intermedium-backend` (admin host rule is added in T019 once `admin-backend` exists; importing a URL map that references a non-existent backend fails)
 
 ---
 
@@ -48,7 +48,7 @@
 
 - [ ] T009 [US1] Create GCP backend bucket resource `intermedium-backend` pointing at `gs://aie-matrix-intermedium` with Cloud CDN enabled — document gcloud command in `deploy/frontend/README.md`
 - [ ] T010 [US1] Create URL map `aie-matrix-frontend` with `play.matrix.relateby.dev` host rule routing to `intermedium-backend`; import from `deploy/frontend/url-map.yaml`
-- [ ] T011 [US1] Create Google-managed TLS certificate `aie-matrix-frontend-cert` covering `play.matrix.relateby.dev` — document command in `deploy/frontend/README.md` (admin subdomain will be added in Phase 4)
+- [ ] T011 [US1] Create Google-managed TLS certificate `aie-matrix-frontend-cert` covering **both** `play.matrix.relateby.dev` and `admin.matrix.relateby.dev` — Google-managed certs are immutable after creation; provision both subdomains now even though `admin-backend` does not exist until Phase 4; document command in `deploy/frontend/README.md`
 - [ ] T012 [US1] Create HTTPS target proxy `aie-matrix-frontend-proxy` referencing the URL map and cert; create global forwarding rule on port 443 pointing at `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
 - [ ] T013 [US1] Add DNS A record `play.matrix.relateby.dev` → `aie-matrix-frontend` static IP; document in `deploy/frontend/README.md` (manual step — script prints IP)
 - [ ] T014 [US1] Smoke test: navigate to `https://play.matrix.relateby.dev` in a private browser; confirm Intermedium loads with no auth prompt; record result in `deploy/frontend/README.md` under Verification
@@ -65,14 +65,14 @@
 
 ### Implementation
 
-- [ ] T015 [US2] **IAP verification gate**: run `gcloud compute backend-buckets update admin-backend --iap=enabled,...` against a test backend bucket; confirm command succeeds or triggers fallback path (Cloud Run nginx:alpine) — document outcome in `deploy/frontend/README.md`
-- [ ] T016 [US2] Create GCP backend bucket resource `admin-backend` (IAP path) **OR** Cloud Run service `admin-frontend` serving `gs://aie-matrix-admin` via nginx (fallback path) per T015 outcome — document chosen approach in `deploy/frontend/README.md`
+- [ ] T015 [US2] **IAP verification gate**: run `gcloud compute backend-buckets update admin-backend --iap=enabled,...` against a test backend bucket; confirm command succeeds or triggers fallback path (Cloud Run nginx:alpine) — record the chosen implementation path ("backend-bucket IAP" or "Cloud Run fallback") in a **"Chosen IAP Implementation"** section in `deploy/frontend/README.md` before proceeding to T016
+- [ ] T016 [US2] Create GCP backend bucket resource `admin-backend` (IAP path) **OR** Cloud Run service `admin-frontend` serving `gs://aie-matrix-admin` via nginx (fallback path) per the decision recorded in T015 — document chosen approach in `deploy/frontend/README.md`
 - [ ] T017 [US2] Configure IAP OAuth consent screen (Internal, GCP org) and create OAuth client ID in the GCP project — document one-time setup steps in `deploy/frontend/README.md`
 - [ ] T018 [US2] Enable IAP on `admin-backend` (or Cloud Run backend) using OAuth credentials from T017 — document command in `deploy/frontend/README.md`
-- [ ] T019 [US2] Update `aie-matrix-frontend-cert` to add `admin.matrix.relateby.dev` (expand to multi-domain cert) — document command in `deploy/frontend/README.md`
-- [ ] T020 [US2] Add `admin.matrix.relateby.dev` host rule to URL map `aie-matrix-frontend` pointing at `admin-backend` — update `deploy/frontend/url-map.yaml` and re-import
-- [ ] T021 [US2] Add DNS A record `admin.matrix.relateby.dev` → same `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
-- [ ] T022 [US2] Add initial `roles/iap.httpsResourceAccessor` IAM binding for at least one operator account; document the add/remove commands in `deploy/frontend/README.md` and confirm they match `specs/017-frontend-deploy-auth/quickstart.md`
+- [ ] T019 [US2] Add `admin.matrix.relateby.dev` host rule to URL map `aie-matrix-frontend` pointing at `admin-backend` — update `deploy/frontend/url-map.yaml` to add the admin host rule and re-import (cert already covers `admin.*` from T011; no cert update needed)
+- [ ] T020 [US2] Add DNS A record `admin.matrix.relateby.dev` → same `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
+- [ ] T021 [US2] Add initial `roles/iap.httpsResourceAccessor` IAM binding for at least one operator account; document the add/remove commands in `deploy/frontend/README.md` and confirm they match `specs/017-frontend-deploy-auth/quickstart.md`
+- [x] T022 [US2] Verify `name` fields in `clients/intermedium/package.json` and `tools/map-editor/package.json`; record the correct pnpm filter expressions to use in T024 (prefer `--filter ./clients/intermedium` directory form over package name to avoid silent mismatches)
 - [ ] T023 [US2] Smoke test: verify IAP redirect (unauthorized private browser), authorized login lands on Admin UI, unauthorized login receives 403 — record results in `deploy/frontend/README.md` under Verification
 
 **Checkpoint**: Admin is IAP-gated. US2 acceptance scenarios pass. ✅
@@ -87,10 +87,10 @@
 
 ### Implementation
 
-- [ ] T024 [US3] Add `build-deploy-frontend` job to `.github/workflows/production-deploy.yml` — job runs after GCP auth is established; builds `clients/intermedium` and `tools/map-editor` with `VITE_API_BASE_URL` injected from secrets; fails explicitly if `VITE_API_BASE_URL` is unset
-- [ ] T025 [P] [US3] Add `gsutil -m rsync -r -d clients/intermedium/dist/ gs://aie-matrix-intermedium/` step to the new job in `.github/workflows/production-deploy.yml`
-- [ ] T026 [P] [US3] Add `gsutil -m rsync -r -d tools/map-editor/dist/ gs://aie-matrix-admin/` step to the new job in `.github/workflows/production-deploy.yml`
-- [ ] T027 [US3] Add `gcloud compute url-maps invalidate-cdn-cache aie-matrix-frontend --path "/*" --host play.matrix.relateby.dev --async` step (after T025) in `.github/workflows/production-deploy.yml`
+- [x] T024 [US3] Add `build-deploy-frontend` job to `.github/workflows/production-deploy.yml` — job runs after GCP auth is established; builds using `pnpm --filter ./clients/intermedium build` and `pnpm --filter ./tools/map-editor build` (directory form, not package name, per T022 finding) with `VITE_API_BASE_URL` injected from secrets; fails explicitly if `VITE_API_BASE_URL` is unset
+- [x] T025 [P] [US3] Add `gsutil -m rsync -r -d clients/intermedium/dist/ gs://aie-matrix-intermedium/` step to the new job in `.github/workflows/production-deploy.yml`
+- [x] T026 [P] [US3] Add `gsutil -m rsync -r -d tools/map-editor/dist/ gs://aie-matrix-admin/` step to the new job in `.github/workflows/production-deploy.yml`
+- [x] T027 [US3] Add `gcloud compute url-maps invalidate-cdn-cache aie-matrix-frontend --path "/*" --host play.matrix.relateby.dev --async` step (after T025) in `.github/workflows/production-deploy.yml`
 - [ ] T028 [US3] Smoke test: push a version tag; confirm the workflow completes and updated builds are live at both production URLs
 
 **Checkpoint**: Front-end deploys are fully automated. US3 acceptance scenarios pass. ✅
@@ -116,9 +116,9 @@
 
 **Purpose**: Documentation updates, helper script, and full end-to-end smoke test across all stories.
 
-- [ ] T031 [P] Update `docs/architecture.md` — add entries to the Decided Stack table for front-end hosting (GCS + Cloud CDN) and Admin access control (IAP); note that the Authentication and Identity open question is partially resolved for the operator use case
-- [ ] T032 [P] Update `deploy/staging/README.md` — add "Front-end validation" section documenting `pnpm preview` commands for Intermedium and Admin with `VITE_API_BASE_URL` set to the staging host (per `specs/017-frontend-deploy-auth/quickstart.md`)
-- [ ] T033 Create `deploy/frontend/setup.sh` — idempotent shell script wrapping the gcloud commands from `deploy/frontend/README.md` in correct dependency order (IP → buckets → backend resources → IAP verify → URL map → cert → proxy → forwarding rule → DNS reminder → SA permissions)
+- [x] T031 [P] Update `docs/architecture.md` — add entries to the Decided Stack table for front-end hosting (GCS + Cloud CDN) and Admin access control (IAP); note that the Authentication and Identity open question is partially resolved for the operator use case
+- [x] T032 [P] Update `deploy/staging/README.md` — add "Front-end validation" section documenting `pnpm preview` commands for Intermedium and Admin with `VITE_API_BASE_URL` set to the staging host (per `specs/017-frontend-deploy-auth/quickstart.md`)
+- [x] T033 Create `deploy/frontend/setup.sh` — idempotent shell script wrapping the gcloud commands from `deploy/frontend/README.md` in correct dependency order (IP → buckets → backend resources → IAP verify → URL map → cert → proxy → forwarding rule → DNS reminder → SA permissions)
 - [ ] T034 Run full end-to-end smoke test across all user stories using `specs/017-frontend-deploy-auth/quickstart.md` as the checklist; confirm all four stories pass in a single session
 
 ---
