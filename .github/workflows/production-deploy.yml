@@ -118,21 +118,18 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
-      - name: Build shared workspace packages
-        run: pnpm --filter @aie-matrix/shared-types --filter @aie-matrix/map-gram --filter @aie-matrix/server-colyseus build
-
       - name: Build Intermedium
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
           [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL secret is not set"; exit 1; }
-          pnpm --filter ./clients/intermedium build
+          pnpm --filter "...{./clients/intermedium}" build
 
       - name: Build Admin
         env:
           VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
         run: |
-          pnpm --filter ./tools/map-editor build
+          pnpm --filter "...{./tools/map-editor}" build
 
       - name: Sync Intermedium to GCS
         run: gsutil -m rsync -r -d clients/intermedium/dist/ gs://aie-matrix-intermedium/
