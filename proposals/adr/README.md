@@ -52,3 +52,4 @@ What becomes easier or harder as a result of this decision?
 | [ADR-0005](0005-h3-native-map-format.md) | H3-Native Map Format (.map.gram) | proposed |
 | [ADR-0006](0006-personal-stop-renderer.md) | Personal-Stop Rendering Stack | proposed |
 | [ADR-0007](0007-three-tier-deployment.md) | Three-Tier Deployment Strategy | proposed |
+| [ADR-0008](0008-frontend-deployment-access-control.md) | Front-End Deployment and Access Control | proposed |
