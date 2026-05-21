@@ -75,6 +75,23 @@ Third-party **ghost agents** are hosted by the **agent host** package (`@aie-mat
 
 **Several ghosts, one Wanderer process:** the random-agent README and quickstart §7 describe how distinct `ghostId`s map to parallel movement loops against a single registered `baseUrl`, versus running N agent processes for isolation.
 
+### Running the staging stack
+
+The Tier 2 staging environment runs all four services (neo4j, redis, server, agent-host) in containers. See [`deploy/staging/README.md`](deploy/staging/README.md) for the full operator runbook.
+
+**Quick start:**
+```bash
+cp deploy/staging/.env.staging.example deploy/staging/.env.staging
+# edit .env.staging — set NEO4J_PASSWORD, NEO4J_AUTH, GHOST_HOUSE_DEV_TOKEN, ADMIN_TOKEN
+docker compose -f deploy/staging/docker-compose.yml --env-file deploy/staging/.env.staging up --build
+```
+
+**Tier 1 shortcut (stateful services only):** if you only need Neo4j and Redis running locally to run `pnpm dev` against real infrastructure, use the dev compose file at the repo root:
+```bash
+docker compose -f docker-compose.dev.yml up -d
+pnpm dev
+```
+
 ### Code Style and CI
 
 - CI checks run on every PR. All checks must pass before merge.

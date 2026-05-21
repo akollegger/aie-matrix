@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { createReadStream, statSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, isAbsolute, join, normalize, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,9 +67,10 @@ if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const httpPort = Number(process.env.AIE_MATRIX_HTTP_PORT ?? "8787");
 const mapPathRaw = process.env.AIE_MATRIX_MAP;
-const mapPath = mapPathRaw
+const _mapPathFallback = join(repoRoot, "maps/sandbox/freeplay.map.gram");
+const mapPath: string | undefined = mapPathRaw
   ? (isAbsolute(mapPathRaw) ? mapPathRaw : join(repoRoot, mapPathRaw))
-  : join(repoRoot, "maps/sandbox/freeplay.map.gram");
+  : (existsSync(_mapPathFallback) ? _mapPathFallback : undefined);
 const mapsRoot = normalize(join(repoRoot, "maps"));
 const conversationDataDir =
   process.env.CONVERSATION_DATA_DIR ?? join(process.cwd(), "data/conversations");
@@ -137,7 +138,9 @@ async function readRequestBody(req: import("node:http").IncomingMessage): Promis
 }
 
 async function main(): Promise<void> {
-  await readFile(mapPath);
+  if (mapPath) {
+    await readFile(mapPath); // pre-flight: fail fast if the configured map file is unreadable
+  }
 
   patchMatchmakeCorsForCredentials();
 

@@ -1,7 +1,7 @@
 # HTTP API Contract: Conversation Store
 
 **Base path**: `/threads`  
-**Auth**: `Authorization: Bearer <ghost_house_api_key>`  
+**Auth**: `Authorization: Bearer <agent_host_api_key>`  
 **Content-Type**: `application/json`
 
 One API key is scoped to a agent host and grants read access to all ghost instances registered under that house. The key is issued by `server/registry/` at agent host registration time.

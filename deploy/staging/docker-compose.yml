@@ -60,6 +60,7 @@ services:
       AIE_MATRIX_HTTP_PORT: "${AIE_MATRIX_HTTP_PORT:-8787}"
       AIE_MATRIX_DEBUG: "${AIE_MATRIX_DEBUG:-false}"
       AIE_MATRIX_INTERNAL_FANOUT_TOKEN: "${AIE_MATRIX_INTERNAL_FANOUT_TOKEN:-}"
+      ADMIN_TOKEN: "${ADMIN_TOKEN}"
     ports:
       - "${AIE_MATRIX_HTTP_PORT:-8787}:${AIE_MATRIX_HTTP_PORT:-8787}"
     networks:
@@ -71,7 +72,8 @@ services:
         condition: service_healthy
     healthcheck:
       # IC-001: /health returns {"status":"ok","checks":{"neo4j":true}} when ready
-      test: ["CMD-SHELL", "wget -qO- http://localhost:${AIE_MATRIX_HTTP_PORT:-8787}/health | grep -q '\"status\":\"ok\"'"]
+      # Uses node (always present in node:24-slim) instead of wget/curl
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:8787/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(d.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -100,7 +102,8 @@ services:
         condition: service_healthy
     healthcheck:
       # IC-001: /health returns {"status":"ok","checks":{"world-api":true}} when ready
-      test: ["CMD-SHELL", "wget -qO- http://localhost:${GHOST_HOUSE_PORT:-4000}/health | grep -q '\"status\":\"ok\"'"]
+      # Uses node (always present in node:24-slim) instead of wget/curl
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4000/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(d.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12
