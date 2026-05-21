@@ -9,6 +9,20 @@
 #   kubectl describe managedcertificate aie-matrix-cert -n aie-matrix
 
 ---
+# Tell the GCP L7 load balancer to use /health for its backend health check.
+# Without this the LB probes / (404) and marks all pods unhealthy.
+apiVersion: cloud.google.com/v1
+kind: BackendConfig
+metadata:
+  name: aie-matrix-backend
+  namespace: aie-matrix
+spec:
+  healthCheck:
+    requestPath: /health
+    port: 8787
+    type: HTTP
+
+---
 # Redirect HTTP → HTTPS
 apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig
