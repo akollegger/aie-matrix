@@ -31,8 +31,8 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
     }
   }, [selectedGhostId, identities, pairing]);
 
-  const ghostHouseUrl = import.meta.env.VITE_GHOST_HOUSE_URL ?? "";
-  const worldApiUrl = import.meta.env.VITE_WORLD_API_URL ?? "";
+  const ghostHouseUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+  const worldApiUrl = import.meta.env.VITE_API_BASE_URL ?? "";
   const humanId = useHumanSession();
   const { thread: rawThread, sendMessage } = useA2AConversation(selectedGhostId, worldApiUrl, humanId);
   const thread = { ...rawThread, ghostId: rawThread.ghostId ?? "" };

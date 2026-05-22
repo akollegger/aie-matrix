@@ -24,7 +24,7 @@ jobs:
 
     permissions:
       contents: read
-      id-token: write   # required for Workload Identity Federation
+      id-token: write # required for Workload Identity Federation
 
     steps:
       - uses: actions/checkout@v4
@@ -42,7 +42,10 @@ jobs:
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          service_account: ${{ vars.GCP_SERVICE_ACCOUNT }}
+
+      - name: Show authenticated identity
+        run: gcloud auth list
 
       - name: Set up gcloud SDK
         uses: google-github-actions/setup-gcloud@v2
@@ -58,6 +61,16 @@ jobs:
 
       - name: Set up Helm
         uses: azure/setup-helm@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
 
       # ── Build & push server image ──────────────────────────────────────────
 
@@ -83,6 +96,20 @@ jobs:
       - name: Push agent-host image
         run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-host:${{ steps.tag.outputs.value }}
 
+      # ── Sync secrets into k8s ─────────────────────────────────────────────
+      # GitHub Actions secrets are the source of truth. Patch the k8s secret
+      # before Helm deploy so the server always uses the same ADMIN_TOKEN that
+      # was baked into the map-editor client bundle.
+
+      - name: Sync ADMIN_TOKEN to k8s secret
+        env:
+          VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
+        run: |
+          kubectl patch secret aie-matrix-secrets \
+            --namespace ${{ env.NAMESPACE }} \
+            --type merge \
+            -p "{\"data\":{\"ADMIN_TOKEN\":\"$(echo -n "$VITE_ADMIN_TOKEN" | base64 -w0)\"}}"
+
       # ── Deploy via Helm ────────────────────────────────────────────────────
 
       - name: Deploy server
@@ -102,6 +129,66 @@ jobs:
             -f deploy/k8s/values-production.yaml \
             --wait \
             --timeout 5m
+
+      # ── Build & deploy front-ends ─────────────────────────────────────────
+
+      - name: Install workspace deps
+        run: pnpm install --frozen-lockfile
+
+      - name: Build workspace deps for Intermedium
+        run: |
+          pnpm --filter @aie-matrix/root-env \
+               --filter @aie-matrix/shared-types \
+               --filter @aie-matrix/map-gram \
+               --filter @aie-matrix/server-colyseus \
+               build
+
+      - name: Build Intermedium
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+        run: |
+          [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL variable is not set"; exit 1; }
+          pnpm --filter ./clients/intermedium build
+
+      - name: Build Admin
+        env:
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
+        run: |
+          [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL variable is not set"; exit 1; }
+          [ -n "$VITE_ADMIN_TOKEN" ]  || echo "WARNING: VITE_ADMIN_TOKEN is not set — admin write ops will fail at runtime"
+          pnpm --filter ./tools/map-editor build
+
+      - name: Sync Intermedium to GCS
+        run: gsutil -m rsync -r -d clients/intermedium/dist/ gs://aie-matrix-intermedium/
+
+      - name: Sync Admin to GCS
+        run: gsutil -m rsync -r -d tools/map-editor/dist/ gs://aie-matrix-admin/
+
+      - name: Build admin-nginx image
+        run: |
+          docker build \
+            -f deploy/frontend/nginx-admin/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/admin-nginx:${{ steps.tag.outputs.value }} \
+            deploy/frontend/nginx-admin/
+
+      - name: Push admin-nginx image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/admin-nginx:${{ steps.tag.outputs.value }}
+
+      - name: Update admin-frontend Cloud Run
+        run: |
+          gcloud run deploy admin-frontend \
+            --image=${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/admin-nginx:${{ steps.tag.outputs.value }} \
+            --region=${{ env.REGION }} \
+            --service-account=admin-frontend-sa@${{ env.PROJECT }}.iam.gserviceaccount.com \
+            --project=${{ env.PROJECT }}
+
+      - name: Invalidate Intermedium CDN cache
+        run: |
+          gcloud compute url-maps invalidate-cdn-cache aie-matrix-frontend \
+            --path "/*" \
+            --host play.matrix.relateby.dev \
+            --async
 
       # ── Verify ────────────────────────────────────────────────────────────
 

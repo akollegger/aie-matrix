@@ -24,6 +24,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Neo4j (`:Map`, `:LiveSession`, `:Cell` nodes); GCS (`.map.gram` artifact blobs) (015-map-management)
 - TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`); pnpm 10 workspace monorepo + Effect v3+, `@colyseus/core` 0.15.57, Docker Compose v2, GitHub Actions (016-staging-deployment)
 - Neo4j 5 container (named volume for persistence), Redis 7 container (016-staging-deployment)
+- Bash (CI steps); gcloud CLI (infrastructure provisioning) + GCS (static hosting), Cloud Load Balancer (GCLB), Cloud CDN, Identity-Aware Proxy (IAP), GitHub Actions (017-frontend-deploy-auth)
+- Two GCS buckets — `gs://aie-matrix-intermedium` (public), `gs://aie-matrix-admin` (private) (017-frontend-deploy-auth)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -71,6 +73,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 017-frontend-deploy-auth: Added Bash (CI steps); gcloud CLI (infrastructure provisioning) + GCS (static hosting), Cloud Load Balancer (GCLB), Cloud CDN, Identity-Aware Proxy (IAP), GitHub Actions
 - 016-staging-deployment: Added TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`); pnpm 10 workspace monorepo + Effect v3+, `@colyseus/core` 0.15.57, Docker Compose v2, GitHub Actions
 - 015-map-management: Added TypeScript 5.7 / Node.js 24, ESM (`"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@google-cloud/storage` v7 (new), `busboy` v1 (new — multipart parsing), `ioredis` v5 (new — world-api pub/sub), `ulid` (new — session IDs), `zod` v3
-- 014-intermedium-polish: Added TypeScript 5.7 (browser target, ESM) + React 18, deck.gl ≥ 9 (`H3HexagonLayer`, `ScatterplotLayer`, `_GlobeView`), h3-js ≥ 4, colyseus.js, `@react-three/fiber`, `three`, Vite 6

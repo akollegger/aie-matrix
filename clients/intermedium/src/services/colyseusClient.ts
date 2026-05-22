@@ -34,19 +34,20 @@ function setRoom(next: Room<WorldSpectatorState> | null) {
   }
 }
 
-export function getColyseusUrl(): string {
-  return import.meta.env.VITE_COLYSEUS_URL ?? "";
+/** HTTP base URL for all server endpoints (e.g. https://matrix.relateby.dev). */
+function getHttpBase(): string {
+  return import.meta.env.VITE_API_BASE_URL ?? "";
 }
 
-/** Derive the HTTP base URL from the WebSocket URL (ws → http, wss → https). */
-function getHttpBase(): string {
-  return getColyseusUrl().replace(/^ws(s?):\/\//, "http$1://");
+/** Derive the WebSocket URL from the HTTP base (https → wss, http → ws). */
+export function getColyseusUrl(): string {
+  return getHttpBase().replace(/^http(s?):\/\//, "ws$1://");
 }
 
 function ensureClient(): Client {
   const url = getColyseusUrl();
   if (!url) {
-    throw new Error("VITE_COLYSEUS_URL is not set");
+    throw new Error("VITE_API_BASE_URL is not set");
   }
   if (!client) {
     client = new Client(url);
