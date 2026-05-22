@@ -51,7 +51,7 @@
 - [x] T011 [US1] Create Google-managed TLS certificate `aie-matrix-frontend-cert` covering **both** `play.matrix.relateby.dev` and `admin.matrix.relateby.dev` — Google-managed certs are immutable after creation; provision both subdomains now even though `admin-backend` does not exist until Phase 4; document command in `deploy/frontend/README.md`
 - [x] T012 [US1] Create HTTPS target proxy `aie-matrix-frontend-proxy` referencing the URL map and cert; create global forwarding rule on port 443 pointing at `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
 - [x] T013 [US1] Add DNS A record `play.matrix.relateby.dev` → `aie-matrix-frontend` static IP; document in `deploy/frontend/README.md` (manual step — script prints IP)
-- [ ] T014 [US1] Smoke test: navigate to `https://play.matrix.relateby.dev` in a private browser; confirm Intermedium loads with no auth prompt; record result in `deploy/frontend/README.md` under Verification
+- [x] T014 [US1] Smoke test: navigate to `https://play.matrix.relateby.dev` in a private browser; confirm Intermedium loads with no auth prompt; record result in `deploy/frontend/README.md` under Verification
 
 **Checkpoint**: Intermedium is publicly reachable via CDN. US1 acceptance scenarios pass. ✅
 
@@ -71,9 +71,9 @@
 - [x] T018 [US2] Enable IAP on `admin-backend` (or Cloud Run backend) using OAuth credentials from T017 — document command in `deploy/frontend/README.md`
 - [x] T019 [US2] Add `admin.matrix.relateby.dev` host rule to URL map `aie-matrix-frontend` pointing at `admin-backend` — update `deploy/frontend/url-map.yaml` to add the admin host rule and re-import (cert already covers `admin.*` from T011; no cert update needed)
 - [x] T020 [US2] Add DNS A record `admin.matrix.relateby.dev` → same `aie-matrix-frontend` static IP — document in `deploy/frontend/README.md`
-- [ ] T021 [US2] Add initial `roles/iap.httpsResourceAccessor` IAM binding for at least one operator account; document the add/remove commands in `deploy/frontend/README.md` and confirm they match `specs/017-frontend-deploy-auth/quickstart.md`
+- [x] T021 [US2] Add initial `roles/iap.httpsResourceAccessor` IAM binding for at least one operator account; document the add/remove commands in `deploy/frontend/README.md` and confirm they match `specs/017-frontend-deploy-auth/quickstart.md`
 - [x] T022 [US2] Verify `name` fields in `clients/intermedium/package.json` and `tools/map-editor/package.json`; record the correct pnpm filter expressions to use in T024 (prefer `--filter ./clients/intermedium` directory form over package name to avoid silent mismatches)
-- [ ] T023 [US2] Smoke test: verify IAP redirect (unauthorized private browser), authorized login lands on Admin UI, unauthorized login receives 403 — record results in `deploy/frontend/README.md` under Verification
+- [x] T023 [US2] Smoke test: verify IAP redirect (unauthorized private browser), authorized login lands on Admin UI, unauthorized login receives 403 — record results in `deploy/frontend/README.md` under Verification
 
 **Checkpoint**: Admin is IAP-gated. US2 acceptance scenarios pass. ✅
 
@@ -91,7 +91,7 @@
 - [x] T025 [P] [US3] Add `gsutil -m rsync -r -d clients/intermedium/dist/ gs://aie-matrix-intermedium/` step to the new job in `.github/workflows/production-deploy.yml`
 - [x] T026 [P] [US3] Add `gsutil -m rsync -r -d tools/map-editor/dist/ gs://aie-matrix-admin/` step to the new job in `.github/workflows/production-deploy.yml`
 - [x] T027 [US3] Add `gcloud compute url-maps invalidate-cdn-cache aie-matrix-frontend --path "/*" --host play.matrix.relateby.dev --async` step (after T025) in `.github/workflows/production-deploy.yml`
-- [ ] T028 [US3] Smoke test: push a version tag; confirm the workflow completes and updated builds are live at both production URLs
+- [x] T028 [US3] Smoke test: push a version tag; confirm the workflow completes and updated builds are live at both production URLs
 
 **Checkpoint**: Front-end deploys are fully automated. US3 acceptance scenarios pass. ✅
 
@@ -105,8 +105,8 @@
 
 ### Implementation
 
-- [ ] T029 [US4] Verify `add-iam-policy-binding` and `remove-iam-policy-binding` commands documented in `specs/017-frontend-deploy-auth/quickstart.md` work end-to-end against the live IAP resource; update the quickstart if any command details differ
-- [ ] T030 [US4] Add a "Operator Access Management" section to `deploy/frontend/README.md` mirroring the quickstart commands, with notes on propagation time (~60 seconds) and that no redeployment is required
+- [x] T029 [US4] Verify `add-iam-policy-binding` and `remove-iam-policy-binding` commands documented in `specs/017-frontend-deploy-auth/quickstart.md` work end-to-end against the live IAP resource; update the quickstart if any command details differ
+- [x] T030 [US4] Add a "Operator Access Management" section to `deploy/frontend/README.md` mirroring the quickstart commands, with notes on propagation time (~60 seconds) and that no redeployment is required
 
 **Checkpoint**: Operator onboarding requires no code changes. US4 acceptance scenarios pass. ✅
 

@@ -25,13 +25,16 @@ Run the phases in this order. Each phase has a checkpoint — do not proceed unt
 1. [Phase 1: Reserve Static IP](#phase-1-reserve-static-ip)
 2. [Phase 2: Create GCS Buckets](#phase-2-create-gcs-buckets)
 3. [Phase 3: Grant CI Service Account Permissions](#phase-3-grant-ci-service-account-permissions)
-4. [Phase 4: IAP Verification (Admin only)](#phase-4-iap-verification-admin-only)
-5. [Phase 5: Create GCP Backend Bucket Resources](#phase-5-create-gcp-backend-bucket-resources)
-6. [Phase 6: Create Load Balancer (URL Map, Cert, Proxy, Forwarding Rule)](#phase-6-create-load-balancer)
-7. [Phase 7: DNS Records](#phase-7-dns-records)
-8. [Phase 8: IAP OAuth and Access Configuration](#phase-8-iap-oauth-and-access-configuration)
-9. [Phase 9: Operator Access Management](#phase-9-operator-access-management)
-10. [Verification](#verification)
+4. [Phase 4: Build and Push admin-nginx Image](#phase-4-build-and-push-admin-nginx-image)
+5. [Phase 5: Grant Cloud Run SA Access to GCS Bucket](#phase-5-grant-cloud-run-sa-access-to-gcs-bucket)
+6. [Phase 6: Create GCP Backend Bucket (Intermedium)](#phase-6-create-gcp-backend-bucket-intermedium)
+7. [Phase 7: Deploy Cloud Run admin-frontend](#phase-7-deploy-cloud-run-admin-frontend)
+8. [Phase 8: Serverless NEG and Backend Service](#phase-8-serverless-neg-and-backend-service)
+9. [Phase 9: Create Load Balancer (URL Map, Cert, Proxy, Forwarding Rule)](#phase-9-create-load-balancer)
+10. [Phase 10: DNS Records](#phase-10-dns-records)
+11. [Phase 11: IAP OAuth and Access Configuration](#phase-11-iap-oauth-and-access-configuration)
+12. [Phase 12: Operator Access Management](#phase-12-operator-access-management)
+13. [Verification](#verification)
 
 ---
 
@@ -99,42 +102,45 @@ done
 
 ---
 
-## Phase 4: IAP Verification (Admin only)
+## Phase 4: Build and Push admin-nginx Image
 
-### Chosen IAP Implementation
+GCP does not support IAP on backend buckets — only on backend services. The admin frontend therefore runs as a Cloud Run gen2 service. The GCS bucket `gs://aie-matrix-admin` is mounted as a filesystem volume via Cloud Run's built-in GCS Fuse support; nginx reads files from it directly with no auth code in the container.
 
-<!-- FILL IN after running the verification command below -->
-**Status**: ⬜ Not yet verified  
-**Chosen path**: _backend-bucket IAP_ or _Cloud Run fallback_ (update after T015)
-
-### Verification command
-
-Create a throwaway test backend bucket and attempt to enable IAP:
+The Dockerfile is at [`deploy/frontend/nginx-admin/Dockerfile`](nginx-admin/Dockerfile). Build and push before deploying Cloud Run:
 
 ```bash
-# Create a temporary backend bucket for testing
-gcloud compute backend-buckets create iap-test-bucket \
-  --gcs-bucket-name=aie-matrix-admin
+REGISTRY=us-central1-docker.pkg.dev
+PROJECT=aie-matrix
+REPO=aie-matrix
+ADMIN_IMAGE="${REGISTRY}/${PROJECT}/${REPO}/admin-nginx:latest"
 
-# Attempt to enable IAP on it
-gcloud compute backend-buckets update iap-test-bucket \
-  --iap=enabled,oauth2-client-id=TEST,oauth2-client-secret=TEST 2>&1
-
-# Clean up
-gcloud compute backend-buckets delete iap-test-bucket --quiet
+gcloud auth configure-docker ${REGISTRY}
+docker build -t "${ADMIN_IMAGE}" deploy/frontend/nginx-admin/
+docker push "${ADMIN_IMAGE}"
 ```
 
-**If the command succeeds** (or fails only on invalid credentials, not "unsupported"): use the **backend-bucket IAP path** in Phase 5.
-
-**If the command returns "IAP not supported on backend buckets"**: use the **Cloud Run fallback path** in Phase 5.
-
-Update the "Chosen IAP Implementation" field above before proceeding.
+**Checkpoint**: `gcloud artifacts docker images list us-central1-docker.pkg.dev/aie-matrix/aie-matrix --filter="package:admin-nginx"` shows the image. ✅
 
 ---
 
-## Phase 5: Create GCP Backend Bucket Resources
+## Phase 5: Grant Cloud Run SA Access to GCS Bucket
 
-### Intermedium backend (always the same)
+The Cloud Run service runs under the default compute service account. Grant it read access to `gs://aie-matrix-admin` so the GCS Fuse volume mount works:
+
+```bash
+PROJECT_NUMBER=$(gcloud projects describe aie-matrix --format="value(projectNumber)")
+CLOUD_RUN_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+
+gcloud storage buckets add-iam-policy-binding gs://aie-matrix-admin \
+  --member="serviceAccount:${CLOUD_RUN_SA}" \
+  --role=roles/storage.objectViewer
+```
+
+**Checkpoint**: `gcloud storage buckets get-iam-policy gs://aie-matrix-admin` shows the compute SA with `roles/storage.objectViewer`. ✅
+
+---
+
+## Phase 6: Create GCP Backend Bucket (Intermedium)
 
 ```bash
 gcloud compute backend-buckets create intermedium-backend \
@@ -142,35 +148,64 @@ gcloud compute backend-buckets create intermedium-backend \
   --enable-cdn
 ```
 
-### Admin backend — two paths depending on Phase 4 outcome
-
-#### Path A: Backend-bucket IAP (preferred)
-
-```bash
-gcloud compute backend-buckets create admin-backend \
-  --gcs-bucket-name=aie-matrix-admin
-# IAP is applied in Phase 8 after OAuth credentials are ready
-```
-
-#### Path B: Cloud Run fallback
-
-```bash
-# Deploy a minimal nginx container that serves from the admin GCS bucket
-gcloud run deploy admin-frontend \
-  --image=nginx:alpine \
-  --region=us-central1 \
-  --no-allow-unauthenticated \
-  --set-env-vars=BUCKET=aie-matrix-admin
-# IAP is applied to the Cloud Run backend service in Phase 8
-```
-
-> The Cloud Run nginx image needs a startup script that fetches assets from the GCS bucket. A Dockerfile for this is at `deploy/frontend/nginx-admin/Dockerfile` if the fallback path is needed.
-
 **Checkpoint**: `gcloud compute backend-buckets list | grep intermedium-backend` shows the backend bucket. ✅
 
 ---
 
-## Phase 6: Create Load Balancer
+## Phase 7: Deploy Cloud Run admin-frontend
+
+```bash
+REGISTRY=us-central1-docker.pkg.dev
+PROJECT=aie-matrix
+REPO=aie-matrix
+ADMIN_IMAGE="${REGISTRY}/${PROJECT}/${REPO}/admin-nginx:latest"
+
+gcloud run deploy admin-frontend \
+  --image="${ADMIN_IMAGE}" \
+  --region=us-central1 \
+  --allow-unauthenticated \
+  --execution-environment=gen2 \
+  --add-volume=name=admin-bucket,type=cloud-storage,bucket=aie-matrix-admin \
+  --add-volume-mount=volume=admin-bucket,mount-path=/usr/share/nginx/html \
+  --service-account=admin-frontend-sa@aie-matrix.iam.gserviceaccount.com \
+  --port=8080
+```
+
+> `--allow-unauthenticated` is set because IAP is enforced at the load balancer level (Phase 11), not at the Cloud Run service itself. The direct `*.run.app` URL is not published.
+>
+> **`--service-account` is required.** The default Compute Engine SA has a broken metadata token endpoint in this project and cannot authenticate to GCS — the GCS Fuse mount fails with UNAUTHENTICATED errors at startup. The dedicated `admin-frontend-sa` SA must be used.
+
+**Checkpoint**: `gcloud run services describe admin-frontend --region=us-central1` shows status READY. ✅
+
+---
+
+## Phase 8: Serverless NEG and Backend Service
+
+Cloud Run must be wired into the load balancer via a serverless NEG and a global backend service. This is the resource that appears in the IAP console.
+
+```bash
+# Serverless NEG pointing at the Cloud Run service
+gcloud compute network-endpoint-groups create admin-frontend-neg \
+  --region=us-central1 \
+  --network-endpoint-type=serverless \
+  --cloud-run-service=admin-frontend
+
+# Global backend service
+gcloud compute backend-services create admin-backend-service \
+  --global
+
+# Wire the NEG into the backend service
+gcloud compute backend-services add-backend admin-backend-service \
+  --global \
+  --network-endpoint-group=admin-frontend-neg \
+  --network-endpoint-group-region=us-central1
+```
+
+**Checkpoint**: `gcloud compute backend-services describe admin-backend-service --global` shows the NEG backend. ✅
+
+---
+
+## Phase 9: Create Load Balancer
 
 **Google-managed TLS certificates are immutable** — domains cannot be added after creation. The cert is provisioned with both subdomains now, even though `admin-backend` is not yet wired.
 
@@ -225,7 +260,7 @@ gcloud compute forwarding-rules create aie-matrix-frontend-rule \
 
 ---
 
-## Phase 7: DNS Records
+## Phase 10: DNS Records
 
 Add two A records in your DNS provider (both point at the `aie-matrix-frontend` static IP reserved in Phase 1):
 
@@ -242,7 +277,7 @@ Add two A records in your DNS provider (both point at the `aie-matrix-frontend` 
 
 ---
 
-## Phase 8: IAP OAuth and Access Configuration
+## Phase 11: IAP OAuth and Access Configuration
 
 ### Step 1: Create OAuth consent screen
 
@@ -255,34 +290,36 @@ In the GCP Console: **APIs & Services → OAuth consent screen**
 
 In the GCP Console: **APIs & Services → Credentials → Create Credentials → OAuth client ID**
 - Application type: **Web application**
-- Authorized redirect URIs: add the IAP redirect URI shown in the IAP console after enabling (format: `https://iap.googleapis.com/v1/oauth/clientIds/<client-id>:handleRedirect`)
+- Authorized redirect URIs: add the IAP redirect URI shown in the IAP console (format: `https://iap.googleapis.com/v1/oauth/clientIds/<client-id>:handleRedirect`)
 - Note the **Client ID** and **Client secret**
 
-### Step 3: Enable IAP
+### Step 3: Enable IAP on the backend service
 
-#### Path A (backend-bucket IAP):
 ```bash
-gcloud compute backend-buckets update admin-backend \
+gcloud compute backend-services update admin-backend-service \
+  --global \
   --iap=enabled,oauth2-client-id=<CLIENT_ID>,oauth2-client-secret=<CLIENT_SECRET>
 ```
 
-#### Path B (Cloud Run):
-Enable IAP on the Cloud Run service via the GCP Console: **Cloud Run → admin-frontend → Security → Enable IAP**.
+After this step `admin-backend-service` appears in the IAP console (**Security → Identity-Aware Proxy → Backend services → admin-backend-service**).
+
+**Checkpoint**: IAP toggle is blue (enabled) next to `admin-backend-service` in the IAP console. ✅
 
 ---
 
-## Phase 9: Operator Access Management
+## Phase 12: Operator Access Management
 
 ### Grant access to a new operator
 
 ```bash
 gcloud projects add-iam-policy-binding aie-matrix \
   --member=user:name@example.com \
-  --role=roles/iap.httpsResourceAccessor \
-  --condition="expression=request.host=='admin.matrix.relateby.dev',title=admin-frontend"
+  --role=roles/iap.httpsResourceAccessor
 ```
 
 Access takes effect within ~60 seconds. No redeployment required.
+
+> This grants access to all IAP-protected resources in the project. If per-resource scoping is needed, add `--condition="expression=request.host=='admin.matrix.relateby.dev',title=admin-frontend"` and include the same condition on remove.
 
 ### Revoke access
 
@@ -300,10 +337,10 @@ After full provisioning and first CI deploy:
 
 1. **Intermedium public** — navigate to `https://play.matrix.relateby.dev` in a private browser. Confirm the deck.gl scene loads with no auth prompt.
 
-2. **Admin IAP gate** — navigate to `https://admin.matrix.relateby.dev` in a private browser. Confirm Google OAuth redirect occurs.
+2. **Admin IAP gate** — navigate to `https://admin.matrix.relateby.dev` in a private browser. Confirm Google OAuth redirect occurs. ✅
 
-3. **Authorized access** — log in with an authorized operator account. Confirm the Admin UI is served.
+3. **Authorized access** — log in with an authorized operator account. Confirm the Admin UI is served. ✅
 
-4. **Unauthorized access** — log in with a non-authorized Google account. Confirm HTTP 403.
+4. **Unauthorized access** — log in with a non-authorized Google account. Confirm "Access blocked" (OAuth consent screen is Internal, so personal Gmail accounts are rejected before reaching the load balancer). ✅
 
 5. **CDN freshness** — after a tag push, confirm the updated Intermedium build appears on next page load (allow up to 5 minutes for CDN propagation after `--async` invalidation).

@@ -138,8 +138,11 @@ jobs:
 
       - name: Build Admin
         env:
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_SERVER_URL: ${{ secrets.VITE_SERVER_URL }}
+          VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
         run: |
+          [ -n "$VITE_SERVER_URL" ]  || { echo "ERROR: VITE_SERVER_URL secret is not set"; exit 1; }
+          [ -n "$VITE_ADMIN_TOKEN" ] || { echo "ERROR: VITE_ADMIN_TOKEN secret is not set"; exit 1; }
           pnpm --filter ./tools/map-editor build
 
       - name: Sync Intermedium to GCS
@@ -147,6 +150,24 @@ jobs:
 
       - name: Sync Admin to GCS
         run: gsutil -m rsync -r -d tools/map-editor/dist/ gs://aie-matrix-admin/
+
+      - name: Build admin-nginx image
+        run: |
+          docker build \
+            -f deploy/frontend/nginx-admin/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/admin-nginx:${{ steps.tag.outputs.value }} \
+            deploy/frontend/nginx-admin/
+
+      - name: Push admin-nginx image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/admin-nginx:${{ steps.tag.outputs.value }}
+
+      - name: Update admin-frontend Cloud Run
+        run: |
+          gcloud run deploy admin-frontend \
+            --image=${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/admin-nginx:${{ steps.tag.outputs.value }} \
+            --region=${{ env.REGION }} \
+            --service-account=admin-frontend-sa@${{ env.PROJECT }}.iam.gserviceaccount.com \
+            --project=${{ env.PROJECT }}
 
       - name: Invalidate Intermedium CDN cache
         run: |

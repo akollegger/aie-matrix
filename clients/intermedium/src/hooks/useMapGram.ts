@@ -31,9 +31,9 @@ export function useMapGram(): {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const base = import.meta.env.VITE_WORLD_API_URL ?? "";
+    const base = import.meta.env.VITE_API_BASE_URL ?? "";
     if (!base) {
-      setError("VITE_WORLD_API_URL is not set");
+      setError("VITE_API_BASE_URL is not set");
       setStatus("error");
       return;
     }

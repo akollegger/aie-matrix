@@ -50,13 +50,21 @@ bash deploy/frontend/setup.sh
 This script runs the gcloud commands documented in `deploy/frontend/README.md` in the correct order:
 1. Reserve static IP
 2. Create GCS buckets with correct access policies
-3. Create GCS backend bucket resources
-4. Verify IAP support (and apply or fall back to Cloud Run)
-5. Create URL map, TLS cert, HTTPS proxy, forwarding rule
-6. Add DNS records (manual — the script prints the IP and required DNS entries)
-7. Grant CI service account bucket write access
+3. Build and push `admin-nginx` Docker image to Artifact Registry
+4. Create dedicated Cloud Run service account (`admin-frontend-sa`) and grant it bucket read access
+5. Create Intermedium CDN backend bucket
+6. Deploy Cloud Run `admin-frontend` (gen2, GCS Fuse volume mount, dedicated SA)
+7. Create serverless NEG and global backend service (`admin-backend-service`) for IAP
+8. Create URL map, TLS cert, HTTPS proxy, forwarding rule
+9. Print DNS records (manual — the script prints the IP and required entries)
+10. Print IAP OAuth setup instructions (manual — requires GCP Console)
 
 The script is idempotent — re-running it on an already-provisioned project is safe.
+
+> **Note**: `gcloud builds submit` is the recommended way to build the admin-nginx image if Docker is not available locally (e.g. on Apple Silicon with Podman only):
+> ```bash
+> gcloud builds submit --tag=us-central1-docker.pkg.dev/aie-matrix/aie-matrix/admin-nginx:latest deploy/frontend/nginx-admin/
+> ```
 
 ## Verifying a Production Deploy
 
@@ -77,11 +85,12 @@ After pushing a `v*` tag and the `production-deploy.yml` workflow completes:
 ```bash
 gcloud projects add-iam-policy-binding aie-matrix \
   --member=user:name@example.com \
-  --role=roles/iap.httpsResourceAccessor \
-  --condition="expression=request.host=='admin.matrix.relateby.dev',title=admin-frontend"
+  --role=roles/iap.httpsResourceAccessor
 ```
 
 Access takes effect within ~60 seconds. No redeployment required.
+
+> This grants access to all IAP-protected resources in the project (`admin-backend-service` and `aie-matrix/server`). If per-resource scoping is needed in future, add `--condition="expression=request.host=='admin.matrix.relateby.dev',title=admin-frontend"` and match the same condition on remove.
 
 ## Removing an Operator
 
