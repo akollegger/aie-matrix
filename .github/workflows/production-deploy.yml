@@ -105,7 +105,7 @@ jobs:
         env:
           VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
         run: |
-          kubectl patch secret aie-matrix \
+          kubectl patch secret aie-matrix-secrets \
             --namespace ${{ env.NAMESPACE }} \
             --type merge \
             -p "{\"data\":{\"ADMIN_TOKEN\":\"$(echo -n "$VITE_ADMIN_TOKEN" | base64 -w0)\"}}"
