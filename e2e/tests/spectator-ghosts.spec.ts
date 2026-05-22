@@ -50,34 +50,43 @@ test.describe("Phaser spectator + Colyseus ghostTiles", () => {
   let randomAgent: ChildProcess | undefined;
   let activeSessionId: string | undefined;
 
+  const E2E_AGENT_HOSTNAME = "e2e";
+  const E2E_AGENT_ID = `random-agent-${E2E_AGENT_HOSTNAME}`;
+
   test.beforeAll(async () => {
     agentHost = spawn("node", ["server/agent-host/dist/main.js"], {
       cwd: repoRoot,
       env: {
         ...process.env,
-        GHOST_HOUSE_DEV_TOKEN: DEV_TOKEN,
+        AGENT_HOST_TOKEN: DEV_TOKEN,
         AIE_MATRIX_HTTP_BASE_URL: WORLD_API_BASE,
         CATALOG_FILE_PATH: path.join(repoRoot, "server/agent-host/catalog.json"),
-        GHOST_HOUSE_PORT: String(AGENT_HOST_PORT),
-        GHOST_HOUSE_DISABLE_COLYSEUS_BRIDGE: "1",
-      },
-      stdio: "ignore",
-    });
-
-    randomAgent = spawn("node", ["ghosts/random-agent/dist/agent.js"], {
-      cwd: repoRoot,
-      env: {
-        ...process.env,
-        GHOST_HOUSE_DEV_TOKEN: DEV_TOKEN,
-        AGENT_PORT: String(RANDOM_AGENT_PORT),
-        RANDOM_AGENT_PUBLIC_BASE_URL: `http://127.0.0.1:${RANDOM_AGENT_PORT}`,
-        RANDOM_AGENT_MOVE_MS: "1000",
+        AGENT_HOST_PORT: String(AGENT_HOST_PORT),
+        AGENT_HOST_DISABLE_COLYSEUS_BRIDGE: "1",
       },
       stdio: "ignore",
     });
 
     await waitUrl(`${AGENT_HOST_BASE}/health`);
+
+    randomAgent = spawn("node", ["ghosts/random-agent/dist/agent.js"], {
+      cwd: repoRoot,
+      env: {
+        ...process.env,
+        AGENT_HOST_TOKEN: DEV_TOKEN,
+        AGENT_HOST_URL: AGENT_HOST_BASE,
+        AGENT_PORT: String(RANDOM_AGENT_PORT),
+        RANDOM_AGENT_PUBLIC_BASE_URL: `http://127.0.0.1:${RANDOM_AGENT_PORT}`,
+        RANDOM_AGENT_MOVE_MS: "1000",
+        // Deterministic agentId for spawn URL — avoids hostname-dependent lookup
+        HOSTNAME: E2E_AGENT_HOSTNAME,
+      },
+      stdio: "ignore",
+    });
+
     await waitUrl(`http://127.0.0.1:${RANDOM_AGENT_PORT}/.well-known/agent-card.json`);
+    // Wait for random-agent to self-register with agent-host catalog
+    await waitUrl(`${AGENT_HOST_BASE}/v1/catalog/${E2E_AGENT_ID}`, 30_000);
 
     // Use the registry API to obtain a valid world-api ghost credential
     const houseRes = await fetch(`${WORLD_API_BASE}/registry/houses`, {
@@ -107,7 +116,7 @@ test.describe("Phaser spectator + Colyseus ghostTiles", () => {
       credential: { token: string; worldApiBaseUrl: string };
     };
 
-    const spawnRes = await fetch(`${AGENT_HOST_BASE}/v1/sessions/spawn/random-agent`, {
+    const spawnRes = await fetch(`${AGENT_HOST_BASE}/v1/sessions/spawn/${E2E_AGENT_ID}`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
