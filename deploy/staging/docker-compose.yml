@@ -86,15 +86,15 @@ services:
     environment:
       NODE_ENV: "${NODE_ENV:-production}"
       # Auth token — required
-      GHOST_HOUSE_DEV_TOKEN: "${GHOST_HOUSE_DEV_TOKEN}"
-      GHOST_HOUSE_PORT: "${GHOST_HOUSE_PORT:-4000}"
-      GHOST_HOUSE_PUBLIC_BASE_URL: "${GHOST_HOUSE_PUBLIC_BASE_URL:-http://localhost:4000}"
+      AGENT_HOST_TOKEN: "${AGENT_HOST_TOKEN}"
+      AGENT_HOST_PORT: "${AGENT_HOST_PORT:-4000}"
+      AGENT_HOST_PUBLIC_BASE_URL: "${AGENT_HOST_PUBLIC_BASE_URL:-http://localhost:4000}"
       # IC-002: inter-service URLs — must use Docker service names, not localhost
       WORLD_API_URL: "${WORLD_API_URL:-http://server:8787}"
       COLYSEUS_URL: "${COLYSEUS_URL:-ws://server:8787}"
       AIE_MATRIX_HTTP_BASE_URL: "${WORLD_API_URL:-http://server:8787}"
     ports:
-      - "${GHOST_HOUSE_PORT:-4000}:${GHOST_HOUSE_PORT:-4000}"
+      - "${AGENT_HOST_PORT:-4000}:${AGENT_HOST_PORT:-4000}"
     networks:
       - aie-matrix
     depends_on:
@@ -107,6 +107,33 @@ services:
       interval: 10s
       timeout: 5s
       retries: 12
+      start_period: 30s
+
+  random-agent:
+    build:
+      context: ../..      # repo root
+      dockerfile: ghosts/random-agent/Dockerfile
+    environment:
+      NODE_ENV: "${NODE_ENV:-production}"
+      # Agent-host connection — uses Docker service name, not localhost
+      AGENT_HOST_URL: "http://agent-host:4000"
+      AGENT_HOST_TOKEN: "${AGENT_HOST_TOKEN}"
+      # Public URL for this agent — used in A2A agent card and catalog registration
+      # In compose, agent-host reaches random-agent via the shared network
+      RANDOM_AGENT_PUBLIC_BASE_URL: "${RANDOM_AGENT_PUBLIC_BASE_URL:-http://random-agent:4001}"
+      AGENT_PORT: "4001"
+    ports:
+      - "4001:4001"
+    networks:
+      - aie-matrix
+    depends_on:
+      agent-host:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4001/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(d.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
       start_period: 30s
 
 # ─── Volumes ────────────────────────────────────────────────────────────────

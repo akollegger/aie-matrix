@@ -30,7 +30,7 @@ describe("supervisor crash (integration)", () => {
   } as any;
 
   beforeEach(() => {
-    process.env.GHOST_HOUSE_SHUTDOWN_GRACE_MS = "50";
+    process.env.AGENT_HOST_SHUTDOWN_GRACE_MS = "50";
     vi.clearAllMocks();
   });
 

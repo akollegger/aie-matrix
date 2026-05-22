@@ -17,7 +17,7 @@ function listenPortFromEnv(fallback: number): number {
   return Number.isFinite(n) && n > 0 && n < 65_536 ? n : fallback;
 }
 
-const dev = process.env.GHOST_HOUSE_DEV_TOKEN ?? "";
+const dev = process.env.AGENT_HOST_TOKEN ?? "";
 const port = listenPortFromEnv(4003);
 const publicBase = (process.env.ECHO_AGENT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`).replace(
   /\/$/,
@@ -32,7 +32,7 @@ const requestHandler = new DefaultRequestHandler(
 
 const requireToken: RequestHandler = (req: Request, res: Response, next) => {
   if (dev.length === 0) {
-    return res.status(500).json({ error: "GHOST_HOUSE_DEV_TOKEN is not set" });
+    return res.status(500).json({ error: "AGENT_HOST_TOKEN is not set" });
   }
   if (req.headers.authorization === `Bearer ${dev}`) {
     return next();

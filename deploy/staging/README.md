@@ -1,6 +1,6 @@
 # Staging Stack — Operator Runbook
 
-This directory contains the Docker Compose definition for the **aie-matrix Tier 2 staging environment** (ADR-0007). It runs four containers — `neo4j`, `redis`, `server` (combined Colyseus + world-api + registry), and `agent-host` — wired together on a private Docker network with health-check dependency ordering.
+This directory contains the Docker Compose definition for the **aie-matrix Tier 2 staging environment** (ADR-0007). It runs five containers — `neo4j`, `redis`, `server` (combined Colyseus + world-api + registry), `agent-host`, and `random-agent` — wired together on a private Docker network with health-check dependency ordering.
 
 ---
 
@@ -22,7 +22,7 @@ pnpm install
 cp deploy/staging/.env.staging.example deploy/staging/.env.staging
 
 # 3. Edit .env.staging — at minimum set these secrets:
-#    NEO4J_PASSWORD, NEO4J_AUTH, GHOST_HOUSE_DEV_TOKEN
+#    NEO4J_PASSWORD, NEO4J_AUTH, AGENT_HOST_TOKEN
 ```
 
 **Required variables** (no defaults — the stack will not start without them):
@@ -31,7 +31,7 @@ cp deploy/staging/.env.staging.example deploy/staging/.env.staging
 |----------|-------------|
 | `NEO4J_PASSWORD` | Neo4j database password |
 | `NEO4J_AUTH` | `neo4j/<password>` — used by the Neo4j container image |
-| `GHOST_HOUSE_DEV_TOKEN` | Bearer token for agent-host authenticated requests |
+| `AGENT_HOST_TOKEN` | Bearer token for agent-host authenticated requests |
 
 See `specs/016-staging-deployment/contracts/env-contract.md` for the full variable reference.
 
@@ -48,7 +48,7 @@ The `--build` flag rebuilds images from source. Omit it on subsequent runs if so
 Startup order (enforced via `depends_on: condition: service_healthy`):
 
 ```
-neo4j  →  redis  →  server  →  agent-host
+neo4j  →  redis  →  server  →  agent-host  →  random-agent
 ```
 
 Each container only starts once its dependency reports healthy. Full cold-start (including image builds) takes **under 5 minutes** on a standard broadband connection.
@@ -128,9 +128,47 @@ docker compose -f deploy/staging/docker-compose.yml down -v
 
 ---
 
+## Ghost Agents (random-agent)
+
+The staging stack includes `random-agent` as a fifth service (ADR-0009, Spec 018). It depends on `agent-host` and self-registers automatically on startup.
+
+**Required env var** (add to `.env.staging`):
+
+```bash
+# URL agent-host uses to reach random-agent over the shared compose network
+RANDOM_AGENT_PUBLIC_BASE_URL=http://random-agent:4001
+```
+
+**Verify registration after startup:**
+
+```bash
+curl http://localhost:4000/v1/catalog | jq '.agents[] | {agentId, tier}'
+# → {"agentId":"random-agent-<container-id>","tier":"wanderer"}
+
+curl http://localhost:4001/health
+# → {"status":"ok"}
+```
+
+**Restart random-agent without cycling the stack:**
+
+```bash
+docker compose -f deploy/staging/docker-compose.yml restart random-agent
+# re-registers within ~30s
+```
+
+See `specs/018-ghost-agent-deployment/quickstart.md` §Tier 2 for the full ghost spawn walkthrough.
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| `random-agent` stuck `starting` | `agent-host` not yet healthy | Wait; depends on `agent-host: service_healthy` |
+| `random-agent.registration-timeout` in logs | Wrong `AGENT_HOST_URL` or token mismatch | Check `AGENT_HOST_TOKEN` matches in both services |
+| No catalog entry after healthy | `RANDOM_AGENT_PUBLIC_BASE_URL` not set | Add to `.env.staging` (see above) |
+
+---
+
 ## 4-Container vs. 6-Container Vision
 
-ADR-0007 describes six separately deployable services: `neo4j`, `redis`, `colyseus`, `world-api`, `registry`, and `agent-host`. The current staging stack runs **4 containers** because `server/colyseus`, `server/world-api`, and `server/registry` are library packages with no standalone entry points — they run inside the combined `server` container.
+ADR-0007 describes six separately deployable services: `neo4j`, `redis`, `colyseus`, `world-api`, `registry`, and `agent-host`. The current staging stack runs **4 containers** (plus `random-agent`) because `server/colyseus`, `server/world-api`, and `server/registry` are library packages with no standalone entry points — they run inside the combined `server` container.
 
 Reaching the 6-container vision requires a "service extraction" effort (splitting the combined server into independent processes). That work is tracked in a future spec. The 4-container staging stack fully validates multi-process wiring, Neo4j + Redis integration, and the CI gate described in ADR-0007.
 

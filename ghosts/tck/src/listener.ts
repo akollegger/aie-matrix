@@ -8,7 +8,7 @@ import { decodeTime } from "ulid";
 loadRootEnv();
 
 const registryBase = (process.env.AIE_MATRIX_REGISTRY_BASE ?? "http://127.0.0.1:8787").replace(/\/$/, "");
-const houseBase = (process.env.GHOST_HOUSE_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
+const houseBase = (process.env.AGENT_HOST_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
 const worldHttpBase = (process.env.AIE_MATRIX_HTTP_BASE_URL ?? "http://127.0.0.1:8787").replace(
   /\/$/,
   "",
@@ -17,7 +17,7 @@ const observerBase = (process.env.OBSERVER_AGENT_BASE_URL ?? "http://127.0.0.1:4
   /\/$/,
   "",
 );
-const devToken = process.env.GHOST_HOUSE_DEV_TOKEN ?? "dev-secret-change-me";
+const devToken = process.env.AGENT_HOST_TOKEN ?? "dev-secret-change-me";
 const fanoutToken = process.env.AIE_MATRIX_INTERNAL_FANOUT_TOKEN ?? "";
 const fromGhost = process.env.AIE_MATRIX_TCK_MESSAGE_FROM_GHOST ?? "01JARKZP8T0T4T7W8D8V8B8B00";
 

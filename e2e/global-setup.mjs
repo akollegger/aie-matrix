@@ -11,11 +11,15 @@ const e2eClientEnv = {
 };
 
 /**
- * Always: random-house binary + Phaser map assets (tests spawn the ghost walker).
+ * Always: agent-host + random-agent binaries + Phaser map assets (tests start these processes).
  * With `E2E_AUTOSTART=1`: `dev-stack.mjs` builds the client before Vite preview (see Playwright `webServer` order).
  */
 export default async function globalSetup() {
-  execSync("pnpm --filter @aie-matrix/ghost-random-house build", {
+  execSync("pnpm --filter @aie-matrix/server-agent-host build", {
+    cwd: root,
+    stdio: "inherit",
+  });
+  execSync("pnpm --filter @aie-matrix/random-agent build", {
     cwd: root,
     stdio: "inherit",
   });

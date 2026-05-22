@@ -16,7 +16,7 @@ Add to your repo-root `.env` before starting anything:
 
 ```bash
 # A2A shared token — must match what agent-host uses
-GHOST_HOUSE_DEV_TOKEN=dev-secret
+AGENT_HOST_TOKEN=dev-secret
 
 # OpenAI — drives Id (8 parallel facet agents) and Surface
 OPENAI_API_KEY=sk-...
@@ -75,7 +75,7 @@ This bypasses agent-host entirely — useful for tuning Id prompts, slider math,
 |---|---|---|
 | `PEPPERS_AGENT_PORT` | `4002` | Port the A2A agent server listens on |
 | `PEPPERS_AGENT_PUBLIC_BASE_URL` | `http://127.0.0.1:4002` | Public base for agent card URL |
-| `GHOST_HOUSE_DEV_TOKEN` | — | Shared bearer token for A2A auth |
+| `AGENT_HOST_TOKEN` | — | Shared bearer token for A2A auth |
 | `OPENAI_API_KEY` | — | OpenAI key for Id + Surface LLM calls |
 | `GHOST_MINDS_NEO4J_URI` | — | Neo4j URI for cascade persistence |
 | `GHOST_MINDS_NEO4J_USERNAME` | — | Neo4j username |

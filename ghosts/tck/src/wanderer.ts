@@ -9,8 +9,8 @@ import { getResolution, isValidCell } from "h3-js";
 loadRootEnv();
 
 const registryBase = (process.env.AIE_MATRIX_REGISTRY_BASE ?? "http://127.0.0.1:8787").replace(/\/$/, "");
-const houseBase = (process.env.GHOST_HOUSE_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
-const devToken = process.env.GHOST_HOUSE_DEV_TOKEN ?? "dev-secret-change-me";
+const houseBase = (process.env.AGENT_HOST_URL ?? "http://127.0.0.1:4000").replace(/\/$/, "");
+const devToken = process.env.AGENT_HOST_TOKEN ?? "dev-secret-change-me";
 const randomBase = (process.env.RANDOM_AGENT_BASE_URL ?? "http://127.0.0.1:4001").replace(/\/$/, "");
 
 function fail(step: string, message: string, cause?: unknown): never {

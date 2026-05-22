@@ -33,7 +33,7 @@ describe("AgentSupervisor (T030)", () => {
   let cancelTask: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    process.env.GHOST_HOUSE_SHUTDOWN_GRACE_MS = "50";
+    process.env.AGENT_HOST_SHUTDOWN_GRACE_MS = "50";
     ping = vi.fn().mockReturnValue(Effect.void);
     createClient = vi.fn().mockReturnValue(Effect.succeed({}));
     sendSpawnContext = vi

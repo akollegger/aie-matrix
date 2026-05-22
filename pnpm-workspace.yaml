@@ -14,7 +14,6 @@ packages:
   - shared/types
   - shared/root-env
   - ghosts/ts-client
-  - ghosts/random-house
   - server/agent-host
   - server/agent-host/examples/observer-agent
   - server/agent-host/examples/echo-agent

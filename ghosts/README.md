@@ -1,30 +1,104 @@
-# `ghosts/` — flat namespace (FR-019)
+# `ghosts/` — First-Party Ghost Agents
 
-All ghost-side code lives here as **sibling packages** — no nested subtype trees (for example no `ghosts/providers/random-house/`). See [FR-019](../specs/001-minimal-poc/spec.md) in the Minimal PoC spec.
+First-party ghosts are autonomous agents that self-register with the **agent-host** on startup, respond to A2A spawn requests, and interact with the world via MCP. They are deployed as containers alongside the rest of the stack (ADR-0009).
 
-## Naming
+The reference implementation is **`random-agent/`** (Wanderer tier).
 
-| Pattern | Role |
-|---------|------|
-| **`ghosts/<name>-client/`** | MCP client SDKs for ghost authors (TypeScript today; others welcome). |
-| **`ghosts/<name>-house/`** | Runnable GhostHouse: register with the registry, adopt/provision ghosts for caretakers, run ghost processes. |
-| **`ghosts/tck/`** | Minimal compatibility smoke against a **live** stack ([`contracts/tck-scenarios.md`](../specs/001-minimal-poc/contracts/tck-scenarios.md)). |
+## Packages
 
-The reference house is **`random-house/`** (not `random-house-house/`) — historical name; it still satisfies the “one runnable house package per folder” rule.
+| Path | Package | Role |
+|------|---------|------|
+| [`random-agent/`](./random-agent/) | `@aie-matrix/random-agent` | Reference Wanderer — random movement via MCP |
+| [`ts-client/`](./ts-client/) | `@aie-matrix/ghost-ts-client` | MCP client SDK used by ghost implementations |
+| [`tck/`](./tck/) | `@aie-matrix/ghost-tck` | Compatibility smoke tests — server must be running |
 
-## Packages in this repo (PoC)
+---
 
-| Path | pnpm workspace | Notes |
-|------|----------------|--------|
-| [`ts-client/`](./ts-client/) | `@aie-matrix/ghost-ts-client` | Streamable HTTP MCP client used by houses and TCK. |
-| [`random-house/`](./random-house/) | `@aie-matrix/ghost-random-house` | Registers, adopts, random-walks via MCP. |
-| [`ghost-cli/`](./ghost-cli/) | `@aie-matrix/ghost-cli` | Interactive REPL and one-shot CLI for human-operated ghost debugging. |
-| [`tck/`](./tck/) | `@aie-matrix/ghost-tck` | `pnpm run test` — server must already be listening. |
-| [`python-client/`](./python-client/) | *(none — Python only)* | Stub / future SDK; see `pyproject.toml`. |
+## What a first-party ghost needs
 
-Other dirs (e.g. `tck/` tooling only) follow the same flat rule: add new **`ghosts/<short-name>-{house,client}/`** siblings rather than nesting under existing packages.
+Every ghost is a Node.js HTTP server that:
+
+1. **Serves an A2A agent card** at `GET /.well-known/agent-card.json` (IC-001 schema; `matrix` block required)
+2. **Exposes `GET /health`** returning `{ "status": "ok" }` (used by compose and K8s probes)
+3. **Self-registers on startup** — calls `POST {AGENT_HOST_URL}/v1/catalog/register` after `listen()`
+4. **Deregisters on SIGTERM** — calls `DELETE {AGENT_HOST_URL}/v1/catalog/{agentId}` before exiting
+
+## Environment variable contract
+
+Every ghost reads these variables:
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `AGENT_HOST_URL` | yes | — | Base URL of the agent-host (`http://agent-host:4000` in compose, ClusterIP in K8s) |
+| `AGENT_HOST_TOKEN` | yes | — | Shared bearer token — must match agent-host's `AGENT_HOST_TOKEN` |
+| `AGENT_PORT` | no | `4001` | Port this ghost listens on |
+| `<NAME>_PUBLIC_BASE_URL` | yes | `http://127.0.0.1:${AGENT_PORT}` | Externally reachable base URL used in catalog registration and the agent card |
+| `AGENT_REGISTER_TIMEOUT` | no | `120000` ms | Max wait before exiting if registration fails |
+
+Agent ID is derived as: `<ghost-name>-${HOSTNAME ?? "local"}`. In K8s, `HOSTNAME` is the pod name (set automatically), making each replica's catalog entry unique.
+
+---
+
+## Adding a new ghost
+
+### Step 1 — Copy the reference implementation
+
+```bash
+cp -r ghosts/random-agent ghosts/my-agent
+cd ghosts/my-agent
+# edit package.json: change "name" to "@aie-matrix/my-agent"
+# edit src/agent.ts: change agentId prefix, implement your executor
+# edit src/buildAgentCard.ts: set your agent's name, description, and tier
+```
+
+### Step 2 — Update the Dockerfile
+
+In `ghosts/my-agent/Dockerfile`, change only the pnpm filter lines:
+
+```dockerfile
+# Change random-agent → my-agent in these two lines:
+RUN pnpm --filter @aie-matrix/my-agent run build
+RUN pnpm --filter @aie-matrix/my-agent deploy --prod --legacy /app/deploy
+```
+
+Keep the base stage and runner stage identical to `random-agent/Dockerfile`.
+
+### Step 3 — Add to pnpm-workspace.yaml
+
+```yaml
+# pnpm-workspace.yaml
+packages:
+  - ghosts/my-agent
+  # ... existing entries
+```
+
+### Step 4 — Add to docker-compose.yml
+
+Copy the `random-agent` service block in `deploy/staging/docker-compose.yml` and change:
+- service name: `random-agent` → `my-agent`
+- `dockerfile`: `ghosts/random-agent/Dockerfile` → `ghosts/my-agent/Dockerfile`
+- env var name: `RANDOM_AGENT_PUBLIC_BASE_URL` → `MY_AGENT_PUBLIC_BASE_URL`
+- `AGENT_HOST_URL` value: keep `http://agent-host:4000`
+- port: pick a new port (e.g. `4002:4002`)
+
+Add `MY_AGENT_PUBLIC_BASE_URL=http://my-agent:<port>` to `.env.staging.example`.
+
+### Step 5 — Add a K8s manifest
+
+Copy `deploy/k8s/ghosts/random-agent.yaml` → `deploy/k8s/ghosts/my-agent.yaml` and change:
+- All `random-agent` name references to `my-agent`
+- The image name to match your new package
+- The `<NAME>_PUBLIC_BASE_URL` env var name
+
+### Step 6 — Verify
+
+Follow `specs/018-ghost-agent-deployment/quickstart.md` to verify registration and spawn at each tier.
+
+---
 
 ## Related
 
-- [RFC-0001](../proposals/rfc/0001-minimal-poc.md) — layout and goals  
-- [Minimal PoC quickstart](../specs/001-minimal-poc/quickstart.md) — verification order  
+- [ADR-0009](../proposals/adr/0009-first-party-ghost-deployment.md) — why first-party deployment for AIEWF 2026
+- [ADR-0004](../proposals/adr/0004-ghost-agent-tiers.md) — Wanderer / Listener / Social behavioral tiers
+- [Spec 018 quickstart](../specs/018-ghost-agent-deployment/quickstart.md) — local run, compose, K8s verification
+- [RFC-0007](../proposals/rfc/0007-a2a-agent-host.md) — A2A agent-host architecture

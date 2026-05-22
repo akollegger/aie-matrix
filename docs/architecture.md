@@ -185,7 +185,7 @@ IRL talks could feed speaker agents via live transcription (Whisper or similar).
               └─────────────────────┘
 ```
 
-**Ghost house (A2A contributor path, `009`):** The diagram above is the long-horizon “agent layer” view. Today’s third-party **ghost agents** attach through an explicit **agent host** service with four concrete north–south links:
+**Ghost house (A2A, `009`):** The diagram above is the long-horizon “agent layer” view. For AIEWF 2026, **ghost agents are first-party** — built from the same repo, containerized using the same Docker/K8s patterns as other services, and deployed into the same cluster (ADR-0009). The third-party remote-endpoint contribution model (ADR-0004) is deferred. First-party ghosts self-register with the agent-host catalog on startup using `AGENT_HOST_URL` and `<NAME>_PUBLIC_BASE_URL`; each container replica registers independently with a unique agentId derived from `HOSTNAME`. The agent-host has four concrete north–south links:
 
 ```
                     ┌────────────────────────┐
@@ -207,7 +207,7 @@ IRL talks could feed speaker agents via live transcription (Whisper or similar).
 |------------|-------------------|
 | **World server (`server/world-api`, MCP at `/mcp`) ↔ Ghost house** | MCP tool calls the agent requested on its card (`matrix.requiredTools`); ghost-scoped token from the registry. Outbound `say` (Social tier) is written in the world then **fan-out** to agent host Colyseus bridge clients, which become IC-004 envelopes inside the house. |
 | **Colyseus ↔ Ghost house** | Bridge client in the house subscribes as the adopted ghost; room events and `message.new` fan-out become `aie-matrix.world-event.v1` (IC-004) inside the house and are delivered to agents as A2A data/push per tier. |
-| **Ghost house ↔ External agents** | HTTPS A2A: agent card at `/.well-known/agent-card.json`, `message/send` for tasks and world events, catalog and session control on the house HTTP API (IC-005). Phase 1 assumes **localhost**-reachable `baseUrl` in the catalog. |
+| **Agent-host ↔ First-party ghosts** | HTTP A2A: agent card at `/.well-known/agent-card.json`, `message/send` for tasks and world events, catalog and session control on the agent-host HTTP API (IC-005). Ghosts self-register at startup via `POST /v1/catalog/register { agentId, baseUrl }` and deregister on SIGTERM. In compose and K8s, `baseUrl` is the container's service-DNS or pod-IP URL. |
 
 **Contracts:** `specs/009-agent-host-a2a/contracts/` — in particular **IC-001** (agent card `matrix` block), **IC-002** (A2A + push invariants), **IC-003** (MCP tool surface), **IC-004** (world event envelope), **IC-005** (catalog HTTP), **IC-006** (spawn context).
 
@@ -226,7 +226,7 @@ The [Minimal PoC](../specs/001-minimal-poc/) combines several packages in **one 
 | **Ghost credentials** | `server/auth/` | Dev JWT mint/verify for adopted ghosts. |
 | **Contracts & shared types** | `shared/types/`, `specs/001-minimal-poc/contracts/` | Source of truth for REST/MCP shapes; keep docs and code aligned. |
 | **Phaser debugger (spectator)** | `clients/debugger/phaser/` | Loads `maps/` assets; **no** move RPC. |
-| **Ghost house (A2A) + reference Wanderer** | `server/agent-host/`, `ghosts/random-agent/` | Canonical house: catalog, MCP proxy, Colyseus bridge, A2A supervisor. Reference agent serves an A2A card and movement loop. Legacy `ghosts/ghost-random-house/` remains for older PoC flows; new work targets `009` packages. |
+| **Agent-host + first-party ghosts** | `server/agent-host/`, `ghosts/random-agent/` | Canonical house: catalog, MCP proxy, Colyseus bridge, A2A supervisor. `random-agent` is the reference Wanderer: containerized per ADR-0009, self-registers on startup, deregisters on SIGTERM. Add new ghosts following `ghosts/README.md`. |
 
 ---
 
