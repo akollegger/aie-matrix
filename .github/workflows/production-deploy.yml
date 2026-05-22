@@ -96,6 +96,20 @@ jobs:
       - name: Push agent-host image
         run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-host:${{ steps.tag.outputs.value }}
 
+      # ── Sync secrets into k8s ─────────────────────────────────────────────
+      # GitHub Actions secrets are the source of truth. Patch the k8s secret
+      # before Helm deploy so the server always uses the same ADMIN_TOKEN that
+      # was baked into the map-editor client bundle.
+
+      - name: Sync ADMIN_TOKEN to k8s secret
+        env:
+          VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
+        run: |
+          kubectl patch secret aie-matrix \
+            --namespace ${{ env.NAMESPACE }} \
+            --type merge \
+            -p "{\"data\":{\"ADMIN_TOKEN\":\"$(echo -n "$VITE_ADMIN_TOKEN" | base64 -w0)\"}}"
+
       # ── Deploy via Helm ────────────────────────────────────────────────────
 
       - name: Deploy server
