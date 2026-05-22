@@ -1,4 +1,4 @@
-const serverUrl = (import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787").replace(/\/$/, "")
+const serverUrl = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8787").replace(/\/$/, "")
 const adminToken = import.meta.env.VITE_ADMIN_TOKEN ?? ""
 
 export interface ServerMapRecord {

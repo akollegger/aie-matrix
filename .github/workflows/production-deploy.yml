@@ -138,11 +138,11 @@ jobs:
 
       - name: Build Admin
         env:
-          VITE_SERVER_URL: ${{ secrets.VITE_SERVER_URL }}
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
           VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
         run: |
-          [ -n "$VITE_SERVER_URL" ]  || { echo "ERROR: VITE_SERVER_URL secret is not set"; exit 1; }
-          [ -n "$VITE_ADMIN_TOKEN" ] || { echo "ERROR: VITE_ADMIN_TOKEN secret is not set"; exit 1; }
+          [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL secret is not set"; exit 1; }
+          [ -n "$VITE_ADMIN_TOKEN" ]  || echo "WARNING: VITE_ADMIN_TOKEN is not set — admin write ops will fail at runtime"
           pnpm --filter ./tools/map-editor build
 
       - name: Sync Intermedium to GCS
