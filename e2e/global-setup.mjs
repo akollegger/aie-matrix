@@ -15,6 +15,10 @@ const e2eClientEnv = {
  * With `E2E_AUTOSTART=1`: `dev-stack.mjs` builds the client before Vite preview (see Playwright `webServer` order).
  */
 export default async function globalSetup() {
+  // Build workspace dependencies in topological order before agent packages
+  execSync("pnpm --filter @aie-matrix/root-env build", { cwd: root, stdio: "inherit" });
+  execSync("pnpm --filter @aie-matrix/shared-types build", { cwd: root, stdio: "inherit" });
+  execSync("pnpm --filter @aie-matrix/ghost-ts-client build", { cwd: root, stdio: "inherit" });
   execSync("pnpm --filter @aie-matrix/server-agent-host build", {
     cwd: root,
     stdio: "inherit",
