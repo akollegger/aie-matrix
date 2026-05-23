@@ -96,6 +96,18 @@ jobs:
       - name: Push agent-host image
         run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-host:${{ steps.tag.outputs.value }}
 
+      # ── Build & push random-agent image ────────────────────────────────────
+
+      - name: Build random-agent image
+        run: |
+          docker build \
+            -f ghosts/random-agent/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/random-agent:${{ steps.tag.outputs.value }} \
+            .
+
+      - name: Push random-agent image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/random-agent:${{ steps.tag.outputs.value }}
+
       # ── Sync secrets into k8s ─────────────────────────────────────────────
       # GitHub Actions secrets are the source of truth. Patch the k8s secret
       # before Helm deploy so the server always uses the same ADMIN_TOKEN that
@@ -129,6 +141,13 @@ jobs:
             -f deploy/k8s/values-production.yaml \
             --wait \
             --timeout 5m
+
+      - name: Deploy random-agent
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          envsubst < deploy/k8s/ghosts/random-agent.yaml \
+            | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
 
       # ── Build & deploy front-ends ─────────────────────────────────────────
 
@@ -196,9 +215,11 @@ jobs:
         run: |
           kubectl rollout status deployment/server -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/agent-host -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/random-agent -n ${{ env.NAMESPACE }}
 
       - name: Dump logs on failure
         if: failure()
         run: |
           kubectl logs -l app.kubernetes.io/name=server -n ${{ env.NAMESPACE }} --tail=50 || true
           kubectl logs -l app.kubernetes.io/name=agent-host -n ${{ env.NAMESPACE }} --tail=50 || true
+          kubectl logs -l app=random-agent -n ${{ env.NAMESPACE }} --tail=50 || true
