@@ -39,6 +39,8 @@ curl http://localhost:4000/v1/catalog | jq '.agents[] | {agentId, tier}'
 
 ### 4. Spawn a ghost
 
+> **Preferred path**: Use the Admin panel (`http://localhost:5173`, switch to **Admin** mode) — click a session row, then click **Spawn Ghost** on any agent in the Catalog panel. The panel acquires registry credentials automatically (Spec 019). The curl steps below are the manual equivalent.
+
 ```bash
 # First adopt a ghost from the registry
 CARETAKER=$(curl -sX POST http://localhost:8787/registry/caretakers \

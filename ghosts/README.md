@@ -39,6 +39,21 @@ Agent ID is derived as: `<ghost-name>-${HOSTNAME ?? "local"}`. In K8s, `HOSTNAME
 
 ---
 
+## Spawning a ghost
+
+The preferred way to spawn ghosts in production or staging is through the **Admin panel** at `admin.matrix.relateby.dev` (or `http://localhost:5173` locally in Admin mode). The panel handles the full spawn flow automatically:
+
+1. Open the Admin panel → click a running world session in the left sidebar
+2. The Catalog panel opens — showing all registered agents
+3. Click **Spawn Ghost** on any agent row
+4. The panel acquires a ghost identity from the registry and spawns the ghost in one step
+
+No terminal access or curl commands required. See `specs/019-ghost-management/quickstart.md` for local setup.
+
+For manual spawning via curl (CI, scripting, or when the admin panel is unavailable), see `specs/018-ghost-agent-deployment/quickstart.md` §Tier 1.
+
+---
+
 ## Adding a new ghost
 
 ### Step 1 — Copy the reference implementation

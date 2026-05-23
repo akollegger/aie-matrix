@@ -226,9 +226,13 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
           VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
+          VITE_AGENT_HOST_URL: ${{ vars.VITE_AGENT_HOST_URL }}
+          VITE_AGENT_HOST_BEARER: ${{ secrets.AGENT_HOST_TOKEN }}
         run: |
           [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL variable is not set"; exit 1; }
           [ -n "$VITE_ADMIN_TOKEN" ]  || echo "WARNING: VITE_ADMIN_TOKEN is not set — admin write ops will fail at runtime"
+          [ -n "$VITE_AGENT_HOST_URL" ] || echo "WARNING: VITE_AGENT_HOST_URL is not set — ghost management will be unavailable"
+          [ -n "$VITE_AGENT_HOST_BEARER" ] || echo "WARNING: VITE_AGENT_HOST_BEARER is not set — agent-host requests will fail at runtime"
           pnpm --filter ./tools/map-editor build
 
       - name: Sync Intermedium to GCS

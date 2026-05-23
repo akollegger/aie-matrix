@@ -33,7 +33,12 @@ const primaryBtn: CSSProperties = { ...actionBtn, background: "#2255aa", color: 
 const dangerBtn: CSSProperties = { ...actionBtn, background: "#661122", color: "#f88", border: "1px solid #992233" }
 const ghostBtn: CSSProperties = { ...actionBtn, background: "none", border: "1px solid transparent" }
 
-export function AdminPanel() {
+export interface AdminPanelProps {
+  selectedSessionId?: string | null
+  onSelectSession?: (id: string | null) => void
+}
+
+export function AdminPanel({ selectedSessionId = null, onSelectSession }: AdminPanelProps) {
   const { state, dispatch } = useEditor()
 
   const [maps, setMaps] = useState<ServerMapRecord[]>([])
@@ -306,18 +311,26 @@ export function AdminPanel() {
                 </div>
               )}
 
-              {isExpanded && editorSessions.map(session => (
-                <div key={session.id} style={{
-                  padding: "5px 8px 5px 24px", borderBottom: "1px solid #1a1a2e",
-                  background: "#12122a", display: "flex", flexDirection: "column", gap: 3,
-                }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ flex: 1, fontSize: 11, color: "#99bbff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.name}</span>
-                    <button onClick={() => void handleEndSession(session.id)} disabled={busy === `end-${session.id}`} style={dangerBtn}>End</button>
+              {isExpanded && editorSessions.map(session => {
+                const isSessionSelected = selectedSessionId === session.id
+                return (
+                  <div key={session.id} style={{
+                    padding: "5px 8px 5px 24px", borderBottom: "1px solid #1a1a2e",
+                    background: isSessionSelected ? "#1a2244" : "#12122a",
+                    display: "flex", flexDirection: "column", gap: 3,
+                    cursor: "pointer",
+                  }}
+                    onClick={() => onSelectSession?.(isSessionSelected ? null : session.id)}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                      <span style={{ flex: 1, fontSize: 11, color: isSessionSelected ? "#aaccff" : "#99bbff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{session.name}</span>
+                      {isSessionSelected && <span style={{ fontSize: 9, color: "#6688cc" }}>▶</span>}
+                      <button onClick={e => { e.stopPropagation(); void handleEndSession(session.id) }} disabled={busy === `end-${session.id}`} style={dangerBtn}>End</button>
+                    </div>
+                    <div style={{ fontSize: 9, color: "#444" }}>started {new Date(session.startedAt).toLocaleTimeString()}</div>
                   </div>
-                  <div style={{ fontSize: 9, color: "#444" }}>started {new Date(session.startedAt).toLocaleTimeString()}</div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )
         })()}
@@ -471,23 +484,30 @@ export function AdminPanel() {
               )}
 
               {/* Session child rows */}
-              {isExpanded && mapSessions.map(session => (
-                <div key={session.id} style={{
-                  padding: "5px 8px 5px 24px",
-                  borderBottom: "1px solid #1a1a2e",
-                  background: "#12122a",
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 3,
-                }}>
+              {isExpanded && mapSessions.map(session => {
+                const isSessionSelected = selectedSessionId === session.id
+                return (
+                <div key={session.id}
+                  onClick={() => onSelectSession?.(isSessionSelected ? null : session.id)}
+                  style={{
+                    padding: "5px 8px 5px 24px",
+                    borderBottom: "1px solid #1a1a2e",
+                    background: isSessionSelected ? "#1a2244" : "#12122a",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 3,
+                    cursor: "pointer",
+                  }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{ flex: 1, fontSize: 11, color: "#99bbff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span style={{ flex: 1, fontSize: 11, color: isSessionSelected ? "#aaccff" : "#99bbff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {session.name}
                     </span>
+                    {isSessionSelected && <span style={{ fontSize: 9, color: "#6688cc" }}>▶</span>}
                     {switchingSessionId === session.id ? (
                       <select
                         autoFocus
                         defaultValue=""
+                        onClick={e => e.stopPropagation()}
                         onChange={e => { if (e.target.value) void handleSwitchMap(session.id, e.target.value) }}
                         onBlur={() => setSwitchingSessionId(null)}
                         style={{
@@ -508,7 +528,7 @@ export function AdminPanel() {
                       </select>
                     ) : (
                       <button
-                        onClick={() => setSwitchingSessionId(session.id)}
+                        onClick={e => { e.stopPropagation(); setSwitchingSessionId(session.id) }}
                         disabled={busy === `switch-${session.id}`}
                         style={actionBtn}
                         title="Switch map"
@@ -517,7 +537,7 @@ export function AdminPanel() {
                       </button>
                     )}
                     <button
-                      onClick={() => void handleEndSession(session.id)}
+                      onClick={e => { e.stopPropagation(); void handleEndSession(session.id) }}
                       disabled={busy === `end-${session.id}`}
                       style={dangerBtn}
                     >
@@ -528,7 +548,8 @@ export function AdminPanel() {
                     started {new Date(session.startedAt).toLocaleTimeString()}
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )
         })}

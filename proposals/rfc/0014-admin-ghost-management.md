@@ -1,9 +1,11 @@
 # RFC-0014: Admin Ghost Management Panel
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-05-22  
 **Authors:** @akollegger  
-**Related:** [ADR-0008](../adr/0008-frontend-deployment-access-control.md) · [ADR-0009](../adr/0009-first-party-ghost-deployment.md) · [RFC-0013](0013-map-management.md) · [Spec 018](../../specs/018-ghost-agent-deployment/spec.md)
+**Related:** [ADR-0008](../adr/0008-frontend-deployment-access-control.md) · [ADR-0009](../adr/0009-first-party-ghost-deployment.md) · [RFC-0013](0013-map-management.md) · [Spec 018](../../specs/018-ghost-agent-deployment/spec.md) · [Spec 019](../../specs/019-ghost-management/spec.md)
+
+> **Implementation note (Spec 019)**: The implemented information architecture uses a **Miller columns / progressive disclosure** pattern (Maps → Sessions → Catalog → Ghosts) rather than the two-tab layout described in this RFC. The core API surface and error handling requirements are unchanged. One-click spawn was also implemented (the admin panel acquires ghost credentials from the registry automatically — no manual token entry). See `specs/019-ghost-management/research.md` for the decision rationale.
 
 ## Summary
 

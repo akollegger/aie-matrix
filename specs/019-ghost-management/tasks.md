@@ -18,9 +18,9 @@
 
 **Purpose**: Install new dependency, scaffold directory structure, declare new env vars.
 
-- [ ] T001 Install `unique-names-generator` in `tools/map-editor/package.json` via `pnpm add unique-names-generator` in `tools/map-editor/`
-- [ ] T002 [P] Add `VITE_AGENT_HOST_URL` and `VITE_AGENT_HOST_BEARER` env vars to `tools/map-editor/.env.example` with comments matching the existing pattern
-- [ ] T003 [P] Create directory structure: `tools/map-editor/src/panels/admin/`, `tools/map-editor/src/panels/detail/`, `tools/map-editor/src/hooks/`
+- [x] T001 Install `unique-names-generator` in `tools/map-editor/package.json` via `pnpm add unique-names-generator` in `tools/map-editor/`
+- [x] T002 [P] Add `VITE_AGENT_HOST_URL` and `VITE_AGENT_HOST_BEARER` env vars to `tools/map-editor/.env.example` with comments matching the existing pattern
+- [x] T003 [P] Create directory structure: `tools/map-editor/src/panels/admin/`, `tools/map-editor/src/panels/detail/`, `tools/map-editor/src/hooks/`
 
 ---
 
@@ -30,9 +30,9 @@
 
 **⚠️ CRITICAL**: No user story panel work can begin until this phase is complete.
 
-- [ ] T004 Create `tools/map-editor/src/hooks/useAdminSelection.ts` with `AdminSelection` interface (`selectedSessionId`, `selectedAgentId`, `selectedGhostSessionId`) and hook returning `selection` + `selectSession`, `selectAgent`, `selectGhostSession` setters; each setter clears deeper levels (e.g., `selectSession(null)` clears agentId and ghostSessionId too)
-- [ ] T005 [P] Create `tools/map-editor/src/services/agentHostClient.ts` with base setup: `agentHostUrl` and `agentHostBearer` from `import.meta.env`, `AgentHostError` class with `status: number`, auth header helper, `AgentCatalogEntry` and `GhostSessionRecord` TypeScript interfaces — no fetch calls yet
-- [ ] T006 Update `tools/map-editor/src/App.tsx` to: instantiate `useAdminSelection()` at App level; add a horizontal-flex left overlay container in admin mode; add a right overlay slot in admin mode (both empty until panels added in later tasks)
+- [x] T004 Create `tools/map-editor/src/hooks/useAdminSelection.ts` with `AdminSelection` interface (`selectedSessionId`, `selectedAgentId`, `selectedGhostSessionId`) and hook returning `selection` + `selectSession`, `selectAgent`, `selectGhostSession` setters; each setter clears deeper levels (e.g., `selectSession(null)` clears agentId and ghostSessionId too)
+- [x] T005 [P] Create `tools/map-editor/src/services/agentHostClient.ts` with base setup: `agentHostUrl` and `agentHostBearer` from `import.meta.env`, `AgentHostError` class with `status: number`, auth header helper, `AgentCatalogEntry` and `GhostSessionRecord` TypeScript interfaces — no fetch calls yet
+- [x] T006 Update `tools/map-editor/src/App.tsx` to: instantiate `useAdminSelection()` at App level; add a horizontal-flex left overlay container in admin mode; add a right overlay slot in admin mode (both empty until panels added in later tasks)
 
 **Checkpoint**: `pnpm typecheck` in `tools/map-editor/` passes with no errors.
 
@@ -44,9 +44,9 @@
 
 **Independent Test**: Start local services per quickstart.md Step 1–3. Start a world session per Step 4. In Admin mode: click the session row → CatalogPanel appears with session name in header. Click ✕ → CatalogPanel closes. Verifies smoke test S1.
 
-- [ ] T007 [US1] Extend `tools/map-editor/src/panels/AdminPanel.tsx` to: accept `onSelectSession: (id: string | null) => void` and `selectedSessionId: string | null` props; make session child rows clickable (call `onSelectSession(session.id)` on click); highlight the selected session row with a distinct background; add a `▶` affordance on the selected session row indicating CatalogPanel is open
-- [ ] T008 [US1] Create `tools/map-editor/src/panels/admin/CatalogPanel.tsx` as a panel shell: 280px wide, `#16162a` background, top header showing "Catalog · {sessionId}" + ↻ Reload button + ✕ close button (`onClose` prop); body placeholder "Loading agents…" state; error banner slot for "Agent host is not reachable — check VITE_AGENT_HOST_URL" (FR-013); close button calls `onClose`
-- [ ] T009 [US1] Update `tools/map-editor/src/App.tsx` left overlay container (from T006) to render `<AdminPanel onSelectSession={selectSession} selectedSessionId={selection.selectedSessionId} />` and, when `selection.selectedSessionId` is non-null, render `<CatalogPanel sessionId={selection.selectedSessionId} onClose={() => selectSession(null)} ... />`
+- [x] T007 [US1] Extend `tools/map-editor/src/panels/AdminPanel.tsx` to: accept `onSelectSession: (id: string | null) => void` and `selectedSessionId: string | null` props; make session child rows clickable (call `onSelectSession(session.id)` on click); highlight the selected session row with a distinct background; add a `▶` affordance on the selected session row indicating CatalogPanel is open
+- [x] T008 [US1] Create `tools/map-editor/src/panels/admin/CatalogPanel.tsx` as a panel shell: 280px wide, `#16162a` background, top header showing "Catalog · {sessionId}" + ↻ Reload button + ✕ close button (`onClose` prop); body placeholder "Loading agents…" state; error banner slot for "Agent host is not reachable — check VITE_AGENT_HOST_URL" (FR-013); close button calls `onClose`
+- [x] T009 [US1] Update `tools/map-editor/src/App.tsx` left overlay container (from T006) to render `<AdminPanel onSelectSession={selectSession} selectedSessionId={selection.selectedSessionId} />` and, when `selection.selectedSessionId` is non-null, render `<CatalogPanel sessionId={selection.selectedSessionId} onClose={() => selectSession(null)} ... />`
 
 **Checkpoint**: Smoke test S1 passes — session click opens CatalogPanel; ✕ closes it; map editor remains visible behind the overlay.
 
@@ -58,11 +58,11 @@
 
 **Independent Test**: Start local services per quickstart.md Step 1–3 with random-agent running. Select a session → CatalogPanel shows `random-agent-<pod>` with Wanderer badge. Click Spawn Ghost → success inline shows a sessionId. Click Deregister on an agent with active sessions → inline error "Cannot deregister: N active sessions". Verifies smoke tests S2 and S3.
 
-- [ ] T010 [P] [US2] Add `listAgents()`, `getAgentCard(agentId)`, and `deregisterAgent(agentId)` functions to `tools/map-editor/src/services/agentHostClient.ts`; `listAgents()` must extract `tier` from `agentCard.matrix.tier` and `about` from `agentCard.matrix.profile.about` before returning; `deregisterAgent()` must parse 409 response for `count` and throw `AgentHostError(409, "Cannot deregister: N active sessions")`
-- [ ] T011 [P] [US2] Create `tools/map-editor/src/services/registryClient.ts` with `oneClickSpawn(agentId: string): Promise<{ sessionId: string; ghostId: string }>` that executes the four-step registry chain: `POST /registry/houses` → `POST /registry/caretakers` (unique name via `uniqueNamesGenerator`) → `POST /registry/adopt` → `spawnGhost()` from agentHostClient; re-export `worldApiUrl` derived from `VITE_API_BASE_URL`
-- [ ] T012 [US2] Implement full agent table in `tools/map-editor/src/panels/admin/CatalogPanel.tsx`: call `listAgents()` on mount and on ↻ reload; display rows with Agent ID, Tier badge (amber = wanderer, blue = listener, green = social), Built-in flag, About text; row click expands an inline `<pre>` with `JSON.stringify(agentCard, null, 2)`; Spawn Ghost button calls `oneClickSpawn(agentId)` — show "Spawning…" state, success inline `sessionId: ...`, error inline; Deregister button calls `deregisterAgent(agentId)` — show 409 error inline per row; empty state "No agents registered"; agent host error banner per FR-013
-- [ ] T013 [US2] Create `tools/map-editor/src/panels/admin/GhostListPanel.tsx` shell: 280px wide panel with header "Ghosts · {agentId}" + ↻ Reload + ✕ close button (`onClose` prop); body placeholder "Loading ghost sessions…"; accepts `agentId`, `onClose`, `onSelectGhostSession`, `selectedGhostSessionId` props
-- [ ] T014 [US2] Update `tools/map-editor/src/App.tsx`: pass `onSelectAgent={selectAgent} selectedAgentId={selection.selectedAgentId}` to CatalogPanel; render `<GhostListPanel agentId={selection.selectedAgentId} onClose={() => selectAgent(null)} ... />` in the left overlay when `selection.selectedAgentId` is non-null
+- [x] T010 [P] [US2] Add `listAgents()`, `getAgentCard(agentId)`, and `deregisterAgent(agentId)` functions to `tools/map-editor/src/services/agentHostClient.ts`; `listAgents()` must extract `tier` from `agentCard.matrix.tier` and `about` from `agentCard.matrix.profile.about` before returning; `deregisterAgent()` must parse 409 response for `count` and throw `AgentHostError(409, "Cannot deregister: N active sessions")`
+- [x] T011 [P] [US2] Create `tools/map-editor/src/services/registryClient.ts` with `oneClickSpawn(agentId: string): Promise<{ sessionId: string; ghostId: string }>` that executes the four-step registry chain: `POST /registry/houses` → `POST /registry/caretakers` (unique name via `uniqueNamesGenerator`) → `POST /registry/adopt` → `spawnGhost()` from agentHostClient; re-export `worldApiUrl` derived from `VITE_API_BASE_URL`
+- [x] T012 [US2] Implement full agent table in `tools/map-editor/src/panels/admin/CatalogPanel.tsx`: call `listAgents()` on mount and on ↻ reload; display rows with Agent ID, Tier badge (amber = wanderer, blue = listener, green = social), Built-in flag, About text; row click expands an inline `<pre>` with `JSON.stringify(agentCard, null, 2)`; Spawn Ghost button calls `oneClickSpawn(agentId)` — show "Spawning…" state, success inline `sessionId: ...`, error inline; Deregister button calls `deregisterAgent(agentId)` — show 409 error inline per row; empty state "No agents registered"; agent host error banner per FR-013
+- [x] T013 [US2] Create `tools/map-editor/src/panels/admin/GhostListPanel.tsx` shell: 280px wide panel with header "Ghosts · {agentId}" + ↻ Reload + ✕ close button (`onClose` prop); body placeholder "Loading ghost sessions…"; accepts `agentId`, `onClose`, `onSelectGhostSession`, `selectedGhostSessionId` props
+- [x] T014 [US2] Update `tools/map-editor/src/App.tsx`: pass `onSelectAgent={selectAgent} selectedAgentId={selection.selectedAgentId}` to CatalogPanel; render `<GhostListPanel agentId={selection.selectedAgentId} onClose={() => selectAgent(null)} ... />` in the left overlay when `selection.selectedAgentId` is non-null
 
 **Checkpoint**: Smoke tests S2 and S3 pass — agent catalog visible, Spawn Ghost creates a ghost session and shows sessionId, Deregister with active sessions shows inline error.
 
@@ -74,10 +74,10 @@
 
 **Independent Test**: Spawn at least one ghost per S3. Click the agent row in CatalogPanel → GhostListPanel shows the ghost session with status "running". Click Shutdown → row disappears after ↻ reload. Open browser DevTools and confirm "mcpToken" string does not appear anywhere in the DOM. Verifies smoke tests S4 and S5.
 
-- [ ] T015 [P] [US3] Add `listGhostSessions()` and `shutdownGhostSession(sessionId)` to `tools/map-editor/src/services/agentHostClient.ts`; `listGhostSessions()` MUST strip `mcpToken` before returning `GhostSessionRecord[]` — verify via `Object.keys(session).includes("mcpToken") === false` assertion during development
-- [ ] T016 [US3] Implement `tools/map-editor/src/panels/admin/GhostListPanel.tsx` fully: call `listGhostSessions()` on mount filtered by `agentId`; display rows with Session ID (truncated to 12 chars), Ghost ID, Status (styled for known values: running = green, failed = red, others = default); Shutdown button calls `shutdownGhostSession(sessionId)`, shows inline error on failure, refreshes list on success; empty state "No active ghost sessions"; explicitly assert `mcpToken` does not appear anywhere in the JSX (add a comment noting FR-012 compliance)
-- [ ] T017 [P] [US3] Create `tools/map-editor/src/panels/detail/DetailPanel.tsx`: 280px wide right overlay, matches existing right sidebar styling; cold start (no selection): "Select a session or agent to inspect"; when `selectedGhostSessionId` is set: fetch and display ghost session detail (sessionId, agentId, ghostId, status) without mcpToken
-- [ ] T018 [US3] Update `tools/map-editor/src/App.tsx` right overlay: in admin mode, render `<DetailPanel selection={selection} />` (replaces the edit sidebar); in edit mode, restore the existing edit sidebar — ensure modes are mutually exclusive
+- [x] T015 [P] [US3] Add `listGhostSessions()` and `shutdownGhostSession(sessionId)` to `tools/map-editor/src/services/agentHostClient.ts`; `listGhostSessions()` MUST strip `mcpToken` before returning `GhostSessionRecord[]` — verify via `Object.keys(session).includes("mcpToken") === false` assertion during development
+- [x] T016 [US3] Implement `tools/map-editor/src/panels/admin/GhostListPanel.tsx` fully: call `listGhostSessions()` on mount filtered by `agentId`; display rows with Session ID (truncated to 12 chars), Ghost ID, Status (styled for known values: running = green, failed = red, others = default); Shutdown button calls `shutdownGhostSession(sessionId)`, shows inline error on failure, refreshes list on success; empty state "No active ghost sessions"; explicitly assert `mcpToken` does not appear anywhere in the JSX (add a comment noting FR-012 compliance)
+- [x] T017 [P] [US3] Create `tools/map-editor/src/panels/detail/DetailPanel.tsx`: 280px wide right overlay, matches existing right sidebar styling; cold start (no selection): "Select a session or agent to inspect"; when `selectedGhostSessionId` is set: fetch and display ghost session detail (sessionId, agentId, ghostId, status) without mcpToken
+- [x] T018 [US3] Update `tools/map-editor/src/App.tsx` right overlay: in admin mode, render `<DetailPanel selection={selection} />` (replaces the edit sidebar); in edit mode, restore the existing edit sidebar — ensure modes are mutually exclusive
 
 **Checkpoint**: Smoke tests S4 and S5 pass — ghost sessions visible, shutdown works, mcpToken absent from DOM per S6 (use browser DevTools → Ctrl+F on "mcpToken").
 
@@ -87,12 +87,12 @@
 
 **Purpose**: Keyboard navigation, CI/CD env var wiring, documentation updates.
 
-- [ ] T019 [P] Add Esc key handler to `tools/map-editor/src/panels/admin/CatalogPanel.tsx` (Esc → calls `onClose`) and `tools/map-editor/src/panels/admin/GhostListPanel.tsx` (Esc → calls `onClose`) using `useEffect` + `document.addEventListener("keydown", ...)` scoped to panel mount
-- [ ] T020 [P] Add `VITE_AGENT_HOST_URL` and `VITE_AGENT_HOST_BEARER` build args to the map-editor build step in `.github/workflows/production-deploy.yml`, sourced from the `aie-matrix-secrets` GCP secret (same pattern as existing `VITE_ADMIN_TOKEN`)
-- [ ] T021 [P] Add `VITE_AGENT_HOST_URL` and `VITE_AGENT_HOST_BEARER` to the environment variable table in `deploy/staging/README.md`
-- [ ] T022 [P] Update `specs/018-ghost-agent-deployment/quickstart.md` to reference the admin panel (`admin.matrix.relateby.dev`) as the preferred operator path for spawning ghosts
-- [ ] T023 [P] Update `ghosts/README.md` to note that ghost spawning can be done via the admin panel without terminal access
-- [ ] T024 Update `proposals/rfc/0014-admin-ghost-management.md` status note: add a comment that the implemented IA uses Miller columns (Maps → Sessions → Catalog → Ghosts) rather than the two-tab layout originally described
+- [x] T019 [P] Add Esc key handler to `tools/map-editor/src/panels/admin/CatalogPanel.tsx` (Esc → calls `onClose`) and `tools/map-editor/src/panels/admin/GhostListPanel.tsx` (Esc → calls `onClose`) using `useEffect` + `document.addEventListener("keydown", ...)` scoped to panel mount
+- [x] T020 [P] Add `VITE_AGENT_HOST_URL` and `VITE_AGENT_HOST_BEARER` build args to the map-editor build step in `.github/workflows/production-deploy.yml`, sourced from the `aie-matrix-secrets` GCP secret (same pattern as existing `VITE_ADMIN_TOKEN`)
+- [x] T021 [P] Add `VITE_AGENT_HOST_URL` and `VITE_AGENT_HOST_BEARER` to the environment variable table in `deploy/staging/README.md`
+- [x] T022 [P] Update `specs/018-ghost-agent-deployment/quickstart.md` to reference the admin panel (`admin.matrix.relateby.dev`) as the preferred operator path for spawning ghosts
+- [x] T023 [P] Update `ghosts/README.md` to note that ghost spawning can be done via the admin panel without terminal access
+- [x] T024 Update `proposals/rfc/0014-admin-ghost-management.md` status note: add a comment that the implemented IA uses Miller columns (Maps → Sessions → Catalog → Ghosts) rather than the two-tab layout originally described
 - [ ] T025 Run all six quickstart.md smoke tests (S1–S6) and document results in `specs/019-ghost-management/quickstart.md` under a "Verified" section with date
 
 ---

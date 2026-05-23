@@ -33,6 +33,15 @@ cp deploy/staging/.env.staging.example deploy/staging/.env.staging
 | `NEO4J_AUTH` | `neo4j/<password>` — used by the Neo4j container image |
 | `AGENT_HOST_TOKEN` | Bearer token for agent-host authenticated requests |
 
+**Front-end build variables** (required when building `tools/map-editor` against this staging stack):
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_API_BASE_URL` | World API base URL (e.g., `http://<staging-host>:8787`) |
+| `VITE_ADMIN_TOKEN` | Admin bearer token for map write operations |
+| `VITE_AGENT_HOST_URL` | Agent-host base URL (e.g., `http://<staging-host>:4000`) — required for ghost management panel (Spec 019) |
+| `VITE_AGENT_HOST_BEARER` | Bearer token for agent-host — same value as `AGENT_HOST_TOKEN` (Spec 019) |
+
 See `specs/016-staging-deployment/contracts/env-contract.md` for the full variable reference.
 
 ---
