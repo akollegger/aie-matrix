@@ -131,7 +131,7 @@ jobs:
             --set image.tag=${{ steps.tag.outputs.value }} \
             -f deploy/k8s/values-production.yaml \
             --wait \
-            --timeout 5m
+            --timeout 8m
 
       - name: Deploy agent-host
         run: |
@@ -140,7 +140,7 @@ jobs:
             --set image.tag=${{ steps.tag.outputs.value }} \
             -f deploy/k8s/values-production.yaml \
             --wait \
-            --timeout 5m
+            --timeout 8m
 
       - name: Deploy random-agent
         env:

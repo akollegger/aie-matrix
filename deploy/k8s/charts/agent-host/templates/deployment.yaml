@@ -15,6 +15,9 @@ spec:
       labels:
         {{- include "agent-host.selectorLabels" . | nindent 8 }}
     spec:
+      # Match the 25s hard deadline in the shutdown handler (see main.ts shutdownWithDeadline).
+      # K8s force-kills at this boundary; the process must exit before then.
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds | default 30 }}
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

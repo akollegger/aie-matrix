@@ -94,14 +94,31 @@ const server = app.listen(port, "0.0.0.0", () => {
 const shutdown = async () => {
   colyseusHandle?.close();
   await runtime.dispose();
+  // closeAllConnections() force-closes keep-alive HTTP connections so server.close()
+  // doesn't wait indefinitely for clients (health probes, registered ghosts) to disconnect.
+  server.closeAllConnections();
   await new Promise<void>((resolve) => {
     server.close(() => resolve());
   });
 };
 
+// Hard 25s deadline: ensures the process always exits before K8s force-kills at
+// terminationGracePeriodSeconds (30s). Without this, a hung runtime.dispose() or
+// a keep-alive connection would cause Helm --wait to time out on rolling deploys.
+const shutdownWithDeadline = () =>
+  Promise.race([
+    shutdown(),
+    new Promise<void>((resolve) =>
+      setTimeout(() => {
+        console.warn(JSON.stringify({ kind: "agent-host.shutdown-timeout", note: "forcing exit after 25s" }));
+        resolve();
+      }, 25_000),
+    ),
+  ]);
+
 process.on("SIGINT", () => {
-  void shutdown().finally(() => process.exit(0));
+  void shutdownWithDeadline().finally(() => process.exit(0));
 });
 process.on("SIGTERM", () => {
-  void shutdown().finally(() => process.exit(0));
+  void shutdownWithDeadline().finally(() => process.exit(0));
 });
