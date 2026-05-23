@@ -122,6 +122,33 @@ jobs:
             --type merge \
             -p "{\"data\":{\"ADMIN_TOKEN\":\"$(echo -n "$VITE_ADMIN_TOKEN" | base64 -w0)\"}}"
 
+      # The agent-host chart's secretKeys changed from GHOST_HOUSE_DEV_TOKEN
+      # (v0.2.7) to AGENT_HOST_TOKEN (018-ghost-agent-deployment). If the k8s
+      # secret still only has the old key, pods get CreateContainerConfigError.
+      # Copy the old key to the new name if AGENT_HOST_TOKEN is not yet present.
+      - name: Migrate GHOST_HOUSE_DEV_TOKEN → AGENT_HOST_TOKEN in k8s secret
+        run: |
+          existing=$(kubectl get secret aie-matrix-secrets \
+            --namespace ${{ env.NAMESPACE }} \
+            -o jsonpath='{.data.AGENT_HOST_TOKEN}' 2>/dev/null || true)
+          if [ -z "$existing" ]; then
+            old=$(kubectl get secret aie-matrix-secrets \
+              --namespace ${{ env.NAMESPACE }} \
+              -o jsonpath='{.data.GHOST_HOUSE_DEV_TOKEN}' 2>/dev/null || true)
+            if [ -n "$old" ]; then
+              echo "Copying GHOST_HOUSE_DEV_TOKEN → AGENT_HOST_TOKEN"
+              kubectl patch secret aie-matrix-secrets \
+                --namespace ${{ env.NAMESPACE }} \
+                --type merge \
+                -p "{\"data\":{\"AGENT_HOST_TOKEN\":\"$old\"}}"
+            else
+              echo "ERROR: neither AGENT_HOST_TOKEN nor GHOST_HOUSE_DEV_TOKEN found in aie-matrix-secrets"
+              exit 1
+            fi
+          else
+            echo "AGENT_HOST_TOKEN already present — no migration needed"
+          fi
+
       # ── Deploy via Helm ────────────────────────────────────────────────────
 
       - name: Deploy server
