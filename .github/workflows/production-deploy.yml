@@ -96,6 +96,18 @@ jobs:
       - name: Push agent-host image
         run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-host:${{ steps.tag.outputs.value }}
 
+      # ── Build & push random-agent image ────────────────────────────────────
+
+      - name: Build random-agent image
+        run: |
+          docker build \
+            -f ghosts/random-agent/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/random-agent:${{ steps.tag.outputs.value }} \
+            .
+
+      - name: Push random-agent image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/random-agent:${{ steps.tag.outputs.value }}
+
       # ── Sync secrets into k8s ─────────────────────────────────────────────
       # GitHub Actions secrets are the source of truth. Patch the k8s secret
       # before Helm deploy so the server always uses the same ADMIN_TOKEN that
@@ -110,6 +122,33 @@ jobs:
             --type merge \
             -p "{\"data\":{\"ADMIN_TOKEN\":\"$(echo -n "$VITE_ADMIN_TOKEN" | base64 -w0)\"}}"
 
+      # The agent-host chart's secretKeys changed from GHOST_HOUSE_DEV_TOKEN
+      # (v0.2.7) to AGENT_HOST_TOKEN (018-ghost-agent-deployment). If the k8s
+      # secret still only has the old key, pods get CreateContainerConfigError.
+      # Copy the old key to the new name if AGENT_HOST_TOKEN is not yet present.
+      - name: Migrate GHOST_HOUSE_DEV_TOKEN → AGENT_HOST_TOKEN in k8s secret
+        run: |
+          existing=$(kubectl get secret aie-matrix-secrets \
+            --namespace ${{ env.NAMESPACE }} \
+            -o jsonpath='{.data.AGENT_HOST_TOKEN}' 2>/dev/null || true)
+          if [ -z "$existing" ]; then
+            old=$(kubectl get secret aie-matrix-secrets \
+              --namespace ${{ env.NAMESPACE }} \
+              -o jsonpath='{.data.GHOST_HOUSE_DEV_TOKEN}' 2>/dev/null || true)
+            if [ -n "$old" ]; then
+              echo "Copying GHOST_HOUSE_DEV_TOKEN → AGENT_HOST_TOKEN"
+              kubectl patch secret aie-matrix-secrets \
+                --namespace ${{ env.NAMESPACE }} \
+                --type merge \
+                -p "{\"data\":{\"AGENT_HOST_TOKEN\":\"$old\"}}"
+            else
+              echo "ERROR: neither AGENT_HOST_TOKEN nor GHOST_HOUSE_DEV_TOKEN found in aie-matrix-secrets"
+              exit 1
+            fi
+          else
+            echo "AGENT_HOST_TOKEN already present — no migration needed"
+          fi
+
       # ── Deploy via Helm ────────────────────────────────────────────────────
 
       - name: Deploy server
@@ -119,16 +158,49 @@ jobs:
             --set image.tag=${{ steps.tag.outputs.value }} \
             -f deploy/k8s/values-production.yaml \
             --wait \
-            --timeout 5m
+            --timeout 8m
 
+      # agent-host's pre-ee98b91 code hangs on SIGTERM (server.close() waits
+      # for keep-alive connections indefinitely). GKE Autopilot does not appear
+      # to honour terminationGracePeriodSeconds reliably for this workload, so
+      # the pod can stay Terminating for the entire Helm --wait window.
+      #
+      # Fix: scale to 0 before the upgrade so there is no running pod for the
+      # rolling-update to terminate. Helm then only waits for the new pod to
+      # become Ready — no "Pending termination" possible. Once the new image
+      # (25 s shutdown deadline, ee98b91) is live this step is idempotent:
+      # scale-to-0 will succeed instantly against an already-empty replica set
+      # and the wait command will be a no-op.
       - name: Deploy agent-host
         run: |
+          # Drain existing pods so Helm sees no old replica to terminate.
+          kubectl scale deployment/agent-host --replicas=0 \
+            -n ${{ env.NAMESPACE }} 2>/dev/null || true
+          # Wait up to 60 s; force-kill any pod that refuses to exit cleanly.
+          kubectl wait pod \
+            -l "app.kubernetes.io/name=agent-host" \
+            -n ${{ env.NAMESPACE }} \
+            --for=delete \
+            --timeout=60s 2>/dev/null \
+          || kubectl delete pod \
+               -l "app.kubernetes.io/name=agent-host" \
+               -n ${{ env.NAMESPACE }} \
+               --force --grace-period=0 2>/dev/null || true
+
+          # Now upgrade: no old pods → no rolling-update termination wait.
           helm upgrade --install agent-host deploy/k8s/charts/agent-host \
             --namespace ${{ env.NAMESPACE }} \
             --set image.tag=${{ steps.tag.outputs.value }} \
             -f deploy/k8s/values-production.yaml \
             --wait \
-            --timeout 5m
+            --timeout 4m
+
+      - name: Deploy random-agent
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          envsubst < deploy/k8s/ghosts/random-agent.yaml \
+            | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
 
       # ── Build & deploy front-ends ─────────────────────────────────────────
 
@@ -196,9 +268,11 @@ jobs:
         run: |
           kubectl rollout status deployment/server -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/agent-host -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/random-agent -n ${{ env.NAMESPACE }}
 
       - name: Dump logs on failure
         if: failure()
         run: |
           kubectl logs -l app.kubernetes.io/name=server -n ${{ env.NAMESPACE }} --tail=50 || true
           kubectl logs -l app.kubernetes.io/name=agent-host -n ${{ env.NAMESPACE }} --tail=50 || true
+          kubectl logs -l app=random-agent -n ${{ env.NAMESPACE }} --tail=50 || true

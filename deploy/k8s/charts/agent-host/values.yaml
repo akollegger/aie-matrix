@@ -12,8 +12,8 @@ service:
 # Non-secret environment variables
 env:
   NODE_ENV: production
-  GHOST_HOUSE_PORT: "4000"
-  GHOST_HOUSE_PUBLIC_BASE_URL: "https://matrix.relateby.dev"
+  AGENT_HOST_PORT: "4000"
+  AGENT_HOST_PUBLIC_BASE_URL: "https://matrix.relateby.dev"
   # Inter-service URLs — use Kubernetes Service DNS within the same namespace
   WORLD_API_URL: "http://server:8787"
   COLYSEUS_URL: "ws://server:8787"
@@ -24,7 +24,7 @@ secretName: aie-matrix-secrets
 
 # Keys from the secret to inject as env vars
 secretKeys:
-  - GHOST_HOUSE_DEV_TOKEN
+  - AGENT_HOST_TOKEN
 
 resources:
   requests:

@@ -45,7 +45,7 @@ cp clients/intermedium/.env.example clients/intermedium/.env.local
 # Edit .env.local — set the URLs for your local backend:
 # VITE_COLYSEUS_URL=ws://localhost:2567
 # VITE_WORLD_API_URL=http://localhost:8787
-# VITE_GHOST_HOUSE_URL=http://localhost:4000
+# VITE_AGENT_HOST_URL=http://localhost:4000
 # VITE_MAP_ID=freeplay
 ```
 
@@ -64,7 +64,7 @@ Open `http://localhost:5180`.
 |---|---|
 | `VITE_COLYSEUS_URL` | Colyseus WebSocket URL for ghost position broadcasts |
 | `VITE_WORLD_API_URL` | World API HTTP base URL for map topology fetch |
-| `VITE_GHOST_HOUSE_URL` | Ghost house base URL for conversation and interiority |
+| `VITE_AGENT_HOST_URL` | Ghost house base URL for conversation and interiority |
 | `VITE_MAP_ID` | Map to load at startup (default: `freeplay`) |
 | `VITE_DEV_GHOST_ID` | Bypasses pairing flow — sets ghost ID directly for local dev |
 

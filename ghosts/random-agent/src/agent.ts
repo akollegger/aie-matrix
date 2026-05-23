@@ -17,12 +17,21 @@ function listenPortFromEnv(fallback: number): number {
   return Number.isFinite(n) && n > 0 && n < 65536 ? n : fallback;
 }
 
-const dev = process.env.GHOST_HOUSE_DEV_TOKEN ?? "";
+const token = process.env.AGENT_HOST_TOKEN ?? "";
+const agentHostUrl = (process.env.AGENT_HOST_URL ?? "").replace(/\/$/, "");
 const port = listenPortFromEnv(4001);
 const publicBase = (process.env.RANDOM_AGENT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`).replace(
   /\/$/,
   "",
 );
+const agentId = `random-agent-${process.env.HOSTNAME ?? "local"}`;
+const registerTimeoutMs = (() => {
+  const raw = process.env.AGENT_REGISTER_TIMEOUT;
+  if (!raw) return 120_000;
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : 120_000;
+})();
+
 const agentCard = buildWandererAgentCard(publicBase);
 const requestHandler = new DefaultRequestHandler(
   agentCard,
@@ -31,10 +40,10 @@ const requestHandler = new DefaultRequestHandler(
 );
 
 const requireToken: RequestHandler = (req: Request, res: Response, next) => {
-  if (dev.length === 0) {
-    return res.status(500).json({ error: "GHOST_HOUSE_DEV_TOKEN is not set" });
+  if (token.length === 0) {
+    return res.status(500).json({ error: "AGENT_HOST_TOKEN is not set" });
   }
-  if (req.headers.authorization === `Bearer ${dev}`) {
+  if (req.headers.authorization === `Bearer ${token}`) {
     return next();
   }
   return res.status(401).json({ error: "unauthorized" });
@@ -42,6 +51,12 @@ const requireToken: RequestHandler = (req: Request, res: Response, next) => {
 
 const app = express();
 app.use(express.json({ limit: "4mb" }));
+
+// Health endpoint — required by compose depends_on and K8s probes
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
 app.use(`/${AGENT_CARD_PATH}`, agentCardHandler({ agentCardProvider: requestHandler }));
 app.use(
   "/a2a/jsonrpc",
@@ -49,13 +64,88 @@ app.use(
   jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }),
 );
 
+async function register(): Promise<void> {
+  if (!agentHostUrl) {
+    console.warn(JSON.stringify({ kind: "random-agent.registration-skipped", reason: "AGENT_HOST_URL not set" }));
+    return;
+  }
+
+  const deadline = Date.now() + registerTimeoutMs;
+  const headers = {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+
+  // Deregister any stale entry before registering — ignore 404; warn on 409 (active sessions)
+  try {
+    const del = await fetch(`${agentHostUrl}/v1/catalog/${agentId}`, { method: "DELETE", headers });
+    if (del.status === 409) {
+      console.warn(JSON.stringify({ kind: "random-agent.deregister-conflict", agentId, note: "active sessions; skipping deregister" }));
+    }
+  } catch {
+    // network error during delete — continue to registration attempt
+  }
+
+  for (;;) {
+    try {
+      const res = await fetch(`${agentHostUrl}/v1/catalog/register`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ agentId, baseUrl: publicBase }),
+      });
+      if (res.ok || res.status === 201) {
+        console.info(JSON.stringify({ kind: "random-agent.registered", agentId }));
+        return;
+      }
+      if (res.status === 409) {
+        // Already registered (race or restart without clean deregister) — treat as success
+        console.warn(JSON.stringify({ kind: "random-agent.already-registered", agentId }));
+        return;
+      }
+      // 4xx client error that isn't 409 — unlikely to recover, fall through to retry
+      console.warn(JSON.stringify({ kind: "random-agent.registration-error", status: res.status }));
+    } catch (err) {
+      // network error — agent-host not yet ready
+    }
+
+    if (Date.now() >= deadline) {
+      console.error(JSON.stringify({ kind: "random-agent.registration-timeout", agentId }));
+      process.exit(1);
+    }
+    await new Promise((r) => setTimeout(r, 2_000));
+  }
+}
+
+async function deregister(): Promise<void> {
+  if (!agentHostUrl) return;
+  try {
+    await fetch(`${agentHostUrl}/v1/catalog/${agentId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+  } catch {
+    // ignore errors on shutdown
+  }
+}
+
+process.on("SIGTERM", () => {
+  const timeout = setTimeout(() => process.exit(0), 10_000);
+  timeout.unref();
+  deregister().then(() => {
+    clearTimeout(timeout);
+    process.exit(0);
+  });
+});
+
 app.listen(port, "0.0.0.0", () => {
   console.info(
     JSON.stringify({
       kind: "random-agent.start",
       publicBase,
       port,
-      card: `http://127.0.0.1:${port}/.well-known/agent-card.json`,
+      agentId,
     }),
   );
+  // Registration runs after listen — non-blocking relative to accepting connections
+  register();
 });

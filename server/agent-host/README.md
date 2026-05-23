@@ -8,9 +8,9 @@ Config is loaded with `@aie-matrix/root-env` from the **monorepo root** `.env` /
 
 | Variable | Required | Default | Role |
 |----------|----------|---------|------|
-| `GHOST_HOUSE_DEV_TOKEN` | yes | — | Static bearer for catalog and session HTTP (localhost Phase 1) |
+| `AGENT_HOST_TOKEN` | yes | — | Static bearer for catalog and session HTTP (localhost Phase 1) |
 | `AIE_MATRIX_HTTP_BASE_URL` | no | `http://127.0.0.1:8787` | World **HTTP** origin for the Colyseus bridge (`/spectator/room`, WS). Not the Streamable `/mcp` URL. |
-| `GHOST_HOUSE_PORT` | no | `4000` | House HTTP + A2A port |
+| `AGENT_HOST_PORT` | no | `4000` | House HTTP + A2A port |
 | `CATALOG_FILE_PATH` | no | `./catalog.json` (relative to **process cwd** of the house) | File-backed agent catalog (IC-005) |
 
 The Streamable world MCP URL used to forward tools is **`credential.worldApiBaseUrl`** from each registry **/adopt** response (per session), not a single env var.

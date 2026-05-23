@@ -67,13 +67,15 @@ Third-party **ghost agents** are hosted by the **agent host** package (`@aie-mat
 |--------|----------------|
 | **Tiers** | **Wanderer** (movement / minimal), **Listener** (world events, no `say`), **Social** (events + `say` via MCP). Declared on the agent card. |
 | **Agent card** | [IC-001](specs/009-agent-host-a2a/contracts/ic-001-agent-card-schema.md) — `matrix` block (`tier`, `requiredTools`, `schemaVersion`, …) on `/.well-known/agent-card.json`. |
-| **Catalog** | [IC-005](specs/009-agent-host-a2a/contracts/ic-005-catalog-api.md) — register with `POST {GHOST_HOUSE_URL}/v1/catalog/register` (bearer `GHOST_HOUSE_DEV_TOKEN`). |
+| **Catalog** | [IC-005](specs/009-agent-host-a2a/contracts/ic-005-catalog-api.md) — register with `POST {AGENT_HOST_URL}/v1/catalog/register` (bearer `AGENT_HOST_TOKEN`). |
 | **TCK** | `pnpm --filter @aie-matrix/ghost-tck run tck:wanderer` — same package has `tck:listener` and `tck:social` for the other tiers (server + house + agent must be running). |
 | **Phase 1 networking** | **Localhost** — the catalog stores a reachable `baseUrl` for your agent; production TLS and non-local auth are follow-ups. |
 
-**Reference implementation:** [`ghosts/random-agent/`](ghosts/random-agent/) (Wanderer). End-to-end steps: [`specs/009-agent-host-a2a/quickstart.md`](specs/009-agent-host-a2a/quickstart.md).
+**Reference implementation:** [`ghosts/random-agent/`](ghosts/random-agent/) (Wanderer). End-to-end steps: [`specs/018-ghost-agent-deployment/quickstart.md`](specs/018-ghost-agent-deployment/quickstart.md).
 
-**Several ghosts, one Wanderer process:** the random-agent README and quickstart §7 describe how distinct `ghostId`s map to parallel movement loops against a single registered `baseUrl`, versus running N agent processes for isolation.
+### Contributing a ghost agent
+
+First-party ghost agents live in `ghosts/` and are deployed as containers alongside the rest of the stack. To add a new ghost, follow the step-by-step guide in [`ghosts/README.md`](ghosts/README.md). It covers: what a ghost needs (A2A server, `/health`, self-registration, graceful shutdown), the env var contract, and how to wire up the Dockerfile, compose service, and K8s manifest by copying the `random-agent` reference implementation.
 
 ### Running the staging stack
 
@@ -82,7 +84,7 @@ The Tier 2 staging environment runs all four services (neo4j, redis, server, age
 **Quick start:**
 ```bash
 cp deploy/staging/.env.staging.example deploy/staging/.env.staging
-# edit .env.staging — set NEO4J_PASSWORD, NEO4J_AUTH, GHOST_HOUSE_DEV_TOKEN, ADMIN_TOKEN
+# edit .env.staging — set NEO4J_PASSWORD, NEO4J_AUTH, AGENT_HOST_TOKEN, ADMIN_TOKEN
 docker compose -f deploy/staging/docker-compose.yml --env-file deploy/staging/.env.staging up --build
 ```
 

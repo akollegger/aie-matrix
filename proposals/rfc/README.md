@@ -60,3 +60,4 @@ What other approaches were considered?
 | [RFC-0011](0011-ghost-personality-substructure.md) | Ghost Personality Substructure | draft |
 | [RFC-0012](0012-speaker-rooms.md) | Speaker Rooms | draft |
 | [RFC-0013](0013-map-management.md) | Map Management — Publish, Activate, and Archive | under review |
+| [RFC-0014](0014-admin-ghost-management.md) | Admin Ghost Management Panel | draft |

@@ -7,7 +7,7 @@
 import type { ConversationMessage } from "../types/conversation.js";
 
 const defaultHeaders = (): Record<string, string> => {
-  const token = import.meta.env.VITE_GHOST_HOUSE_BEARER;
+  const token = import.meta.env.VITE_AGENT_HOST_BEARER;
   if (token && String(token).length > 0) {
     return { Authorization: `Bearer ${token}` };
   }

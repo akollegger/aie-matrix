@@ -41,11 +41,11 @@ export function readSupervisionConfig(): SupervisionConfigValue {
     return Number.isFinite(x) && x > 0 ? x : d;
   };
   return {
-    healthIntervalMs: n("GHOST_HOUSE_HEALTH_INTERVAL_MS", 30_000),
-    healthTimeoutMs: n("GHOST_HOUSE_HEALTH_TIMEOUT_MS", 30_000),
-    restartBaseMs: n("GHOST_HOUSE_RESTART_BASE_MS", 5_000),
-    maxRestartsPerHour: n("GHOST_HOUSE_MAX_RESTARTS_PER_HOUR", 5),
-    maxActionsPerMinute: n("GHOST_HOUSE_MAX_ACTIONS_PER_MIN", 60),
+    healthIntervalMs: n("AGENT_HOST_HEALTH_INTERVAL_MS", 30_000),
+    healthTimeoutMs: n("AGENT_HOST_HEALTH_TIMEOUT_MS", 30_000),
+    restartBaseMs: n("AGENT_HOST_RESTART_BASE_MS", 5_000),
+    maxRestartsPerHour: n("AGENT_HOST_MAX_RESTARTS_PER_HOUR", 5),
+    maxActionsPerMinute: n("AGENT_HOST_MAX_ACTIONS_PER_MIN", 60),
   };
 }
 
@@ -434,7 +434,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         }
         s.status = "shutdown";
         const shutdownGraceMs = (() => {
-          const r = process.env.GHOST_HOUSE_SHUTDOWN_GRACE_MS;
+          const r = process.env.AGENT_HOST_SHUTDOWN_GRACE_MS;
           if (r == null || r === "") return 10_000;
           const n = parseInt(r, 10);
           return Number.isFinite(n) && n >= 0 ? n : 10_000;

@@ -21,11 +21,11 @@ cp ghosts/random-agent/.env.example ghosts/random-agent/.env
 
 | Variable | Example | Used by |
 |----------|---------|--------|
-| `GHOST_HOUSE_DEV_TOKEN` | `dev-secret-change-me` | house, random-agent (A2A auth) |
+| `AGENT_HOST_TOKEN` | `dev-secret-change-me` | house, random-agent (A2A auth) |
 | `AIE_MATRIX_HTTP_BASE_URL` | `http://127.0.0.1:8787` | house Colyseus bridge (optional; default shown) |
-| `GHOST_HOUSE_PORT` | `4000` | house (optional) |
+| `AGENT_HOST_PORT` | `4000` | house (optional) |
 | `CATALOG_FILE_PATH` | `./catalog.json` | house, relative to package cwd (optional) |
-| `GHOST_HOUSE_URL` | `http://127.0.0.1:4000` | random-agent |
+| `AGENT_HOST_URL` | `http://127.0.0.1:4000` | random-agent |
 | `AGENT_PORT` | `4001` | random-agent (optional) |
 
 ---
@@ -150,7 +150,7 @@ This behavior is a **reference implementation** convenience, not a platform-wide
 
 ```bash
 # Optional: if not using defaults
-export GHOST_HOUSE_URL=http://localhost:4000
+export AGENT_HOST_URL=http://localhost:4000
 export RANDOM_AGENT_BASE_URL=http://localhost:4001
 pnpm --filter @aie-matrix/ghost-tck run tck:wanderer
 # [tck] wanderer PASS
@@ -172,12 +172,12 @@ curl -X DELETE "http://localhost:4000/v1/sessions/$SESSION_ID" \
 
 | Variable | Package | Required | Default | Description |
 |----------|---------|----------|---------|-------------|
-| `GHOST_HOUSE_DEV_TOKEN` | agent-host, random-agent | yes | — | Static bearer token for Phase 1 auth (localhost only) |
+| `AGENT_HOST_TOKEN` | agent-host, random-agent | yes | — | Static bearer token for Phase 1 auth (localhost only) |
 | `AIE_MATRIX_HTTP_BASE_URL` | agent-host | no | `http://127.0.0.1:8787` | World HTTP origin for the Colyseus bridge (not the `/mcp` URL) |
-| `GHOST_HOUSE_PORT` | agent-host | no | `4000` | HTTP port |
+| `AGENT_HOST_PORT` | agent-host | no | `4000` | HTTP port |
 | `CATALOG_FILE_PATH` | agent-host | no | `./catalog.json` | Agent catalog persistence file |
 | `AGENT_PORT` | random-agent | no | `4001` | HTTP port for agent A2A endpoint |
-| `GHOST_HOUSE_URL` | random-agent | yes | — | Ghost house URL for registration and health checks |
+| `AGENT_HOST_URL` | random-agent | yes | — | Ghost house URL for registration and health checks |
 
 **MCP to the world:** the house’s `/v1/mcp` proxy forwards to each session’s `credential.worldApiBaseUrl` from **registry /adopt** (same value as the combined server prints for MCP, e.g. `http://127.0.0.1:8787/mcp`). You do **not** set a separate `WORLD_API_BASE_URL` in `.env` for the house.
 
@@ -185,7 +185,7 @@ curl -X DELETE "http://localhost:4000/v1/sessions/$SESSION_ID" \
 
 ## Troubleshooting
 
-**Ghost house fails to start**: Check `GHOST_HOUSE_DEV_TOKEN` is set. For the Colyseus bridge, ensure `AIE_MATRIX_HTTP_BASE_URL` (or default `127.0.0.1:8787`) matches the running combined server. For movement after spawn, the world MCP must be reachable at the **adopt** `credential.worldApiBaseUrl` (usually `http://127.0.0.1:8787/mcp` when the server is local).
+**Ghost house fails to start**: Check `AGENT_HOST_TOKEN` is set. For the Colyseus bridge, ensure `AIE_MATRIX_HTTP_BASE_URL` (or default `127.0.0.1:8787`) matches the running combined server. For movement after spawn, the world MCP must be reachable at the **adopt** `credential.worldApiBaseUrl` (usually `http://127.0.0.1:8787/mcp` when the server is local).
 
 **Registration returns 502**: The house cannot fetch the agent card from `baseUrl/.well-known/agent-card.json`. Confirm the agent is running and `AGENT_PORT` matches the URL used in registration.
 
@@ -198,5 +198,5 @@ curl -X DELETE "http://localhost:4000/v1/sessions/$SESSION_ID" \
 ## Phase 7 verification (maintainers)
 
 - Use **`@aie-matrix/server-agent-host`** and **`@aie-matrix/random-agent`** (not the spike under `spikes/a2a-ghost-agent-protocol/`). Repo gate: **`pnpm typecheck`** at root.
-- Run §1–8 in **separate shells** (or `pnpm run demo` with `GHOST_HOUSE_DEV_TOKEN` set — `scripts/demo.mjs` runs quickstart §5–7 after the house and agent are up; set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip that) on a host where default ports are free. Conflicting listeners cause `EADDRINUSE` on 8787 / 4000 / 4001.
+- Run §1–8 in **separate shells** (or `pnpm run demo` with `AGENT_HOST_TOKEN` set — `scripts/demo.mjs` runs quickstart §5–7 after the house and agent are up; set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip that) on a host where default ports are free. Conflicting listeners cause `EADDRINUSE` on 8787 / 4000 / 4001.
 - Last structure check: all quickstart HTTP steps and `tck:wanderer` exercised against the workspace packages; intermittent `MOVEMENT_BLOCKED` / `RULESET_DENY` is an environmental flake, not a spec deviation.

@@ -8,8 +8,8 @@ Use the **monorepo root** `.env` (via `@aie-matrix/root-env`), same as the house
 
 | Variable | Required | Default | Role |
 |----------|----------|---------|------|
-| `GHOST_HOUSE_DEV_TOKEN` | yes | — | Must match the house; used for A2A auth |
-| `GHOST_HOUSE_URL` | yes | — | e.g. `http://127.0.0.1:4000` |
+| `AGENT_HOST_TOKEN` | yes | — | Must match the house; used for A2A auth |
+| `AGENT_HOST_URL` | yes | — | e.g. `http://127.0.0.1:4000` |
 | `AGENT_PORT` | no | `4001` | This agent’s HTTP port |
 
 ## Develop
@@ -31,12 +31,12 @@ For **hard isolation** between ghosts (separate crashes, memory, or CPU limits),
 
 ## Register with the house
 
-1. With both **world server** and **agent host** running, `POST` to the house (bearer = `GHOST_HOUSE_DEV_TOKEN`):
+1. With both **world server** and **agent host** running, `POST` to the house (bearer = `AGENT_HOST_TOKEN`):
 
    ```bash
    curl -X POST http://127.0.0.1:4000/v1/catalog/register \
      -H "Content-Type: application/json" \
-     -H "Authorization: Bearer <GHOST_HOUSE_DEV_TOKEN>" \
+     -H "Authorization: Bearer <AGENT_HOST_TOKEN>" \
      -d '{"agentId": "random-agent", "baseUrl": "http://127.0.0.1:4001"}'
    ```
 
@@ -47,7 +47,7 @@ For **hard isolation** between ghosts (separate crashes, memory, or CPU limits),
 With server + house + this agent + an active session:
 
 ```bash
-export GHOST_HOUSE_URL=http://127.0.0.1:4000
+export AGENT_HOST_URL=http://127.0.0.1:4000
 export RANDOM_AGENT_BASE_URL=http://127.0.0.1:4001
 pnpm --filter @aie-matrix/ghost-tck run tck:wanderer
 ```

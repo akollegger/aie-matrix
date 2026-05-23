@@ -17,8 +17,8 @@
     "@aie-matrix/ghost-ts-client": "workspace:*",
     "@aie-matrix/root-env": "workspace:*",
     "@colyseus/core": "0.15.57",
-    "colyseus.js": "0.15.28",
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "colyseus.js": "0.15.28",
     "effect": "^3.21.0",
     "express": "^4.21.2",
     "h3-js": "^4.1.0",
@@ -28,6 +28,8 @@
   "devDependencies": {
     "@types/express": "^4.17.21",
     "@types/node": "^24.12.2",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
     "tsx": "^4.19.4",
     "typescript": "~5.7.3",
     "vitest": "^3.2.4"

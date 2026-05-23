@@ -27,9 +27,9 @@ jobs:
       ADMIN_TOKEN: ci-admin
       NODE_ENV: production
       # Agent Host
-      GHOST_HOUSE_DEV_TOKEN: ci-test-token
-      GHOST_HOUSE_PORT: "4000"
-      GHOST_HOUSE_PUBLIC_BASE_URL: http://localhost:4000
+      AGENT_HOST_TOKEN: ci-test-token
+      AGENT_HOST_PORT: "4000"
+      AGENT_HOST_PUBLIC_BASE_URL: http://localhost:4000
       WORLD_API_URL: http://server:8787
       COLYSEUS_URL: ws://server:8787
 
