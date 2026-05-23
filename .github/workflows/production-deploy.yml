@@ -133,41 +133,40 @@ jobs:
             --wait \
             --timeout 8m
 
-      # agent-host's old code (pre-ee98b91) has no shutdown deadline, so the
-      # pod can hang in Terminating when it gets SIGTERM during a rolling update.
-      # K8s would eventually SIGKILL it at terminationGracePeriodSeconds, but
-      # something in GKE Autopilot prevents that from happening within Helm's 8m
-      # window. Strategy: run Helm in the foreground and concurrently poll for
-      # stuck terminating pods every 10 s, force-deleting them immediately.
-      # Once the new image (with the 25 s shutdown deadline) is live, future
-      # upgrades will self-terminate and this watcher will never fire.
+      # agent-host's pre-ee98b91 code hangs on SIGTERM (server.close() waits
+      # for keep-alive connections indefinitely). GKE Autopilot does not appear
+      # to honour terminationGracePeriodSeconds reliably for this workload, so
+      # the pod can stay Terminating for the entire Helm --wait window.
+      #
+      # Fix: scale to 0 before the upgrade so there is no running pod for the
+      # rolling-update to terminate. Helm then only waits for the new pod to
+      # become Ready — no "Pending termination" possible. Once the new image
+      # (25 s shutdown deadline, ee98b91) is live this step is idempotent:
+      # scale-to-0 will succeed instantly against an already-empty replica set
+      # and the wait command will be a no-op.
       - name: Deploy agent-host
         run: |
-          # Background watcher: force-delete any agent-host pod stuck in Terminating.
-          (
-            while true; do
-              sleep 10
-              kubectl get pods -n ${{ env.NAMESPACE }} \
-                -l "app.kubernetes.io/name=agent-host" \
-                -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
-                2>/dev/null \
-                | awk -F'\t' '$2 != "" {print $1}' \
-                | xargs -r kubectl delete pod \
-                    -n ${{ env.NAMESPACE }} --force --grace-period=0 2>/dev/null || true
-            done
-          ) &
-          WATCHER_PID=$!
+          # Drain existing pods so Helm sees no old replica to terminate.
+          kubectl scale deployment/agent-host --replicas=0 \
+            -n ${{ env.NAMESPACE }} 2>/dev/null || true
+          # Wait up to 60 s; force-kill any pod that refuses to exit cleanly.
+          kubectl wait pod \
+            -l "app.kubernetes.io/name=agent-host" \
+            -n ${{ env.NAMESPACE }} \
+            --for=delete \
+            --timeout=60s 2>/dev/null \
+          || kubectl delete pod \
+               -l "app.kubernetes.io/name=agent-host" \
+               -n ${{ env.NAMESPACE }} \
+               --force --grace-period=0 2>/dev/null || true
 
+          # Now upgrade: no old pods → no rolling-update termination wait.
           helm upgrade --install agent-host deploy/k8s/charts/agent-host \
             --namespace ${{ env.NAMESPACE }} \
             --set image.tag=${{ steps.tag.outputs.value }} \
             -f deploy/k8s/values-production.yaml \
             --wait \
-            --timeout 8m
-          HELM_EXIT=$?
-
-          kill "$WATCHER_PID" 2>/dev/null || true
-          exit $HELM_EXIT
+            --timeout 4m
 
       - name: Deploy random-agent
         env:
