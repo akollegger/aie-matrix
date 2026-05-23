@@ -124,6 +124,28 @@ jobs:
 
       # ── Deploy via Helm ────────────────────────────────────────────────────
 
+      # Drain any pods that are stuck in Terminating from a previous failed
+      # upgrade. Both server and agent-host are stateless — force-deleting is
+      # safe and unblocks Helm --wait, which refuses to complete while any pod
+      # in the Deployment still has a deletionTimestamp set.
+      - name: Clear stuck Terminating pods
+        run: |
+          for selector in \
+            "app.kubernetes.io/name=server" \
+            "app.kubernetes.io/name=agent-host"; do
+            terminating=$(kubectl get pods -n ${{ env.NAMESPACE }} \
+              -l "$selector" \
+              -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.deletionTimestamp}{"\n"}{end}' \
+              | awk -F'\t' '$2 != "" {print $1}')
+            if [ -n "$terminating" ]; then
+              echo "Force-deleting terminating pods ($selector): $terminating"
+              echo "$terminating" | xargs kubectl delete pod \
+                -n ${{ env.NAMESPACE }} --force --grace-period=0 || true
+            else
+              echo "No terminating pods for $selector"
+            fi
+          done
+
       - name: Deploy server
         run: |
           helm upgrade --install server deploy/k8s/charts/server \
