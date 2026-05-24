@@ -92,6 +92,7 @@ export function makeInitialState(): MapEditorState {
       vertexDragPreview: null,
       pendingFitBounds: null,
       publishedMapId: null,
+      dirty: false,
     },
   }
 }
@@ -164,6 +165,7 @@ export type EditorAction =
   | { type: "SET_BOUNDING_BOX_VISIBILITY"; visible: boolean }
   // Import
   | { type: "IMPORT_MAP"; state: MapEditorState }
+  | { type: "FIT_BOUNDS" }
   | { type: "CLEAR_FIT_BOUNDS" }
   | { type: "SET_PUBLISHED_MAP_ID"; mapId: string | null }
 
@@ -171,7 +173,7 @@ export type EditorAction =
 // Reducer
 // ---------------------------------------------------------------------------
 
-export function editorReducer(
+function editorReducerCore(
   state: MapEditorState,
   action: EditorAction
 ): MapEditorState {
@@ -700,6 +702,25 @@ export function editorReducer(
       return { ...action.state, ui: { ...action.state.ui, pendingFitBounds: { west, south, east, north } } }
     }
 
+    case "FIT_BOUNDS": {
+      const allCells = state.layers.flatMap(l => {
+        if (l.kind === "tile") return Array.from(l.tiles.keys()) as string[]
+        if (l.kind === "polygon") return l.committed.flatMap(p => p.cells as string[])
+        if (l.kind === "items") return l.items.map(i => i.h3Index as string)
+        return []
+      })
+      if (allCells.length === 0) return state
+      let west = Infinity, south = Infinity, east = -Infinity, north = -Infinity
+      for (const cell of allCells) {
+        const [lat, lng] = cellToLatLng(cell)
+        if (lat < south) south = lat
+        if (lat > north) north = lat
+        if (lng < west) west = lng
+        if (lng > east) east = lng
+      }
+      return { ...state, ui: { ...state.ui, pendingFitBounds: { west, south, east, north } } }
+    }
+
     case "CLEAR_FIT_BOUNDS":
       return { ...state, ui: { ...state.ui, pendingFitBounds: null } }
 
@@ -709,4 +730,31 @@ export function editorReducer(
     default:
       return state
   }
+}
+
+/**
+ * Public reducer — wraps editorReducerCore to maintain the `dirty` flag
+ * without touching every individual case.
+ *
+ * Rules:
+ *  - IMPORT_MAP and SET_PUBLISHED_MAP_ID are always clean (just loaded / just saved)
+ *  - Any action that changes `layers` or `meta` by reference marks the buffer dirty
+ */
+export function editorReducer(
+  state: MapEditorState,
+  action: EditorAction,
+): MapEditorState {
+  const next = editorReducerCore(state, action)
+
+  // Clean after an explicit load or save
+  if (action.type === "IMPORT_MAP" || action.type === "SET_PUBLISHED_MAP_ID") {
+    return next.ui.dirty ? { ...next, ui: { ...next.ui, dirty: false } } : next
+  }
+
+  // Dirty when map content changed
+  if (!next.ui.dirty && (next.layers !== state.layers || next.meta !== state.meta)) {
+    return { ...next, ui: { ...next.ui, dirty: true } }
+  }
+
+  return next
 }

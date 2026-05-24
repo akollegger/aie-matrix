@@ -140,3 +140,15 @@ export function leaveWorldSpectator(): void {
   ignoreNextLeaveReconnect = true;
   void room.leave(true);
 }
+
+/**
+ * Force a clean disconnect + re-join.  Call this when the live session changes so
+ * Intermedium receives a fresh full-state snapshot from the Colyseus room and resets
+ * its `ghostTiles` listeners — avoiding stale ghost positions from a previous session.
+ */
+export async function reconnectWorldSpectator(): Promise<void> {
+  leaveWorldSpectator();
+  // Brief pause so the leave handshake completes before we re-join.
+  await new Promise<void>((r) => setTimeout(r, 200));
+  await joinWorldSpectator();
+}

@@ -42,6 +42,11 @@ export interface IA2AHostService {
     context: SpawnContext,
     options?: { timeoutMs?: number },
   ) => Effect.Effect<{ taskId: string; contextId?: string }, SpawnTimeout>;
+  readonly sendSpawnContextNonBlocking: (
+    client: Client,
+    context: SpawnContext,
+    options?: { timeoutMs?: number },
+  ) => Effect.Effect<{ taskId: string; contextId?: string }, SpawnTimeout>;
   readonly startPushSpawnContext: (
     client: Client,
     context: SpawnContext,
@@ -121,6 +126,33 @@ export const createA2AHostService = (devToken: string): IA2AHostService => {
             throw new SpawnTimeout({ message: `spawn task ended in ${t.status.state}` });
           }
           return { taskId, contextId };
+        },
+        catch: (e) =>
+          e instanceof SpawnTimeout
+            ? e
+            : new SpawnTimeout({ message: e instanceof Error ? e.message : String(e) }),
+      }),
+
+    sendSpawnContextNonBlocking: (client, context, options) =>
+      Effect.tryPromise({
+        try: async () => {
+          const timeoutMs = options?.timeoutMs ?? 30_000;
+          const message: Message = {
+            kind: "message",
+            messageId: randomUUID(),
+            role: "user",
+            parts: [{ kind: "data", data: context as unknown as Record<string, unknown> }],
+          };
+          const result = await client.sendMessage(
+            { message, configuration: { blocking: false } },
+            { serviceParameters: A2A_PROTO_HEADERS, signal: AbortSignal.timeout(timeoutMs) },
+          );
+          if (!isTaskResult(result)) {
+            // Agent returned a bare message — generate a synthetic taskId
+            return { taskId: randomUUID() };
+          }
+          const task = result as Task;
+          return { taskId: task.id, contextId: task.contextId };
         },
         catch: (e) =>
           e instanceof SpawnTimeout

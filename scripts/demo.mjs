@@ -1,42 +1,51 @@
 #!/usr/bin/env node
 /**
- * One-terminal PoC: combined server → ghost house → random-agent.
+ * Full local stack: world server → agent-host → random-agent → intermedium + map-editor.
  * Ctrl+C stops all child processes.
  *
- * Open Intermedium at http://127.0.0.1:5180/ to watch ghosts (run separately via `pnpm --filter @aie-matrix/intermedium dev`).
+ * New dev quickstart:
+ *   git clone … && cd aie-matrix
+ *   cp .env.example .env.local   # fill in AGENT_HOST_TOKEN at minimum
+ *   pnpm install
+ *   pnpm run demo
  *
- * ## Required env (repo root `.env` / `.env.local` — this script calls `loadRootEnv()` like
- * ghost-house / random-agent; child processes inherit the same merged `process.env`.)
+ * Then open:
+ *   http://127.0.0.1:5180/  — Intermedium (spectator view, ghosts moving)
+ *   http://127.0.0.1:5182/  — Map Editor  (admin panel to spawn/manage ghosts)
  *
- * - `GHOST_HOUSE_DEV_TOKEN` — shared bearer (house + agent A2A).
- * - `AIE_MATRIX_HTTP_BASE_URL` (optional) — e.g. `http://127.0.0.1:8787` for the house Colyseus
- *   bridge. Session MCP uses `credential.worldApiBaseUrl` from registry /adopt after spawn, not
- *   a `WORLD_API_BASE_URL` env var.
- * - `GHOST_HOUSE_PORT` (optional) — default `4000`.
- * - `AGENT_PORT` (optional) — default `4001` for `random-agent`.
- * - `GHOST_HOUSE_URL` — e.g. `http://127.0.0.1:4000` (used by the agent; must match
- *   house port if you override `GHOST_HOUSE_PORT`).
+ * ## Required env (repo root `.env` / `.env.local` — loaded via `loadRootEnv()`;
+ * all child processes inherit the merged `process.env`.)
+ *
+ * - `AGENT_HOST_TOKEN` — shared bearer (agent-host + agent A2A). Required for
+ *   auto-bootstrap (catalog register, adopt, spawn). Without it the ghost stack
+ *   starts but no ghosts will be spawned automatically.
+ * - `ADMIN_TOKEN` — world server admin bearer (publish map, start/end live session).
+ *   Required for the demo to create a live session in the map-editor admin panel.
+ *   Without it the map-editor will show maps (if Neo4j is configured) but no session.
+ * - `AIE_MATRIX_HTTP_PORT` (optional) — world server port, default `8787`.
+ * - `AGENT_HOST_PORT` (optional) — agent-host port, default `4000`.
+ * - `AGENT_PORT` (optional) — random-agent port, default `4001`.
+ * - `AGENT_HOST_URL` (optional) — override agent-host base URL (e.g. if running
+ *   behind a tunnel); default `http://127.0.0.1:<AGENT_HOST_PORT>`.
  *
  * ## Startup order
  *
- * 1. `pnpm run server` — world + Colyseus + registry (HTTP `8787`, spectator meta).
- * 2. `pnpm --filter @aie-matrix/ghost-house dev` — A2A + catalog.
- * 3. `pnpm --filter @aie-matrix/random-agent dev` — Wanderer card + endpoint.
+ * 1. Build + start `@aie-matrix/server` — world + Colyseus + registry (port 8787).
+ * 2. Wait for server ready, then start in parallel:
+ *    - `@aie-matrix/server-agent-host` — A2A catalog + spawn API (port 4000).
+ *    - `@aie-matrix/random-agent`      — Wanderer ghost endpoint (port 4001).
+ *    - `@aie-matrix/intermedium`       — Vite spectator UI (port 5180).
+ *    - `@aie-matrix/map-editor`        — Vite admin UI (port 5182).
+ * 3. Once agent-host + random-agent respond, auto-bootstrap registers random-agent
+ *    in the catalog. Ghost spawn only runs if an active live session already exists
+ *    (sessions are created by the operator via the map-editor Admin panel).
+ *    Set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip bootstrap entirely.
  *
- * After the ghost house and random-agent respond, the script runs the same HTTP flow as
- * `specs/009-ghost-house-a2a/quickstart.md` §5–7 (catalog register, registry adopt, spawn)
- * whenever `GHOST_HOUSE_DEV_TOKEN` is set. Catalog register treats HTTP 409 (already
- * registered) as success. Set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip that block (e.g. to
- * drive registration manually).
+ * **CLI:** `-n` / `--ghosts <n>` — number of caretakers/sessions to spawn
+ * (default `1`, max `32`). Example: `pnpm run demo -- --ghosts 5`.
  *
- * **CLI:** `-n` / `--ghosts <n>` or `--ghosts=<n>` — number of registry caretakers + adoptions +
- * house spawn sessions (default `1`, max `32`, same cap as `random-house`). Each ghost uses a
- * distinct caretaker against one registry house (IC-002). Example: `pnpm run demo -- --ghosts 5`.
- *
- * **Troubleshooting:** The output you described (only the `aie-matrix PoC listening` block) is
- * from `pnpm run server` alone. This script always prints lines beginning with `[demo]`
- * *before* the server’s Colyseus banner. From the repo root run: `pnpm run demo` (not `server`
- * or `dev` unless you intend only the combined server).
+ * **Troubleshooting:** If you never see `[demo]` lines you are probably running
+ * `pnpm run server` instead of `pnpm run demo`.
  */
 import { execSync, spawn } from "node:child_process";
 import path from "node:path";
@@ -52,26 +61,32 @@ const serverRoot = path.join(root, "server");
 const httpPort = String(process.env.AIE_MATRIX_HTTP_PORT ?? "8787").trim() || "8787";
 const readyUrl = `http://127.0.0.1:${httpPort}/spectator/room`;
 
-const housePort = process.env.GHOST_HOUSE_PORT || "4000";
+const housePort = process.env.AGENT_HOST_PORT || "4000";
 const agentPort = process.env.AGENT_PORT || "4001";
 const houseBase =
-  process.env.GHOST_HOUSE_URL || `http://127.0.0.1:${housePort}`;
-const token = process.env.GHOST_HOUSE_DEV_TOKEN || "";
+  process.env.AGENT_HOST_URL || `http://127.0.0.1:${housePort}`;
+const token = process.env.AGENT_HOST_TOKEN || "";
+const adminToken = process.env.ADMIN_TOKEN || "";
 const worldBase = `http://127.0.0.1:${httpPort}`;
+
+// Vite front-end ports (fixed in each package's vite.config.ts)
+const intermediumPort = "5180";
+const mapEditorPort = "5182";
 
 const MAX_DEMO_GHOSTS = 32;
 
 function printDemoHelp() {
   console.log(`Usage: node scripts/demo.mjs [options]
 
-One-terminal PoC: combined server, spectator, ghost-house, random-agent; optional bootstrap.
+Full local stack: world server, agent-host, random-agent, intermedium, map-editor.
 
 Options:
   -h, --help              Show this help
   -n, --ghosts <n>        Registry adoptions + wanderer sessions (1..${MAX_DEMO_GHOSTS}, default 1)
-      --ghosts=<n>       Long option with equals (same as random-house)
+      --ghosts=<n>       Long option with equals
 
 Examples:
+  pnpm run demo
   pnpm run demo -- --ghosts 5
 `);
 }
@@ -146,11 +161,11 @@ function forwardSignal(sig) {
 forwardSignal("SIGINT");
 forwardSignal("SIGTERM");
 
-function start(label, command, args) {
+function start(label, command, args, extraEnv = {}) {
   const child = spawn(command, args, {
     cwd: root,
     stdio: "inherit",
-    env: { ...process.env },
+    env: { ...process.env, ...extraEnv },
   });
   child.on("error", (err) => {
     console.error(`[demo] failed to start ${label}:`, err);
@@ -221,13 +236,13 @@ async function waitForHouseAndAgent() {
       /* retry */
     }
     if (houseOk && agentOk) {
-      console.info(`[demo] ghost house :${housePort} and random-agent :${agentPort} responding.`);
+      console.info(`[demo] agent-host :${housePort} and random-agent :${agentPort} responding.`);
       return;
     }
     await new Promise((r) => setTimeout(r, 400));
   }
   console.warn(
-    "[demo] timeout waiting for house + agent; continue anyway (check GHOST_HOUSE_DEV_TOKEN and root .env).",
+    "[demo] timeout waiting for agent-host + agent; continue anyway (check AGENT_HOST_TOKEN and root .env).",
   );
 }
 
@@ -242,11 +257,25 @@ async function autoBootstrap(ghostCount) {
   }
   if (!token) {
     console.warn(
-      "[demo] GHOST_HOUSE_DEV_TOKEN not set — skipping catalog register, adopt, and spawn. Add it to repo root `.env` for a wanderer in-world (see quickstart §5–7).",
+      "[demo] AGENT_HOST_TOKEN not set — skipping ghost bootstrap. Add AGENT_HOST_TOKEN (and ADMIN_TOKEN) to repo root `.env` for a full demo with a wanderer and live session.",
     );
     return;
   }
 
+  // Step 1: Check for an active live session. Ghost spawn requires one.
+  // Sessions are created by the operator via the map-editor Admin panel — the
+  // demo script never creates one automatically.
+  const liveSessionId = await getActiveLiveSessionId();
+  if (!liveSessionId) {
+    console.info(
+      "[demo] no active live session — skipping ghost spawn.\n" +
+      "       Open the map-editor Admin panel, select a map, and start a session.",
+    );
+    return;
+  }
+  console.info(`[demo] found active session: ${liveSessionId}`);
+
+  // Step 2: Register the random-agent with the agent-host catalog.
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
@@ -270,6 +299,7 @@ async function autoBootstrap(ghostCount) {
     console.info("[demo] catalog: random-agent registered.");
   }
 
+  // Step 3: For each ghost — create caretaker, adopt, then spawn.
   const gr = await fetch(`${worldBase}/registry/houses`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -279,7 +309,7 @@ async function autoBootstrap(ghostCount) {
     console.error("[demo] registry house failed:", gr.status, await gr.text());
     return;
   }
-  const { ghostHouseId } = await gr.json();
+  const { agentHostId } = await gr.json();
 
   for (let i = 0; i < ghostCount; i++) {
     const cr = await fetch(`${worldBase}/registry/caretakers`, {
@@ -296,7 +326,7 @@ async function autoBootstrap(ghostCount) {
     const ar = await fetch(`${worldBase}/registry/adopt`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caretakerId, ghostHouseId }),
+      body: JSON.stringify({ caretakerId, agentHostId }),
     });
     if (!ar.ok) {
       console.error("[demo] registry adopt failed:", ar.status, await ar.text());
@@ -318,8 +348,24 @@ async function autoBootstrap(ghostCount) {
     }
     const { sessionId } = await sp.json();
     console.info(
-      `[demo] ghost ${i + 1}/${ghostCount}: session ${sessionId} (ghostId ${adopt.ghostId}) — wanderer may be moving.`,
+      `[demo] ghost ${i + 1}/${ghostCount}: session ${sessionId} (ghostId ${adopt.ghostId}) — wanderer active.`,
     );
+  }
+}
+
+/**
+ * Return the ID of the first active live session, or null if none exists.
+ * GET /live is public — no auth required.
+ */
+async function getActiveLiveSessionId() {
+  try {
+    const r = await fetch(`${worldBase}/live?status=active`);
+    if (!r.ok) return null;
+    const sessions = await r.json();
+    if (!Array.isArray(sessions) || sessions.length === 0) return null;
+    return sessions[0].id ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -336,12 +382,12 @@ function waitFirstExit() {
 
 try {
   const { ghostCount } = parseDemoArgv(process.argv.slice(2));
-  console.info(`[demo] --ghosts ${ghostCount} (registry caretakers + house sessions)`);
+  console.info(`[demo] --ghosts ${ghostCount} (registry caretakers + sessions)`);
   console.info(
-    "[demo] --- If you never see [demo] lines, you are not running `pnpm run demo` (e.g. you used `pnpm run server` instead). ---",
+    "[demo] --- If you never see [demo] lines you are not running `pnpm run demo` (e.g. you used `pnpm run server` instead). ---",
   );
   console.info(
-    "[demo] 1/4 building @aie-matrix/server in the parent (same as prestart: `tsc --build` so the child can skip a second tsc)…",
+    "[demo] 1/3 building @aie-matrix/server (tsc --build so the child can skip a second compile)…",
   );
   execSync("pnpm exec tsc --build tsconfig.json", {
     cwd: serverRoot,
@@ -349,27 +395,52 @@ try {
     env: { ...process.env },
   });
   console.info(
-    "[demo] 1/4 starting combined server via start:dist (no second tsc in the child) — Colyseus + aie-matrix output follows…",
+    "[demo] 1/3 starting combined server via start:dist — Colyseus + world API output follows…",
   );
-  start("server", "pnpm", ["--filter", "@aie-matrix/server", "run", "start:dist"]);
+  // AIE_MATRIX_MODE=development activates the local file-backed MapManagement and
+  // LiveSession implementations so map-editor's admin panel sees the same map that
+  // Intermedium renders, without requiring Neo4j or GCS.
+  start("server", "pnpm", ["--filter", "@aie-matrix/server", "run", "start:dist"], {
+    AIE_MATRIX_MODE: process.env.AIE_MATRIX_MODE ?? "development",
+  });
 
-  console.info(
-    "[demo] 2/4 waiting for GET " + readyUrl + " (then ghost house + random-agent start)…",
-  );
-  await waitUntilReady(readyUrl, "HTTP + spectator meta");
+  console.info("[demo] 2/3 waiting for " + readyUrl + "…");
+  await waitUntilReady(readyUrl, "world server");
 
-  console.info("[demo] 3/4 starting @aie-matrix/ghost-house (dev)…");
-  start("ghost-house", "pnpm", ["--filter", "@aie-matrix/ghost-house", "dev"]);
+  // Start all remaining services in parallel once the world server is up.
+  // The Vite front-ends receive VITE_ env vars so they point at the local stack
+  // even when no .env.local files exist (fresh clone scenario).
+  const viteEnv = {
+    VITE_API_BASE_URL: `http://127.0.0.1:${httpPort}`,
+    VITE_AGENT_HOST_URL: `http://127.0.0.1:${housePort}`,
+    // Note: an existing .env.local in tools/map-editor/ takes precedence over these.
+    // VITE_ADMIN_TOKEN authenticates world-API write ops (publish map, start/end session).
+    // VITE_AGENT_HOST_BEARER authenticates agent-host ops (catalog, spawn, shutdown).
+    // These are two distinct tokens — do not mix them up.
+    ...(adminToken ? { VITE_ADMIN_TOKEN: adminToken } : {}),
+    ...(token ? { VITE_AGENT_HOST_BEARER: token } : {}),
+  };
 
-  console.info("[demo] 4/4 starting @aie-matrix/random-agent (dev)…");
-  start("random-agent", "pnpm", ["--filter", "@aie-matrix/random-agent", "dev"]);
+  console.info("[demo] 3/3 starting agent-host, random-agent, intermedium, map-editor…");
+  start("agent-host",  "pnpm", ["--filter", "@aie-matrix/server-agent-host", "dev"]);
+  start("random-agent","pnpm", ["--filter", "@aie-matrix/random-agent",      "dev"]);
+  start("intermedium", "pnpm", ["--filter", "@aie-matrix/intermedium",        "dev"], viteEnv);
+  start("map-editor",  "pnpm", ["--filter", "@aie-matrix/map-editor",         "dev"], viteEnv);
 
   await waitForHouseAndAgent();
   await autoBootstrap(ghostCount);
 
-  console.info(
-    "[demo] all processes running. Intermedium: http://127.0.0.1:5180/ · Ctrl+C to stop.",
-  );
+  console.info(`
+[demo] ✓ Full stack running — Ctrl+C to stop all processes.
+
+  Spectator (Intermedium)  →  http://127.0.0.1:${intermediumPort}/
+  Admin UI  (Map Editor)   →  http://127.0.0.1:${mapEditorPort}/
+  World API                →  http://127.0.0.1:${httpPort}/
+  Agent Host               →  http://127.0.0.1:${housePort}/v1/catalog
+
+  The Vite front-ends compile on first load — allow a few seconds after opening.
+  Switch the Map Editor to Admin mode to spawn and manage ghosts.
+`);
 
   const { code, signal } = await waitFirstExit();
   killAll();

@@ -43,6 +43,7 @@ export const appLayer = Layer.mergeAll(
     AgentSupervisorLayer({
       publicHouseBaseUrl: publicBase,
       defaultCapabilityManifest: readHouseCapabilityManifest(),
+      pushIngestToken: devToken,
     }),
     base,
   ),

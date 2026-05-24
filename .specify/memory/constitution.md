@@ -81,6 +81,34 @@ and ownership expectations. Cross-language support MUST be treated as a design
 constraint when proposals claim it; stubs are acceptable for a PoC only if the
 plan states what is intentionally deferred.
 
+### Service Testing Requirements
+
+Every Effect service `Layer` implementation MUST have tests covering its full
+interface contract — every method, including error paths. The test tier is
+determined by the implementation's external dependencies:
+
+| Implementation type | Required test tier | Must ship in same change? |
+|---|---|---|
+| No external deps (in-memory, local file) | Unit tests (`node:test`, no live services) | Yes |
+| External deps (Neo4j, GCS, Redis) | Integration tests (require live services) | Plan in same change; tests MAY land separately if infrastructure is unavailable in CI |
+
+**Unit test expectations** (applies to all in-memory / file-backed implementations):
+- Each method of the service interface has at least one passing-path test.
+- Each method that can fail has at least one test asserting the correct typed error
+  (`Effect.flip` or `Effect.exit` pattern — never `try/catch` on `runPromise`).
+- Filter/status parameters are tested for each distinct branch (e.g., `"active"` vs.
+  `"ended"`, `"published"` vs. `"archived"`).
+- Tests run with `pnpm test` in the package — no manual setup required.
+
+**Integration test expectations** (applies to Neo4j / GCS / Redis-backed implementations):
+- The same interface methods and error paths are covered, but the test file is
+  skipped when the required service is unavailable (e.g., `NEO4J_URI` not set).
+- The plan or ADR for the implementation MUST identify which methods lack coverage
+  and under what conditions full coverage will be added.
+
+A new service implementation that ships without the required tests is a failing
+quality gate, not a deferred task.
+
 ## Review and Quality Gates
 
 Every plan and pull request MUST pass these checks:
@@ -92,6 +120,10 @@ Every plan and pull request MUST pass these checks:
   called out with a reason.
 - Documentation touched by the change remains consistent with `README.md`,
   `docs/architecture.md`, `docs/project-overview.md`, and `CONTRIBUTING.md`.
+- New Effect service Layer implementations are accompanied by tests at the
+  appropriate tier (unit or integration) covering all interface methods and
+  error paths. Missing tests require an explicit written justification naming
+  which methods are uncovered and the plan to cover them.
 
 Reviews SHOULD prioritize behavioral regressions, boundary violations, contract
 drift, and missing verification before style-level comments.
@@ -111,4 +143,4 @@ Compliance is checked during proposal review, planning, task generation, and pul
 request review. `AGENTS.md`, `README.md`, and the files under `.specify/templates/`
 are the operational guidance that MUST stay aligned with this constitution.
 
-**Version**: 1.0.0 | **Ratified**: 2026-04-12 | **Last Amended**: 2026-04-12
+**Version**: 1.1.0 | **Ratified**: 2026-04-12 | **Last Amended**: 2026-05-24

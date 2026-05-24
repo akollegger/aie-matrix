@@ -50,6 +50,7 @@ describe("supervisor crash (integration)", () => {
         } as any,
         publicHouseBaseUrl: "http://127.0.0.1:4000",
         defaultCapabilityManifest: new Set(),
+        pushIngestToken: "test-token",
         getConfig: () => ({
           ...readSupervisionConfig(),
           healthIntervalMs: 25,
@@ -73,6 +74,7 @@ describe("supervisor crash (integration)", () => {
         } as any,
         publicHouseBaseUrl: "http://127.0.0.1:4000",
         defaultCapabilityManifest: new Set(),
+        pushIngestToken: "test-token",
         getConfig: () => ({
           ...readSupervisionConfig(),
           healthIntervalMs: 25,

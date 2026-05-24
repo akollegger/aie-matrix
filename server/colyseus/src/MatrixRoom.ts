@@ -49,6 +49,32 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     return this.loadedMap;
   }
 
+  /**
+   * Hot-swap the loaded map (e.g. when the active live session changes to a new map).
+   * Clears all ghost tiles — positions from the previous map are invalid on the new one.
+   * After this call, `ghost.go()` will trigger tier-3 initial placement on the new map.
+   */
+  setLoadedMap(map: LoadedMap): void {
+    this.loadedMap = map;
+    // Remove all ghost positions — their old cells don't exist on the new map.
+    for (const ghostId of Array.from(this.ghostCellByGhostId.keys())) {
+      this.ghostCellByGhostId.delete(ghostId);
+      this.state.ghostTiles.delete(ghostId);
+    }
+    // Update spectator tile state for the new map.
+    this.state.tileCoords.clear();
+    this.state.tileClasses.clear();
+    this.state.itemGlyphs.clear();
+    for (const [cellId, rec] of map.cells) {
+      const tc = new TileCoord(rec.col, rec.row);
+      this.state.tileCoords.set(cellId, tc);
+      this.state.tileClasses.set(cellId, rec.tileClass);
+    }
+    seedItemGlyphsFromSidecar(map.itemSidecar, (ref, glyph) => {
+      this.state.itemGlyphs.set(ref, glyph);
+    });
+  }
+
   async onCreate(options: MatrixRoomOptions): Promise<void> {
     // PoC world room must stay in matchmaker with zero clients; default autoDispose
     // removes it after the seat-reservation window, breaking joinById + /spectator/room.

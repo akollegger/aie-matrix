@@ -24,7 +24,10 @@ export function useColyseus(): {
   const [connectionState, setConnectionState] = useState<ColyseusLinkState>(getColyseusLinkState);
   const [room, setRoom] = useState<Room<WorldSpectatorState> | null>(null);
 
-  useEffect(() => onColyseusLinkState(setConnectionState), []);
+  useEffect(() => onColyseusLinkState((s) => {
+    console.debug("[colyseus] linkState →", s);
+    setConnectionState(s);
+  }), []);
   useEffect(() => onSpectatorRoom(setRoom), []);
 
   useEffect(() => {
@@ -47,15 +50,18 @@ export function useColyseus(): {
 
   useEffect(() => {
     if (!room) {
+      console.debug("[colyseus] room effect: null — skipping listener setup");
       return;
     }
     const initial: GhostMap = new Map();
     room.state.ghostTiles.forEach((h3, ghostId) => {
       initial.set(ghostId, { ghostId, h3Index: h3 });
     });
+    console.debug("[colyseus] room effect: initial ghosts", Array.from(initial.keys()));
     setGhosts(initial);
 
     room.state.ghostTiles.onAdd((h3, ghostId) => {
+      console.debug("[colyseus] onAdd", ghostId, h3);
       setGhosts((prev) => {
         const next = new Map(prev);
         const prior = next.get(ghostId)?.h3Index;
@@ -68,6 +74,7 @@ export function useColyseus(): {
       });
     });
     room.state.ghostTiles.onChange((h3, ghostId) => {
+      console.debug("[colyseus] onChange", ghostId, h3);
       setGhosts((prev) => {
         const next = new Map(prev);
         const old = next.get(ghostId);
@@ -81,6 +88,7 @@ export function useColyseus(): {
       });
     });
     room.state.ghostTiles.onRemove((_h3, ghostId) => {
+      console.debug("[colyseus] onRemove", ghostId);
       setGhosts((prev) => {
         const next = new Map(prev);
         next.delete(ghostId);

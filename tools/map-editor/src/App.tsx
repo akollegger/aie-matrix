@@ -13,23 +13,39 @@ import { GhostListPanel } from "./panels/admin/GhostListPanel"
 import { DetailPanel } from "./panels/detail/DetailPanel"
 import { useAdminSelection } from "./hooks/useAdminSelection"
 
-const modeBtn = (active: boolean): CSSProperties => ({
+const toggleBtn = (active: boolean): CSSProperties => ({
   background: active ? "#2255aa" : "#1c1c30",
   color: active ? "#ddf" : "#666",
   border: `1px solid ${active ? "#3366cc" : "#2a2a3e"}`,
   borderRadius: 4,
-  padding: "2px 12px",
+  padding: "2px 10px",
   fontSize: 11,
   cursor: "pointer",
+  userSelect: "none",
 })
 
 export function App() {
-  const [mode, setMode] = useState<"edit" | "admin">("edit")
-  const { selection, selectSession, selectAgent, selectGhostSession } = useAdminSelection()
+  const [adminPanelOpen, setAdminPanelOpen] = useState(false)
+  const { selection, selectMap, selectSession, selectAgent, selectGhostSession } = useAdminSelection()
+
+  const hasAdminSelection = !!(
+    selection.selectedMap ||
+    selection.selectedSessionId ||
+    selection.selectedAgentId ||
+    selection.selectedGhostSessionId
+  )
+
+  function toggleAdmin() {
+    if (adminPanelOpen) {
+      // Clear selection when closing so the right panel reverts to edit tools
+      selectMap(null)
+    }
+    setAdminPanelOpen(o => !o)
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", width: "100%", overflow: "hidden" }}>
-      {/* Mode toggle bar */}
+      {/* Top bar — hamburger toggle only */}
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -39,19 +55,20 @@ export function App() {
         borderBottom: "1px solid #2a2a3e",
         flexShrink: 0,
       }}>
-        <button onClick={() => setMode("edit")} style={modeBtn(mode === "edit")}>Edit</button>
-        <button onClick={() => setMode("admin")} style={modeBtn(mode === "admin")}>Admin</button>
+        <button onClick={toggleAdmin} style={toggleBtn(adminPanelOpen)} title={adminPanelOpen ? "Hide admin panel" : "Show admin panel"}>
+          ☰ Admin
+        </button>
       </div>
 
-      {/* Content — map is always full-size, panels float as overlays */}
+      {/* Content — map always full-size, panels float as overlays */}
       <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
         {/* Map canvas — always full size */}
         <div style={{ position: "absolute", inset: 0 }}>
           <MapView />
         </div>
 
-        {/* Admin left overlay — Miller columns: AdminPanel | CatalogPanel? | GhostListPanel? */}
-        {mode === "admin" && (
+        {/* Left overlay — Miller columns: AdminPanel | CatalogPanel? | GhostListPanel? */}
+        {adminPanelOpen && (
           <div style={{
             position: "absolute", top: 0, left: 0, bottom: 0,
             display: "flex",
@@ -59,6 +76,8 @@ export function App() {
             boxShadow: "4px 0 16px rgba(0,0,0,0.6)",
           }}>
             <AdminPanel
+              selectedMapId={selection.selectedMap?.mapId ?? null}
+              onSelectMap={selectMap}
               selectedSessionId={selection.selectedSessionId}
               onSelectSession={selectSession}
             />
@@ -81,46 +100,35 @@ export function App() {
           </div>
         )}
 
-        {/* Admin right overlay — detail panel */}
-        {mode === "admin" && (
-          <div style={{
-            position: "absolute", top: 0, right: 0, bottom: 0, width: 280,
-            display: "flex",
-            flexDirection: "column",
-            borderLeft: "1px solid #2a2a3e",
-            background: "#16162a",
-            overflow: "hidden",
-            zIndex: 10,
-            boxShadow: "-4px 0 16px rgba(0,0,0,0.6)",
-          }}>
+        {/* Right sidebar — always visible; shows admin detail when something is
+            selected in the admin panel, otherwise shows the map editing tools. */}
+        <div style={{
+          position: "absolute", top: 0, right: 0, bottom: 0, width: 280,
+          display: "flex",
+          flexDirection: "column",
+          borderLeft: "1px solid #2a2a3e",
+          background: "#16162a",
+          overflow: "hidden",
+          zIndex: 10,
+          boxShadow: "-4px 0 16px rgba(0,0,0,0.6)",
+        }}>
+          {adminPanelOpen && hasAdminSelection ? (
             <DetailPanel selection={selection} />
-          </div>
-        )}
-
-        {/* Edit sidebar — right overlay */}
-        {mode === "edit" && (
-          <div style={{
-            position: "absolute", top: 0, right: 0, bottom: 0, width: 280,
-            display: "flex",
-            flexDirection: "column",
-            borderLeft: "1px solid #2a2a3e",
-            background: "#16162a",
-            overflow: "hidden",
-            zIndex: 10,
-            boxShadow: "-4px 0 16px rgba(0,0,0,0.6)",
-          }}>
-            <ToolPanel />
-            <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "60%" }}>
-              <LayerPanel />
-              <TileTypePalette />
-              <PolygonParamsPanel />
-              <ItemTypePalette />
-            </div>
-            <div style={{ flex: 1, overflow: "auto", borderTop: "1px solid #2a2a3e" }}>
-              <PropertyEditor />
-            </div>
-          </div>
-        )}
+          ) : (
+            <>
+              <ToolPanel />
+              <div style={{ overflowY: "auto", flexShrink: 0, maxHeight: "60%" }}>
+                <LayerPanel />
+                <TileTypePalette />
+                <PolygonParamsPanel />
+                <ItemTypePalette />
+              </div>
+              <div style={{ flex: 1, overflow: "auto", borderTop: "1px solid #2a2a3e" }}>
+                <PropertyEditor />
+              </div>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

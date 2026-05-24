@@ -141,11 +141,14 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
     res.status(worldApiOk ? 200 : 503).json({ status, checks: { "world-api": worldApiOk } });
   });
 
-  /** A2A agent → house push target (set via setTaskPushNotificationConfig; dev sink). */
+  /** A2A agent → house push target (set via setTaskPushNotificationConfig; dev sink).
+   *  The A2A SDK sends the token via `X-A2A-Notification-Token` (not Authorization Bearer). */
   app.post("/v1/internal/a2a-agent-push", express.json({ limit: "4mb" }), (req, res) => {
-    const tok = getBearerValue(req);
+    // SDK default header is X-A2A-Notification-Token; fall back to Authorization Bearer.
+    const tok =
+      (req.headers["x-a2a-notification-token"] as string | undefined) ?? getBearerValue(req);
     if (!tok || tok !== devToken) {
-      res.status(401).json({ error: "invalid or missing Authorization", code: "UNAUTHORIZED" });
+      res.status(401).json({ error: "invalid or missing push token", code: "UNAUTHORIZED" });
       return;
     }
     res.status(204).end();

@@ -1,4 +1,5 @@
 export { loadHexMap, MapLoadError } from "./mapLoader.js";
+export { loadGramMap } from "./mapLoader.gram.js";
 export { MatrixRoom, type MatrixRoomOptions } from "./MatrixRoom.js";
 export {
   TileCoord,

@@ -4,6 +4,10 @@ const adminToken = import.meta.env.VITE_ADMIN_TOKEN ?? ""
 export interface ServerMapRecord {
   mapId: string
   name: string
+  elevation?: number
+  /** Storage URL — `file://` in development mode, `gs://` in production. */
+  gcsPath?: string
+  contentHash?: string
   status: "published" | "archived"
   publishedAt: string
   archivedAt?: string

@@ -9,6 +9,7 @@ import type { WorldTile } from "./worldTile.js";
 import type { TileTypeStyles } from "../services/gramParser.js";
 import type { ViewState } from "./viewState.js";
 import type { ColyseusLinkState, MapGramStatus } from "./spectator.js";
+import type { SessionInfo } from "../hooks/useSessionPoller.js";
 import type { ViewNavigation } from "./navigation.js";
 
 export type { ViewState, GhostPosition, HumanPairing, WorldTile, GhostIdentity };
@@ -34,4 +35,6 @@ export interface ClientState {
   readonly colyseusLinkState: ColyseusLinkState;
   /** Retry map fetch (FR-023). */
   readonly retryMapLoad: () => void;
+  /** Currently active world session, or null when none exists. Updated by session poller. */
+  readonly activeSession: SessionInfo | null;
 }

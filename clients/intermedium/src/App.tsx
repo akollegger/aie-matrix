@@ -66,6 +66,28 @@ function AppInner() {
     return <FailWhale onRetry={state.retryMapLoad} />;
   }
 
+  if (state.activeSession === null && state.mapGramStatus !== "loading") {
+    return (
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          height: "100vh",
+          background: "#0b0920",
+          color: "rgba(200, 210, 230, 0.5)",
+          gap: 12,
+          fontFamily: "system-ui, sans-serif",
+        }}
+      >
+        <div style={{ fontSize: 32, opacity: 0.3 }}>⬡</div>
+        <div style={{ fontSize: 14 }}>Waiting for session…</div>
+        <div style={{ fontSize: 11, opacity: 0.5 }}>Start a session in the map editor to begin</div>
+      </div>
+    );
+  }
+
   return (
     <div className="app-root" data-stop={stop} aria-label="intermedium">
       <div

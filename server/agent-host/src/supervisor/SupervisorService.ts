@@ -55,6 +55,8 @@ type Deps = {
   readonly publicHouseBaseUrl: string;
   readonly defaultCapabilityManifest: ReadonlySet<string>;
   readonly getConfig: () => Readonly<SupervisionConfigValue>;
+  /** Bearer token the agent-host expects on its push-ingest endpoint (= AGENT_HOST_TOKEN). */
+  readonly pushIngestToken: string;
   /** Tests: override H3 for spawn (avoids real MCP in unit tests). */
   readonly resolveWorldH3ForSpawn?: (c: WorldCredential) => Promise<string>;
 };
@@ -93,6 +95,7 @@ function sessionHealthLoop(
   catalog: ICatalogService,
   getCfg: () => Readonly<SupervisionConfigValue>,
   publicHouseBaseUrl: string,
+  pushIngestToken: string,
 ) {
   const doTick: Effect.Effect<void> = Effect.gen(function* () {
     if (s.status === "failed") {
@@ -162,10 +165,10 @@ function sessionHealthLoop(
         const r = yield* (s.usesA2APush
           ? a2a.startPushSpawnContext(client, lastCtx, {
               houseAgentPushIngestUrl: housePushIngest,
-              pushToken: s.mcpToken,
+              pushToken: pushIngestToken,
               timeoutMs: 30_000,
             })
-          : a2a.sendSpawnContext(client, lastCtx, { timeoutMs: 30_000 }));
+          : a2a.sendSpawnContextNonBlocking(client, lastCtx, { timeoutMs: 30_000 }));
         s.currentTaskId = r.taskId;
         s.currentA2AContextId = r.contextId ?? s.currentA2AContextId;
         s.restartCount += 1;
@@ -205,9 +208,10 @@ function startHealth(
   catalog: ICatalogService,
   getCfg: () => Readonly<SupervisionConfigValue>,
   publicHouseBaseUrl: string,
+  pushIngestToken: string,
 ): Effect.Effect<void> {
   // T027: daemon fiber per session, interrupted on shutdown.
-  const loop = sessionHealthLoop(st, s, a2a, catalog, getCfg, publicHouseBaseUrl);
+  const loop = sessionHealthLoop(st, s, a2a, catalog, getCfg, publicHouseBaseUrl, pushIngestToken);
   const program = pipe(
     loop,
     Effect.ensuring(Effect.sync(() => void st.healthFibers.delete(s.sessionId))),
@@ -273,7 +277,7 @@ export interface IAgentSupervisor {
   readonly getSession: (sessionId: string) => AgentSession | undefined;
   readonly getByMcpToken: (mcpToken: string) => AgentSession | undefined;
   readonly listSessionIdsByAgent: (agentId: string) => string[];
-  readonly listSessions: () => ReadonlyArray<{ ghostId: string; agentId: string; status: AgentSessionStatus }>;
+  readonly listSessions: () => ReadonlyArray<{ sessionId: string; ghostId: string; agentId: string; status: AgentSessionStatus }>;
   /** Routes IC-004 world events to the A2A push session for the target ghost, if any. */
   readonly deliverWorldEvent: (event: WorldEvent) => Effect.Effect<void>;
 }
@@ -290,6 +294,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
     publicHouseBaseUrl,
     defaultCapabilityManifest,
     getConfig,
+    pushIngestToken,
     resolveWorldH3ForSpawn,
   } = deps;
 
@@ -393,10 +398,10 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
             const r = yield* (usesA2APush
               ? a2a.startPushSpawnContext(client, spawnContext, {
                   houseAgentPushIngestUrl: houseAgentPushIngest,
-                  pushToken: mcpToken,
+                  pushToken: pushIngestToken,
                   timeoutMs: 30_000,
                 })
-              : a2a.sendSpawnContext(client, spawnContext, { timeoutMs: 30_000 }));
+              : a2a.sendSpawnContextNonBlocking(client, spawnContext, { timeoutMs: 30_000 }));
             return r;
           }),
           Effect.tapError(() =>
@@ -417,7 +422,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         session.status = "running";
         session.lastSpawnContext = spawnContext;
 
-        yield* startHealth(state, session, a2a, catalog, getConfig, publicHouseBaseUrl);
+        yield* startHealth(state, session, a2a, catalog, getConfig, publicHouseBaseUrl, pushIngestToken);
         return session;
       }),
 
@@ -439,24 +444,30 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
           const n = parseInt(r, 10);
           return Number.isFinite(n) && n >= 0 ? n : 10_000;
         })();
-        if (s.spawnClient && s.currentTaskId) {
-          yield* a2a.cancelTask(s.spawnClient, s.currentTaskId);
-          yield* Effect.sleep(Duration.millis(shutdownGraceMs));
-        } else {
-          yield* Effect.sleep(Duration.millis(100));
-        }
-        s.spawnClient = undefined;
-        state.sessions.delete(sessionId);
-        state.mcpToSession.delete(s.mcpToken);
-        state.byGhostId.delete(s.ghostId);
-        state.actionStamps.delete(sessionId);
-        const aset = state.byAgent.get(s.agentId);
-        if (aset) {
-          aset.delete(sessionId);
-          if (aset.size === 0) {
-            state.byAgent.delete(s.agentId);
+
+        // Fire cancelTask immediately; the grace-period drain and state cleanup
+        // run in the background so callers aren't blocked by the sleep.
+        const drainAndCleanup = Effect.gen(function* () {
+          if (s.spawnClient && s.currentTaskId) {
+            yield* a2a.cancelTask(s.spawnClient, s.currentTaskId);
+            yield* Effect.sleep(Duration.millis(shutdownGraceMs));
+          } else {
+            yield* Effect.sleep(Duration.millis(100));
           }
-        }
+          s.spawnClient = undefined;
+          state.sessions.delete(sessionId);
+          state.mcpToSession.delete(s.mcpToken);
+          state.byGhostId.delete(s.ghostId);
+          state.actionStamps.delete(sessionId);
+          const aset = state.byAgent.get(s.agentId);
+          if (aset) {
+            aset.delete(sessionId);
+            if (aset.size === 0) {
+              state.byAgent.delete(s.agentId);
+            }
+          }
+        });
+        yield* Effect.forkDaemon(drainAndCleanup);
       }),
 
     getSession: (sessionId) => state.sessions.get(sessionId),
@@ -471,6 +482,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
 
     listSessions: () =>
       Array.from(state.sessions.values()).map((s) => ({
+        sessionId: s.sessionId,
         ghostId: s.ghostId,
         agentId: s.agentId,
         status: s.status,
@@ -507,6 +519,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
 export const AgentSupervisorLayer = (opts: {
   publicHouseBaseUrl: string;
   defaultCapabilityManifest: ReadonlySet<string>;
+  pushIngestToken: string;
 }): Layer.Layer<AgentSupervisor, never, CatalogService | A2AHostService> => {
   const st = new SupervisorState();
   return Layer.effect(
@@ -520,6 +533,7 @@ export const AgentSupervisorLayer = (opts: {
           a2a,
           publicHouseBaseUrl: opts.publicHouseBaseUrl,
           defaultCapabilityManifest: opts.defaultCapabilityManifest,
+          pushIngestToken: opts.pushIngestToken,
           getConfig: readSupervisionConfig,
         },
         st,

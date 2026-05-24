@@ -20,8 +20,10 @@ import {
   loadMovementRulesFromEnv,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
+  makeLocalLiveSessionLayer,
   makeGcsLayerFromEnv,
   makeMapManagementLayer,
+  makeLocalMapManagementLayer,
   makeMapServiceLayer,
   makeMovementRulesLayer,
   makeNoOpNeo4jGraphLayer,
@@ -66,6 +68,22 @@ if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const httpPort = Number(process.env.AIE_MATRIX_HTTP_PORT ?? "8787");
+
+/**
+ * AIE_MATRIX_MODE controls which service backend implementations are wired:
+ *   development — local file-backed; no Neo4j or GCS required (default)
+ *   staging     — Docker Compose; Neo4j + local-filesystem GCS stub
+ *   production  — Kubernetes/GCP; Neo4j Aura + GCS bucket
+ *
+ * See ADR-0007 for the full deployment model.
+ */
+const matrixMode = (process.env.AIE_MATRIX_MODE ?? "development") as
+  | "development"
+  | "staging"
+  | "production";
+
+console.info(`[aie-matrix] mode: ${matrixMode}`);
+
 const mapPathRaw = process.env.AIE_MATRIX_MAP;
 const _mapPathFallback = join(repoRoot, "maps/sandbox/freeplay.map.gram");
 const mapPath: string | undefined = mapPathRaw
@@ -216,6 +234,10 @@ async function main(): Promise<void> {
   const ghostAuthority = new Map<string, string>();
   const bridge = {
     getLoadedMap: () => colyseusBridge.getLoadedMap(),
+    setLoadedMap(map: import("@aie-matrix/server-colyseus").LoadedMap): void {
+      ghostAuthority.clear();
+      colyseusBridge.setLoadedMap(map);
+    },
     getGhostCell(ghostId: string): string | undefined {
       const gid = String(ghostId).trim();
       const traceId = getRequestTraceId();
@@ -333,26 +355,33 @@ async function main(): Promise<void> {
   itemServiceImpl.setBridge(bridge);
   broadcastInitialItemState(itemServiceImpl, bridge);
 
-  // Map management layers — require Neo4j driver; provide no-op stubs when unavailable
-  const mapMgmtLayer: Layer.Layer<MapManagementService> = neoDriver
-    ? makeMapManagementLayer(neoDriver).pipe(Layer.provide(gcsLayer))
-    : Layer.succeed(MapManagementService, {
-        publish: () => Effect.die("MapManagementService requires Neo4j"),
-        list: () => Effect.succeed([]),
-        get: () => Effect.die("MapManagementService requires Neo4j"),
-        download: () => Effect.die("MapManagementService requires Neo4j"),
-        archive: () => Effect.die("MapManagementService requires Neo4j"),
-      });
+  // Map management + live session layers — implementation selected by AIE_MATRIX_MODE.
+  //
+  //   development: local file-backed (no Neo4j/GCS); discovers all .map.gram files
+  //                under maps/ via MapService. AIE_MATRIX_MAP selects the active Colyseus map.
+  //   staging / production: Neo4j-backed; requires neoDriver
+  //
+  // See ADR-0007 for the full deployment model.
+  let mapMgmtLayer: Layer.Layer<MapManagementService>;
+  let liveSessionLayer: Layer.Layer<LiveSessionService>;
+  // Shared MapService layer — used by LocalMapManagementService (dev) and map routes (all modes).
+  const mapSvcLayer = makeMapServiceLayer(repoRoot, mapPath);
 
-  const liveSessionLayer: Layer.Layer<LiveSessionService> = neoDriver
-    ? makeLiveSessionLayer(neoDriver).pipe(Layer.provide(redisLayer))
-    : Layer.succeed(LiveSessionService, {
-        start: () => Effect.die("LiveSessionService requires Neo4j"),
-        list: () => Effect.succeed([]),
-        get: () => Effect.die("LiveSessionService requires Neo4j"),
-        switchMaps: () => Effect.die("LiveSessionService requires Neo4j"),
-        end: () => Effect.die("LiveSessionService requires Neo4j"),
-      });
+  if (matrixMode === "development") {
+    mapMgmtLayer = makeLocalMapManagementLayer().pipe(Layer.provide(mapSvcLayer), Layer.orDie);
+    liveSessionLayer = makeLocalLiveSessionLayer().pipe(Layer.provide(mapMgmtLayer));
+    console.info(`[aie-matrix] development mode: maps auto-discovered from ${repoRoot}/maps/`);
+  } else {
+    // staging / production — require Neo4j
+    if (!neoDriver) {
+      console.error(
+        `[aie-matrix] AIE_MATRIX_MODE=${matrixMode} requires NEO4J_URI to be set. Exiting.`,
+      );
+      process.exit(1);
+    }
+    mapMgmtLayer = makeMapManagementLayer(neoDriver).pipe(Layer.provide(gcsLayer));
+    liveSessionLayer = makeLiveSessionLayer(neoDriver).pipe(Layer.provide(redisLayer));
+  }
 
   type MatrixRuntimeServices =
     | WorldBridgeService
@@ -376,7 +405,7 @@ async function main(): Promise<void> {
     conversationLayer,
     neo4jGraphLayer,
     makeItemServiceLayer(itemServiceImpl),
-    makeMapServiceLayer(repoRoot, mapPath),
+    mapSvcLayer,
     gcsLayer,
     redisLayer,
     mapMgmtLayer,
@@ -385,9 +414,10 @@ async function main(): Promise<void> {
 
   const runtime = ManagedRuntime.make(runtimeLayer);
 
-  // T025 — Session binding for Tier 2/3 (skip when AIE_MATRIX_MAP is set = Tier 1 local file mode)
+  // T025 — Session binding for staging/production (skip in development mode where the
+  // local session is synthesised in-memory by makeLocalLiveSessionLayer).
   const liveSessionId = process.env.LIVE_SESSION_ID?.trim();
-  if (!mapPathRaw && neoDriver) {
+  if (matrixMode !== "development" && neoDriver) {
     let sessionToBind: string | undefined;
     if (liveSessionId) {
       sessionToBind = liveSessionId;

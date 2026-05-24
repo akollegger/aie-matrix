@@ -1,6 +1,16 @@
 import type { CSSProperties } from "react"
 import type { AdminSelection } from "../../hooks/useAdminSelection"
 
+function formatDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+    })
+  } catch {
+    return iso
+  }
+}
+
 const sectionLabel: CSSProperties = {
   fontSize: 9,
   fontWeight: 600,
@@ -30,7 +40,8 @@ export interface DetailPanelProps {
  * FR-012: mcpToken MUST NOT appear in any rendered output in this component.
  */
 export function DetailPanel({ selection }: DetailPanelProps) {
-  const { selectedSessionId, selectedAgentId, selectedGhostSessionId } = selection
+  const { selectedMap, selectedSessionId, selectedAgentId, selectedGhostSessionId } = selection
+  const hasSelection = !!(selectedMap || selectedSessionId || selectedAgentId || selectedGhostSessionId)
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -46,10 +57,77 @@ export function DetailPanel({ selection }: DetailPanelProps) {
 
       {/* Content */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {!selectedSessionId && !selectedAgentId && !selectedGhostSessionId && (
+        {!hasSelection && (
           <div style={{ padding: "16px 8px", fontSize: 11, color: "#444", lineHeight: 1.6 }}>
-            Select a session or agent to inspect details.
+            Select a map or session to inspect details.
           </div>
+        )}
+
+        {/* Map detail — shown when a map is selected and nothing deeper */}
+        {selectedMap && !selectedSessionId && !selectedAgentId && !selectedGhostSessionId && (
+          <>
+            <div style={sectionLabel}>Map</div>
+
+            <div style={valueRow}>
+              <span style={labelStyle}>Name</span>
+              <span style={{ ...valueStyle, fontFamily: "inherit", fontSize: 13, color: "#ddf" }}>
+                {selectedMap.name || selectedMap.mapId}
+              </span>
+            </div>
+
+            <div style={valueRow}>
+              <span style={labelStyle}>Map ID</span>
+              <span style={valueStyle}>{selectedMap.mapId}</span>
+            </div>
+
+            <div style={valueRow}>
+              <span style={labelStyle}>Status</span>
+              <span style={{
+                display: "inline-block",
+                fontSize: 9,
+                padding: "1px 6px",
+                borderRadius: 3,
+                background: selectedMap.status === "published" ? "#1a3a1a" : "#2a1a00",
+                color: selectedMap.status === "published" ? "#66cc66" : "#cc8833",
+                border: `1px solid ${selectedMap.status === "published" ? "#224422" : "#443300"}`,
+                marginTop: 2,
+              }}>
+                {selectedMap.status}
+              </span>
+            </div>
+
+            <div style={valueRow}>
+              <span style={labelStyle}>Published</span>
+              <span style={valueStyle}>{formatDate(selectedMap.publishedAt)}</span>
+            </div>
+
+            {selectedMap.archivedAt && (
+              <div style={valueRow}>
+                <span style={labelStyle}>Archived</span>
+                <span style={valueStyle}>{formatDate(selectedMap.archivedAt)}</span>
+              </div>
+            )}
+
+            {selectedMap.gcsPath && (
+              <div style={valueRow}>
+                <span style={labelStyle}>Storage</span>
+                <span style={{ ...valueStyle, fontSize: 9, color: "#556" }}>{selectedMap.gcsPath}</span>
+              </div>
+            )}
+
+            {selectedMap.contentHash && (
+              <div style={valueRow}>
+                <span style={labelStyle}>Content Hash</span>
+                <span style={{ ...valueStyle, fontSize: 9, color: "#445" }}>
+                  {selectedMap.contentHash.slice(0, 12)}…
+                </span>
+              </div>
+            )}
+
+            <div style={{ padding: "8px 8px", fontSize: 10, color: "#445" }}>
+              Expand the map row to manage sessions.
+            </div>
+          </>
         )}
 
         {selectedGhostSessionId && (
