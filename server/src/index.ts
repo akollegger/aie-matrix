@@ -558,12 +558,56 @@ async function main(): Promise<void> {
           p.startsWith("/ghosts") ||
           p.startsWith("/humans") ||
           p === "/mcp" ||
-          p === "/internal/world-fanout"
+          p === "/internal/world-fanout" ||
+          p.startsWith("/agent-host/")
         ) {
           res.writeHead(204, corsHeaders);
           res.end();
           return;
         }
+      }
+
+      // Agent-host reverse proxy — admin-only.
+      // The admin panel's agentHostClient.ts points VITE_AGENT_HOST_URL at /agent-host on this
+      // server. We check the caller holds the ADMIN_TOKEN, then forward the stripped path to the
+      // agent-host ClusterIP service with the AGENT_HOST_TOKEN (never exposed to browsers).
+      if (url.pathname.startsWith("/agent-host/")) {
+        const adminToken = process.env.ADMIN_TOKEN?.trim();
+        if (!adminToken || req.headers.authorization !== `Bearer ${adminToken}`) {
+          res.writeHead(401, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "UNAUTHORIZED" }));
+          return;
+        }
+        const agentHostBase = process.env.AGENT_HOST_URL?.trim();
+        const agentHostToken = process.env.AGENT_HOST_TOKEN?.trim();
+        if (!agentHostBase || !agentHostToken) {
+          res.writeHead(503, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "AGENT_HOST_NOT_CONFIGURED", message: "Set AGENT_HOST_URL and AGENT_HOST_TOKEN on the server" }));
+          return;
+        }
+        const downstreamPath = url.pathname.slice("/agent-host".length) + (url.search ?? "");
+        const bodyBuf = (req.method !== "GET" && req.method !== "DELETE") ? await readRequestBody(req) : Buffer.alloc(0);
+        let upstream: Response;
+        try {
+          upstream = await fetch(`${agentHostBase}${downstreamPath}`, {
+            method: req.method,
+            headers: {
+              "Content-Type": (req.headers["content-type"] as string | undefined) ?? "application/json",
+              Authorization: `Bearer ${agentHostToken}`,
+              Accept: (req.headers.accept as string | undefined) ?? "application/json",
+            },
+            ...(bodyBuf.length > 0 ? { body: bodyBuf } : {}),
+          });
+        } catch (e) {
+          res.writeHead(502, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "AGENT_HOST_UNREACHABLE", message: e instanceof Error ? e.message : String(e) }));
+          return;
+        }
+        const upstreamBody = Buffer.from(await upstream.arrayBuffer());
+        const ct = upstream.headers.get("content-type") ?? "application/json";
+        res.writeHead(upstream.status, { "Content-Type": ct, ...corsHeaders });
+        res.end(upstreamBody);
+        return;
       }
 
       // Map management routes — BEFORE the read-only map GET handler.

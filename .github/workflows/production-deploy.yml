@@ -226,13 +226,15 @@ jobs:
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
           VITE_ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
-          VITE_AGENT_HOST_URL: ${{ vars.VITE_AGENT_HOST_URL }}
-          VITE_AGENT_HOST_BEARER: ${{ secrets.AGENT_HOST_TOKEN }}
+          # Agent-host is proxied through the world-api server at /agent-host/*.
+          # VITE_AGENT_HOST_URL is derived from VITE_API_BASE_URL — no separate variable needed.
+          # VITE_AGENT_HOST_BEARER reuses VITE_ADMIN_TOKEN: the proxy checks ADMIN_TOKEN then
+          # forwards with AGENT_HOST_TOKEN server-side, keeping that token out of the browser bundle.
+          VITE_AGENT_HOST_URL: ${{ vars.VITE_API_BASE_URL }}/agent-host
+          VITE_AGENT_HOST_BEARER: ${{ secrets.VITE_ADMIN_TOKEN }}
         run: |
           [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL variable is not set"; exit 1; }
           [ -n "$VITE_ADMIN_TOKEN" ]  || echo "WARNING: VITE_ADMIN_TOKEN is not set — admin write ops will fail at runtime"
-          [ -n "$VITE_AGENT_HOST_URL" ] || echo "WARNING: VITE_AGENT_HOST_URL is not set — ghost management will be unavailable"
-          [ -n "$VITE_AGENT_HOST_BEARER" ] || echo "WARNING: VITE_AGENT_HOST_BEARER is not set — agent-host requests will fail at runtime"
           pnpm --filter ./tools/map-editor build
 
       - name: Sync Intermedium to GCS
