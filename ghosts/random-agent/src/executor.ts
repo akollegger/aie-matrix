@@ -218,9 +218,21 @@ export class RandomWandererExecutor implements AgentExecutor {
           }
         }
       }
-      // Acknowledge delivery: close this independent task as completed.
-      // Using `tid` (= taskId ?? freshUUID) satisfies the SDK push-notification sender
-      // without corrupting the spawn task state.
+      // Persist the delivery task in InMemoryTaskStore before publishing a status-update.
+      // Without this, _sendPushNotificationIfNeeded logs "Task [tid] not found." because
+      // the store has no record for the fresh UUID.
+      if (!task) {
+        const deliveryTask: Task = {
+          kind: "task",
+          id: tid,
+          contextId: contextId ?? tid,
+          status: { state: "submitted", timestamp: new Date().toISOString() },
+          history: userMessage ? [userMessage] : [],
+          artifacts: [],
+        };
+        eventBus.publish(deliveryTask);
+      }
+      // Close this independent delivery task as completed.
       const done: TaskStatusUpdateEvent = {
         kind: "status-update",
         taskId: tid,
