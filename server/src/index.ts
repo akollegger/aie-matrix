@@ -173,7 +173,12 @@ async function main(): Promise<void> {
   let spectatorMetaReady = false;
   /** IC-001: flipped true after initial Neo4j connectivity is confirmed (or when Neo4j is not configured). */
   let neo4jHealthy = false;
-  const worldApiBaseUrl = `http://127.0.0.1:${httpPort}/mcp`;
+  // AIE_MATRIX_WORLD_API_MCP_URL lets other pods (agent-host, random-agent) reach the MCP
+  // endpoint via in-cluster DNS. Defaults to loopback for local dev.
+  // In K8s set to "http://server:8787/mcp" so ghost credentials are reachable cross-pod.
+  const worldApiBaseUrl =
+    (process.env.AIE_MATRIX_WORLD_API_MCP_URL ?? "").trim() ||
+    `http://127.0.0.1:${httpPort}/mcp`;
 
   // `scripts/demo.mjs` polls this as soon as the TCP port is open. Colyseus registers its HTTP
   // layer during `listen()`; our main `httpServer.on` handler is attached much later after slow
