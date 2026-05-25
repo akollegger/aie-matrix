@@ -12,6 +12,7 @@ service:
 # Non-secret environment variables
 env:
   NODE_ENV: production
+  AIE_MATRIX_MODE: production
   AIE_MATRIX_HTTP_PORT: "8787"
   AIE_MATRIX_DEBUG: "false"
 
