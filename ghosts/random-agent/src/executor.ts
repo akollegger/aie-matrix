@@ -202,27 +202,33 @@ export class RandomWandererExecutor implements AgentExecutor {
       eventBus.finished();
       return;
     }
+    // World events are delivered as independent A2A messages (no taskId on the message),
+    // so `tid` here is a fresh UUID — the spawn task is not touched.
     const ev = asWorldEvent(userMessage);
-    if (ev?.kind === "world.message.new") {
-      const pl = ev.payload as { text?: string; priority?: string; from?: string };
-      if (pl.priority === "PARTNER" && typeof pl.from === "string" && typeof pl.text === "string") {
-        const mcp = mcpByGhostId.get(ev.ghostId);
-        if (mcp) {
-          void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e) => {
-            console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
-          });
+    if (ev !== null) {
+      // Only world.message.new with PARTNER priority triggers a say() call.
+      if (ev.kind === "world.message.new") {
+        const pl = ev.payload as { text?: string; priority?: string; from?: string };
+        if (pl.priority === "PARTNER" && typeof pl.from === "string" && typeof pl.text === "string") {
+          const mcp = mcpByGhostId.get(ev.ghostId);
+          if (mcp) {
+            void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e) => {
+              console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
+            });
+          }
         }
       }
-      if (taskId) {
-        const done: TaskStatusUpdateEvent = {
-          kind: "status-update",
-          taskId,
-          contextId: contextId ?? "",
-          final: true,
-          status: { state: "completed", timestamp: new Date().toISOString() },
-        };
-        eventBus.publish(done);
-      }
+      // Acknowledge delivery: close this independent task as completed.
+      // Using `tid` (= taskId ?? freshUUID) satisfies the SDK push-notification sender
+      // without corrupting the spawn task state.
+      const done: TaskStatusUpdateEvent = {
+        kind: "status-update",
+        taskId: tid,
+        contextId: contextId ?? tid,
+        final: true,
+        status: { state: "completed", timestamp: new Date().toISOString() },
+      };
+      eventBus.publish(done);
       eventBus.finished();
       return;
     }
@@ -233,6 +239,7 @@ export class RandomWandererExecutor implements AgentExecutor {
         messageId: randomUUID(),
         role: "agent",
         contextId,
+        taskId: tid,
         parts: [{ kind: "text", text: "ok" }],
       };
       eventBus.publish(reply);
@@ -244,6 +251,7 @@ export class RandomWandererExecutor implements AgentExecutor {
       messageId: randomUUID(),
       role: "agent",
       contextId,
+      taskId: tid,
       parts: [{ kind: "text", text: "noop" }],
     };
     eventBus.publish(reply);

@@ -206,12 +206,14 @@ export const createA2AHostService = (devToken: string): IA2AHostService => {
       Effect.tryPromise({
         try: async () => {
           const data = p.event as unknown as Record<string, unknown>;
+          // World events are delivered as independent messages — NOT continuations of the
+          // spawn task. Attaching the spawn taskId caused the executor to publish into the
+          // shared event bus, which (a) corrupts the spawn task state and (b) triggers the
+          // A2A SDK's push-notification sender with events that have no taskId on them.
           const message: Message = {
             kind: "message",
             messageId: randomUUID(),
             role: "user",
-            taskId: p.taskId,
-            contextId: p.contextId,
             parts: [{ kind: "data", data }],
           };
           const out = await client.sendMessage(
