@@ -336,19 +336,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(msw@2.14.6(@types/node@24.12.2)(typescript@5.7.3))(tsx@4.21.0)(yaml@2.8.3)
 
-  ghosts/random-house:
-    dependencies:
-      '@aie-matrix/ghost-ts-client':
-        specifier: workspace:*
-        version: link:../ts-client
-      '@aie-matrix/root-env':
-        specifier: workspace:*
-        version: link:../../shared/root-env
-    devDependencies:
-      '@types/node':
-        specifier: ^24.12.2
-        version: 24.12.2
-
   ghosts/tck:
     dependencies:
       '@aie-matrix/ghost-ts-client':
@@ -4747,11 +4734,11 @@ packages:
     resolution: {integrity: sha512-azl+t0z7pw/z958Gy9svOTuzqIk6xq+NSheJzn5MMWtWTFywIacg2wUlzKFGtt3cthx0r2SxMK0yzJOR0IES7Q==}
     engines: {node: '>=14.0.0'}
 
-  tldts-core@7.0.32:
-    resolution: {integrity: sha512-GbSw6chU2HsHIB/NAyBJYxXQKpcqhtgY6bvWi90OarpbuMia+Z4Gw5BYiW4hJo1DzQ/6k9coba7FU/ijcgVLLw==}
+  tldts-core@7.1.2:
+    resolution: {integrity: sha512-26EbERPLf5wkNFKW+7egxArSPN1Nqipe/PIe1nvhpNu8HqQeY2pYdOeQk4sAiADv/e03VzHkLY0PPohKv1JMAQ==}
 
-  tldts@7.0.32:
-    resolution: {integrity: sha512-5eDV0tK2NhLAAqBeXDAQ36+EwuStd1HbsSOnGsp+JbExITnExcALLL5M1kTH8gjDYN5QvwmUWimE3GoMZ2A7xQ==}
+  tldts@7.1.2:
+    resolution: {integrity: sha512-RUX5sQm8bl03ycwQ6nSgJiKw9FZWhA8GBzxX6X1lsG3xKzFIW+lYLLpM30FQbDD6XjTWa/VkF15VxjnAMWYJAQ==}
     hasBin: true
 
   toidentifier@1.0.1:
@@ -9390,11 +9377,11 @@ snapshots:
 
   tinyspy@4.0.4: {}
 
-  tldts-core@7.0.32: {}
+  tldts-core@7.1.2: {}
 
-  tldts@7.0.32:
+  tldts@7.1.2:
     dependencies:
-      tldts-core: 7.0.32
+      tldts-core: 7.1.2
 
   toidentifier@1.0.1: {}
 
@@ -9402,7 +9389,7 @@ snapshots:
 
   tough-cookie@6.0.1:
     dependencies:
-      tldts: 7.0.32
+      tldts: 7.1.2
 
   tr46@0.0.3: {}
 
