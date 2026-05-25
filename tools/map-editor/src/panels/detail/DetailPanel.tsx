@@ -2,6 +2,8 @@ import { useEffect, useState } from "react"
 import type { CSSProperties } from "react"
 import type { AdminSelection } from "../../hooks/useAdminSelection"
 import { AgentHostError, getAgentCard } from "../../services/agentHostClient"
+import { getGhostPosition } from "../../services/registryClient"
+import { useEditor } from "../../state/editor-context"
 
 function formatDate(iso: string): string {
   try {
@@ -35,13 +37,6 @@ const valueStyle: CSSProperties = { fontSize: 11, color: "#ccc", fontFamily: "mo
 /** Poll interval for ghost position updates (ms). */
 const GHOST_POS_POLL_MS = 2000
 
-async function fetchGhostPosition(ghostId: string): Promise<{ h3Index: string; status: string }> {
-  const res = await fetch(`/registry/ghosts/${encodeURIComponent(ghostId)}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const data = await res.json() as { h3Index: string; status: string }
-  return data
-}
-
 export interface DetailPanelProps {
   selection: AdminSelection
 }
@@ -54,6 +49,7 @@ export interface DetailPanelProps {
 export function DetailPanel({ selection }: DetailPanelProps) {
   const { selectedMap, selectedSessionId, selectedAgentId, selectedGhostSessionId, selectedGhostId } = selection
   const hasSelection = !!(selectedMap || selectedSessionId || selectedAgentId || selectedGhostSessionId)
+  const { dispatch } = useEditor()
 
   // Fetched A2A agent card — loaded whenever selectedAgentId changes.
   const [agentCardData, setAgentCardData] = useState<unknown>(null)
@@ -93,7 +89,7 @@ export function DetailPanel({ selection }: DetailPanelProps) {
     let active = true
     const poll = async () => {
       try {
-        const pos = await fetchGhostPosition(selectedGhostId)
+        const pos = await getGhostPosition(selectedGhostId)
         if (active) setGhostPos(pos)
       } catch { /* ignore transient errors */ }
     }
@@ -221,7 +217,24 @@ export function DetailPanel({ selection }: DetailPanelProps) {
               <>
                 <div style={valueRow}>
                   <span style={labelStyle}>H3 Cell</span>
-                  <span style={{ ...valueStyle, letterSpacing: "0.04em" }}>{ghostPos.h3Index}</span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ ...valueStyle, letterSpacing: "0.04em", flex: 1 }}>{ghostPos.h3Index}</span>
+                    <button
+                      onClick={() => dispatch({ type: "FIT_TO_CELL", h3Index: ghostPos.h3Index })}
+                      title="Pan map to this cell"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        cursor: "pointer",
+                        fontSize: 13,
+                        padding: "0 2px",
+                        lineHeight: 1,
+                        flexShrink: 0,
+                      }}
+                    >
+                      🎯
+                    </button>
+                  </div>
                 </div>
                 <div style={valueRow}>
                   <span style={labelStyle}>Status</span>

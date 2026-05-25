@@ -61,6 +61,8 @@ services:
       AIE_MATRIX_DEBUG: "${AIE_MATRIX_DEBUG:-false}"
       AIE_MATRIX_INTERNAL_FANOUT_TOKEN: "${AIE_MATRIX_INTERNAL_FANOUT_TOKEN:-}"
       ADMIN_TOKEN: "${ADMIN_TOKEN}"
+      # IC-002: MCP URL for spawn credentials — must be reachable by agent-host container
+      AIE_MATRIX_WORLD_API_MCP_URL: "http://server:8787/mcp"
     ports:
       - "${AIE_MATRIX_HTTP_PORT:-8787}:${AIE_MATRIX_HTTP_PORT:-8787}"
     networks:
@@ -93,6 +95,10 @@ services:
       WORLD_API_URL: "${WORLD_API_URL:-http://server:8787}"
       COLYSEUS_URL: "${COLYSEUS_URL:-ws://server:8787}"
       AIE_MATRIX_HTTP_BASE_URL: "${WORLD_API_URL:-http://server:8787}"
+      # Internal base URL so spawn tokens carry a container-reachable agent-host URL
+      AGENT_HOST_INTERNAL_BASE_URL: "http://agent-host:4000"
+      # Catalog file path — avoids stale entries from prior runs
+      CATALOG_FILE_PATH: "/tmp/catalog.json"
     ports:
       - "${AGENT_HOST_PORT:-4000}:${AGENT_HOST_PORT:-4000}"
     networks:

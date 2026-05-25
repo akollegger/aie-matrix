@@ -167,6 +167,7 @@ export type EditorAction =
   | { type: "IMPORT_MAP"; state: MapEditorState }
   | { type: "FIT_BOUNDS" }
   | { type: "CLEAR_FIT_BOUNDS" }
+  | { type: "FIT_TO_CELL"; h3Index: string }
   | { type: "SET_PUBLISHED_MAP_ID"; mapId: string | null }
 
 // ---------------------------------------------------------------------------
@@ -723,6 +724,28 @@ function editorReducerCore(
 
     case "CLEAR_FIT_BOUNDS":
       return { ...state, ui: { ...state.ui, pendingFitBounds: null } }
+
+    case "FIT_TO_CELL": {
+      try {
+        const [lat, lng] = cellToLatLng(action.h3Index)
+        // 0.0001° ≈ 11 m — enough to show the cell clearly at any resolution
+        const pad = 0.0001
+        return {
+          ...state,
+          ui: {
+            ...state.ui,
+            pendingFitBounds: {
+              west: lng - pad,
+              south: lat - pad,
+              east: lng + pad,
+              north: lat + pad,
+            },
+          },
+        }
+      } catch {
+        return state
+      }
+    }
 
     case "SET_PUBLISHED_MAP_ID":
       return { ...state, ui: { ...state.ui, publishedMapId: action.mapId } }

@@ -128,24 +128,24 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
             const store = yield* RegistryStoreService
             const redisStore = yield* RedisGhostStoreService
 
-            // 1. In-memory bridge on this pod (fastest)
+            // 1. In-memory bridge on this pod — most current, but cleared on map switch
             const h3Index = bridge.getGhostCell(ghostId)
             if (h3Index) {
               yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index, status: "active" })
               return
             }
 
-            // 2. In-memory registry store on this pod
-            const ghost = store.ghosts.get(ghostId)
-            if (ghost) {
-              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: ghost.h3Index, status: ghost.status })
-              return
-            }
-
-            // 3. Redis — cross-pod fallback (ghost may be on a different replica)
+            // 2. Redis — updated by goEffect after every move, survives map switches and pod restarts
             const redisRecord = yield* redisStore.get(ghostId)
             if (redisRecord) {
               yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: redisRecord.h3Index, status: redisRecord.status })
+              return
+            }
+
+            // 3. In-memory registry store — spawn-time position; only reached if Redis is unavailable
+            const ghost = store.ghosts.get(ghostId)
+            if (ghost) {
+              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: ghost.h3Index, status: ghost.status })
               return
             }
 

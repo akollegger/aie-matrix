@@ -91,12 +91,42 @@ export function makeLocalLiveSessionLayer(): Layer.Layer<LiveSessionService, nev
           };
         });
 
+      const switchMaps = (
+        id: string,
+        maps: Array<{ mapId: string; role: string }>,
+      ): Effect.Effect<
+        { session: SessionRecord; removedCells: string[]; addedCells: string[] },
+        LiveSessionNotFoundError | LiveSessionMapNotPublishedError
+      > =>
+        Effect.gen(function* () {
+          // Validate session exists and is active.
+          const existing = yield* get(id);
+          if (existing.status !== "active") {
+            yield* Effect.fail(new LiveSessionNotFoundError({ id }));
+          }
+
+          // Resolve gcsPath for each new map via MapManagementService (reads local files).
+          const resolvedMaps: Array<{ mapId: string; role: string; gcsPath: string }> = [];
+          for (const { mapId, role } of maps) {
+            const record = yield* mapMgmt.get(mapId).pipe(
+              Effect.mapError(() => new LiveSessionMapNotPublishedError({ mapId })),
+            );
+            resolvedMaps.push({ mapId, role, gcsPath: record.gcsPath });
+          }
+
+          // Update in-memory session.
+          currentSession = { ...existing, maps: resolvedMaps };
+
+          // Cell diff not computable without Neo4j in dev mode — return empty arrays.
+          // The actual Colyseus map reload is handled by LiveSessionRoutes after this returns.
+          return { session: currentSession, removedCells: [], addedCells: [] };
+        });
+
       return {
         start,
         list,
         get,
-        switchMaps: (_id, _maps) =>
-          Effect.die("LiveSessionService.switchMaps not supported in development mode"),
+        switchMaps,
         end,
       };
     }),
