@@ -49,6 +49,10 @@ RUN pnpm --filter @aie-matrix/server deploy --prod --legacy /app/deploy
 FROM node:24-slim AS runner
 WORKDIR /app
 COPY --from=build /app/deploy .
+# Maps are baked into the image so startup-map-sync can auto-publish them.
+# repoRoot resolves to "/" in this layout (dist/index.js is two levels deep),
+# so maps must live at /maps for MapService's glob to find them.
+COPY --from=build /repo/maps /maps
 ENV NODE_ENV=production
 # Combined server port (AIE_MATRIX_HTTP_PORT default)
 EXPOSE 8787
