@@ -32,6 +32,16 @@ const valueRow: CSSProperties = {
 const labelStyle: CSSProperties = { fontSize: 9, color: "#445" }
 const valueStyle: CSSProperties = { fontSize: 11, color: "#ccc", fontFamily: "monospace", wordBreak: "break-all" }
 
+/** Poll interval for ghost position updates (ms). */
+const GHOST_POS_POLL_MS = 2000
+
+async function fetchGhostPosition(ghostId: string): Promise<{ h3Index: string; status: string }> {
+  const res = await fetch(`/registry/ghosts/${encodeURIComponent(ghostId)}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json() as { h3Index: string; status: string }
+  return data
+}
+
 export interface DetailPanelProps {
   selection: AdminSelection
 }
@@ -42,13 +52,16 @@ export interface DetailPanelProps {
  * FR-012: mcpToken MUST NOT appear in any rendered output in this component.
  */
 export function DetailPanel({ selection }: DetailPanelProps) {
-  const { selectedMap, selectedSessionId, selectedAgentId, selectedGhostSessionId } = selection
+  const { selectedMap, selectedSessionId, selectedAgentId, selectedGhostSessionId, selectedGhostId } = selection
   const hasSelection = !!(selectedMap || selectedSessionId || selectedAgentId || selectedGhostSessionId)
 
   // Fetched A2A agent card — loaded whenever selectedAgentId changes.
   const [agentCardData, setAgentCardData] = useState<unknown>(null)
   const [agentCardLoading, setAgentCardLoading] = useState(false)
   const [agentCardError, setAgentCardError] = useState<string | null>(null)
+
+  // Ghost position — polled while a ghost session is selected.
+  const [ghostPos, setGhostPos] = useState<{ h3Index: string; status: string } | null>(null)
 
   useEffect(() => {
     if (!selectedAgentId) {
@@ -73,6 +86,21 @@ export function DetailPanel({ selection }: DetailPanelProps) {
       })
     return () => { cancelled = true }
   }, [selectedAgentId])
+
+  // Poll ghost position while a ghost is selected.
+  useEffect(() => {
+    if (!selectedGhostId) { setGhostPos(null); return }
+    let active = true
+    const poll = async () => {
+      try {
+        const pos = await fetchGhostPosition(selectedGhostId)
+        if (active) setGhostPos(pos)
+      } catch { /* ignore transient errors */ }
+    }
+    void poll()
+    const handle = setInterval(() => { void poll() }, GHOST_POS_POLL_MS)
+    return () => { active = false; clearInterval(handle) }
+  }, [selectedGhostId])
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -168,6 +196,12 @@ export function DetailPanel({ selection }: DetailPanelProps) {
               <span style={labelStyle}>Session ID</span>
               <span style={valueStyle}>{selectedGhostSessionId}</span>
             </div>
+            {selectedGhostId && (
+              <div style={valueRow}>
+                <span style={labelStyle}>Ghost ID</span>
+                <span style={valueStyle}>{selectedGhostId}</span>
+              </div>
+            )}
             {selectedAgentId && (
               <div style={valueRow}>
                 <span style={labelStyle}>Agent ID</span>
@@ -178,6 +212,31 @@ export function DetailPanel({ selection }: DetailPanelProps) {
               <div style={valueRow}>
                 <span style={labelStyle}>World Session</span>
                 <span style={valueStyle}>{selectedSessionId}</span>
+              </div>
+            )}
+
+            {/* Live position — polled every 2 s */}
+            <div style={sectionLabel}>Position</div>
+            {ghostPos ? (
+              <>
+                <div style={valueRow}>
+                  <span style={labelStyle}>H3 Cell</span>
+                  <span style={{ ...valueStyle, letterSpacing: "0.04em" }}>{ghostPos.h3Index}</span>
+                </div>
+                <div style={valueRow}>
+                  <span style={labelStyle}>Status</span>
+                  <span style={{
+                    ...valueStyle,
+                    color: ghostPos.status === "active" ? "#66bb66" : "#cc8833",
+                    fontSize: 10,
+                  }}>
+                    {ghostPos.status}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div style={{ padding: "4px 8px", fontSize: 10, color: "#444" }}>
+                {selectedGhostId ? "Fetching position…" : "No ghost selected"}
               </div>
             )}
           </>

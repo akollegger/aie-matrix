@@ -5,8 +5,7 @@ import { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adopt
 import { handleRegisterAgentHostEffect } from "./routes/register-house.js";
 import { handleSpawnGhostEffect, type SpawnGhostDeps } from "./routes/spawn-ghost.js";
 import { createCaretakerId } from "./store.js";
-import type { WorldBridgeService } from "@aie-matrix/server-world-api";
-import { runWithRequestTrace } from "@aie-matrix/server-world-api";
+import { runWithRequestTrace, WorldBridgeService } from "@aie-matrix/server-world-api";
 import { RegistryStoreService, RedisGhostStoreService } from "@aie-matrix/server-world-api";
 import { readJsonBody, sendJson, sendRawJsonBody } from "./utils/http.js";
 import { RegistryBadJson } from "./registry-errors.js";
@@ -117,6 +116,30 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
           ),
         );
         return;
+      }
+
+      // GET /registry/ghosts/:ghostId — current position for admin inspection
+      const ghostGetMatch = /^\/registry\/ghosts\/([^/]+)$/.exec(path)
+      if (ghostGetMatch && req.method === "GET") {
+        const ghostId = decodeURIComponent(ghostGetMatch[1]!)
+        await config.runtime.runPromise(
+          Effect.gen(function* () {
+            const bridge = yield* WorldBridgeService
+            const store = yield* RegistryStoreService
+            const h3Index = bridge.getGhostCell(ghostId)
+            if (h3Index) {
+              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index, status: "active" })
+              return
+            }
+            const ghost = store.ghosts.get(ghostId)
+            if (ghost) {
+              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: ghost.h3Index, status: ghost.status })
+              return
+            }
+            yield* sendJson(res, REGISTRY_CORS_HEADERS, 404, { error: "NOT_FOUND", message: `ghost ${ghostId} not found` })
+          }),
+        )
+        return
       }
 
       if (path === "/registry/ghosts" && req.method === "POST") {

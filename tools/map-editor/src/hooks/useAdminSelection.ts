@@ -7,6 +7,8 @@ export interface AdminSelection {
   selectedSessionId: string | null
   selectedAgentId: string | null
   selectedGhostSessionId: string | null
+  /** The actual ghost ID (from GhostSessionRecord.ghostId), distinct from the agent-host session ID. */
+  selectedGhostId: string | null
 }
 
 export interface AdminSelectionActions {
@@ -14,7 +16,7 @@ export interface AdminSelectionActions {
   selectMap: (map: ServerMapRecord | null) => void
   selectSession: (id: string | null) => void
   selectAgent: (id: string | null) => void
-  selectGhostSession: (id: string | null) => void
+  selectGhostSession: (sessionId: string | null, ghostId?: string | null) => void
 }
 
 /**
@@ -35,6 +37,7 @@ export function useAdminSelection(): AdminSelectionActions {
     selectedSessionId: null,
     selectedAgentId: null,
     selectedGhostSessionId: null,
+    selectedGhostId: null,
   })
 
   const selectMap = (map: ServerMapRecord | null) => {
@@ -43,6 +46,7 @@ export function useAdminSelection(): AdminSelectionActions {
       selectedSessionId: null,
       selectedAgentId: null,
       selectedGhostSessionId: null,
+      selectedGhostId: null,
     })
   }
 
@@ -52,6 +56,7 @@ export function useAdminSelection(): AdminSelectionActions {
       selectedSessionId: id,
       selectedAgentId: null,
       selectedGhostSessionId: null,
+      selectedGhostId: null,
     })
   }
 
@@ -60,13 +65,15 @@ export function useAdminSelection(): AdminSelectionActions {
       ...prev,
       selectedAgentId: id,
       selectedGhostSessionId: null,
+      selectedGhostId: null,
     }))
   }
 
-  const selectGhostSession = (id: string | null) => {
+  const selectGhostSession = (sessionId: string | null, ghostId?: string | null) => {
     setSelection(prev => ({
       ...prev,
-      selectedGhostSessionId: id,
+      selectedGhostSessionId: sessionId,
+      selectedGhostId: ghostId ?? null,
     }))
   }
 

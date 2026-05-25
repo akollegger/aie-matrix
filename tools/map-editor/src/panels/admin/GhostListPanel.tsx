@@ -52,7 +52,7 @@ const POLL_TIMEOUT_MS = 30_000
 export interface GhostListPanelProps {
   agentId: string
   selectedGhostSessionId: string | null
-  onSelectGhostSession: (id: string | null) => void
+  onSelectGhostSession: (sessionId: string | null, ghostId?: string | null) => void
   onClose: () => void
   /**
    * Set immediately after a successful spawn so this panel can show a placeholder
@@ -154,7 +154,7 @@ export function GhostListPanel({
     try {
       await shutdownGhostSession(sessionId)
       setSessions(prev => prev.filter(s => s.sessionId !== sessionId))
-      if (selectedGhostSessionId === sessionId) onSelectGhostSession(null)
+      if (selectedGhostSessionId === sessionId) onSelectGhostSession(null, null)
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Shutdown failed"
       setShutdownState(s => ({ ...s, [sessionId]: "error" }))
@@ -246,7 +246,10 @@ export function GhostListPanel({
           return (
             <div key={session.sessionId}>
               <div
-                onClick={() => onSelectGhostSession(isSelected ? null : session.sessionId)}
+                onClick={() => onSelectGhostSession(
+                  isSelected ? null : session.sessionId,
+                  isSelected ? null : session.ghostId,
+                )}
                 style={{
                   padding: "6px 8px", borderBottom: "1px solid #1a1a2e",
                   background: isSelected ? "#1a2244" : "transparent",
