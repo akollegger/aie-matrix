@@ -78,8 +78,8 @@ test.describe("Phaser spectator + Colyseus ghostTiles", () => {
         AGENT_PORT: String(RANDOM_AGENT_PORT),
         RANDOM_AGENT_PUBLIC_BASE_URL: `http://127.0.0.1:${RANDOM_AGENT_PORT}`,
         RANDOM_AGENT_MOVE_MS: "1000",
-        // Deterministic agentId for spawn URL — avoids hostname-dependent lookup
-        HOSTNAME: E2E_AGENT_HOSTNAME,
+        // Deterministic agentId for spawn URL — HOSTNAME is used directly as agentId
+        HOSTNAME: E2E_AGENT_ID,
       },
       stdio: "ignore",
     });

@@ -33,3 +33,8 @@ test-results
 # Turbo / pnpm cache
 .turbo
 .pnpm-store
+
+# Agent-host catalog — agents self-register at startup; the dev-time catalog.json
+# must not be baked into Docker images (it contains loopback URLs that break production).
+# CATALOG_FILE_PATH=/tmp/catalog.json in values.yaml ensures an ephemeral path is used.
+server/agent-host/catalog.json

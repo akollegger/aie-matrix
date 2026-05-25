@@ -5,6 +5,7 @@ import { useGhostIdentity } from "../hooks/useGhostIdentity.js";
 import { useMapGram } from "../hooks/useMapGram.js";
 import { useColyseus } from "../hooks/useColyseus.js";
 import { useViewState } from "../hooks/useViewState.js";
+import { useSessionPoller } from "../hooks/useSessionPoller.js";
 
 const ClientStateCtx = createContext<ClientState | null>(null);
 const RefreshIdentitiesCtx = createContext<() => void>(() => {});
@@ -18,6 +19,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
   const { identities, refresh } = useGhostIdentity(import.meta.env.VITE_AGENT_HOST_URL ?? "");
   const { status: mapGramStatus, tiles, tileTypeStyles, error: mapGramError, retry: retryMapLoad } = useMapGram();
   const { ghosts, connectionState: colyseusLinkState } = useColyseus();
+  const { activeSession } = useSessionPoller(import.meta.env.VITE_API_BASE_URL ?? "", retryMapLoad);
   const { viewState, nav } = useViewState(pairing);
   const [thread] = useState<ClientState["thread"]>(null);
   const [interiority] = useState<ClientState["interiority"]>(null);
@@ -37,6 +39,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
       mapGramError,
       colyseusLinkState,
       retryMapLoad,
+      activeSession,
     }),
     [
       viewState,
@@ -52,6 +55,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
       mapGramError,
       colyseusLinkState,
       retryMapLoad,
+      activeSession,
     ],
   );
 

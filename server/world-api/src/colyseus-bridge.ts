@@ -5,6 +5,11 @@ import type { LoadedMap, MatrixRoom } from "@aie-matrix/server-colyseus";
  */
 export interface ColyseusWorldBridge {
   getLoadedMap(): LoadedMap;
+  /**
+   * Hot-swap the room's loaded map (called when the active live session switches to a new map).
+   * Clears all ghost positions — the caller must also clear any external position caches.
+   */
+  setLoadedMap(map: LoadedMap): void;
   getGhostCell(ghostId: string): string | undefined;
   setGhostCell(ghostId: string, cellId: string): void;
   /** Ghost ids whose authoritative tile is `cellId`. */
@@ -27,6 +32,7 @@ export interface ColyseusWorldBridge {
 export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
   return {
     getLoadedMap: () => room.getLoadedMap(),
+    setLoadedMap: (map) => room.setLoadedMap(map),
     getGhostCell: (ghostId) => room.getGhostCell(ghostId),
     setGhostCell: (ghostId, cellId) => room.setGhostCell(ghostId, cellId),
     listOccupantsOnCell: (cellId) => room.listOccupantsOnCell(cellId),

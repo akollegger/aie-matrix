@@ -17,8 +17,8 @@ export interface CaretakerRecord {
 
 export interface GhostRecord {
   id: string;
-  agentHostId: string;
-  caretakerId: string;
+  agentHostId?: string;
+  caretakerId?: string;
   h3Index: string;
   status: "active" | "stopped";
 }

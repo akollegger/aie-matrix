@@ -116,11 +116,11 @@ hosting for agents without their own infrastructure — is deferred to a
 follow-up ADR.
 
 **Phase 1 exception (localhost only):** Phase 1 implementation may use a
-static shared bearer token (`GHOST_HOUSE_DEV_TOKEN` env var) for both
+static shared bearer token (`AGENT_HOST_TOKEN` env var) for both
 directions (agent → house and house → agent). This is explicitly unsafe for
 production: it exercises the auth header path in code without requiring
 credential issuance infrastructure. The A2A SDK's `getToken` callback is wired
-to `() => process.env.GHOST_HOUSE_DEV_TOKEN` on both sides. This mechanism
+to `() => process.env.AGENT_HOST_TOKEN` on both sides. This mechanism
 **must not be used outside localhost deployments**.
 
 **The auth ADR remains required before any non-local deployment** (public
@@ -224,6 +224,18 @@ with growing tooling and ecosystem support.
   authors, etc.) — defined in the agent host RFC and validated by spike-008.
 - Capability manifest format: what the house advertises as available to agents it
   spawns (memory backends, available MCP tools, notification types)
+- **Agent-host Colyseus dependency** — the current implementation relays world
+  events to ghost A2A push sessions via `ColyseusWorldBridge` (a read-only
+  Colyseus room observer inside the agent-host). This means two clients hold
+  Colyseus seats: Intermedium (the intended spectator) and the agent-host. The
+  preferred long-term shape is for the agent-host to subscribe to world events
+  via Redis pub/sub (`RedisPublishService` already publishes these events from
+  the world API) rather than maintaining its own Colyseus connection. Keeping
+  Colyseus as a single-consumer channel would make it easier to reason about
+  room capacity, connection lifecycle, and future schema evolution. Resolving
+  this requires verifying that all `world-v1` event types the bridge currently
+  forwards are also published to Redis, then replacing `ColyseusWorldBridge`
+  with a Redis subscriber.
 
 ## Appendix: Spike Evidence
 

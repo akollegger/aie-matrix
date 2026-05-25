@@ -101,6 +101,9 @@ async function startMovementFromSpawn(
       const ex = (await mcp.callTool("exits", {})) as { exits?: ReadonlyArray<{ toward?: string }> };
       const exits = ex.exits ?? [];
       if (exits.length === 0) {
+        // No exits on this cell (e.g. isolated map cell or map switch in progress).
+        // Back off before retrying to avoid a tight spin loop.
+        await new Promise((r) => setTimeout(r, moveMs));
         continue;
       }
       const pick = exits[Math.floor(Math.random() * exits.length)]!;
@@ -170,13 +173,23 @@ export class RandomWandererExecutor implements AgentExecutor {
       };
       eventBus.publish(w);
       registerSpawnTask(t.id, sp.ghostId, contextId ?? t.contextId);
-      void startMovementFromSpawn(this.getMoveInterval, sp).catch((e) =>
+
+      // Await the movement loop — keeps this A2A task in "working" state so
+      // cancelTask() can cancel it cleanly. The loop exits when:
+      //   (a) cancelMovementForGhost sets go=false (via cancelTask), or
+      //   (b) the loop throws (unrecoverable error).
+      await startMovementFromSpawn(this.getMoveInterval, sp).catch((e) =>
         console.error(`[random-agent] movement ghostId=${sp.ghostId}`, e),
       );
-      // Wanderer tier: sendSpawnContext polls for terminal state, so we must complete.
-      // Social/listener tier: startPushSpawnContext uses blocking:false and keeps the task
-      // open for future sendWorldEvent deliveries — publishing "completed" would close it.
-      if (sp.ghostCard.class === "wanderer") {
+
+      // If cancelTask already ran it has claimed the metadata and published "canceled".
+      // Only publish "completed" if we still own the metadata entry.
+      const stillOwned = spawnTaskMeta.get(t.id)?.ghostId === sp.ghostId;
+      if (stillOwned) {
+        spawnTaskMeta.delete(t.id);
+        if (ghostIdToTaskId.get(sp.ghostId) === t.id) {
+          ghostIdToTaskId.delete(sp.ghostId);
+        }
         const done: TaskStatusUpdateEvent = {
           kind: "status-update",
           taskId: t.id,
@@ -189,27 +202,45 @@ export class RandomWandererExecutor implements AgentExecutor {
       eventBus.finished();
       return;
     }
+    // World events are delivered as independent A2A messages (no taskId on the message),
+    // so `tid` here is a fresh UUID — the spawn task is not touched.
     const ev = asWorldEvent(userMessage);
-    if (ev?.kind === "world.message.new") {
-      const pl = ev.payload as { text?: string; priority?: string; from?: string };
-      if (pl.priority === "PARTNER" && typeof pl.from === "string" && typeof pl.text === "string") {
-        const mcp = mcpByGhostId.get(ev.ghostId);
-        if (mcp) {
-          void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e) => {
-            console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
-          });
+    if (ev !== null) {
+      // Only world.message.new with PARTNER priority triggers a say() call.
+      if (ev.kind === "world.message.new") {
+        const pl = ev.payload as { text?: string; priority?: string; from?: string };
+        if (pl.priority === "PARTNER" && typeof pl.from === "string" && typeof pl.text === "string") {
+          const mcp = mcpByGhostId.get(ev.ghostId);
+          if (mcp) {
+            void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e) => {
+              console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
+            });
+          }
         }
       }
-      if (taskId) {
-        const done: TaskStatusUpdateEvent = {
-          kind: "status-update",
-          taskId,
-          contextId: contextId ?? "",
-          final: true,
-          status: { state: "completed", timestamp: new Date().toISOString() },
+      // Persist the delivery task in InMemoryTaskStore before publishing a status-update.
+      // Without this, _sendPushNotificationIfNeeded logs "Task [tid] not found." because
+      // the store has no record for the fresh UUID.
+      if (!task) {
+        const deliveryTask: Task = {
+          kind: "task",
+          id: tid,
+          contextId: contextId ?? tid,
+          status: { state: "submitted", timestamp: new Date().toISOString() },
+          history: userMessage ? [userMessage] : [],
+          artifacts: [],
         };
-        eventBus.publish(done);
+        eventBus.publish(deliveryTask);
       }
+      // Close this independent delivery task as completed.
+      const done: TaskStatusUpdateEvent = {
+        kind: "status-update",
+        taskId: tid,
+        contextId: contextId ?? tid,
+        final: true,
+        status: { state: "completed", timestamp: new Date().toISOString() },
+      };
+      eventBus.publish(done);
       eventBus.finished();
       return;
     }
@@ -220,6 +251,7 @@ export class RandomWandererExecutor implements AgentExecutor {
         messageId: randomUUID(),
         role: "agent",
         contextId,
+        taskId: tid,
         parts: [{ kind: "text", text: "ok" }],
       };
       eventBus.publish(reply);
@@ -231,6 +263,7 @@ export class RandomWandererExecutor implements AgentExecutor {
       messageId: randomUUID(),
       role: "agent",
       contextId,
+      taskId: tid,
       parts: [{ kind: "text", text: "noop" }],
     };
     eventBus.publish(reply);

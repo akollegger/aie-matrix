@@ -28,6 +28,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Two GCS buckets — `gs://aie-matrix-intermedium` (public), `gs://aie-matrix-admin` (private) (017-frontend-deploy-auth)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `express` v4, `@a2a-js/sdk` 0.3.13+, `@aie-matrix/root-env`, `@aie-matrix/ghost-ts-client` (workspace); Docker/Podman multi-stage build; Kubernetes 1.28+ (018-ghost-agent-deployment)
 - `catalog.json` on agent-host (no new storage owned by ghost) (018-ghost-agent-deployment)
+- TypeScript 5.7 (browser target, ESM) / React 18 / Vite 6 + React 18, Vite 6, `unique-names-generator` (new), existing `mapServer.ts` service pattern (019-ghost-management)
+- Browser memory only — no persistence across page loads (019-ghost-management)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -75,6 +77,7 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 019-ghost-management: Added TypeScript 5.7 (browser target, ESM) / React 18 / Vite 6 + React 18, Vite 6, `unique-names-generator` (new), existing `mapServer.ts` service pattern
 - 018-ghost-agent-deployment: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `express` v4, `@a2a-js/sdk` 0.3.13+, `@aie-matrix/root-env`, `@aie-matrix/ghost-ts-client` (workspace); Docker/Podman multi-stage build; Kubernetes 1.28+
 - 017-frontend-deploy-auth: Added Bash (CI steps); gcloud CLI (infrastructure provisioning) + GCS (static hosting), Cloud Load Balancer (GCLB), Cloud CDN, Identity-Aware Proxy (IAP), GitHub Actions
 - 016-staging-deployment: Added TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`); pnpm 10 workspace monorepo + Effect v3+, `@colyseus/core` 0.15.57, Docker Compose v2, GitHub Actions

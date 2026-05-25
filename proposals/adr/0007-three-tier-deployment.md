@@ -16,37 +16,56 @@ Without a documented deployment model, each developer makes incompatible local a
 
 ## Decision
 
-We adopt a **three-tier deployment strategy** where the same codebase and container images move across environments driven exclusively by configuration. No code branching per environment.
+We adopt a **three-mode deployment strategy** where the same codebase and container images move across environments driven exclusively by configuration. No code branching per environment.
 
-| Tier | Target | Orchestration | Redis | Neo4j |
-|------|--------|---------------|-------|-------|
-| **1 — Local dev** | Developer workstation | `pnpm dev` (watch mode) | In-memory (`LocalPresence`) | Docker Desktop or native install |
-| **2 — Staging** | Single VM or CI runner | `docker compose up` | Redis container (Compose service) | Neo4j container (Compose service) |
-| **3 — Production** | GCP / GKE | Kubernetes (Helm) | GCP Memorystore (Redis) | Neo4j Aura (managed) |
+Mode is declared explicitly via the `AIE_MATRIX_MODE` environment variable. Services read this variable at startup and wire the correct Layer implementation — file-backed in `development`, Neo4j-backed in `staging` and `production`. Never infer mode from which env vars happen to be present.
 
-### Tier 1 — Local dev
+| Mode | `AIE_MATRIX_MODE` | Target | Orchestration | Map storage | Session storage | Redis | Neo4j |
+|------|-------------------|--------|---------------|-------------|-----------------|-------|-------|
+| **development** | `development` (default) | Developer workstation | `pnpm dev` or `pnpm run demo` | Local `.map.gram` file | In-memory (synthesised) | In-memory (`LocalPresence`) | Not required |
+| **staging** | `staging` | Single VM or CI runner | `docker compose up` | Local volume (`file://`) | Neo4j container | Redis container | Neo4j container |
+| **production** | `production` | GCP / GKE | Kubernetes (Helm) | GCS bucket (`gs://`) | Neo4j Aura | GCP Memorystore | Neo4j Aura |
 
-`pnpm dev` starts all services in watch mode via a root-level `dev` script. Colyseus uses its default `LocalPresence` (single-process, in-memory). Developers run Neo4j locally (Docker Desktop one-liner or native). No Docker required for the application code itself.
+### Mode: development
 
-Required env vars (`.env` or shell):
+`pnpm run demo` (or `pnpm dev`) starts all services in watch mode. Colyseus uses `LocalPresence` (single-process, in-memory). **No Neo4j or GCS required.** Map management and live session data are served from a local `.map.gram` file.
+
+The active map is declared by `AIE_MATRIX_MAP` (a `file://` path or a bare relative path resolved against the repo root). If unset, the server looks for `maps/sandbox/freeplay.map.gram` as a fallback.
+
+`MapManagementService` and `LiveSessionService` use local file-backed implementations that synthesise a single "published" map record and a single perpetually-active session — making the map-editor admin panel functional with no database.
+
+Required env vars (`.env.local` or shell):
 ```
-NEO4J_URI=bolt://localhost:7687
-NEO4J_USER=neo4j
-NEO4J_PASSWORD=<local>
+AIE_MATRIX_MODE=development
+# AIE_MATRIX_MAP=maps/sandbox/freeplay.map.gram   # optional; fallback auto-detected
 # REDIS_URL omitted → LocalPresence
+# NEO4J_* omitted → file-backed services
 ```
 
-### Tier 2 — Staging
+### Mode: staging
 
-A `docker-compose.yml` at the repo root (or `deploy/staging/`) defines:
+A `docker-compose.yml` at the repo root (or `deploy/staging/`) defines all services in containers.
+
+The staging Compose file defines:
 - One container per service package (`colyseus`, `world-api`, `registry`, `agent-host`)
 - A `redis:7` service
 - A `neo4j:5` service with persistent volume
 - A shared `aie-matrix` network
 
-Images are built from the repo's multi-stage `Dockerfile` (one per package, sharing a common base layer). Compose mounts no source code; it runs the built artefacts. This tier is the contract-validation gate before production.
+Images are built from the repo's multi-stage `Dockerfile` (one per package, sharing a common base layer). Compose mounts no source code; it runs the built artefacts. This mode is the contract-validation gate before production.
 
-### Tier 3 — Production (GCP / GKE)
+Required env vars:
+```
+AIE_MATRIX_MODE=staging
+NEO4J_URI=bolt://neo4j:7687
+NEO4J_USER=neo4j
+NEO4J_PASSWORD=<local>
+REDIS_URL=redis://redis:6379
+# GCS_BUCKET omitted → local file stub under tmp/gcs/
+# AIE_MATRIX_MAP omitted → active map from LiveSessionService (Neo4j)
+```
+
+### Mode: production (GCP / GKE)
 
 Each service runs as a Kubernetes `Deployment` behind a `Service`. Helm charts under `deploy/k8s/` parameterise image tags, replica counts, and resource limits. External traffic enters through a GCP `LoadBalancer` or `Ingress`.
 
@@ -126,23 +145,24 @@ This property is what makes horizontal scaling (multiple Colyseus replicas) and 
 
 #### Configuration contract
 
-A single env-var contract governs all tiers:
+A single env-var contract governs all modes:
 
-| Variable | Local default | Staging/Prod |
-|----------|--------------|-------------|
-| `NEO4J_URI` | `bolt://localhost:7687` | injected |
-| `NEO4J_USER` | `neo4j` | injected |
-| `NEO4J_PASSWORD` | local value | Secret |
-| `REDIS_URL` | *(unset → LocalPresence)* | `redis://redis:6379` / Memorystore URL |
-| `GCS_BUCKET` | *(unset → local file fallback)* | `gs://aie-matrix-maps` |
-| `CONVERSATION_DATA_DIR` | `data/conversations` | *(unset → Neo4j store)* |
-| `CATALOG_FILE_PATH` | `./catalog.json` | *(unset → Neo4j store)* |
-| `AIE_MATRIX_MAP` | `maps/sandbox/freeplay.map.gram` | GCS object path or omitted (active map from Neo4j) |
-| `AIE_MATRIX_RULES` | *(unset → permissive)* | GCS object path or omitted |
-| `NODE_ENV` | `development` | `production` |
-| `PORT` | per-package default | Kubernetes `containerPort` |
+| Variable | `development` default | `staging` | `production` |
+|----------|-----------------------|-----------|--------------|
+| `AIE_MATRIX_MODE` | `development` | `staging` | `production` |
+| `AIE_MATRIX_MAP` | `maps/sandbox/freeplay.map.gram` (auto-detected) | *(omitted — active map from Neo4j)* | *(omitted — active map from Neo4j)* |
+| `NEO4J_URI` | *(omitted — not required)* | `bolt://neo4j:7687` | injected (Aura) |
+| `NEO4J_USER` | *(omitted)* | `neo4j` | injected |
+| `NEO4J_PASSWORD` | *(omitted)* | local value | Secret |
+| `REDIS_URL` | *(omitted → LocalPresence)* | `redis://redis:6379` | Memorystore URL |
+| `GCS_BUCKET` | *(omitted → local file stub)* | *(omitted → local file stub)* | `gs://aie-matrix-maps` |
+| `CONVERSATION_DATA_DIR` | `data/conversations` | *(omitted → Neo4j store)* | *(omitted → Neo4j store)* |
+| `CATALOG_FILE_PATH` | `./catalog.json` | *(omitted → Neo4j store)* | *(omitted → Neo4j store)* |
+| `AIE_MATRIX_RULES` | *(omitted → permissive)* | GCS object path or omitted | GCS object path or omitted |
+| `NODE_ENV` | `development` | `production` | `production` |
+| `PORT` | per-package default | per-container default | Kubernetes `containerPort` |
 
-The Effect-ts `Layer` for each stateful service reads these variables at startup via `@aie-matrix/root-env` and wires the correct implementation. No runtime `if (NODE_ENV === 'production')` guards in business logic. The behaviour of an unset `GCS_BUCKET` (fall back to local file) and an unset `CONVERSATION_DATA_DIR` (fall back to JSONL) preserves the local-dev workflow without special-casing.
+The Effect-ts `Layer` for each stateful service reads `AIE_MATRIX_MODE` at startup and wires the correct implementation. No runtime `if (NODE_ENV === 'production')` guards in business logic. `AIE_MATRIX_MODE` is the single explicit signal — service selection is never inferred from which other env vars happen to be absent.
 
 ## Rationale
 
@@ -180,7 +200,7 @@ The Effect-ts `Layer` for each stateful service reads these variables at startup
 - **Service discovery changes between tiers**: Localhost ports in Tier 1 become DNS names in Tier 2/3. Services must not hard-code `localhost`; all inter-service URLs must be configurable env vars.
 - **Filesystem-to-Neo4j migration for conversation history and agent catalog**: `server/conversation` (JSONL store) and `server/agent-host` (catalog.json) currently write to local disk. In production these must write to Neo4j Aura. Each will need an Effect-ts `Layer` implementation backed by Neo4j, selected when `CONVERSATION_DATA_DIR` / `CATALOG_FILE_PATH` are unset in the production config. This is new implementation work gated behind staging validation.
 - **Map publish step**: A "publish map" operation (upload `.map.gram` + sidecar to GCS, seed Neo4j, update active-map pointer) is required before production can serve a new map. The interface for this is out of scope for this ADR; it is defined in [RFC-0013](../rfc/0013-map-management.md).
-- **world-api refactor**: Removing the local-file read path from world-api in favour of Neo4j is a non-trivial change to `MapService` and `ItemService`. This work is explicitly deferred until the local-file fallback is no longer required (i.e., when the map publish workflow exists).
+- **world-api refactor**: The local-file read path in world-api is now formalised as the `development` mode implementation (`LocalMapManagementService`, `LocalLiveSessionService`). Removing it in favour of pure Neo4j-backed services is gated on the `staging` / `production` modes being validated end-to-end. The development mode implementations are intentionally minimal and read-only.
 
 ### Open questions resolved
 

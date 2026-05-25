@@ -21,6 +21,12 @@
       "port": 5182
     },
     {
+      "name": "Map Editor Mock",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@aie-matrix/map-editor", "dev:mock"],
+      "port": 5183
+    },
+    {
       "name": "Agent Host",
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@aie-matrix/server-agent-host", "run", "dev"],

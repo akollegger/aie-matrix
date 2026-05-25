@@ -3,10 +3,10 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect, ManagedRuntime } from "effect";
 import { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
 import { handleRegisterAgentHostEffect } from "./routes/register-house.js";
+import { handleSpawnGhostEffect, type SpawnGhostDeps } from "./routes/spawn-ghost.js";
 import { createCaretakerId } from "./store.js";
-import type { WorldBridgeService } from "@aie-matrix/server-world-api";
-import { runWithRequestTrace } from "@aie-matrix/server-world-api";
-import { RegistryStoreService } from "@aie-matrix/server-world-api";
+import { runWithRequestTrace, WorldBridgeService } from "@aie-matrix/server-world-api";
+import { RegistryStoreService, RedisGhostStoreService } from "@aie-matrix/server-world-api";
 import { readJsonBody, sendJson, sendRawJsonBody } from "./utils/http.js";
 import { RegistryBadJson } from "./registry-errors.js";
 
@@ -14,6 +14,7 @@ export { createRegistryStore, createCaretakerId, type RegistryStore } from "./st
 export { assertAdoptionAllowed } from "./session-guard.js";
 export { handleRegisterAgentHostEffect } from "./routes/register-house.js";
 export { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
+export { handleSpawnGhostEffect, type SpawnGhostDeps } from "./routes/spawn-ghost.js";
 export * from "./registry-errors.js";
 export { RegistryStoreService, makeRegistryStoreLayer } from "@aie-matrix/server-world-api";
 
@@ -34,12 +35,13 @@ export type RegistryManagedRuntime = ManagedRuntime.ManagedRuntime<any, never>;
 
 export interface RegistryHttpConfig {
   adoption: AdoptionRuntimeDeps;
+  spawn: SpawnGhostDeps;
   runtime: RegistryManagedRuntime;
   /** Maps registry / bridge domain failures to HTTP (combined server passes `errorToResponse`). */
   mapHttpError: (error: unknown) => { status: number; body: string };
 }
 
-function withRegistryRouteRecovery<R extends RegistryStoreService | WorldBridgeService>(
+function withRegistryRouteRecovery<R extends RegistryStoreService | WorldBridgeService | RedisGhostStoreService>(
   res: ServerResponse,
   program: Effect.Effect<void, unknown, R>,
   mapHttpError: (error: unknown) => { status: number; body: string },
@@ -109,6 +111,57 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
             withRegistryRouteRecovery(
               res,
               handleAdoptGhostEffect(req, res, REGISTRY_CORS_HEADERS, config.adoption),
+              config.mapHttpError,
+            ),
+          ),
+        );
+        return;
+      }
+
+      // GET /registry/ghosts/:ghostId — current position for admin inspection
+      const ghostGetMatch = /^\/registry\/ghosts\/([^/]+)$/.exec(path)
+      if (ghostGetMatch && req.method === "GET") {
+        const ghostId = decodeURIComponent(ghostGetMatch[1]!)
+        await config.runtime.runPromise(
+          Effect.gen(function* () {
+            const bridge = yield* WorldBridgeService
+            const store = yield* RegistryStoreService
+            const redisStore = yield* RedisGhostStoreService
+
+            // 1. In-memory bridge on this pod — most current, but cleared on map switch
+            const h3Index = bridge.getGhostCell(ghostId)
+            if (h3Index) {
+              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index, status: "active" })
+              return
+            }
+
+            // 2. Redis — updated by goEffect after every move, survives map switches and pod restarts
+            const redisRecord = yield* redisStore.get(ghostId)
+            if (redisRecord) {
+              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: redisRecord.h3Index, status: redisRecord.status })
+              return
+            }
+
+            // 3. In-memory registry store — spawn-time position; only reached if Redis is unavailable
+            const ghost = store.ghosts.get(ghostId)
+            if (ghost) {
+              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: ghost.h3Index, status: ghost.status })
+              return
+            }
+
+            yield* sendJson(res, REGISTRY_CORS_HEADERS, 404, { error: "NOT_FOUND", message: `ghost ${ghostId} not found` })
+          }),
+        )
+        return
+      }
+
+      if (path === "/registry/ghosts" && req.method === "POST") {
+        const traceId = randomUUID();
+        await runWithRequestTrace(traceId, () =>
+          config.runtime.runPromise(
+            withRegistryRouteRecovery(
+              res,
+              handleSpawnGhostEffect(req, res, REGISTRY_CORS_HEADERS, config.spawn),
               config.mapHttpError,
             ),
           ),

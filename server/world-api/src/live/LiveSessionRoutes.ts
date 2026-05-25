@@ -12,6 +12,8 @@ import { MapManagementService } from "../map/MapManagementService.js";
 import { MapService } from "../map/MapService.js";
 import type { MapFileReadError, MapNotFoundError } from "../map/map-errors.js";
 import type { GcsError } from "../gcs/GcsService.js";
+import { loadGramMap } from "@aie-matrix/server-colyseus";
+import { WorldBridgeService } from "../WorldBridgeService.js";
 
 const LIVE_SINGLE_SEGMENT = /^\/live\/([^/]+)$/;
 const LIVE_MAPS_SEGMENT = /^\/live\/([^/]+)\/maps$/;
@@ -81,7 +83,7 @@ export function tryHandleLiveSession(
   | MapNotFoundError
   | MapFileReadError
   | GcsError,
-  LiveSessionService | MapManagementService | MapService
+  LiveSessionService | MapManagementService | MapService | WorldBridgeService
 > {
   const { pathname } = url;
 
@@ -165,6 +167,32 @@ export function tryHandleLiveSession(
       );
       if (record !== null) {
         sendJson(res, 201, record, corsHeaders);
+        // Reload the Colyseus room's map so ghost placement uses the new session's cells.
+        // Fire-and-forget: a failure here is non-fatal (ghosts will use the old map until restart).
+        const primaryMap = record.maps.find((m) => m.role === "primary") ?? record.maps[0];
+        if (primaryMap) {
+          yield* Effect.gen(function* () {
+            const mapSvc = yield* MapManagementService;
+            const worldBridge = yield* WorldBridgeService;
+            const gramBytes = yield* mapSvc.download(primaryMap.mapId).pipe(
+              Effect.catchAll(() => Effect.succeed(null as Buffer | null)),
+            );
+            if (gramBytes !== null) {
+              const newMap = yield* Effect.tryPromise({
+                try: () => loadGramMap(gramBytes.toString("utf8")),
+                catch: () => null,
+              }).pipe(Effect.catchAll(() => Effect.succeed(null)));
+              if (newMap !== null) {
+                worldBridge.setLoadedMap(newMap);
+                console.info(JSON.stringify({
+                  kind: "live-session.map-reloaded",
+                  sessionId: record.id,
+                  mapId: primaryMap.mapId,
+                }));
+              }
+            }
+          }).pipe(Effect.catchAll(() => Effect.void));
+        }
       }
       return true as const;
     });
@@ -211,6 +239,33 @@ export function tryHandleLiveSession(
         );
         if (result !== null) {
           sendJson(res, 200, result, corsHeaders);
+          // Reload the Colyseus room's map so ghost placement uses the switched map's cells.
+          // Fire-and-forget: a failure here is non-fatal (ghosts will use the old map until restart).
+          const primaryMap = result.session.maps.find((m: { role: string }) => m.role === "primary") ?? result.session.maps[0];
+          if (primaryMap) {
+            yield* Effect.gen(function* () {
+              const mapSvc = yield* MapManagementService;
+              const worldBridge = yield* WorldBridgeService;
+              const gramBytes = yield* mapSvc.download(primaryMap.mapId).pipe(
+                Effect.catchAll(() => Effect.succeed(null as Buffer | null)),
+              );
+              if (gramBytes !== null) {
+                const newMap = yield* Effect.tryPromise({
+                  try: () => loadGramMap(gramBytes.toString("utf8")),
+                  catch: () => null,
+                }).pipe(Effect.catchAll(() => Effect.succeed(null)));
+                if (newMap !== null) {
+                  worldBridge.setLoadedMap(newMap);
+                  console.info(JSON.stringify({
+                    kind: "live-session.map-reloaded",
+                    sessionId: id,
+                    mapId: primaryMap.mapId,
+                    trigger: "map-switch",
+                  }));
+                }
+              }
+            }).pipe(Effect.catchAll(() => Effect.void));
+          }
         }
         return true as const;
       });

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, isAbsolute, join, normalize, sep } from "node:path";
@@ -20,13 +20,17 @@ import {
   loadMovementRulesFromEnv,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
+  makeLocalLiveSessionLayer,
   makeGcsLayerFromEnv,
   makeMapManagementLayer,
+  makeLocalMapManagementLayer,
   makeMapServiceLayer,
   makeMovementRulesLayer,
   makeNoOpNeo4jGraphLayer,
   makeItemServiceLayer,
   makeRedisPublishLayerFromEnv,
+  makeRedisGhostStoreLayerFromEnv,
+  RedisGhostStoreService,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
   MapManagementService,
@@ -66,6 +70,22 @@ if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const httpPort = Number(process.env.AIE_MATRIX_HTTP_PORT ?? "8787");
+
+/**
+ * AIE_MATRIX_MODE controls which service backend implementations are wired:
+ *   development — local file-backed; no Neo4j or GCS required (default)
+ *   staging     — Docker Compose; Neo4j + local-filesystem GCS stub
+ *   production  — Kubernetes/GCP; Neo4j Aura + GCS bucket
+ *
+ * See ADR-0007 for the full deployment model.
+ */
+const matrixMode = (process.env.AIE_MATRIX_MODE ?? "development") as
+  | "development"
+  | "staging"
+  | "production";
+
+console.info(`[aie-matrix] mode: ${matrixMode}`);
+
 const mapPathRaw = process.env.AIE_MATRIX_MAP;
 const _mapPathFallback = join(repoRoot, "maps/sandbox/freeplay.map.gram");
 const mapPath: string | undefined = mapPathRaw
@@ -153,7 +173,12 @@ async function main(): Promise<void> {
   let spectatorMetaReady = false;
   /** IC-001: flipped true after initial Neo4j connectivity is confirmed (or when Neo4j is not configured). */
   let neo4jHealthy = false;
-  const worldApiBaseUrl = `http://127.0.0.1:${httpPort}/mcp`;
+  // AIE_MATRIX_WORLD_API_MCP_URL lets other pods (agent-host, random-agent) reach the MCP
+  // endpoint via in-cluster DNS. Defaults to loopback for local dev.
+  // In K8s set to "http://server:8787/mcp" so ghost credentials are reachable cross-pod.
+  const worldApiBaseUrl =
+    (process.env.AIE_MATRIX_WORLD_API_MCP_URL ?? "").trim() ||
+    `http://127.0.0.1:${httpPort}/mcp`;
 
   // `scripts/demo.mjs` polls this as soon as the TCP port is open. Colyseus registers its HTTP
   // layer during `listen()`; our main `httpServer.on` handler is attached much later after slow
@@ -216,6 +241,10 @@ async function main(): Promise<void> {
   const ghostAuthority = new Map<string, string>();
   const bridge = {
     getLoadedMap: () => colyseusBridge.getLoadedMap(),
+    setLoadedMap(map: import("@aie-matrix/server-colyseus").LoadedMap): void {
+      ghostAuthority.clear();
+      colyseusBridge.setLoadedMap(map);
+    },
     getGhostCell(ghostId: string): string | undefined {
       const gid = String(ghostId).trim();
       const traceId = getRequestTraceId();
@@ -308,6 +337,7 @@ async function main(): Promise<void> {
 
   const gcsLayer = makeGcsLayerFromEnv(process.env);
   const redisLayer = await makeRedisPublishLayerFromEnv(process.env);
+  const redisGhostStoreLayer = await makeRedisGhostStoreLayerFromEnv(process.env);
 
   let movementRules;
   try {
@@ -333,26 +363,33 @@ async function main(): Promise<void> {
   itemServiceImpl.setBridge(bridge);
   broadcastInitialItemState(itemServiceImpl, bridge);
 
-  // Map management layers — require Neo4j driver; provide no-op stubs when unavailable
-  const mapMgmtLayer: Layer.Layer<MapManagementService> = neoDriver
-    ? makeMapManagementLayer(neoDriver).pipe(Layer.provide(gcsLayer))
-    : Layer.succeed(MapManagementService, {
-        publish: () => Effect.die("MapManagementService requires Neo4j"),
-        list: () => Effect.succeed([]),
-        get: () => Effect.die("MapManagementService requires Neo4j"),
-        download: () => Effect.die("MapManagementService requires Neo4j"),
-        archive: () => Effect.die("MapManagementService requires Neo4j"),
-      });
+  // Map management + live session layers — implementation selected by AIE_MATRIX_MODE.
+  //
+  //   development: local file-backed (no Neo4j/GCS); discovers all .map.gram files
+  //                under maps/ via MapService. AIE_MATRIX_MAP selects the active Colyseus map.
+  //   staging / production: Neo4j-backed; requires neoDriver
+  //
+  // See ADR-0007 for the full deployment model.
+  let mapMgmtLayer: Layer.Layer<MapManagementService>;
+  let liveSessionLayer: Layer.Layer<LiveSessionService>;
+  // Shared MapService layer — used by LocalMapManagementService (dev) and map routes (all modes).
+  const mapSvcLayer = makeMapServiceLayer(repoRoot, mapPath);
 
-  const liveSessionLayer: Layer.Layer<LiveSessionService> = neoDriver
-    ? makeLiveSessionLayer(neoDriver).pipe(Layer.provide(redisLayer))
-    : Layer.succeed(LiveSessionService, {
-        start: () => Effect.die("LiveSessionService requires Neo4j"),
-        list: () => Effect.succeed([]),
-        get: () => Effect.die("LiveSessionService requires Neo4j"),
-        switchMaps: () => Effect.die("LiveSessionService requires Neo4j"),
-        end: () => Effect.die("LiveSessionService requires Neo4j"),
-      });
+  if (matrixMode === "development") {
+    mapMgmtLayer = makeLocalMapManagementLayer().pipe(Layer.provide(mapSvcLayer), Layer.orDie);
+    liveSessionLayer = makeLocalLiveSessionLayer().pipe(Layer.provide(mapMgmtLayer));
+    console.info(`[aie-matrix] development mode: maps auto-discovered from ${repoRoot}/maps/`);
+  } else {
+    // staging / production — require Neo4j
+    if (!neoDriver) {
+      console.error(
+        `[aie-matrix] AIE_MATRIX_MODE=${matrixMode} requires NEO4J_URI to be set. Exiting.`,
+      );
+      process.exit(1);
+    }
+    mapMgmtLayer = makeMapManagementLayer(neoDriver).pipe(Layer.provide(gcsLayer));
+    liveSessionLayer = makeLiveSessionLayer(neoDriver).pipe(Layer.provide(redisLayer));
+  }
 
   type MatrixRuntimeServices =
     | WorldBridgeService
@@ -365,6 +402,7 @@ async function main(): Promise<void> {
     | MapService
     | GcsService
     | RedisPublishService
+    | RedisGhostStoreService
     | MapManagementService
     | LiveSessionService;
 
@@ -376,18 +414,89 @@ async function main(): Promise<void> {
     conversationLayer,
     neo4jGraphLayer,
     makeItemServiceLayer(itemServiceImpl),
-    makeMapServiceLayer(repoRoot, mapPath),
+    mapSvcLayer,
     gcsLayer,
     redisLayer,
+    redisGhostStoreLayer,
     mapMgmtLayer,
     liveSessionLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
 
-  // T025 — Session binding for Tier 2/3 (skip when AIE_MATRIX_MAP is set = Tier 1 local file mode)
+  // GitOps startup map sync (staging/production only).
+  // Auto-publishes every .map.gram baked into the Docker image to GCS+Neo4j if not already present.
+  // - New map (no Neo4j record) → publish
+  // - Published map, same content hash → skip (no-op)
+  // - Published map, content changed → re-publish (update graph + GCS)
+  // - Archived map → skip (admin decision respected across deploys)
+  // Individual publish failures are logged but do not abort startup.
+  if (matrixMode !== "development") {
+    console.info("[aie-matrix] startup-map-sync: scanning maps/ for unpublished maps…");
+    const syncSummary = await runtime.runPromise(
+      Effect.gen(function* () {
+        const mapSvc = yield* MapService;
+        const mapMgmt = yield* MapManagementService;
+        const entries = yield* mapSvc.listEntries();
+        let synced = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (const entry of entries) {
+          const existing = yield* mapMgmt.get(entry.mapId).pipe(
+            Effect.catchTag("MapError.NotFound", () => Effect.succeed(null)),
+          );
+
+          if (existing?.status === "archived") {
+            console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "skip-archived" }));
+            skipped++;
+            continue;
+          }
+
+          // Read file bytes
+          const bytes = yield* mapSvc.raw(entry.mapId, "gram").pipe(
+            Effect.catchAll((e) => {
+              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "read-error", error: String(e) }));
+              return Effect.succeed(null as Buffer | null);
+            }),
+          );
+          if (bytes === null) { failed++; continue; }
+
+          // Skip if published with same content hash (idempotent guard)
+          const hash = createHash("sha256").update(bytes).digest("hex");
+          if (existing?.status === "published" && existing.contentHash === hash) {
+            console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "skip-current" }));
+            skipped++;
+            continue;
+          }
+
+          // Publish (new map) or re-publish (content changed)
+          const action = existing ? "republish" : "publish";
+          yield* mapMgmt.publish(entry.mapId, bytes).pipe(
+            Effect.tap(() => Effect.sync(() => {
+              console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action }));
+              synced++;
+            })),
+            Effect.catchAll((e) => Effect.sync(() => {
+              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "publish-error", error: String(e) }));
+              failed++;
+            })),
+          );
+        }
+
+        return { total: entries.length, synced, skipped, failed };
+      }),
+    ).catch((e: unknown) => {
+      console.error("[aie-matrix] startup-map-sync failed:", e);
+      return { total: 0, synced: 0, skipped: 0, failed: 0 };
+    });
+    console.info(JSON.stringify({ kind: "startup-map-sync", ...syncSummary }));
+  }
+
+  // T025 — Session binding for staging/production (skip in development mode where the
+  // local session is synthesised in-memory by makeLocalLiveSessionLayer).
   const liveSessionId = process.env.LIVE_SESSION_ID?.trim();
-  if (!mapPathRaw && neoDriver) {
+  if (matrixMode !== "development" && neoDriver) {
     let sessionToBind: string | undefined;
     if (liveSessionId) {
       sessionToBind = liveSessionId;
@@ -417,9 +526,8 @@ async function main(): Promise<void> {
   });
 
   const registryListener = createRegistryRequestListener({
-    adoption: {
-      worldApiBaseUrl,
-    },
+    adoption: { worldApiBaseUrl },
+    spawn: { worldApiBaseUrl },
     runtime,
     mapHttpError: (e: unknown) => errorToResponse(e as HttpMappingError),
   });
@@ -459,12 +567,56 @@ async function main(): Promise<void> {
           p.startsWith("/ghosts") ||
           p.startsWith("/humans") ||
           p === "/mcp" ||
-          p === "/internal/world-fanout"
+          p === "/internal/world-fanout" ||
+          p.startsWith("/agent-host/")
         ) {
           res.writeHead(204, corsHeaders);
           res.end();
           return;
         }
+      }
+
+      // Agent-host reverse proxy — admin-only.
+      // The admin panel's agentHostClient.ts points VITE_AGENT_HOST_URL at /agent-host on this
+      // server. We check the caller holds the ADMIN_TOKEN, then forward the stripped path to the
+      // agent-host ClusterIP service with the AGENT_HOST_TOKEN (never exposed to browsers).
+      if (url.pathname.startsWith("/agent-host/")) {
+        const adminToken = process.env.ADMIN_TOKEN?.trim();
+        if (!adminToken || req.headers.authorization !== `Bearer ${adminToken}`) {
+          res.writeHead(401, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "UNAUTHORIZED" }));
+          return;
+        }
+        const agentHostBase = process.env.AGENT_HOST_URL?.trim();
+        const agentHostToken = process.env.AGENT_HOST_TOKEN?.trim();
+        if (!agentHostBase || !agentHostToken) {
+          res.writeHead(503, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "AGENT_HOST_NOT_CONFIGURED", message: "Set AGENT_HOST_URL and AGENT_HOST_TOKEN on the server" }));
+          return;
+        }
+        const downstreamPath = url.pathname.slice("/agent-host".length) + (url.search ?? "");
+        const bodyBuf = (req.method !== "GET" && req.method !== "DELETE") ? await readRequestBody(req) : Buffer.alloc(0);
+        let upstream: Response;
+        try {
+          upstream = await fetch(`${agentHostBase}${downstreamPath}`, {
+            method: req.method,
+            headers: {
+              "Content-Type": (req.headers["content-type"] as string | undefined) ?? "application/json",
+              Authorization: `Bearer ${agentHostToken}`,
+              Accept: (req.headers.accept as string | undefined) ?? "application/json",
+            },
+            ...(bodyBuf.length > 0 ? { body: bodyBuf } : {}),
+          });
+        } catch (e) {
+          res.writeHead(502, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "AGENT_HOST_UNREACHABLE", message: e instanceof Error ? e.message : String(e) }));
+          return;
+        }
+        const upstreamBody = Buffer.from(await upstream.arrayBuffer());
+        const ct = upstream.headers.get("content-type") ?? "application/json";
+        res.writeHead(upstream.status, { "Content-Type": ct, ...corsHeaders });
+        res.end(upstreamBody);
+        return;
       }
 
       // Map management routes — BEFORE the read-only map GET handler.

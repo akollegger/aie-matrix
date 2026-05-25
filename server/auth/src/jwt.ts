@@ -12,16 +12,16 @@ export function getJwtSecret(): string {
 export interface GhostClaims {
   sub: string;
   ghostId: string;
-  caretakerId: string;
-  agentHostId: string;
+  caretakerId?: string;
+  agentHostId?: string;
 }
 
 export function mintGhostToken(claims: GhostClaims, ttlSeconds = 60 * 60 * 8): string {
   return jwt.sign(
     {
       ghostId: claims.ghostId,
-      caretakerId: claims.caretakerId,
-      agentHostId: claims.agentHostId,
+      ...(claims.caretakerId !== undefined ? { caretakerId: claims.caretakerId } : {}),
+      ...(claims.agentHostId !== undefined ? { agentHostId: claims.agentHostId } : {}),
     },
     getJwtSecret(),
     {
@@ -43,22 +43,18 @@ export function verifyGhostToken(token: string): Effect.Effect<GhostClaims, JwtE
     if (typeof decoded.sub !== "string") {
       return yield* Effect.fail(new JwtMissingSub({ message: "JWT missing sub" }));
     }
-    if (
-      typeof decoded.ghostId !== "string" ||
-      typeof decoded.caretakerId !== "string" ||
-      typeof decoded.agentHostId !== "string"
-    ) {
+    if (typeof decoded.ghostId !== "string") {
       return yield* Effect.fail(
         new JwtMissingGhostClaims({
-          message: "JWT missing ghostId/caretakerId/agentHostId claims",
+          message: "JWT missing ghostId claim",
         }),
       );
     }
     return {
       sub: decoded.sub,
       ghostId: decoded.ghostId,
-      caretakerId: decoded.caretakerId,
-      agentHostId: decoded.agentHostId,
+      caretakerId: typeof decoded.caretakerId === "string" ? decoded.caretakerId : undefined,
+      agentHostId: typeof decoded.agentHostId === "string" ? decoded.agentHostId : undefined,
     };
   });
 }

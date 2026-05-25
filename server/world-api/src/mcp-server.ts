@@ -44,6 +44,7 @@ import {
 } from "./world-api-errors.js";
 import { evaluateGo, evaluateTraverse } from "./movement.js";
 import { ItemService, type ItemServiceOps } from "./ItemService.js";
+import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -58,7 +59,8 @@ type ToolServices =
   | MovementRulesService
   | Neo4jGraphService
   | ConversationService
-  | ItemService;
+  | ItemService
+  | RedisGhostStoreService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -252,6 +254,12 @@ function normalizeCellId(raw: string | undefined | null): CellId | undefined {
  * Colyseus `ghostTiles` is authoritative, but the in-memory registry still holds each
  * ghost’s last known cell id (`h3Index` in the registry) from adopt / moves. If the room map lost the entry (e.g.
  * process hiccup), re-seed from the registry so MCP tools keep working.
+ *
+ * Tier resolution:
+ *   1. Colyseus ghostTiles — only if the cell is on the current loaded map
+ *   2. Registry store h3Index — only if the cell is on the current loaded map
+ *   3. Random navigable cell from the current loaded map (initial placement /
+ *      relocation after a session/map switch)
  */
 function authoritativeGhostTileEffect(
   ghostId: string,
@@ -259,20 +267,36 @@ function authoritativeGhostTileEffect(
   return Effect.gen(function* () {
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
+    const map = bridge.getLoadedMap();
+
     const raw = bridge.getGhostCell(ghostId) as CellId | undefined;
     yield* logMcpBridgeOp("getGhostCell", { ghostId, cellId: raw ?? null });
     const fromRoom = normalizeCellId(raw);
-    if (fromRoom !== undefined) {
+    if (fromRoom !== undefined && map.cells.has(fromRoom)) {
       return fromRoom;
     }
+
     const regRaw = store.ghosts.get(ghostId)?.h3Index;
     const fromReg = normalizeCellId(regRaw);
-    if (fromReg !== undefined) {
+    if (fromReg !== undefined && map.cells.has(fromReg)) {
       bridge.setGhostCell(ghostId, fromReg);
       yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: fromReg, reason: "reseed-from-registry" });
       return fromReg;
     }
-    return yield* Effect.fail(new WorldApiNoPosition({ ghostId }));
+
+    // Tier 3: ghost has no valid position on the current map (new ghost or post-session-switch
+    // relocation). Place on a random navigable cell so the ghost can start moving immediately.
+    const navigableCells = Array.from(map.cells.values()).filter(
+      (c) => c.capacity === undefined || c.capacity > 0,
+    );
+    if (navigableCells.length === 0) {
+      return yield* Effect.fail(new WorldApiNoPosition({ ghostId }));
+    }
+    const cell = navigableCells[Math.floor(Math.random() * navigableCells.length)]!;
+    const initialId = cell.h3Index as CellId;
+    bridge.setGhostCell(ghostId, initialId);
+    yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: initialId, reason: "initial-placement" });
+    return initialId;
   });
 }
 
@@ -499,6 +523,9 @@ function goEffect(
     }
     bridge.setGhostCell(ghostId, result.tileId);
     yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: result.tileId, reason: "go" });
+    // Persist position to Redis so cross-pod GET /registry/ghosts/:ghostId stays current.
+    const redisStore = yield* RedisGhostStoreService;
+    yield* redisStore.patch(ghostId, { h3Index: result.tileId }).pipe(Effect.ignore);
     return result;
   });
 }
@@ -933,6 +960,7 @@ export function handleGhostMcpEffect(
     const neo = yield* Neo4jGraphService;
     const conversation = yield* ConversationService;
     const itemService = yield* ItemService;
+    const redisGhostStore = yield* RedisGhostStoreService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -940,6 +968,7 @@ export function handleGhostMcpEffect(
       Layer.succeed(Neo4jGraphService, neo),
       Layer.succeed(ConversationService, conversation),
       Layer.succeed(ItemService, itemService),
+      Layer.succeed(RedisGhostStoreService, redisGhostStore),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {

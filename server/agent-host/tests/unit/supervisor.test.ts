@@ -79,6 +79,7 @@ describe("AgentSupervisor (T030)", () => {
       } as any,
       publicHouseBaseUrl: "http://127.0.0.1:4000",
       defaultCapabilityManifest: new Set(),
+      pushIngestToken: "test-token",
       getConfig,
       resolveWorldH3ForSpawn: async () => testH3r15(),
     });

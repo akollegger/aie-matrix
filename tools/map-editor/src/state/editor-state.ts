@@ -86,6 +86,8 @@ export interface UIState {
   pendingFitBounds: { west: number; south: number; east: number; north: number } | null
   /** mapId this buffer was last successfully published as; null if never saved */
   publishedMapId: string | null
+  /** True when the editor content has changed since the last load or save */
+  dirty: boolean
 }
 
 // ---------------------------------------------------------------------------

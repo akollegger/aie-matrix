@@ -12,8 +12,13 @@ service:
 # Non-secret environment variables
 env:
   NODE_ENV: production
+  AIE_MATRIX_MODE: production
   AIE_MATRIX_HTTP_PORT: "8787"
   AIE_MATRIX_DEBUG: "false"
+  # Agent-host proxy: forwards /agent-host/* requests to the agent-host ClusterIP
+  AGENT_HOST_URL: "http://agent-host:4000"
+  # In-cluster MCP URL embedded in ghost credentials — must be reachable from agent-host + ghost pods.
+  AIE_MATRIX_WORLD_API_MCP_URL: "http://server:8787/mcp"
 
 # Name of the Kubernetes Secret created in Phase 3
 secretName: aie-matrix-secrets
@@ -26,6 +31,7 @@ secretKeys:
   - REDIS_URL
   - GCS_BUCKET
   - ADMIN_TOKEN
+  - AGENT_HOST_TOKEN
   - AIE_MATRIX_INTERNAL_FANOUT_TOKEN
 
 resources:
