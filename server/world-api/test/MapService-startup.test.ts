@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,12 +9,9 @@ import { makeMapServiceLayer, MapService } from "../src/map/MapService.js";
 
 const fixturesDir = fileURLToPath(new URL("fixtures/map", import.meta.url));
 
-const minimalTmj = JSON.stringify({ width: 1, height: 1, layers: [], tilesets: [] });
-
-async function writePair(root: string, mapsRelDir: string, stem: string, gramFixtureFile: string): Promise<void> {
+async function writeGramFile(root: string, mapsRelDir: string, stem: string, gramFixtureFile: string): Promise<void> {
   const dir = join(root, "maps", mapsRelDir);
   await mkdir(dir, { recursive: true });
-  await writeFile(join(dir, `${stem}.tmj`), minimalTmj, "utf8");
   await cp(join(fixturesDir, gramFixtureFile), join(dir, `${stem}.map.gram`));
 }
 
@@ -37,7 +34,7 @@ function acquireMapService(root: string) {
 test("startup: malformed gram → MapError.GramParse", async () => {
   const root = await mkdtemp(join(tmpdir(), "map-startup-bad-"));
   try {
-    await writePair(root, "sandbox", "bad-syntax", "bad-syntax.map.gram");
+    await writeGramFile(root, "sandbox", "bad-syntax", "bad-syntax.map.gram");
     const exit = await Effect.runPromiseExit(acquireMapService(root));
     assertFailureWithTag(exit, "MapError.GramParse");
   } finally {
@@ -48,7 +45,7 @@ test("startup: malformed gram → MapError.GramParse", async () => {
 test("startup: matrix-map name ≠ filename stem → succeeds (name is display text, stem is mapId)", async () => {
   const root = await mkdtemp(join(tmpdir(), "map-startup-mismatch-"));
   try {
-    await writePair(root, "sandbox", "name-mismatch", "name-mismatch.map.gram");
+    await writeGramFile(root, "sandbox", "name-mismatch", "name-mismatch.map.gram");
     const exit = await Effect.runPromiseExit(acquireMapService(root));
     assert.ok(Exit.isSuccess(exit), "name mismatch should no longer block load");
   } finally {
@@ -56,11 +53,11 @@ test("startup: matrix-map name ≠ filename stem → succeeds (name is display t
   }
 });
 
-test("startup: two TMJ+gram pairs with same mapId (stem) → MapError.IdCollision", async () => {
+test("startup: two gram files with same mapId (stem) in different dirs → MapError.IdCollision", async () => {
   const root = await mkdtemp(join(tmpdir(), "map-startup-collision-"));
   try {
-    await writePair(root, "pack-a", "shared", "collision-a.map.gram");
-    await writePair(root, "pack-b", "shared", "collision-b.map.gram");
+    await writeGramFile(root, "pack-a", "shared", "collision-a.map.gram");
+    await writeGramFile(root, "pack-b", "shared", "collision-b.map.gram");
     const exit = await Effect.runPromiseExit(acquireMapService(root));
     assertFailureWithTag(exit, "MapError.IdCollision");
   } finally {
@@ -71,12 +68,12 @@ test("startup: two TMJ+gram pairs with same mapId (stem) → MapError.IdCollisio
 test("startup: valid paired maps → MapService acquires", async () => {
   const root = await mkdtemp(join(tmpdir(), "map-startup-ok-"));
   try {
-    await writePair(root, "sandbox", "valid", "valid.map.gram");
+    await writeGramFile(root, "sandbox", "valid", "valid.map.gram");
     const exit = await Effect.runPromiseExit(
       pipe(
         Effect.gen(function* () {
           const maps = yield* MapService;
-          return yield* maps.raw("valid", "gram");
+          return yield* maps.raw("valid");
         }),
         Effect.provide(makeMapServiceLayer(root)),
       ),

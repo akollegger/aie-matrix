@@ -6,17 +6,13 @@ import { type MapIndexEntry, MapService } from "./MapService.js";
 
 const MAPS_SINGLE_SEGMENT = /^\/maps\/([^/]+)$/;
 
-/** JSON body for `GET /maps` / `GET /maps/` (collection). @see `specs/010-tmj-to-gram/contracts/ic-002-maps-http-api.md` */
+/** JSON body for `GET /maps` / `GET /maps/` (collection). @see `specs/020-map-catalog-standardization/contracts/ic-001-maps-http-api.md` */
 export interface MapListItem {
   readonly id: string;
-  /**
-   * Discoverable fetch URLs. `self` is the default map representation (same as `gram`;
-   * `format` query defaults to gram for `GET /maps/:mapId` per IC-002).
-   */
+  /** Discoverable fetch URLs. `gram` is the only supported download format. */
   readonly links: {
     readonly self: string;
     readonly gram: string;
-    readonly tmj: string;
   };
 }
 
@@ -54,13 +50,12 @@ export function publicRequestRoot(req: IncomingMessage, requestUrl: URL): string
 function mapHyperlinks(
   publicRoot: string,
   mapId: string,
-): { readonly self: string; readonly gram: string; readonly tmj: string } {
+): { readonly self: string; readonly gram: string } {
   const idSeg = encodeURIComponent(mapId);
   const base = `${publicRoot}/maps/${idSeg}`;
   return {
     self: base,
     gram: `${base}?format=gram`,
-    tmj: `${base}?format=tmj`,
   };
 }
 
@@ -91,12 +86,9 @@ export function parseMapFormatParam(searchParams: URLSearchParams): string {
   return raw.trim();
 }
 
-function normalizeFormat(raw: string): "gram" | "tmj" | UnsupportedFormatError {
+function normalizeFormat(raw: string): "gram" | UnsupportedFormatError {
   if (raw === "gram" || raw === "") {
     return "gram";
-  }
-  if (raw === "tmj") {
-    return "tmj";
   }
   return new UnsupportedFormatError({ format: raw });
 }
@@ -131,7 +123,8 @@ export function handleMapList(
 }
 
 /**
- * `GET /maps/:mapId` — IC-002. Caller must match pathname with {@link parseMapsPath} first.
+ * `GET /maps/:mapId` — IC-001. Caller must match pathname with {@link parseMapsPath} first.
+ * Only `?format=gram` (default) is supported; other format values return 400.
  */
 export function handleMapAssetGet(
   res: ServerResponse,
@@ -147,22 +140,19 @@ export function handleMapAssetGet(
     }
 
     const map = yield* MapService;
-    const body = yield* map.raw(mapId, fmt);
+    const body = yield* map.raw(mapId);
 
     const traceId = getRequestTraceId();
     yield* Effect.logInfo("map.serve").pipe(
       Effect.annotateLogs({
         traceId: traceId ?? "",
         mapId,
-        format: fmt,
         bytes: body.length,
       }),
     );
 
-    const contentType = fmt === "gram" ? "text/plain; charset=utf-8" : "application/json";
-
     res.writeHead(200, {
-      "Content-Type": contentType,
+      "Content-Type": "text/plain; charset=utf-8",
       ...corsHeaders,
     });
     res.end(body);
@@ -251,7 +241,7 @@ function pipeHandle(
           res.end(
             JSON.stringify({
               error: "UnsupportedFormatError",
-              message: `Unsupported format '${e.format}'. Supported formats: gram, tmj.`,
+              message: `Unsupported format '${e.format}'. Only 'gram' is supported.`,
               requested: e.format,
             }),
           );

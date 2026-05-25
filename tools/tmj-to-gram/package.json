@@ -1,6 +1,7 @@
 {
   "name": "@aie-matrix/tmj-to-gram",
   "version": "0.0.0",
+  "deprecated": "true",
   "private": true,
   "type": "module",
   "scripts": {

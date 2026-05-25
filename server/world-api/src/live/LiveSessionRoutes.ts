@@ -104,7 +104,7 @@ export function tryHandleLiveSession(
           sendJson(res, 404, { error: "NoActiveSession", message: "No active live session and no local map configured." }, corsHeaders);
           return true as const;
         }
-        const bytes = yield* fileSvc.raw(mapId, "gram").pipe(
+        const bytes = yield* fileSvc.raw(mapId).pipe(
           Effect.catchTag("MapError.NotFound", () => {
             sendJson(res, 404, { error: "MapNotFoundError", mapId }, corsHeaders);
             return Effect.succeed(null as Buffer | null);
