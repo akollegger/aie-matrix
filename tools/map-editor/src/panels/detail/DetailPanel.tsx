@@ -1,5 +1,7 @@
+import { useEffect, useState } from "react"
 import type { CSSProperties } from "react"
 import type { AdminSelection } from "../../hooks/useAdminSelection"
+import { AgentHostError, getAgentCard } from "../../services/agentHostClient"
 
 function formatDate(iso: string): string {
   try {
@@ -42,6 +44,35 @@ export interface DetailPanelProps {
 export function DetailPanel({ selection }: DetailPanelProps) {
   const { selectedMap, selectedSessionId, selectedAgentId, selectedGhostSessionId } = selection
   const hasSelection = !!(selectedMap || selectedSessionId || selectedAgentId || selectedGhostSessionId)
+
+  // Fetched A2A agent card — loaded whenever selectedAgentId changes.
+  const [agentCardData, setAgentCardData] = useState<unknown>(null)
+  const [agentCardLoading, setAgentCardLoading] = useState(false)
+  const [agentCardError, setAgentCardError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!selectedAgentId) {
+      setAgentCardData(null)
+      setAgentCardError(null)
+      return
+    }
+    let cancelled = false
+    setAgentCardLoading(true)
+    setAgentCardError(null)
+    getAgentCard(selectedAgentId)
+      .then(card => {
+        if (!cancelled) { setAgentCardData(card); setAgentCardLoading(false) }
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setAgentCardError(
+            e instanceof AgentHostError ? e.message : "Failed to load agent card",
+          )
+          setAgentCardLoading(false)
+        }
+      })
+    return () => { cancelled = true }
+  }, [selectedAgentId])
 
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
@@ -152,6 +183,7 @@ export function DetailPanel({ selection }: DetailPanelProps) {
           </>
         )}
 
+        {/* Agent detail — full A2A card as JSON */}
         {selectedAgentId && !selectedGhostSessionId && (
           <>
             <div style={sectionLabel}>Agent</div>
@@ -165,9 +197,36 @@ export function DetailPanel({ selection }: DetailPanelProps) {
                 <span style={valueStyle}>{selectedSessionId}</span>
               </div>
             )}
-            <div style={{ padding: "8px 8px", fontSize: 10, color: "#445" }}>
-              Click a ghost session row to see its detail, or use Spawn Ghost in the Catalog panel.
-            </div>
+
+            {agentCardLoading && (
+              <div style={{ padding: "8px", fontSize: 10, color: "#444" }}>
+                Loading agent card…
+              </div>
+            )}
+
+            {agentCardError && (
+              <div style={{ padding: "6px 8px", fontSize: 10, color: "#f88" }}>
+                {agentCardError}
+              </div>
+            )}
+
+            {agentCardData != null && !agentCardLoading && (
+              <>
+                <div style={sectionLabel}>A2A Agent Card</div>
+                <pre style={{
+                  margin: 0,
+                  padding: "6px 8px 12px",
+                  fontSize: 9,
+                  color: "#7788aa",
+                  lineHeight: 1.55,
+                  overflowX: "auto",
+                  whiteSpace: "pre-wrap",
+                  wordBreak: "break-all",
+                }}>
+                  {JSON.stringify(agentCardData, null, 2)}
+                </pre>
+              </>
+            )}
           </>
         )}
 

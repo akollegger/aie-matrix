@@ -4,6 +4,7 @@ import {
   AgentHostError,
   deregisterAgent,
   listAgents,
+  listGhostSessions,
   type AgentCatalogEntry,
 } from "../../services/agentHostClient"
 import { oneClickSpawn } from "../../services/registryClient"
@@ -39,13 +40,14 @@ const actionBtn: CSSProperties = {
   whiteSpace: "nowrap",
 }
 const ghostBtn: CSSProperties = { ...actionBtn, background: "none", border: "1px solid transparent" }
-const dangerBtn: CSSProperties = { ...actionBtn, background: "#661122", color: "#f88", border: "1px solid #992233" }
-const successBtn: CSSProperties = { ...actionBtn, background: "#225522", color: "#8f8", border: "1px solid #336633" }
 
-const tierColors: Record<AgentCatalogEntry["tier"], CSSProperties> = {
-  wanderer: { background: "#2a1a00", color: "#cc8833", border: "1px solid #443300", borderRadius: 3, fontSize: 9, padding: "1px 5px" },
-  listener: { background: "#1a2a44", color: "#5599ee", border: "1px solid #2244aa", borderRadius: 3, fontSize: 9, padding: "1px 5px" },
-  social:   { background: "#1a2a1a", color: "#66bb66", border: "1px solid #335533", borderRadius: 3, fontSize: 9, padding: "1px 5px" },
+/** Play button — Noto Emoji ▶ for "spawn ghost", matching AdminPanel's map row style. */
+const playBtn: CSSProperties = {
+  ...ghostBtn,
+  fontSize: 14,
+  padding: "0 2px",
+  flexShrink: 0,
+  fontFamily: "'Noto Emoji', sans-serif",
 }
 
 export interface CatalogPanelProps {
@@ -53,19 +55,25 @@ export interface CatalogPanelProps {
   selectedAgentId: string | null
   onSelectAgent: (id: string | null) => void
   onClose: () => void
+  /** Called when a ghost spawn completes so the parent can show a pending row in GhostListPanel. */
+  onSpawnSuccess?: (info: { sessionId: string; ghostId: string; agentId: string }) => void
 }
 
-export function CatalogPanel({ sessionId, selectedAgentId, onSelectAgent, onClose }: CatalogPanelProps) {
+export function CatalogPanel({ sessionId, selectedAgentId, onSelectAgent, onClose, onSpawnSuccess }: CatalogPanelProps) {
   const [agents, setAgents] = useState<AgentCatalogEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null)
   const [hoveredAgentId, setHoveredAgentId] = useState<string | null>(null)
 
-  // Per-row action state
-  const [spawnState, setSpawnState] = useState<Record<string, "idle" | "spawning" | "success" | "error">>({})
-  const [spawnResult, setSpawnResult] = useState<Record<string, string>>({})
-  const [deregisterState, setDeregisterState] = useState<Record<string, "idle" | "pending" | "error">>({})
+  /** Count of ghost sessions per agentId (all statuses). Drives the count badge. */
+  const [ghostCounts, setGhostCounts] = useState<Record<string, number>>({})
+
+  /** Per-row spawn state. Resets to "idle" on success so further spawns are allowed. */
+  const [spawnState, setSpawnState] = useState<Record<string, "idle" | "spawning" | "error">>({})
+  const [spawnError, setSpawnError] = useState<Record<string, string>>({})
+
+  /** Confirm-deregister (one row at a time). Cleared when mouse leaves the row. */
+  const [pendingDeregisterId, setPendingDeregisterId] = useState<string | null>(null)
   const [deregisterError, setDeregisterError] = useState<Record<string, string>>({})
 
   const panelRef = useRef<HTMLDivElement>(null)
@@ -74,8 +82,20 @@ export function CatalogPanel({ sessionId, selectedAgentId, onSelectAgent, onClos
     setLoading(true)
     setError(null)
     try {
-      const list = await listAgents()
-      setAgents(list)
+      // Load agents and ghost sessions in parallel; ghost-session failure is non-fatal.
+      const [agentsResult, sessionsResult] = await Promise.allSettled([
+        listAgents(),
+        listGhostSessions(),
+      ])
+      if (agentsResult.status === "rejected") throw agentsResult.reason as unknown
+      setAgents(agentsResult.value)
+      if (sessionsResult.status === "fulfilled") {
+        const counts: Record<string, number> = {}
+        for (const s of sessionsResult.value) {
+          counts[s.agentId] = (counts[s.agentId] ?? 0) + 1
+        }
+        setGhostCounts(counts)
+      }
     } catch (e) {
       setError(e instanceof AgentHostError ? e.message : "Agent host is not reachable — check VITE_AGENT_HOST_URL")
     } finally {
@@ -96,37 +116,42 @@ export function CatalogPanel({ sessionId, selectedAgentId, onSelectAgent, onClos
 
   async function handleSpawn(agentId: string) {
     setSpawnState(s => ({ ...s, [agentId]: "spawning" }))
-    setSpawnResult(r => { const c = { ...r }; delete c[agentId]; return c })
+    setSpawnError(r => { const c = { ...r }; delete c[agentId]; return c })
     try {
-      const { sessionId: spawnedSessionId } = await oneClickSpawn(agentId)
-      setSpawnState(s => ({ ...s, [agentId]: "success" }))
-      setSpawnResult(r => ({ ...r, [agentId]: spawnedSessionId }))
+      const { sessionId, ghostId } = await oneClickSpawn(agentId)
+      // Reset to idle so further spawns are possible immediately.
+      setSpawnState(s => ({ ...s, [agentId]: "idle" }))
+      onSpawnSuccess?.({ sessionId, ghostId, agentId })
       onSelectAgent(agentId) // open the ghost list for this agent
+      void load()            // refresh ghost count badge
     } catch (e) {
       setSpawnState(s => ({ ...s, [agentId]: "error" }))
-      setSpawnResult(r => ({ ...r, [agentId]: e instanceof Error ? e.message : "Spawn failed" }))
+      setSpawnError(r => ({ ...r, [agentId]: e instanceof Error ? e.message : "Spawn failed" }))
+      // Auto-clear error after 4 s so the row returns to idle.
+      setTimeout(() => {
+        setSpawnState(s => ({ ...s, [agentId]: "idle" }))
+        setSpawnError(r => { const c = { ...r }; delete c[agentId]; return c })
+      }, 4000)
     }
   }
 
   async function handleDeregister(agentId: string) {
-    if (deregisterState[agentId] !== "pending") {
-      setDeregisterState(s => ({ ...s, [agentId]: "pending" }))
+    if (pendingDeregisterId !== agentId) {
+      // First click: request confirmation.
+      setPendingDeregisterId(agentId)
       return
     }
-    // Second click confirms
-    setDeregisterState(s => ({ ...s, [agentId]: "idle" }))
+    // Second click: confirmed.
+    setPendingDeregisterId(null)
+    setDeregisterError(err => { const c = { ...err }; delete c[agentId]; return c })
     try {
       await deregisterAgent(agentId)
       void load()
     } catch (e) {
       let msg = e instanceof Error ? e.message : "Deregister failed"
-      // Attempt to extract count from server error body for FR-005 message
       if (e instanceof AgentHostError && e.status === 409) {
-        // Server returns "ActiveSessionsPreventDeregister" — we need count
-        // Try to fetch sessions to get count, or use generic message
         msg = e.message.includes("active") ? e.message : "Cannot deregister: agent has active sessions"
       }
-      setDeregisterState(s => ({ ...s, [agentId]: "error" }))
       setDeregisterError(err => ({ ...err, [agentId]: msg }))
     }
   }
@@ -169,36 +194,31 @@ export function CatalogPanel({ sessionId, selectedAgentId, onSelectAgent, onClos
         )}
 
         {agents.map(agent => {
-          const isExpanded = expandedAgentId === agent.agentId
           const isSelected = selectedAgentId === agent.agentId
           const isHovered = hoveredAgentId === agent.agentId
+          const isPendingDeregister = pendingDeregisterId === agent.agentId
           const spawn = spawnState[agent.agentId] ?? "idle"
-          const deregister = deregisterState[agent.agentId] ?? "idle"
+          const ghostCount = ghostCounts[agent.agentId] ?? 0
 
           return (
             <div key={agent.agentId}>
               {/* Agent row */}
               <div
                 onMouseEnter={() => setHoveredAgentId(agent.agentId)}
-                onMouseLeave={() => setHoveredAgentId(null)}
+                onMouseLeave={() => {
+                  setHoveredAgentId(null)
+                  // Clear pending-deregister confirm when cursor leaves the row.
+                  if (pendingDeregisterId === agent.agentId) setPendingDeregisterId(null)
+                }}
                 style={{
                   display: "flex", alignItems: "center", gap: 4,
                   padding: "5px 8px", borderBottom: "1px solid #1a1a2e",
                   background: isSelected ? "#1a2244" : isHovered ? "#1a1a2e" : "transparent",
                   minHeight: 32, cursor: "pointer",
                 }}
-                onClick={() => {
-                  setExpandedAgentId(isExpanded ? null : agent.agentId)
-                  onSelectAgent(isSelected ? null : agent.agentId)
-                }}
+                onClick={() => onSelectAgent(isSelected ? null : agent.agentId)}
               >
-                <button
-                  onClick={e => { e.stopPropagation(); setExpandedAgentId(isExpanded ? null : agent.agentId) }}
-                  style={{ ...ghostBtn, padding: "0 2px", fontSize: 9, color: "#444" }}
-                >
-                  {isExpanded ? "▼" : "▶"}
-                </button>
-
+                {/* Agent name + about subtitle */}
                 <span style={{ flex: 1, overflow: "hidden" }}>
                   <span style={{ fontSize: 11, color: "#ccc", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {agent.agentId}
@@ -210,61 +230,74 @@ export function CatalogPanel({ sessionId, selectedAgentId, onSelectAgent, onClos
                   )}
                 </span>
 
-                <span style={tierColors[agent.tier]}>{agent.tier}</span>
+                {/* Ghost count badge — mirrors map session count badge in AdminPanel */}
+                {ghostCount > 0 && (
+                  <span style={{
+                    background: "#1a3366",
+                    color: "#7799ff",
+                    border: "1px solid #2244aa",
+                    borderRadius: 8,
+                    fontSize: 9,
+                    padding: "0 5px",
+                    lineHeight: "14px",
+                    fontWeight: 600,
+                    flexShrink: 0,
+                  }}>
+                    {ghostCount}
+                  </span>
+                )}
+
                 {agent.builtIn && (
                   <span style={{ fontSize: 9, color: "#445", border: "1px solid #2a2a3e", borderRadius: 3, padding: "1px 4px" }}>
                     built-in
                   </span>
                 )}
+
+                {/* Hover actions — always in DOM so row height stays fixed */}
+                <div style={{ display: "flex", gap: 3, alignItems: "center", visibility: isHovered ? "visible" : "hidden" }}>
+                  {/* Spawn ghost ▶ */}
+                  <button
+                    onClick={e => { e.stopPropagation(); if (spawn !== "spawning") void handleSpawn(agent.agentId) }}
+                    disabled={spawn === "spawning"}
+                    title={spawn === "spawning" ? "Spawning…" : "Spawn ghost"}
+                    style={{ ...playBtn, color: spawn === "spawning" ? "#444" : "#ccc" }}
+                  >
+                    {spawn === "spawning" ? "⟳" : "▶"}
+                  </button>
+
+                  {/* Deregister — two-click confirm, cleared on mouse-leave */}
+                  <button
+                    onClick={e => { e.stopPropagation(); void handleDeregister(agent.agentId) }}
+                    title={isPendingDeregister ? "Click again to confirm deregister" : "Deregister agent"}
+                    style={isPendingDeregister
+                      ? { ...actionBtn, background: "#661122", color: "#f88", border: "1px solid #992233", fontSize: 10 }
+                      : { ...ghostBtn, color: "#554", fontSize: 14, fontFamily: "'Noto Emoji', sans-serif" }
+                    }
+                  >
+                    {isPendingDeregister ? "sure?" : "❎"}
+                  </button>
+                </div>
               </div>
 
-              {/* Expanded: agent card JSON + actions */}
-              {isExpanded && (
-                <div style={{ background: "#12122a", borderBottom: "1px solid #1a1a2e" }}>
-                  {/* Action buttons */}
-                  <div style={{ padding: "6px 8px 4px", display: "flex", gap: 4, flexWrap: "wrap" }}>
-                    <button
-                      onClick={e => { e.stopPropagation(); void handleSpawn(agent.agentId) }}
-                      disabled={spawn === "spawning"}
-                      style={spawn === "success" ? successBtn : actionBtn}
-                    >
-                      {spawn === "spawning" ? "Spawning…" : spawn === "success" ? "Spawned ✓" : "Spawn Ghost"}
-                    </button>
-                    <button
-                      onClick={e => { e.stopPropagation(); void handleDeregister(agent.agentId) }}
-                      style={deregister === "pending" ? dangerBtn : { ...actionBtn, color: "#888" }}
-                    >
-                      {deregister === "pending" ? "Sure?" : "Deregister"}
-                    </button>
-                  </div>
-
-                  {/* Spawn result / error */}
-                  {spawn === "success" && spawnResult[agent.agentId] && (
-                    <div style={{ padding: "2px 8px 6px", fontSize: 10, color: "#8f8" }}>
-                      sessionId: {spawnResult[agent.agentId]}
-                    </div>
-                  )}
-                  {spawn === "error" && spawnResult[agent.agentId] && (
-                    <div style={{ padding: "2px 8px 6px", fontSize: 10, color: "#f88" }}>
-                      {spawnResult[agent.agentId]}
-                    </div>
-                  )}
-
-                  {/* Deregister error (FR-005) */}
-                  {deregister === "error" && deregisterError[agent.agentId] && (
-                    <div style={{ padding: "2px 8px 6px", fontSize: 10, color: "#f88" }}>
-                      {deregisterError[agent.agentId]}
-                    </div>
-                  )}
-
-                  {/* Full agent card JSON */}
-                  <pre style={{
-                    margin: 0, padding: "4px 8px 8px",
-                    fontSize: 9, color: "#666", overflowX: "auto",
-                    maxHeight: 200, overflowY: "auto",
-                  }}>
-                    {JSON.stringify(agent.agentCard, null, 2)}
-                  </pre>
+              {/* Inline error messages (auto-cleared after timeout) */}
+              {spawn === "error" && spawnError[agent.agentId] && (
+                <div style={{
+                  padding: "2px 8px 4px",
+                  background: "#1a0808",
+                  borderBottom: "1px solid #1a1a2e",
+                  fontSize: 9, color: "#f88",
+                }}>
+                  ↳ {spawnError[agent.agentId]}
+                </div>
+              )}
+              {deregisterError[agent.agentId] && (
+                <div style={{
+                  padding: "2px 8px 4px",
+                  background: "#1a0808",
+                  borderBottom: "1px solid #1a1a2e",
+                  fontSize: 9, color: "#f88",
+                }}>
+                  ↳ {deregisterError[agent.agentId]}
                 </div>
               )}
             </div>

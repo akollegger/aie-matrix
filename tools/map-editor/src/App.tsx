@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import type { CSSProperties } from "react"
 import { MapView } from "./map/MapView"
 import { AdminPanel } from "./panels/AdminPanel"
@@ -27,6 +27,22 @@ const toggleBtn = (active: boolean): CSSProperties => ({
 export function App() {
   const [adminPanelOpen, setAdminPanelOpen] = useState(false)
   const { selection, selectMap, selectSession, selectAgent, selectGhostSession } = useAdminSelection()
+
+  // Pending spawn info: set by CatalogPanel immediately after a successful spawn,
+  // passed to GhostListPanel so it can show a synthetic "spawning" placeholder row
+  // and poll until the real session reaches "running" status.
+  const [pendingSpawn, setPendingSpawn] = useState<{
+    sessionId: string
+    ghostId: string
+    agentId: string
+  } | null>(null)
+
+  // Wrapper: clear pendingSpawn when the ghost list column is closed so a stale
+  // placeholder can't appear on a later re-open.
+  const handleSelectAgent = useCallback((id: string | null) => {
+    if (id === null) setPendingSpawn(null)
+    selectAgent(id)
+  }, [selectAgent])
 
   const hasAdminSelection = !!(
     selection.selectedMap ||
@@ -85,8 +101,9 @@ export function App() {
               <CatalogPanel
                 sessionId={selection.selectedSessionId}
                 selectedAgentId={selection.selectedAgentId}
-                onSelectAgent={selectAgent}
+                onSelectAgent={handleSelectAgent}
                 onClose={() => selectSession(null)}
+                onSpawnSuccess={setPendingSpawn}
               />
             )}
             {selection.selectedAgentId && (
@@ -94,7 +111,11 @@ export function App() {
                 agentId={selection.selectedAgentId}
                 selectedGhostSessionId={selection.selectedGhostSessionId}
                 onSelectGhostSession={selectGhostSession}
-                onClose={() => selectAgent(null)}
+                onClose={() => handleSelectAgent(null)}
+                pendingSpawn={
+                  pendingSpawn?.agentId === selection.selectedAgentId ? pendingSpawn : null
+                }
+                onPendingSpawnResolved={() => setPendingSpawn(null)}
               />
             )}
           </div>

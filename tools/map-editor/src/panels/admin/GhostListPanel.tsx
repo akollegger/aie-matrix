@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { CSSProperties } from "react"
 import { AgentHostError, listGhostSessions, shutdownGhostSession, type GhostSessionRecord } from "../../services/agentHostClient"
 
@@ -44,14 +44,33 @@ const statusColors: Record<string, CSSProperties> = {
   shutdown:   { color: "#555" },
 }
 
+/** How often to poll for the pending spawn session to appear/become running (ms). */
+const POLL_INTERVAL_MS = 1500
+/** Give up waiting for "running" status after this many ms. */
+const POLL_TIMEOUT_MS = 30_000
+
 export interface GhostListPanelProps {
   agentId: string
   selectedGhostSessionId: string | null
   onSelectGhostSession: (id: string | null) => void
   onClose: () => void
+  /**
+   * Set immediately after a successful spawn so this panel can show a placeholder
+   * row before the real session appears in the server list.
+   */
+  pendingSpawn?: { sessionId: string; ghostId: string } | null
+  /** Called when the pending session reaches "running" status or the poll times out. */
+  onPendingSpawnResolved?: () => void
 }
 
-export function GhostListPanel({ agentId, selectedGhostSessionId, onSelectGhostSession, onClose }: GhostListPanelProps) {
+export function GhostListPanel({
+  agentId,
+  selectedGhostSessionId,
+  onSelectGhostSession,
+  onClose,
+  pendingSpawn,
+  onPendingSpawnResolved,
+}: GhostListPanelProps) {
   // FR-012: GhostSessionRecord type guarantees mcpToken is stripped at the service layer.
   // This component MUST NOT reference mcpToken in any variable, JSX, or rendered output.
   const [sessions, setSessions] = useState<GhostSessionRecord[]>([])
@@ -59,6 +78,11 @@ export function GhostListPanel({ agentId, selectedGhostSessionId, onSelectGhostS
   const [error, setError] = useState<string | null>(null)
   const [shutdownState, setShutdownState] = useState<Record<string, "idle" | "shutting" | "error">>({})
   const [shutdownError, setShutdownError] = useState<Record<string, string>>({})
+
+  // Keep a stable ref to the resolved callback to avoid stale-closure issues in the
+  // polling interval while still responding to prop changes.
+  const onResolvedRef = useRef(onPendingSpawnResolved)
+  useEffect(() => { onResolvedRef.current = onPendingSpawnResolved })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -85,6 +109,46 @@ export function GhostListPanel({ agentId, selectedGhostSessionId, onSelectGhostS
     return () => document.removeEventListener("keydown", handler)
   }, [onClose])
 
+  // Poll for the pending spawn session until it reaches "running" or we time out.
+  // The synthetic placeholder row is shown until the real session appears in `sessions`.
+  useEffect(() => {
+    if (!pendingSpawn) return
+
+    const start = Date.now()
+    const pendingSessionId = pendingSpawn.sessionId
+
+    const tick = async () => {
+      if (Date.now() - start > POLL_TIMEOUT_MS) {
+        clearInterval(handle)
+        onResolvedRef.current?.()
+        return
+      }
+      try {
+        const all = await listGhostSessions()
+        const found = all.find(s => s.sessionId === pendingSessionId)
+        if (found) {
+          // Merge into sessions state (replaces any existing entry with updated status)
+          setSessions(prev => {
+            const without = prev.filter(s => s.sessionId !== found.sessionId)
+            return [found, ...without]
+          })
+          if (found.status === "running") {
+            clearInterval(handle)
+            onResolvedRef.current?.()
+          }
+        }
+      } catch {
+        // ignore transient poll errors
+      }
+    }
+
+    // eslint-disable-next-line prefer-const
+    let handle = setInterval(tick, POLL_INTERVAL_MS)
+    return () => clearInterval(handle)
+    // pendingSpawn?.sessionId is the meaningful dep: re-runs when a new spawn is issued
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingSpawn?.sessionId])
+
   async function handleShutdown(sessionId: string) {
     setShutdownState(s => ({ ...s, [sessionId]: "shutting" }))
     try {
@@ -99,6 +163,13 @@ export function GhostListPanel({ agentId, selectedGhostSessionId, onSelectGhostS
   }
 
   const agentLabel = agentId.length > 22 ? `${agentId.slice(0, 18)}…` : agentId
+
+  // Show the synthetic placeholder only while pendingSpawn is set AND the real session
+  // hasn't appeared in the list yet.
+  const showPendingRow = !!(
+    pendingSpawn &&
+    !sessions.some(s => s.sessionId === pendingSpawn.sessionId)
+  )
 
   return (
     <div style={panelStyle}>
@@ -128,11 +199,43 @@ export function GhostListPanel({ agentId, selectedGhostSessionId, onSelectGhostS
 
       {/* Session list */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {loading && sessions.length === 0 && (
+        {loading && sessions.length === 0 && !pendingSpawn && (
           <div style={{ padding: "12px 8px", fontSize: 11, color: "#444" }}>Loading ghost sessions…</div>
         )}
-        {!loading && !error && sessions.length === 0 && (
+        {!loading && !error && sessions.length === 0 && !pendingSpawn && (
           <div style={{ padding: "12px 8px", fontSize: 11, color: "#444" }}>No active ghost sessions</div>
+        )}
+
+        {/* Synthetic "pending" row — shown immediately after spawn, before the server
+            confirms the session exists. Disappears once the real session appears. */}
+        {showPendingRow && (
+          <div
+            style={{
+              padding: "6px 8px", borderBottom: "1px solid #1a1a2e",
+              background: "#12122a",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 3 }}>
+              <span style={{
+                flex: 1, fontSize: 11, color: "#99bbff", fontFamily: "monospace",
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+              }}>
+                {pendingSpawn!.sessionId.length > 15
+                  ? `${pendingSpawn!.sessionId.slice(0, 14)}…`
+                  : pendingSpawn!.sessionId}
+              </span>
+              {/* Animated dot — pure CSS keyframe would need a <style> tag; use a
+                  simple blinking character via inline animation polyfill instead. */}
+              <span style={{ ...statusColors["spawning"], fontSize: 9 }}>
+                spawning…
+              </span>
+            </div>
+            <div style={{ fontSize: 9, color: "#445" }}>
+              ghost: {pendingSpawn!.ghostId.length > 20
+                ? `${pendingSpawn!.ghostId.slice(0, 20)}…`
+                : pendingSpawn!.ghostId}
+            </div>
+          </div>
         )}
 
         {sessions.map(session => {
