@@ -17,6 +17,8 @@ export interface RedisGhostStoreOps {
   set(ghostId: string, record: GhostStoreRecord): Effect.Effect<void, never>;
   get(ghostId: string): Effect.Effect<GhostStoreRecord | null, never>;
   del(ghostId: string): Effect.Effect<void, never>;
+  /** Merge partial fields into the existing record (no-op if ghost not found in Redis). */
+  patch(ghostId: string, fields: Partial<GhostStoreRecord>): Effect.Effect<void, never>;
 }
 
 export class RedisGhostStoreService extends Context.Tag("aie-matrix/RedisGhostStoreService")<
@@ -30,6 +32,7 @@ export const makeNoOpRedisGhostStoreLayer: Layer.Layer<RedisGhostStoreService> =
     set: () => Effect.void,
     get: () => Effect.succeed(null),
     del: () => Effect.void,
+    patch: () => Effect.void,
   },
 );
 
@@ -52,6 +55,16 @@ export const makeLiveRedisGhostStoreLayer = (redis: Redis): Layer.Layer<RedisGho
       }),
     del: (ghostId) =>
       Effect.promise(async () => { await redis.del(`${GHOST_KEY_PREFIX}${ghostId}`); }),
+    patch: (ghostId, fields) =>
+      Effect.promise(async () => {
+        const key = `${GHOST_KEY_PREFIX}${ghostId}`;
+        const raw = await redis.get(key);
+        if (!raw) return; // ghost not in Redis — no-op
+        let existing: GhostStoreRecord;
+        try { existing = JSON.parse(raw) as GhostStoreRecord; } catch { return; }
+        const updated: GhostStoreRecord = { ...existing, ...fields };
+        await redis.set(key, JSON.stringify(updated), "EX", GHOST_TTL_SECONDS);
+      }),
   });
 
 export async function makeRedisGhostStoreLayerFromEnv(

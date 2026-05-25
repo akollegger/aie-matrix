@@ -44,6 +44,7 @@ import {
 } from "./world-api-errors.js";
 import { evaluateGo, evaluateTraverse } from "./movement.js";
 import { ItemService, type ItemServiceOps } from "./ItemService.js";
+import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -58,7 +59,8 @@ type ToolServices =
   | MovementRulesService
   | Neo4jGraphService
   | ConversationService
-  | ItemService;
+  | ItemService
+  | RedisGhostStoreService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -521,6 +523,9 @@ function goEffect(
     }
     bridge.setGhostCell(ghostId, result.tileId);
     yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: result.tileId, reason: "go" });
+    // Persist position to Redis so cross-pod GET /registry/ghosts/:ghostId stays current.
+    const redisStore = yield* RedisGhostStoreService;
+    yield* redisStore.patch(ghostId, { h3Index: result.tileId }).pipe(Effect.ignore);
     return result;
   });
 }
@@ -955,6 +960,7 @@ export function handleGhostMcpEffect(
     const neo = yield* Neo4jGraphService;
     const conversation = yield* ConversationService;
     const itemService = yield* ItemService;
+    const redisGhostStore = yield* RedisGhostStoreService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -962,6 +968,7 @@ export function handleGhostMcpEffect(
       Layer.succeed(Neo4jGraphService, neo),
       Layer.succeed(ConversationService, conversation),
       Layer.succeed(ItemService, itemService),
+      Layer.succeed(RedisGhostStoreService, redisGhostStore),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
