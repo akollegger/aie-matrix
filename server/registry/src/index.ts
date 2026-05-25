@@ -7,7 +7,7 @@ import { handleSpawnGhostEffect, type SpawnGhostDeps } from "./routes/spawn-ghos
 import { createCaretakerId } from "./store.js";
 import type { WorldBridgeService } from "@aie-matrix/server-world-api";
 import { runWithRequestTrace } from "@aie-matrix/server-world-api";
-import { RegistryStoreService } from "@aie-matrix/server-world-api";
+import { RegistryStoreService, RedisGhostStoreService } from "@aie-matrix/server-world-api";
 import { readJsonBody, sendJson, sendRawJsonBody } from "./utils/http.js";
 import { RegistryBadJson } from "./registry-errors.js";
 
@@ -42,7 +42,7 @@ export interface RegistryHttpConfig {
   mapHttpError: (error: unknown) => { status: number; body: string };
 }
 
-function withRegistryRouteRecovery<R extends RegistryStoreService | WorldBridgeService>(
+function withRegistryRouteRecovery<R extends RegistryStoreService | WorldBridgeService | RedisGhostStoreService>(
   res: ServerResponse,
   program: Effect.Effect<void, unknown, R>,
   mapHttpError: (error: unknown) => { status: number; body: string },
