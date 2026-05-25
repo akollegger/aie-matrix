@@ -21,6 +21,10 @@ env:
   # Ephemeral catalog — agents self-register on startup, so /tmp starts empty
   # and is never stale from a baked-in catalog.json in the Docker image.
   CATALOG_FILE_PATH: "/tmp/catalog.json"
+  # In-cluster URL for MCP + push-ingest endpoints sent to ghost agents in spawn contexts.
+  # Must be directly reachable from agent pods (not through the external proxy which
+  # swaps Authorization headers and doesn't forward mcpToken).
+  AGENT_HOST_INTERNAL_BASE_URL: "http://agent-host:4000"
 
 # Name of the Kubernetes Secret created in Phase 3
 secretName: aie-matrix-secrets

@@ -21,6 +21,11 @@ const catalogFilePath = process.env.CATALOG_FILE_PATH ?? "./catalog.json";
 const publicBase =
   (process.env.AGENT_HOST_PUBLIC_BASE_URL ?? "").replace(/\/$/, "") ||
   `http://127.0.0.1:${port}`;
+// In-cluster URL for MCP / push-ingest endpoints sent to ghost agents.
+// Must be reachable from agent pods without going through the external proxy.
+// Defaults to publicBase when not set (local dev: both are loopback).
+const internalBase =
+  (process.env.AGENT_HOST_INTERNAL_BASE_URL ?? "").replace(/\/$/, "") || publicBase;
 const worldHttpBase = (process.env.AIE_MATRIX_HTTP_BASE_URL ?? "http://127.0.0.1:8787").replace(
   /\/$/,
   "",
@@ -42,6 +47,7 @@ export const appLayer = Layer.mergeAll(
   Layer.provide(
     AgentSupervisorLayer({
       publicHouseBaseUrl: publicBase,
+      internalHouseBaseUrl: internalBase,
       defaultCapabilityManifest: readHouseCapabilityManifest(),
       pushIngestToken: devToken,
     }),

@@ -53,6 +53,12 @@ type Deps = {
   readonly catalog: ICatalogService;
   readonly a2a: IA2AHostService;
   readonly publicHouseBaseUrl: string;
+  /**
+   * Base URL used for MCP and push-ingest endpoints sent to ghost agents in spawn contexts.
+   * Should be directly reachable from agent pods (e.g. the ClusterIP service name in K8s).
+   * Defaults to `publicHouseBaseUrl` when not set.
+   */
+  readonly internalHouseBaseUrl?: string;
   readonly defaultCapabilityManifest: ReadonlySet<string>;
   readonly getConfig: () => Readonly<SupervisionConfigValue>;
   /** Bearer token the agent-host expects on its push-ingest endpoint (= AGENT_HOST_TOKEN). */
@@ -94,7 +100,7 @@ function sessionHealthLoop(
   a2a: IA2AHostService,
   catalog: ICatalogService,
   getCfg: () => Readonly<SupervisionConfigValue>,
-  publicHouseBaseUrl: string,
+  agentEndpointBase: string,
   pushIngestToken: string,
 ) {
   const doTick: Effect.Effect<void> = Effect.gen(function* () {
@@ -153,8 +159,7 @@ function sessionHealthLoop(
     }
     st.actionStamps.set(s.sessionId, a2.next);
 
-    const houseBase = publicHouseBaseUrl.replace(/\/$/, "");
-    const housePushIngest = `${houseBase}/v1/internal/a2a-agent-push`;
+    const housePushIngest = `${agentEndpointBase}/v1/internal/a2a-agent-push`;
     const lastCtx = s.lastSpawnContext;
 
     const reconE = yield* pipe(
@@ -207,11 +212,11 @@ function startHealth(
   a2a: IA2AHostService,
   catalog: ICatalogService,
   getCfg: () => Readonly<SupervisionConfigValue>,
-  publicHouseBaseUrl: string,
+  agentEndpointBase: string,
   pushIngestToken: string,
 ): Effect.Effect<void> {
   // T027: daemon fiber per session, interrupted on shutdown.
-  const loop = sessionHealthLoop(st, s, a2a, catalog, getCfg, publicHouseBaseUrl, pushIngestToken);
+  const loop = sessionHealthLoop(st, s, a2a, catalog, getCfg, agentEndpointBase, pushIngestToken);
   const program = pipe(
     loop,
     Effect.ensuring(Effect.sync(() => void st.healthFibers.delete(s.sessionId))),
@@ -297,6 +302,9 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
     pushIngestToken,
     resolveWorldH3ForSpawn,
   } = deps;
+  // Use internalHouseBaseUrl for endpoints sent to ghost agents (MCP, push-ingest).
+  // These must be reachable from within the cluster; the public URL may not be.
+  const agentEndpointBase = (deps.internalHouseBaseUrl ?? publicHouseBaseUrl).replace(/\/$/, "");
 
   const resolveH3 = resolveWorldH3ForSpawn
     ? (cred: WorldCredential): Effect.Effect<string, SpawnFailed> =>
@@ -361,7 +369,6 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
           restartWindow: [],
           currentBackoffMs: cfg.restartBaseMs,
         };
-        const houseBase = publicHouseBaseUrl.replace(/\/$/, "");
         const expiresAt = new Date(Date.now() + 24 * 60 * 60_000).toISOString();
         const spawnContext: SpawnContext = {
           schema: "aie-matrix.agent-host.spawn-context.v1",
@@ -373,13 +380,13 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
           },
           worldEntryPoint,
           houseEndpoints: {
-            mcp: `${houseBase}/v1/mcp`,
-            a2a: `${houseBase}/`,
+            mcp: `${agentEndpointBase}/v1/mcp`,
+            a2a: `${agentEndpointBase}/`,
           },
           token: mcpToken,
           expiresAt,
         };
-        const houseAgentPushIngest = `${houseBase}/v1/internal/a2a-agent-push`;
+        const houseAgentPushIngest = `${agentEndpointBase}/v1/internal/a2a-agent-push`;
 
         // Register token before sending spawn context — agent may call MCP immediately on receipt
         // (e.g. social-tier movement loop starts before startPushSpawnContext returns).
@@ -422,7 +429,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         session.status = "running";
         session.lastSpawnContext = spawnContext;
 
-        yield* startHealth(state, session, a2a, catalog, getConfig, publicHouseBaseUrl, pushIngestToken);
+        yield* startHealth(state, session, a2a, catalog, getConfig, agentEndpointBase, pushIngestToken);
         return session;
       }),
 
@@ -518,6 +525,8 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
 
 export const AgentSupervisorLayer = (opts: {
   publicHouseBaseUrl: string;
+  /** In-cluster base URL for endpoints sent to agents (MCP, push-ingest). Defaults to publicHouseBaseUrl. */
+  internalHouseBaseUrl?: string;
   defaultCapabilityManifest: ReadonlySet<string>;
   pushIngestToken: string;
 }): Layer.Layer<AgentSupervisor, never, CatalogService | A2AHostService> => {
@@ -532,6 +541,7 @@ export const AgentSupervisorLayer = (opts: {
           catalog,
           a2a,
           publicHouseBaseUrl: opts.publicHouseBaseUrl,
+          internalHouseBaseUrl: opts.internalHouseBaseUrl,
           defaultCapabilityManifest: opts.defaultCapabilityManifest,
           pushIngestToken: opts.pushIngestToken,
           getConfig: readSupervisionConfig,
