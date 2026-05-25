@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect, ManagedRuntime } from "effect";
 import { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
 import { handleRegisterAgentHostEffect } from "./routes/register-house.js";
+import { handleSpawnGhostEffect, type SpawnGhostDeps } from "./routes/spawn-ghost.js";
 import { createCaretakerId } from "./store.js";
 import type { WorldBridgeService } from "@aie-matrix/server-world-api";
 import { runWithRequestTrace } from "@aie-matrix/server-world-api";
@@ -14,6 +15,7 @@ export { createRegistryStore, createCaretakerId, type RegistryStore } from "./st
 export { assertAdoptionAllowed } from "./session-guard.js";
 export { handleRegisterAgentHostEffect } from "./routes/register-house.js";
 export { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
+export { handleSpawnGhostEffect, type SpawnGhostDeps } from "./routes/spawn-ghost.js";
 export * from "./registry-errors.js";
 export { RegistryStoreService, makeRegistryStoreLayer } from "@aie-matrix/server-world-api";
 
@@ -34,6 +36,7 @@ export type RegistryManagedRuntime = ManagedRuntime.ManagedRuntime<any, never>;
 
 export interface RegistryHttpConfig {
   adoption: AdoptionRuntimeDeps;
+  spawn: SpawnGhostDeps;
   runtime: RegistryManagedRuntime;
   /** Maps registry / bridge domain failures to HTTP (combined server passes `errorToResponse`). */
   mapHttpError: (error: unknown) => { status: number; body: string };
@@ -109,6 +112,20 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
             withRegistryRouteRecovery(
               res,
               handleAdoptGhostEffect(req, res, REGISTRY_CORS_HEADERS, config.adoption),
+              config.mapHttpError,
+            ),
+          ),
+        );
+        return;
+      }
+
+      if (path === "/registry/ghosts" && req.method === "POST") {
+        const traceId = randomUUID();
+        await runWithRequestTrace(traceId, () =>
+          config.runtime.runPromise(
+            withRegistryRouteRecovery(
+              res,
+              handleSpawnGhostEffect(req, res, REGISTRY_CORS_HEADERS, config.spawn),
               config.mapHttpError,
             ),
           ),

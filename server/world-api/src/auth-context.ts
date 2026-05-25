@@ -83,17 +83,17 @@ export function requireGhostAuth(req: IncomingMessage): AuthInfo {
 
 export function ghostIdsFromAuthEffect(
   auth: AuthInfo,
-): Effect.Effect<{ ghostId: string; caretakerId: string }, AuthError> {
+): Effect.Effect<{ ghostId: string; caretakerId?: string }, AuthError> {
   const extra = auth.extra as { ghostId?: string; caretakerId?: string } | undefined;
   const ghostId = extra?.ghostId ?? auth.clientId;
   const caretakerId = extra?.caretakerId;
-  if (!ghostId || !caretakerId) {
+  if (!ghostId) {
     return Effect.fail(new AuthMalformedClaims({ message: "Malformed ghost auth context" }));
   }
   return Effect.succeed({ ghostId, caretakerId });
 }
 
 /** Legacy sync helper for MCP tool handlers (try/catch wraps failures). */
-export function ghostIdsFromAuth(auth: AuthInfo): { ghostId: string; caretakerId: string } {
+export function ghostIdsFromAuth(auth: AuthInfo): { ghostId: string; caretakerId?: string } {
   return Effect.runSync(ghostIdsFromAuthEffect(auth));
 }

@@ -21,7 +21,7 @@ export type GhostMcpTool = (typeof GHOST_MCP_TOOLS)[number];
 
 export interface WhoAmIResult {
   ghostId: string;
-  caretakerId: string;
+  caretakerId?: string;
 }
 
 export interface WhereAmIResult {

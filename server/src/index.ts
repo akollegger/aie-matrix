@@ -29,6 +29,8 @@ import {
   makeNoOpNeo4jGraphLayer,
   makeItemServiceLayer,
   makeRedisPublishLayerFromEnv,
+  makeRedisGhostStoreLayerFromEnv,
+  RedisGhostStoreService,
   makeRegistryStoreLayer,
   makeWorldBridgeLayer,
   MapManagementService,
@@ -330,6 +332,7 @@ async function main(): Promise<void> {
 
   const gcsLayer = makeGcsLayerFromEnv(process.env);
   const redisLayer = await makeRedisPublishLayerFromEnv(process.env);
+  const redisGhostStoreLayer = await makeRedisGhostStoreLayerFromEnv(process.env);
 
   let movementRules;
   try {
@@ -394,6 +397,7 @@ async function main(): Promise<void> {
     | MapService
     | GcsService
     | RedisPublishService
+    | RedisGhostStoreService
     | MapManagementService
     | LiveSessionService;
 
@@ -408,6 +412,7 @@ async function main(): Promise<void> {
     mapSvcLayer,
     gcsLayer,
     redisLayer,
+    redisGhostStoreLayer,
     mapMgmtLayer,
     liveSessionLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
@@ -516,9 +521,8 @@ async function main(): Promise<void> {
   });
 
   const registryListener = createRegistryRequestListener({
-    adoption: {
-      worldApiBaseUrl,
-    },
+    adoption: { worldApiBaseUrl },
+    spawn: { worldApiBaseUrl },
     runtime,
     mapHttpError: (e: unknown) => errorToResponse(e as HttpMappingError),
   });

@@ -146,6 +146,14 @@ export {
   makeRedisPublishLayerFromEnv,
   type RedisPublishOps,
 } from "./redis/RedisPublishService.js";
+export {
+  RedisGhostStoreService,
+  makeNoOpRedisGhostStoreLayer,
+  makeLiveRedisGhostStoreLayer,
+  makeRedisGhostStoreLayerFromEnv,
+  type GhostStoreRecord,
+  type RedisGhostStoreOps,
+} from "./redis/RedisGhostStoreService.js";
 export { checkAdminToken, AdminAuthError } from "./admin-auth.js";
 export { requireNeo4j, Neo4jNotConfiguredError } from "./neo4j-guard.js";
 export {
@@ -154,7 +162,6 @@ export {
   type MapManagementOps,
   type MapRecord,
 } from "./map/MapManagementService.js";
-export { makeLocalMapManagementLayer } from "./map/LocalMapManagementService.js";
 export { tryHandleMapManagement } from "./map/MapManagementRoutes.js";
 export {
   LiveSessionService,
@@ -162,7 +169,6 @@ export {
   type LiveSessionOps,
   type SessionRecord,
 } from "./live/LiveSessionService.js";
-export { makeLocalLiveSessionLayer } from "./live/LocalLiveSessionService.js";
 export { tryHandleLiveSession } from "./live/LiveSessionRoutes.js";
 export {
   LiveSessionNotFoundError,
