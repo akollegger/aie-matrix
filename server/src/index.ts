@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, extname, isAbsolute, join, normalize, sep } from "node:path";
@@ -413,6 +413,75 @@ async function main(): Promise<void> {
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
+
+  // GitOps startup map sync (staging/production only).
+  // Auto-publishes every .map.gram baked into the Docker image to GCS+Neo4j if not already present.
+  // - New map (no Neo4j record) → publish
+  // - Published map, same content hash → skip (no-op)
+  // - Published map, content changed → re-publish (update graph + GCS)
+  // - Archived map → skip (admin decision respected across deploys)
+  // Individual publish failures are logged but do not abort startup.
+  if (matrixMode !== "development") {
+    console.info("[aie-matrix] startup-map-sync: scanning maps/ for unpublished maps…");
+    const syncSummary = await runtime.runPromise(
+      Effect.gen(function* () {
+        const mapSvc = yield* MapService;
+        const mapMgmt = yield* MapManagementService;
+        const entries = yield* mapSvc.listEntries();
+        let synced = 0;
+        let skipped = 0;
+        let failed = 0;
+
+        for (const entry of entries) {
+          const existing = yield* mapMgmt.get(entry.mapId).pipe(
+            Effect.catchTag("MapError.NotFound", () => Effect.succeed(null)),
+          );
+
+          if (existing?.status === "archived") {
+            console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "skip-archived" }));
+            skipped++;
+            continue;
+          }
+
+          // Read file bytes
+          const bytes = yield* mapSvc.raw(entry.mapId, "gram").pipe(
+            Effect.catchAll((e) => {
+              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "read-error", error: String(e) }));
+              return Effect.succeed(null as Buffer | null);
+            }),
+          );
+          if (bytes === null) { failed++; continue; }
+
+          // Skip if published with same content hash (idempotent guard)
+          const hash = createHash("sha256").update(bytes).digest("hex");
+          if (existing?.status === "published" && existing.contentHash === hash) {
+            console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "skip-current" }));
+            skipped++;
+            continue;
+          }
+
+          // Publish (new map) or re-publish (content changed)
+          const action = existing ? "republish" : "publish";
+          yield* mapMgmt.publish(entry.mapId, bytes).pipe(
+            Effect.tap(() => Effect.sync(() => {
+              console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action }));
+              synced++;
+            })),
+            Effect.catchAll((e) => Effect.sync(() => {
+              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "publish-error", error: String(e) }));
+              failed++;
+            })),
+          );
+        }
+
+        return { total: entries.length, synced, skipped, failed };
+      }),
+    ).catch((e: unknown) => {
+      console.error("[aie-matrix] startup-map-sync failed:", e);
+      return { total: 0, synced: 0, skipped: 0, failed: 0 };
+    });
+    console.info(JSON.stringify({ kind: "startup-map-sync", ...syncSummary }));
+  }
 
   // T025 — Session binding for staging/production (skip in development mode where the
   // local session is synthesised in-memory by makeLocalLiveSessionLayer).
