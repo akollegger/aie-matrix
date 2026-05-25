@@ -21,6 +21,8 @@ export class AgentHostError extends Error {
 
 export interface AgentCatalogEntry {
   agentId: string
+  /** Human-readable name from agent card (e.g. "random-agent"). Falls back to agentId. */
+  displayName: string
   baseUrl: string
   builtIn: boolean
   registeredAt: string
@@ -96,6 +98,7 @@ interface RawCatalogEntry {
   builtIn: boolean
   registeredAt: string
   agentCard: {
+    name?: string
     matrix?: {
       tier?: string
       profile?: { about?: string }
@@ -106,8 +109,10 @@ interface RawCatalogEntry {
 function normalizeCatalogEntry(raw: RawCatalogEntry): AgentCatalogEntry {
   const tier = (raw.agentCard?.matrix?.tier ?? "wanderer") as AgentCatalogEntry["tier"]
   const about = raw.agentCard?.matrix?.profile?.about ?? ""
+  const displayName = raw.agentCard?.name ?? raw.agentId
   return {
     agentId: raw.agentId,
+    displayName,
     baseUrl: raw.baseUrl,
     builtIn: raw.builtIn,
     registeredAt: raw.registeredAt,

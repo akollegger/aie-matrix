@@ -218,16 +218,14 @@ export function CatalogPanel({ sessionId, selectedAgentId, onSelectAgent, onClos
                 }}
                 onClick={() => onSelectAgent(isSelected ? null : agent.agentId)}
               >
-                {/* Agent name + about subtitle */}
+                {/* Agent name + agentId subtitle */}
                 <span style={{ flex: 1, overflow: "hidden" }}>
                   <span style={{ fontSize: 11, color: "#ccc", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {agent.displayName}
+                  </span>
+                  <span style={{ fontSize: 9, color: "#555", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {agent.agentId}
                   </span>
-                  {agent.about && (
-                    <span style={{ fontSize: 9, color: "#555", display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {agent.about}
-                    </span>
-                  )}
                 </span>
 
                 {/* Ghost count badge — mirrors map session count badge in AdminPanel */}
