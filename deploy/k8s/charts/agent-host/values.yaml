@@ -18,6 +18,9 @@ env:
   WORLD_API_URL: "http://server:8787"
   COLYSEUS_URL: "ws://server:8787"
   AIE_MATRIX_HTTP_BASE_URL: "http://server:8787"
+  # Ephemeral catalog — agents self-register on startup, so /tmp starts empty
+  # and is never stale from a baked-in catalog.json in the Docker image.
+  CATALOG_FILE_PATH: "/tmp/catalog.json"
 
 # Name of the Kubernetes Secret created in Phase 3
 secretName: aie-matrix-secrets
