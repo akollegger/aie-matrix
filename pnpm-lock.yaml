@@ -371,6 +371,9 @@ importers:
       '@a2a-js/sdk':
         specifier: ^0.3.13
         version: 0.3.13(express@4.22.1)
+      '@aie-matrix/ghost-peppers-agent':
+        specifier: workspace:*
+        version: link:../peppers-agent
       '@aie-matrix/ghost-peppers-inner':
         specifier: workspace:*
         version: link:../peppers-inner
