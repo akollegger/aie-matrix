@@ -4,6 +4,9 @@ import { Effect, ManagedRuntime } from "effect";
 import { handleAdoptGhostEffect, type AdoptionRuntimeDeps } from "./routes/adoption.js";
 import { handleRegisterAgentHostEffect } from "./routes/register-house.js";
 import { handleSpawnGhostEffect, type SpawnGhostDeps } from "./routes/spawn-ghost.js";
+import { handleGetGhostEffect } from "./routes/get-ghost.js";
+import { handleRespawnGhostEffect } from "./routes/respawn.js";
+import { handleWithdrawGhostEffect } from "./routes/withdraw.js";
 import { createCaretakerId } from "./store.js";
 import { runWithRequestTrace, WorldBridgeService } from "@aie-matrix/server-world-api";
 import { RegistryStoreService, RedisGhostStoreService } from "@aie-matrix/server-world-api";
@@ -118,43 +121,29 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
         return;
       }
 
-      // GET /registry/ghosts/:ghostId — current position for admin inspection
-      const ghostGetMatch = /^\/registry\/ghosts\/([^/]+)$/.exec(path)
-      if (ghostGetMatch && req.method === "GET") {
-        const ghostId = decodeURIComponent(ghostGetMatch[1]!)
+      // GET /registry/ghosts/:ghostId — full registry record (id,
+      // agentHostId, caretakerId, h3Index, spawnH3Index, status,
+      // displayName). Used by:
+      //   - ghost-house's Barnacle supervisor to fetch spawnH3Index for
+      //     handoff bundles and respawn-on-complete
+      //   - admin-panel ghost-management view (richer cascade —
+      //     bridge → Redis → store — handled inside the route)
+      const getGhostMatch = /^\/registry\/ghosts\/([^/]+)$/.exec(path);
+      if (getGhostMatch && req.method === "GET") {
+        const ghostId = decodeURIComponent(getGhostMatch[1]!);
         await config.runtime.runPromise(
-          Effect.gen(function* () {
-            const bridge = yield* WorldBridgeService
-            const store = yield* RegistryStoreService
-            const redisStore = yield* RedisGhostStoreService
-
-            // 1. In-memory bridge on this pod — most current, but cleared on map switch
-            const h3Index = bridge.getGhostCell(ghostId)
-            if (h3Index) {
-              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index, status: "active" })
-              return
-            }
-
-            // 2. Redis — updated by goEffect after every move, survives map switches and pod restarts
-            const redisRecord = yield* redisStore.get(ghostId)
-            if (redisRecord) {
-              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: redisRecord.h3Index, status: redisRecord.status })
-              return
-            }
-
-            // 3. In-memory registry store — spawn-time position; only reached if Redis is unavailable
-            const ghost = store.ghosts.get(ghostId)
-            if (ghost) {
-              yield* sendJson(res, REGISTRY_CORS_HEADERS, 200, { ghostId, h3Index: ghost.h3Index, status: ghost.status })
-              return
-            }
-
-            yield* sendJson(res, REGISTRY_CORS_HEADERS, 404, { error: "NOT_FOUND", message: `ghost ${ghostId} not found` })
-          }),
-        )
-        return
+          withRegistryRouteRecovery(
+            res,
+            handleGetGhostEffect(req, res, REGISTRY_CORS_HEADERS, ghostId),
+            config.mapHttpError,
+          ),
+        );
+        return;
       }
 
+      // POST /registry/ghosts — admin spawn at an arbitrary cell (RFC-0014
+      // ghost-management panel). Distinct from /registry/adopt, which
+      // spawns via the agent-host adoption flow.
       if (path === "/registry/ghosts" && req.method === "POST") {
         const traceId = randomUUID();
         await runWithRequestTrace(traceId, () =>
@@ -164,6 +153,38 @@ export function createRegistryRequestListener(config: RegistryHttpConfig) {
               handleSpawnGhostEffect(req, res, REGISTRY_CORS_HEADERS, config.spawn),
               config.mapHttpError,
             ),
+          ),
+        );
+        return;
+      }
+
+      // POST /registry/ghosts/:ghostId/respawn — teleport a ghost back to
+      // their adoption cell. Used by RDC to clear poker tiles on exit.
+      const respawnMatch = /^\/registry\/ghosts\/([^/]+)\/respawn$/.exec(path);
+      if (respawnMatch && req.method === "POST") {
+        const ghostId = decodeURIComponent(respawnMatch[1]!);
+        await config.runtime.runPromise(
+          withRegistryRouteRecovery(
+            res,
+            handleRespawnGhostEffect(req, res, REGISTRY_CORS_HEADERS, ghostId),
+            config.mapHttpError,
+          ),
+        );
+        return;
+      }
+
+      // POST /registry/ghosts/:ghostId/withdraw — remove a ghost from the
+      // world (Barnacle Protocol, RFC-0019). The ghost vanishes from the
+      // spectator; their registry record + spawnH3Index are preserved so
+      // /respawn can bring them back at session-end.
+      const withdrawMatch = /^\/registry\/ghosts\/([^/]+)\/withdraw$/.exec(path);
+      if (withdrawMatch && req.method === "POST") {
+        const ghostId = decodeURIComponent(withdrawMatch[1]!);
+        await config.runtime.runPromise(
+          withRegistryRouteRecovery(
+            res,
+            handleWithdrawGhostEffect(req, res, REGISTRY_CORS_HEADERS, ghostId),
+            config.mapHttpError,
           ),
         );
         return;

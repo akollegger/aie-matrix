@@ -7,6 +7,10 @@ export interface MessageRecord {
   content: string;
   mx_tile: string;
   mx_listeners: string[];
+  /** Speech-act intent declared by the speaker (greet, befriend,
+   *  propose, agree, decline, depart, ...). Optional for backwards
+   *  compatibility with legacy records that pre-date the intent enum. */
+  intent?: string;
 }
 
 export interface ConversationStore {

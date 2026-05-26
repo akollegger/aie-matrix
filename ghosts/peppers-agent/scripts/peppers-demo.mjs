@@ -15,7 +15,7 @@
  *      then asks ghost-house to spawn peppers-agent for that ghost
  *
  * Required env (in repo root .env):
- *   GHOST_HOUSE_DEV_TOKEN   shared bearer token (must match ghost-house)
+ *   AGENT_HOST_TOKEN   shared bearer token (must match ghost-house)
  *   OPENAI_API_KEY          drives Id + Surface LLM calls
  *   GHOST_MINDS_NEO4J_URI   Neo4j for cascade persistence
  *   GHOST_MINDS_NEO4J_USERNAME
@@ -23,7 +23,7 @@
  *
  * Optional env:
  *   PEPPERS_AGENT_PORT      default 4002
- *   GHOST_HOUSE_PORT        default 4000
+ *   AGENT_HOST_PORT        default 4000
  *   AIE_MATRIX_HTTP_PORT    default 8787
  *   PEPPERS_GHOSTS          default ghost count when --ghosts not passed
  *   PEPPERS_VERBOSE         set "1" for full prompt/response logging
@@ -40,11 +40,11 @@ loadRootEnv();
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
 const peppersPort = process.env.PEPPERS_AGENT_PORT || "4002";
-const housePort   = process.env.GHOST_HOUSE_PORT   || "4000";
+const housePort   = process.env.AGENT_HOST_PORT   || "4000";
 const httpPort    = process.env.AIE_MATRIX_HTTP_PORT || "8787";
 const houseBase   = `http://127.0.0.1:${housePort}`;
 const worldBase   = `http://127.0.0.1:${httpPort}`;
-const token       = process.env.GHOST_HOUSE_DEV_TOKEN || "";
+const token       = process.env.AGENT_HOST_TOKEN || "";
 
 const MAX_GHOSTS = 16;
 
@@ -144,7 +144,7 @@ async function poll(url, label, opts = {}) {
 async function bootstrap() {
   if (!token) {
     console.warn(
-      "[peppers-demo] GHOST_HOUSE_DEV_TOKEN not set — skipping bootstrap. " +
+      "[peppers-demo] AGENT_HOST_TOKEN not set — skipping bootstrap. " +
       "Add it to repo root .env to put ghosts in-world.",
     );
     return;
@@ -175,7 +175,7 @@ async function bootstrap() {
     console.error("[peppers-demo] registry house failed:", hr.status, await hr.text());
     return;
   }
-  const { ghostHouseId } = await hr.json();
+  const { agentHostId } = await hr.json();
 
   for (let i = 0; i < ghostCount; i++) {
     const cr = await fetch(`${worldBase}/registry/caretakers`, {
@@ -190,7 +190,7 @@ async function bootstrap() {
 
     const ar = await fetch(`${worldBase}/registry/adopt`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caretakerId, ghostHouseId }),
+      body: JSON.stringify({ caretakerId, agentHostId }),
     });
     if (!ar.ok) {
       console.error(`[peppers-demo] adopt ${i + 1} failed:`, ar.status, await ar.text());
@@ -227,7 +227,7 @@ function waitFirstExit() {
 console.info(`[peppers-demo] spawning ${ghostCount} peppers ghost(s). Run \`pnpm run demo\` first if not already.`);
 
 if (!token) {
-  console.warn("[peppers-demo] GHOST_HOUSE_DEV_TOKEN not set — agent will start but no ghosts will be bootstrapped.");
+  console.warn("[peppers-demo] AGENT_HOST_TOKEN not set — agent will start but no ghosts will be bootstrapped.");
 }
 
 console.info(`[peppers-demo] starting peppers-agent A2A server on port ${peppersPort}…`);

@@ -16,6 +16,7 @@
     "@a2a-js/sdk": "^0.3.13",
     "@aie-matrix/ghost-ts-client": "workspace:*",
     "@aie-matrix/root-env": "workspace:*",
+    "@aie-matrix/shared-types": "workspace:*",
     "@colyseus/core": "0.15.57",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "colyseus.js": "0.15.28",

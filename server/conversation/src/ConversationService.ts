@@ -25,10 +25,27 @@ export interface ConversationBridge {
 }
 
 export interface ConversationServiceShape {
+  /**
+   * Persist a "<ghost> says: <content>" message to the conversation log
+   * and notify each listener's inbox.
+   *
+   * `displayName` overrides the stored `record.name` — pass it when the
+   * speaker has a human-readable identity (e.g. "Django Decypher").
+   * When omitted, `record.name` falls back to `ghostId`, which is what
+   * legacy callers (the older random-agent path) sent. Carrying the
+   * displayName at write-time means recipients read the persistent
+   * identity directly from the message — no second lookup against the
+   * registry, no leaky `ghost_<prefix>` fallback on first sighting.
+   */
   say(
     ghostId: string,
     content: string,
     to?: string,
+    displayName?: string,
+    /** Speech-act intent — e.g. "greet", "befriend", "propose". Stored
+     *  on the conversation record so recipients see WHY they were
+     *  spoken to, not just what was said. */
+    intent?: string,
   ): Effect.Effect<SayResult, ConversationStoreUnavailable | ConversationGhostNoPosition>;
   bye(ghostId: string): Effect.Effect<ByeResult>;
   inbox(ghostId: string): Effect.Effect<InboxResult>;
@@ -55,7 +72,7 @@ function makeConversationService(
   }
 
   return {
-    say(ghostId, content, to?: string) {
+    say(ghostId, content, to?: string, displayName?: string, intent?: string) {
       return Effect.gen(function* () {
         const message_id = ulid();
         const timestamp = new Date().toISOString();
@@ -83,15 +100,22 @@ function makeConversationService(
           mx_listeners = Array.from(listenerSet);
         }
 
+        const effectiveName =
+          typeof displayName === "string" && displayName.trim().length > 0
+            ? displayName.trim()
+            : ghostId;
         const record = {
           thread_id: ghostId,
           message_id,
           timestamp,
           role: "user" as const,
-          name: ghostId,
+          name: effectiveName,
           content,
           mx_tile: ghostCell,
           mx_listeners,
+          ...(intent !== undefined && intent.trim().length > 0
+            ? { intent: intent.trim() }
+            : {}),
         };
 
         yield* Effect.tryPromise({

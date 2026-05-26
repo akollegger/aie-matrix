@@ -53,19 +53,21 @@ You receive:
 - The world right now — what's actually available to act on.
 - The ghost's most recent decision and its outcome — momentum context. If the last action just succeeded, that lets you build on it; if it failed, you might pivot.
 
-You only care about WHAT happens next, not HOW. The emotional flavor of the action — collaborative, defiant, anxious, careful — is shaped elsewhere. You emit the raw verb-and-target.
+You only care about WHAT the ghost is pulled toward next, not HOW. The emotional flavor — collaborative, defiant, anxious, careful — is shaped elsewhere. You emit a short phrase naming the target or intent.
 
-Output a 2-8 word phrase. Examples of good shapes:
-- "reply to ghost_<name>"
-- "answer their question"
-- "ask their name"
-- "say something back"
-- "go north"
-- "take the brass key"
-- "head toward an exit"
-- "drop the key here"
+Output a 2-8 word phrase. Describe the PULL — a destination, a person, an object, a withdrawal — NOT a specific tool name. The Surface layer downstream picks the actual tool from the live menu; constraining the verb here biases that choice away from tools you may not know exist. Examples of useful shapes:
+- "toward the poker saloon"
+- "engage the speaker"
+- "answer them"
+- "withdraw and observe"
+- "approach the badge"
+- "fall back, watch the room"
+- "press on to the goal"
+- "respond, then go"
 
-Ground the impulse in what's actually available — only suggest going toward a real exit, taking an item that's actually here, talking to a ghost that's actually present. If the world offers nothing pulling the ghost in any direction, default to "go" toward an available exit. Standing still is not an option when nothing is happening.
+Use real names when you reference another ghost — the world gives you names like "Django Decypher" or "Tuco Acyclica", never "ghost_<hash>". Treat the name as the identity.
+
+Ground the impulse in what the ghost can actually perceive or is told about — a destination named in the objective, a ghost actually nearby, an item the ghost knows is in the world. Standing still is not an option when nothing is happening — name some pull.
 
 CONVERSATION RULE (most important): if the current trigger is an utterance from another ghost, your impulse should almost always be a verbal response — emit a "say"-shaped impulse like "reply with X", "answer them", "ask Y back". Conversation IS the loop; back-and-forth is correct repetition, not redundancy. Only break this if the slider profile strongly suggests withdrawal (e.g., very low Warmth + very low Assertiveness + very low Trust).
 

@@ -105,3 +105,13 @@ temp/
 
 .claude/*.lock
 .claude/worktrees/
+
+# Sibling reference clone — pokerswarm-ai vendored for the RDC fork.
+# Not part of this repo. Keep alongside but never tracked.
+/pokerswarm-ai/
+
+# RDC runtime artifacts — Cyphers ledger + per-hand audit log live
+# under .local/ next to each running session. Never commit; the file
+# grows unbounded and is per-developer state.
+ghosts/*/ghosts/rdc-orchestrator/.local/
+.local/

@@ -1,8 +1,10 @@
 /**
- * Real-world `ExecuteAction` adapter — translates our semantic
- * `SurfaceAction` to the corresponding MCP tool call against the
- * combined server's world-api, and shapes the result back into an
- * `ActionOutcome`.
+ * Real-world `ExecuteAction` adapter — forwards the chosen tool to
+ * the MCP client generically. With genuine tool-call discovery
+ * (Surface picks from the live `tools/list` menu), the action's
+ * `kind` is the tool name as the server registered it, and the
+ * remaining fields ARE the tool's input arguments. No per-tool
+ * switch is needed; any tool the server exposes can be called.
  */
 
 import type { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
@@ -20,12 +22,13 @@ export function executeViaMcp(client: GhostMcpClient): ExecuteAction {
 }
 
 async function callOne(client: GhostMcpClient, action: SurfaceAction): Promise<ActionOutcome> {
+  const { kind, ...args } = action;
   try {
-    const raw = await dispatch(client, action);
+    const raw = await client.callTool(kind, args as Record<string, unknown>);
     // For `say`, the world-api returns SayResult { message_id, mx_listeners }.
     // Surfacing the listener count in the outcome makes it obvious whether
     // anyone was actually in cluster range when we spoke.
-    if (action.kind === "say" && raw && typeof raw === "object" && "mx_listeners" in raw) {
+    if (kind === "say" && raw && typeof raw === "object" && "mx_listeners" in raw) {
       const listeners = (raw as { mx_listeners?: unknown }).mx_listeners;
       const count = Array.isArray(listeners) ? listeners.length : 0;
       return { ok: true, data: { mx_listener_count: count, ...(raw as Record<string, unknown>) } };
@@ -36,33 +39,6 @@ async function callOne(client: GhostMcpClient, action: SurfaceAction): Promise<A
     return { ok: true, data: raw };
   } catch (err) {
     return failureFromError(err);
-  }
-}
-
-async function dispatch(client: GhostMcpClient, action: SurfaceAction): Promise<unknown> {
-  switch (action.kind) {
-    case "say":
-      return client.callTool("say", { content: action.text });
-    case "go":
-      return client.callTool("go", { toward: action.toward });
-    case "take":
-      return client.callTool("take", { itemRef: action.itemRef });
-    case "drop":
-      return client.callTool("drop", { itemRef: action.itemRef });
-    case "inspect":
-      return client.callTool("inspect", { itemRef: action.itemRef });
-    case "look":
-      return client.callTool("look", { at: action.at });
-    case "exits":
-      return client.callTool("exits", {});
-    case "inventory":
-      return client.callTool("inventory", {});
-    case "whoami":
-      return client.callTool("whoami", {});
-    case "whereami":
-      return client.callTool("whereami", {});
-    case "bye":
-      return client.callTool("bye", {});
   }
 }
 

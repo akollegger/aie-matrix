@@ -24,6 +24,21 @@ export interface ICatalogService {
     baseUrl: string;
     builtIn: boolean;
   }) => Effect.Effect<CatalogEntry, AgentCardInvalid | AgentAlreadyRegistered | AgentCardFetchFailed>;
+  /**
+   * RFC-0019 — register a mini-game session host (Barnacle Protocol
+   * conformer). Unlike `register`, this does NOT fetch or validate an
+   * AgentCard — mini-games speak Barnacle, not A2A-agent. The entry
+   * declares which `platformClasses` (world-item types) the mini-game
+   * claims; the supervisor uses that to route handoffs.
+   */
+  readonly registerMiniGame: (input: {
+    agentId: string;
+    baseUrl: string;
+    platformClasses: ReadonlyArray<string>;
+    hardTimeoutMs?: number;
+    builtIn: boolean;
+    about?: string;
+  }) => Effect.Effect<CatalogEntry, AgentAlreadyRegistered>;
   readonly list: () => Effect.Effect<
     ReadonlyArray<{
       agentId: string;
@@ -34,6 +49,13 @@ export interface ICatalogService {
     }>
   >;
   readonly get: (agentId: string) => Effect.Effect<CatalogEntry, AgentNotFound>;
+  /** Look up the mini-game catalog entry that claims a given platform class.
+   *  Returns the first match (v1 forbids two mini-games claiming the same
+   *  class). Returns `undefined` if no mini-game is registered for it. */
+  readonly findMiniGameForPlatformClass: (platformClass: string) => Effect.Effect<
+    | (Extract<CatalogEntry, { kind: "mini-game" }>)
+    | undefined
+  >;
   readonly deregister: (agentId: string) => Effect.Effect<void, AgentNotFound>;
 }
 
@@ -105,11 +127,26 @@ export class CatalogServiceImpl implements ICatalogService {
       if (!isUrlSafeAgentId(agentId)) {
         return yield* Effect.fail(new AgentCardInvalid({ message: "invalid agentId" }));
       }
+      const b = normalizeBaseUrl(baseUrl);
       const disk = yield* this.load();
-      if (disk.agents[agentId]) {
+      const existing = disk.agents[agentId];
+      // Re-registration from a DIFFERENT baseUrl is rejected — that
+      // would let one host silently take over another's agentId. But
+      // re-registration from the SAME baseUrl is an UPSERT: the
+      // agent restarted with a new agent card (e.g. new requiredTools),
+      // refresh the catalog so the changes go live without manual
+      // catalog.json edits.
+      // Agent variant has `kind?: "agent"` (optional), so treat
+      // anything that isn't a mini-game as an agent entry.
+      if (existing && existing.kind !== "mini-game" && existing.baseUrl !== b) {
         return yield* Effect.fail(new AgentAlreadyRegistered({ agentId }));
       }
-      const b = normalizeBaseUrl(baseUrl);
+      if (existing && existing.kind === "mini-game") {
+        // A mini-game owns this id; the agent register path can't
+        // overwrite it. Surface as already-registered (the only error
+        // shape this method can fail with for collisions).
+        return yield* Effect.fail(new AgentAlreadyRegistered({ agentId }));
+      }
       const cardUrl = `${b}/.well-known/agent-card.json`;
       const raw = yield* fetchJson(cardUrl);
       const v = parseAndValidateAgentCard(raw);
@@ -119,15 +156,63 @@ export class CatalogServiceImpl implements ICatalogService {
         );
       }
       const entry: CatalogEntry = {
+        kind: "agent",
         agentId,
         baseUrl: b,
-        agentCard: v.value as unknown as CatalogEntry["agentCard"],
+        agentCard: v.value as unknown as Extract<
+          CatalogEntry,
+          { kind?: "agent" }
+        >["agentCard"],
         registeredAt: new Date().toISOString(),
         builtIn,
       };
       const next: CatalogFile = { agents: { ...disk.agents, [agentId]: entry } };
       yield* this.save(next);
       return entry;
+    });
+
+  registerMiniGame = (input: {
+    agentId: string;
+    baseUrl: string;
+    platformClasses: ReadonlyArray<string>;
+    hardTimeoutMs?: number;
+    builtIn: boolean;
+    about?: string;
+  }): Effect.Effect<CatalogEntry, AgentAlreadyRegistered> =>
+    Effect.gen(this, function* () {
+      const { agentId, baseUrl, platformClasses, hardTimeoutMs, builtIn, about } = input;
+      const disk = yield* this.load();
+      if (disk.agents[agentId]) {
+        return yield* Effect.fail(new AgentAlreadyRegistered({ agentId }));
+      }
+      const entry: CatalogEntry = {
+        kind: "mini-game",
+        agentId,
+        baseUrl: normalizeBaseUrl(baseUrl),
+        platformClasses: [...platformClasses],
+        ...(hardTimeoutMs !== undefined ? { hardTimeoutMs } : {}),
+        registeredAt: new Date().toISOString(),
+        builtIn,
+        ...(about !== undefined ? { about } : {}),
+      };
+      const next: CatalogFile = { agents: { ...disk.agents, [agentId]: entry } };
+      yield* this.save(next);
+      return entry;
+    });
+
+  findMiniGameForPlatformClass = (
+    platformClass: string,
+  ): Effect.Effect<
+    Extract<CatalogEntry, { kind: "mini-game" }> | undefined
+  > =>
+    Effect.gen(this, function* () {
+      const disk = yield* this.load();
+      for (const e of Object.values(disk.agents)) {
+        if (e.kind === "mini-game" && e.platformClasses.includes(platformClass)) {
+          return e;
+        }
+      }
+      return undefined;
     });
 
   list = (): Effect.Effect<
@@ -142,6 +227,15 @@ export class CatalogServiceImpl implements ICatalogService {
     Effect.gen(this, function* () {
       const disk = yield* this.load();
       return Object.values(disk.agents).map((e) => {
+        if (e.kind === "mini-game") {
+          return {
+            agentId: e.agentId,
+            baseUrl: e.baseUrl,
+            tier: "mini-game",
+            builtIn: e.builtIn,
+            about: e.about ?? `mini-game; serves ${e.platformClasses.join(", ")}`,
+          };
+        }
         const ac = e.agentCard as { matrix?: { tier?: string; profile?: { about?: string } } };
         const matrix = ac.matrix;
         return {

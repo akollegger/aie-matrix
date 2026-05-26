@@ -15,6 +15,7 @@ import { makeLocalLiveSessionLayer } from "./LocalLiveSessionService.js";
 import { LiveSessionService } from "./LiveSessionService.js";
 import { LiveSessionAlreadyEndedError, LiveSessionNotFoundError } from "./live-errors.js";
 import { MapManagementService, type MapRecord } from "../map/MapManagementService.js";
+import { MapService } from "../map/MapService.js";
 import { MapNotFoundError } from "../map/map-errors.js";
 
 // ─── stub data ────────────────────────────────────────────────────────────────
@@ -52,9 +53,19 @@ const stubMapMgmtLayer: Layer.Layer<MapManagementService> = Layer.succeed(MapMan
   archive: (_mapId: string) => Effect.void,
 });
 
+/** Stub MapService that reports no active map — disables tier-1 synthesis. */
+const stubMapSvcLayer: Layer.Layer<MapService> = Layer.succeed(MapService, {
+  listEntries: () => Effect.succeed([]),
+  validate: () => Effect.void,
+  activeMapId: () => undefined,
+  raw: (mapId, _format) => Effect.fail(new MapNotFoundError({ mapId })),
+});
+
 /** Fresh layer for each test — new mutable state per test. */
 function makeTestLayer(): Layer.Layer<LiveSessionService> {
-  return makeLocalLiveSessionLayer().pipe(Layer.provide(stubMapMgmtLayer));
+  return makeLocalLiveSessionLayer().pipe(
+    Layer.provide(Layer.mergeAll(stubMapMgmtLayer, stubMapSvcLayer)),
+  );
 }
 
 /** Run a single-step effect against a fresh layer. */

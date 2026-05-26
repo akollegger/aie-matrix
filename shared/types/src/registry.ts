@@ -16,6 +16,10 @@ export interface AdoptGhostRequest {
   agentHostId: string;
   /** PoC may ignore when a single template ghost is implied. */
   ghostTemplateId?: string;
+  /** Optional persistent display name (e.g. "Django Decypher"). Stored
+   *  on the GhostRecord so other ghosts can resolve names via
+   *  GET /registry/ghosts/:id. */
+  displayName?: string;
 }
 
 export interface GhostSessionCredential {
