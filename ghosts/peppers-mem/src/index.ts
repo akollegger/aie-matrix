@@ -15,7 +15,7 @@ export {
   type MemoryConnection,
 } from "./client.js";
 
-export { callOrThrow, persistCascade } from "./persist.js";
+export { callOrThrow, persistCascade, persistCommitmentEvaluation } from "./persist.js";
 
 export {
   fetchCascadeById,

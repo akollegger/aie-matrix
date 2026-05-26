@@ -43,6 +43,8 @@ export {
   createSurfaceActionEvent,
   type ActionOutcome,
   type BaseEvent,
+  type Commitment,
+  type CommitmentLedger,
   type Compass,
   type Event,
   type EventOptions,

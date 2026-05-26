@@ -30,6 +30,10 @@ export type Stimulus =
       /** Ghost that spoke. */
       readonly from: string;
       readonly text: string;
+      /** Speech-act intent declared by the speaker (greet, befriend,
+       *  propose, agree, decline, depart, ...). Optional — older
+       *  messages predating the intent enum will not have one. */
+      readonly intent?: string;
     }
   | {
       readonly kind: "cluster-entered";
@@ -61,18 +65,24 @@ export type Stimulus =
 // Surface action — what the ghost intends to do
 // ---------------------------------------------------------------------------
 
-export type SurfaceAction =
-  | { readonly kind: "say"; readonly text: string }
-  | { readonly kind: "go"; readonly toward: Compass | string }
-  | { readonly kind: "take"; readonly itemRef: string }
-  | { readonly kind: "drop"; readonly itemRef: string }
-  | { readonly kind: "inspect"; readonly itemRef: string }
-  | { readonly kind: "look"; readonly at: "here" | "around" }
-  | { readonly kind: "exits" }
-  | { readonly kind: "inventory" }
-  | { readonly kind: "whoami" }
-  | { readonly kind: "whereami" }
-  | { readonly kind: "bye" };
+/**
+ * What the ghost decided to do this tick. With genuine tool-call
+ * discovery (Surface reads tools/list from the MCP server and OpenAI
+ * picks one), the shape is `{ kind: <tool-name>, ...args }` for ANY
+ * tool the server exposes. The world-api's well-known tools (say, go,
+ * take, etc.) still produce the same shapes — those typings are
+ * preserved below for the consumers that pattern-match on them — but
+ * the type itself is open so mini-games can add new tools (`bet`,
+ * `sit_at_table`, etc.) without needing to extend this union.
+ *
+ * `Compass` is exported as a hint for movement-tool callers; consumers
+ * that don't care about narrowing can treat the action as the index
+ * signature shape.
+ */
+export type SurfaceAction = {
+  readonly kind: string;
+  readonly [k: string]: unknown;
+};
 
 /** Observed outcome of a Surface action — success with optional data, or a structured denial. */
 export type ActionOutcome =
@@ -91,6 +101,34 @@ export interface IdThought {
   /** First-person natural-language content. Must not expose slider names or numeric values. */
   readonly content: string;
 }
+
+// ---------------------------------------------------------------------------
+// Commitment — debts the ghost owes itself
+// ---------------------------------------------------------------------------
+
+/**
+ * A self-made promise the ghost has decided (privately, in its Id) to
+ * honor. Distinct from anything spoken: what you SAY is for the world,
+ * what you COMMIT to is what your inner voice actually meant.
+ *
+ * `owed` is the first-person debt ("head to Black Bart's", "stop
+ * talking to Yul"). `recognizesSatisfaction` is a one-liner the
+ * commitment-evaluator wrote so future cascades can check whether the
+ * latest action paid it down — e.g. "any movement tool toward the
+ * saloon" or "the next action that is not `say`".
+ */
+export interface Commitment {
+  readonly id: string;
+  readonly owed: string;
+  readonly recognizesSatisfaction: string;
+  /** Cascade index at which this commitment was opened. */
+  readonly bornAtCascade: number;
+  /** When created (epoch ms) — for tie-breaking and pretty-printing. */
+  readonly bornAtMs: number;
+}
+
+/** Snapshot of the ghost's commitment ledger at a moment in time. */
+export type CommitmentLedger = ReadonlyArray<Commitment>;
 
 // ---------------------------------------------------------------------------
 // Event envelope types

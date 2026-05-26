@@ -9,12 +9,14 @@ const neutral: ConversationalState = {
   inConversationalMode: false,
   turnsSinceLastSayWithNoReply: 0,
   socialAnchorTurnsLeft: 0,
+  consecutiveSayTurns: 0,
 };
 
 const inConversation: ConversationalState = {
   inConversationalMode: true,
   turnsSinceLastSayWithNoReply: 0,
   socialAnchorTurnsLeft: 0,
+  consecutiveSayTurns: 0,
 };
 
 const idle = { kind: "idle" as const, quietForMs: 3000 };
@@ -147,9 +149,49 @@ describe("nextConversationalState — immutability", () => {
       inConversationalMode: false,
       turnsSinceLastSayWithNoReply: 0,
       socialAnchorTurnsLeft: 2,
+      consecutiveSayTurns: 0,
     };
     const snapshot = { ...prev };
     nextConversationalState(prev, goOk.action, goOk.outcome, idle);
     expect(prev).toEqual(snapshot);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// IMPETUS counter (consecutive `say` actions)
+// ---------------------------------------------------------------------------
+
+describe("nextConversationalState — impetus counter", () => {
+  it("starts at 0; one successful say → 1", () => {
+    const next = nextConversationalState(neutral, sayOk.action, sayOk.outcome, idle);
+    expect(next.consecutiveSayTurns).toBe(1);
+  });
+
+  it("two successive successful says compound to 2", () => {
+    const first = nextConversationalState(neutral, sayOk.action, sayOk.outcome, idle);
+    const second = nextConversationalState(first, sayOk.action, sayOk.outcome, idle);
+    expect(second.consecutiveSayTurns).toBe(2);
+  });
+
+  it("bye resets the counter", () => {
+    const after2Says = { ...inConversation, consecutiveSayTurns: 2 };
+    const next = nextConversationalState(after2Says, byeOk.action, byeOk.outcome, idle);
+    expect(next.consecutiveSayTurns).toBe(0);
+  });
+
+  it("go (even rejected) resets — any non-say breaks the streak", () => {
+    const after3Says = { ...inConversation, consecutiveSayTurns: 3 };
+    const next = nextConversationalState(
+      after3Says,
+      goInConversation.action,
+      goInConversation.outcome,
+      idle,
+    );
+    expect(next.consecutiveSayTurns).toBe(0);
+  });
+
+  it("denied say does not increment (only successful says count)", () => {
+    const next = nextConversationalState(neutral, sayDenied.action, sayDenied.outcome, idle);
+    expect(next.consecutiveSayTurns).toBe(0);
   });
 });

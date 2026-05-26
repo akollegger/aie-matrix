@@ -38,9 +38,13 @@ export interface RegisterAndAdoptOptions {
 }
 
 async function postJson<T>(base: string, path: string, body: unknown): Promise<T> {
+  // Normalize: strip trailing slashes on base, ensure leading slash on
+  // path — produces `<base>/path` exactly once (no `//` artifacts).
+  const cleanBase = base.replace(/\/+$/, "");
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
   let res: Response;
   try {
-    res = await fetch(`${base}${path}`, {
+    res = await fetch(`${cleanBase}${cleanPath}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -48,7 +52,7 @@ async function postJson<T>(base: string, path: string, body: unknown): Promise<T
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `cannot reach registry at ${base}${path} (${msg}). Start the combined server first: pnpm run dev`,
+      `cannot reach registry at ${cleanBase}${cleanPath} (${msg}). Start the combined server first: pnpm run dev`,
     );
   }
   const text = await res.text();

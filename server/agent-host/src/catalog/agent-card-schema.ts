@@ -3,10 +3,12 @@ import { z } from "zod";
 /** MCP tool names the house may register against — IC-003. */
 const IC003_TOOLS = new Set([
   "whereami",
+  "whoami",
   "look",
   "exits",
   "go",
   "traverse",
+  "nearest",
   "inventory",
   "inspect",
   "take",
@@ -14,6 +16,7 @@ const IC003_TOOLS = new Set([
   "say",
   "bye",
   "inbox",
+  "request_intent",
 ]);
 
 const matrixZ = z.object({

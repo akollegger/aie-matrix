@@ -301,6 +301,30 @@ async function main(): Promise<void> {
         ghost.h3Index = cid;
       }
     },
+    removeGhostCell(ghostId: string): void {
+      const gid = String(ghostId).trim();
+      const traceId = getRequestTraceId() ?? null;
+      console.info(
+        JSON.stringify({
+          kind: "world-bridge",
+          op: "removeGhostCell",
+          phase: "before-colyseus",
+          traceId,
+          ghostId: gid,
+        }),
+      );
+      colyseusBridge.removeGhostCell(gid);
+      console.info(
+        JSON.stringify({
+          kind: "world-bridge",
+          op: "removeGhostCell",
+          phase: "after-colyseus",
+          traceId,
+          ghostId: gid,
+        }),
+      );
+      ghostAuthority.delete(gid);
+    },
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
     setGhostMode: (ghostId: string, mode: "normal" | "conversational") =>
       colyseusBridge.setGhostMode(ghostId, mode),

@@ -18,6 +18,8 @@ import {
   type Adjustment,
   type AppliedAdjustment,
   type CascadeTrace,
+  type Commitment,
+  type CommitmentLedger,
   type FacetName,
   type PersonalityState,
   type Stimulus,
@@ -28,9 +30,11 @@ import {
 import {
   fetchRecentCascades,
   persistCascade,
+  persistCommitmentEvaluation,
   type MemoryClientHandle,
 } from "@aie-matrix/ghost-peppers-mem";
 
+import { invokeCommitment, type CommitmentEvaluation } from "./reason-id-commitment.js";
 import { invokeId, type IdReasoning } from "./reason-id.js";
 import { invokeSurface, type SurfaceReasoning, type WorldContext } from "./reason-surface.js";
 
@@ -52,6 +56,12 @@ export interface RunRecord {
   readonly applied: readonly AppliedAdjustment[];
   readonly nextState: PersonalityState;
   readonly trace: CascadeTrace;
+  /** Commitment evaluator output for this cascade — may be null when
+   *  the evaluator was skipped (e.g. dry-run or disabled). */
+  readonly commitment: CommitmentEvaluation | null;
+  /** Ledger snapshot AFTER this cascade — satisfied items removed,
+   *  newly minted items appended, expired items pruned. */
+  readonly nextLedger: CommitmentLedger;
 }
 
 /** Inputs to one interaction step. */
@@ -68,6 +78,29 @@ export interface RunOneStimulusRequest {
   readonly objective?: string;
   /** How many recent cascades to pass into the Id as context. Default 3. */
   readonly historyDepth?: number;
+  /** Persistent display name (e.g. "Django Decypher"). Threaded into
+   *  Synthesis + Surface prompts so the LLM has the ghost's actual
+   *  identity anchored. Without this, the cascade reaches for whatever
+   *  ghost_<prefix> drifts in from a stimulus. */
+  readonly selfDisplayName?: string;
+  /** Last N super-objectives from prior cascades — passed into the
+   *  Id's convergence stage so committed plans persist across ticks. */
+  readonly recentSuperObjectives?: ReadonlyArray<string>;
+  /** Authoritative tool menu, discovered via `mcp.listTools()` at
+   *  runHouse startup. Passed straight to Surface — the LLM picks
+   *  from this real menu, not a prompt-curated list. */
+  readonly tools: ReadonlyArray<import("./llm-client.js").ToolSchema>;
+  /** Current open commitments. Surfaced into the Surface prompt as
+   *  "debts to yourself" and forwarded to the commitment evaluator
+   *  for satisfaction checks. Defaults to empty. */
+  readonly commitmentLedger?: CommitmentLedger;
+  /** Monotonic cascade counter — stamped onto new commitments and
+   *  used to expire stale ones. Required when `commitmentLedger`
+   *  evaluation is active. */
+  readonly cascadeIndex?: number;
+  /** Maximum cascades a commitment may live unsatisfied before being
+   *  auto-expired. Default 10. */
+  readonly commitmentMaxAge?: number;
 }
 
 /**
@@ -103,6 +136,9 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
   // agent as trajectory. Three steps gives a feel for direction
   // without overwhelming.
   const historyDepth = req.historyDepth ?? 3;
+  const ledgerIn: CommitmentLedger = req.commitmentLedger ?? [];
+  const cascadeIndex = req.cascadeIndex ?? 0;
+  const maxAge = req.commitmentMaxAge ?? 10;
 
   // 1. Pull recent reasoning context for the Id.
   const recentCascades = await fetchRecentCascades(memoryHandle.client, ghostId, historyDepth);
@@ -114,14 +150,23 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
     recentCascades,
     worldContext: req.worldContext,
     objective: req.objective,
+    ...(req.selfDisplayName ? { selfDisplayName: req.selfDisplayName } : {}),
+    ...(req.recentSuperObjectives && req.recentSuperObjectives.length > 0
+      ? { recentSuperObjectives: req.recentSuperObjectives }
+      : {}),
   });
 
-  // 3. Surface picks an action from the monologue + raw stimulus + world context.
+  // 3. Surface picks a tool from the live MCP menu using OpenAI's
+  //    tool-calling API. No curated action list — the LLM sees the
+  //    actual tools the world exposes.
   const surface = await invokeSurface({
     monologue: id.monologue,
     stimulus,
     worldContext: req.worldContext,
     objective: req.objective,
+    tools: req.tools,
+    commitments: ledgerIn,
+    ...(req.selfDisplayName ? { selfDisplayName: req.selfDisplayName } : {}),
   });
 
   // 4. Execute the action against the world.
@@ -149,6 +194,53 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
   // 7. Persist to Agent Memory (event substrate + reasoning tier).
   await persistCascade(memoryHandle.client, trace);
 
+  // 8. Commitment evaluation — runs AFTER the cascade is recorded so
+  //    the ledger reflects what actually happened. The evaluator reads
+  //    the monologue (private intent) and compares to the surface
+  //    action (public behavior); commitments form only when the inner
+  //    voice meant it, never from social-lubricant speech alone.
+  let commitment: CommitmentEvaluation | null = null;
+  let nextLedger: CommitmentLedger = ledgerIn;
+  try {
+    commitment = await invokeCommitment({
+      monologue: id.monologue,
+      action: surface.action,
+      actionSucceeded: outcome.ok,
+      ledger: ledgerIn,
+      cascadeIndex,
+      ...(req.selfDisplayName ? { selfDisplayName: req.selfDisplayName } : {}),
+    });
+    nextLedger = reconcileLedger(
+      ledgerIn,
+      commitment.satisfiedIds,
+      commitment.newCommitments,
+      cascadeIndex,
+      maxAge,
+    );
+    // Mirror the evaluation into the graph so a later cascade can
+    // Cypher-query a ghost's commitment history. Satisfied entries
+    // carry the original `owed` text so a query doesn't need a join.
+    const satisfiedSet = new Set(commitment.satisfiedIds);
+    const satisfiedDetails = ledgerIn
+      .filter((c) => satisfiedSet.has(c.id))
+      .map((c) => ({ id: c.id, owed: c.owed }));
+    await persistCommitmentEvaluation(
+      memoryHandle.client,
+      ghostId,
+      cascadeIndex,
+      satisfiedDetails,
+      commitment.newCommitments,
+    );
+  } catch (err) {
+    // Evaluator failure must not crash the cascade — the ghost just
+    // keeps the prior ledger and tries again next turn. The error
+    // surfaces in the returned `commitment: null` so the runtime can
+    // log it.
+    void err;
+    commitment = null;
+    nextLedger = expireStaleCommitments(ledgerIn, cascadeIndex, maxAge);
+  }
+
   return {
     ghostId,
     stimulus,
@@ -159,5 +251,40 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
     applied,
     nextState,
     trace,
+    commitment,
+    nextLedger,
   };
+}
+
+/**
+ * Apply this cascade's satisfactions, then drop expired entries, then
+ * append the freshly minted commitments. Order matters: a commitment
+ * minted THIS cascade can't be both satisfied AND new in the same
+ * step (the evaluator only checks `satisfiedIds` against the ledger
+ * snapshot that was passed in).
+ *
+ * Exported so the test suite can verify the reconciliation rules
+ * without standing up the full cascade.
+ */
+export function reconcileLedger(
+  prior: CommitmentLedger,
+  satisfiedIds: ReadonlyArray<string>,
+  newCommitments: ReadonlyArray<Commitment>,
+  cascadeIndex: number,
+  maxAge: number,
+): CommitmentLedger {
+  const satisfiedSet = new Set(satisfiedIds);
+  const survived = prior.filter((c) => !satisfiedSet.has(c.id));
+  const unexpired = survived.filter(
+    (c) => cascadeIndex - c.bornAtCascade <= maxAge,
+  );
+  return [...unexpired, ...newCommitments];
+}
+
+function expireStaleCommitments(
+  prior: CommitmentLedger,
+  cascadeIndex: number,
+  maxAge: number,
+): CommitmentLedger {
+  return prior.filter((c) => cascadeIndex - c.bornAtCascade <= maxAge);
 }

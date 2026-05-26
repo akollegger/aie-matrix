@@ -49,6 +49,7 @@ describe("supervisor crash (integration)", () => {
           pingAgent: badPing,
         } as any,
         publicHouseBaseUrl: "http://127.0.0.1:4000",
+        worldHttpBase: "http://127.0.0.1:8787",
         defaultCapabilityManifest: new Set(),
         pushIngestToken: "test-token",
         getConfig: () => ({
@@ -73,6 +74,7 @@ describe("supervisor crash (integration)", () => {
           pingAgent: vi.fn().mockReturnValue(Effect.void),
         } as any,
         publicHouseBaseUrl: "http://127.0.0.1:4000",
+        worldHttpBase: "http://127.0.0.1:8787",
         defaultCapabilityManifest: new Set(),
         pushIngestToken: "test-token",
         getConfig: () => ({

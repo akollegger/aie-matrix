@@ -5,8 +5,24 @@ import {
   applyDelta,
   midpointPersonality,
   toDisplay,
+  type Commitment,
 } from "@aie-matrix/ghost-peppers-inner";
-import { applyAdjustmentsPerFacet } from "./run-loop.js";
+import { applyAdjustmentsPerFacet, reconcileLedger } from "./run-loop.js";
+
+function mkCommitment(
+  id: string,
+  bornAtCascade: number,
+  owed = "do the thing",
+  cue = "the thing is done",
+): Commitment {
+  return {
+    id,
+    owed,
+    recognizesSatisfaction: cue,
+    bornAtCascade,
+    bornAtMs: bornAtCascade * 1000,
+  };
+}
 
 const mid = midpointPersonality();
 
@@ -84,5 +100,54 @@ describe("applyAdjustmentsPerFacet", () => {
       { facet: "Altruism", axis: "internal", direction: "up" },
     ]);
     expect(state.Altruism.internal.logit).toBeGreaterThan(oneUp.Altruism.internal.logit);
+  });
+});
+
+describe("reconcileLedger", () => {
+  it("removes satisfied commitments by id", () => {
+    const prior = [mkCommitment("a", 0), mkCommitment("b", 0), mkCommitment("c", 0)];
+    const next = reconcileLedger(prior, ["b"], [], 1, 10);
+    expect(next.map((c) => c.id)).toEqual(["a", "c"]);
+  });
+
+  it("appends newly minted commitments after survivors", () => {
+    const prior = [mkCommitment("a", 0)];
+    const newC = mkCommitment("x", 1, "x", "x");
+    const next = reconcileLedger(prior, [], [newC], 1, 10);
+    expect(next.map((c) => c.id)).toEqual(["a", "x"]);
+  });
+
+  it("expires commitments older than maxAge", () => {
+    const stale = mkCommitment("old", 0);
+    const fresh = mkCommitment("new", 5);
+    const next = reconcileLedger([stale, fresh], [], [], 11, 10);
+    expect(next.map((c) => c.id)).toEqual(["new"]);
+  });
+
+  it("does not expire commitments at exactly maxAge", () => {
+    const onEdge = mkCommitment("edge", 0);
+    const next = reconcileLedger([onEdge], [], [], 10, 10);
+    expect(next.map((c) => c.id)).toEqual(["edge"]);
+  });
+
+  it("expiry and satisfaction combine: stale + satisfied both removed", () => {
+    const stale = mkCommitment("stale", 0);
+    const satisfied = mkCommitment("sat", 9);
+    const surviving = mkCommitment("ok", 9);
+    const next = reconcileLedger([stale, satisfied, surviving], ["sat"], [], 11, 10);
+    expect(next.map((c) => c.id)).toEqual(["ok"]);
+  });
+
+  it("returns empty when all entries are satisfied and no new ones", () => {
+    const prior = [mkCommitment("a", 0), mkCommitment("b", 0)];
+    const next = reconcileLedger(prior, ["a", "b"], [], 1, 10);
+    expect(next).toEqual([]);
+  });
+
+  it("does not mutate the prior ledger", () => {
+    const prior = [mkCommitment("a", 0), mkCommitment("b", 0)];
+    const snapshot = JSON.stringify(prior);
+    reconcileLedger(prior, ["a"], [mkCommitment("c", 1)], 1, 10);
+    expect(JSON.stringify(prior)).toBe(snapshot);
   });
 });

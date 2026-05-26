@@ -59,7 +59,7 @@ export async function chatJson<T>(req: ChatJsonRequest): Promise<ChatJsonRespons
     ],
     response_format: { type: "json_object" },
     temperature: req.temperature ?? 0.7,
-    max_tokens: req.maxTokens,
+    max_completion_tokens: req.maxTokens,
   });
 
   const choice = resp.choices[0];
@@ -89,5 +89,101 @@ export async function chatJson<T>(req: ChatJsonRequest): Promise<ChatJsonRespons
             total: resp.usage.total_tokens,
           },
     raw: content,
+  };
+}
+
+/** One discoverable tool, in the shape OpenAI tool-calling expects. */
+export interface ToolSchema {
+  readonly name: string;
+  readonly description: string;
+  readonly inputSchema: Record<string, unknown>;
+}
+
+export interface ChatToolsRequest {
+  readonly system: string;
+  readonly user: string;
+  readonly tools: ReadonlyArray<ToolSchema>;
+  readonly model?: string;
+  readonly maxTokens?: number;
+  readonly temperature?: number;
+  /** When true, the model MUST call a tool (not just emit text). Default true. */
+  readonly forceToolCall?: boolean;
+}
+
+export interface ChatToolsResponse {
+  /** The tool the LLM chose to call, parsed from OpenAI's tool_calls. */
+  readonly toolCall: {
+    readonly name: string;
+    readonly arguments: Record<string, unknown>;
+  };
+  readonly usage: {
+    readonly prompt: number;
+    readonly completion: number;
+    readonly total: number;
+  } | null;
+  readonly raw: string;
+}
+
+/**
+ * Send one chat completion with OpenAI tool-calling — the model is
+ * given real tool schemas and picks one to invoke. This is genuine
+ * tool discovery: the menu comes from the MCP server, not from a
+ * hardcoded prompt enumeration.
+ */
+export async function chatTools(req: ChatToolsRequest): Promise<ChatToolsResponse> {
+  if (req.tools.length === 0) {
+    throw new Error("chatTools called with no tools — nothing for the LLM to pick");
+  }
+  const client = getClient();
+  const resp = await client.chat.completions.create({
+    model: req.model ?? DEFAULT_MODEL,
+    messages: [
+      { role: "system", content: req.system },
+      { role: "user", content: req.user },
+    ],
+    tools: req.tools.map((t) => ({
+      type: "function" as const,
+      function: {
+        name: t.name,
+        description: t.description,
+        parameters: t.inputSchema,
+      },
+    })),
+    tool_choice: (req.forceToolCall ?? true) ? "required" : "auto",
+    temperature: req.temperature ?? 0.7,
+    max_completion_tokens: req.maxTokens,
+  });
+
+  const choice = resp.choices[0];
+  const toolCalls = choice?.message?.tool_calls ?? [];
+  const first = toolCalls[0];
+  if (!first || first.type !== "function") {
+    const text = choice?.message?.content ?? "";
+    throw new Error(
+      `LLM did not call a tool (finish_reason=${choice?.finish_reason ?? "unknown"}); content=${JSON.stringify(text).slice(0, 200)}`,
+    );
+  }
+  let args: Record<string, unknown> = {};
+  if (first.function.arguments && first.function.arguments.length > 0) {
+    try {
+      args = JSON.parse(first.function.arguments) as Record<string, unknown>;
+    } catch (err) {
+      throw new Error(
+        `LLM tool_call arguments were not valid JSON: ${(err as Error).message}\n--- raw ---\n${first.function.arguments}`,
+      );
+    }
+  }
+
+  return {
+    toolCall: { name: first.function.name, arguments: args },
+    usage:
+      resp.usage === undefined || resp.usage === null
+        ? null
+        : {
+            prompt: resp.usage.prompt_tokens,
+            completion: resp.usage.completion_tokens,
+            total: resp.usage.total_tokens,
+          },
+    raw: JSON.stringify({ name: first.function.name, arguments: first.function.arguments }),
   };
 }

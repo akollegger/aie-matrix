@@ -78,6 +78,7 @@ describe("AgentSupervisor (T030)", () => {
         pingAgent: ping,
       } as any,
       publicHouseBaseUrl: "http://127.0.0.1:4000",
+        worldHttpBase: "http://127.0.0.1:8787",
       defaultCapabilityManifest: new Set(),
       pushIngestToken: "test-token",
       getConfig,

@@ -1,110 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatStimulus, parseAction } from "./reason-surface.js";
-
-// ---------------------------------------------------------------------------
-// parseAction
-// ---------------------------------------------------------------------------
-
-describe("parseAction", () => {
-  describe("valid actions", () => {
-    it("parses say", () => {
-      expect(parseAction({ kind: "say", text: "hello" })).toEqual({ kind: "say", text: "hello" });
-    });
-
-    it("parses go", () => {
-      expect(parseAction({ kind: "go", toward: "n" })).toEqual({ kind: "go", toward: "n" });
-    });
-
-    it("parses take", () => {
-      expect(parseAction({ kind: "take", itemRef: "badge-42" })).toEqual({
-        kind: "take",
-        itemRef: "badge-42",
-      });
-    });
-
-    it("parses drop", () => {
-      expect(parseAction({ kind: "drop", itemRef: "badge-42" })).toEqual({
-        kind: "drop",
-        itemRef: "badge-42",
-      });
-    });
-
-    it("parses inspect", () => {
-      expect(parseAction({ kind: "inspect", itemRef: "badge-42" })).toEqual({
-        kind: "inspect",
-        itemRef: "badge-42",
-      });
-    });
-
-    it("parses look here", () => {
-      expect(parseAction({ kind: "look", at: "here" })).toEqual({ kind: "look", at: "here" });
-    });
-
-    it("parses look around", () => {
-      expect(parseAction({ kind: "look", at: "around" })).toEqual({ kind: "look", at: "around" });
-    });
-
-    it.each(["exits", "inventory", "whoami", "whereami", "bye"] as const)(
-      "parses %s (no-arg action)",
-      (kind) => {
-        expect(parseAction({ kind })).toEqual({ kind });
-      },
-    );
-  });
-
-  describe("invalid inputs", () => {
-    it("throws on null", () => {
-      expect(() => parseAction(null)).toThrow(/must be an object/);
-    });
-
-    it("throws on primitive", () => {
-      expect(() => parseAction("say")).toThrow(/must be an object/);
-    });
-
-    it("throws on unknown kind", () => {
-      expect(() => parseAction({ kind: "fly" })).toThrow(/unknown action kind/);
-    });
-
-    it("throws on missing kind", () => {
-      expect(() => parseAction({})).toThrow(/unknown action kind/);
-    });
-
-    it("throws on missing text for say", () => {
-      expect(() => parseAction({ kind: "say" })).toThrow(/text/);
-    });
-
-    it("throws on empty text for say", () => {
-      expect(() => parseAction({ kind: "say", text: "" })).toThrow(/text/);
-    });
-
-    it("throws on missing toward for go", () => {
-      expect(() => parseAction({ kind: "go" })).toThrow(/toward/);
-    });
-
-    it("throws on missing itemRef for take", () => {
-      expect(() => parseAction({ kind: "take" })).toThrow(/itemRef/);
-    });
-
-    it("throws on missing itemRef for drop", () => {
-      expect(() => parseAction({ kind: "drop" })).toThrow(/itemRef/);
-    });
-
-    it("throws on missing itemRef for inspect", () => {
-      expect(() => parseAction({ kind: "inspect" })).toThrow(/itemRef/);
-    });
-
-    it('throws on look.at neither "here" nor "around"', () => {
-      expect(() => parseAction({ kind: "look", at: "everywhere" })).toThrow(/here.*around|around.*here/i);
-    });
-
-    it("throws on missing look.at", () => {
-      expect(() => parseAction({ kind: "look" })).toThrow(/at/);
-    });
-  });
-});
+import { formatStimulus } from "./reason-surface.js";
 
 // ---------------------------------------------------------------------------
 // formatStimulus
+//
+// (Tests for the old hand-rolled `parseAction` were removed: tool-call
+// parsing is now done by OpenAI's tool-calling API and arrives as
+// already-validated `{ name, arguments }`. There's nothing to parse.)
 // ---------------------------------------------------------------------------
 
 describe("formatStimulus", () => {
@@ -152,8 +54,29 @@ describe("formatStimulus", () => {
   });
 
   it("formats idle rounds to nearest second", () => {
-    // Math.round(1.4) = 1, Math.round(1.5) = 2
     expect(formatStimulus({ kind: "idle", quietForMs: 1400 })).toContain("1s");
     expect(formatStimulus({ kind: "idle", quietForMs: 1500 })).toContain("2s");
+  });
+
+  it("formats utterance with intent tag when present", () => {
+    const result = formatStimulus({
+      kind: "utterance",
+      from: "Sundance Cypher",
+      text: "you in?",
+      intent: "propose",
+    });
+    expect(result).toContain("[intent: propose]");
+    expect(result).toContain("Sundance Cypher");
+    expect(result).toContain('"you in?"');
+  });
+
+  it("omits intent tag when not declared (backwards compat)", () => {
+    const result = formatStimulus({
+      kind: "utterance",
+      from: "Sundance Cypher",
+      text: "you in?",
+    });
+    expect(result).not.toContain("[intent:");
+    expect(result).toBe('Sundance Cypher says: "you in?"');
   });
 });

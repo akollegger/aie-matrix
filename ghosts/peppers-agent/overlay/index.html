@@ -177,6 +177,25 @@
     .chat-text { font-size: 13px; color: var(--text); }
     .chats-scroll { max-height: 320px; overflow-y: auto; display: flex; flex-direction: column; }
 
+    /* Tool calls */
+    .tool-scroll { max-height: 320px; overflow-y: auto; font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 11px; }
+    .tool-row {
+      padding: 6px 10px; margin: 4px 0; border-radius: 4px;
+      background: var(--bg-card-hi); border-left: 3px solid var(--text-dim);
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .tool-row.ok { border-left-color: var(--ok); }
+    .tool-row.err { border-left-color: var(--bad); background: rgba(248, 81, 73, 0.06); }
+    .tool-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+    .tool-name { color: var(--accent); font-weight: 600; }
+    .tool-time { color: var(--text-dim); font-size: 10px; margin-left: auto; }
+    .tool-dur { color: var(--text-dim); font-size: 10px; }
+    .tool-args { color: var(--text-dim); }
+    .tool-args .k { color: var(--cool); }
+    .tool-result { color: var(--text); padding-top: 2px; word-break: break-word; }
+    .tool-result.err { color: var(--bad); }
+    .tool-empty { color: var(--text-dim); font-style: italic; padding: 8px; }
+
     /* Cascade index */
     .cascade-tag {
       display: inline-block; padding: 2px 8px; border-radius: 10px;
@@ -229,6 +248,11 @@
       <h2>Chats</h2>
       <div id="chats-card" class="chats-scroll"><div class="chat-empty">No utterances yet.</div></div>
     </div>
+
+    <div class="card wide">
+      <h2>Tool Calls <span class="cascade-tag" id="tool-count">0</span></h2>
+      <div id="tools-card" class="tool-scroll"><div class="tool-empty">No tool calls yet.</div></div>
+    </div>
   </div>
 
   <footer><span id="meta">—</span></footer>
@@ -239,6 +263,7 @@
     const statusText = $('status-text');
 
     let ghostId = null;
+    let selfDisplayName = null;
     let chats = [];
     let cascadeCount = 0;
 
@@ -345,14 +370,23 @@
         chats.push({ from: record.stimulus.from, text: record.stimulus.text, direction: 'in' });
       }
       if (record.action && record.action.kind === 'say' && record.outcome && record.outcome.ok) {
-        chats.push({ from: ghostId ? ghostId.slice(0, 8) : 'me', text: record.action.text, direction: 'out' });
+        // Self label: persistent displayName (e.g. "Django Decypher") when known,
+        // falling back to the ghostId prefix. The say tool's input schema names
+        // the spoken text `content`; older code used `text`. Accept either so we
+        // don't drop chat lines on the shape transition.
+        const selfLabel = selfDisplayName || (ghostId ? ghostId.slice(0, 8) : 'me');
+        const said = record.action.content ?? record.action.text ?? '';
+        chats.push({ from: selfLabel, text: said, direction: 'out' });
       }
       renderChats();
     };
 
     const handleInit = (data) => {
       ghostId = data.ghostId || null;
-      $('ghost-id').textContent = ghostId ? ghostId.slice(0, 8) + '…' : '—';
+      selfDisplayName = data.displayName || null;
+      // Title pill prefers the persistent name; falls back to ghostId prefix.
+      $('ghost-id').textContent =
+        selfDisplayName || (ghostId ? ghostId.slice(0, 8) + '…' : '—');
       setStatus('live', true);
       renderObjective(data.objective, null);
       renderPersonality(data.personality);
@@ -362,6 +396,12 @@
     const handleCascade = (record) => {
       cascadeCount++;
       $('cascade-tag').textContent = `cascade #${cascadeCount}`;
+      // Pick up displayName from cascade payload too — covers reconnect
+      // cases where the SSE init replay used the old (unprimed) name.
+      if (record.displayName && record.displayName !== selfDisplayName) {
+        selfDisplayName = record.displayName;
+        $('ghost-id').textContent = selfDisplayName;
+      }
       renderObjective(record.objective, record.superObjective);
       renderEnvironment(record.worldContext, record.tileClass);
       renderHead(record);
@@ -369,10 +409,46 @@
       trackChats(record);
     };
 
+    // Tool-call stream — newest at top; cap at 200 rows.
+    let toolCallCount = 0;
+    const TOOL_LOG_MAX = 200;
+    const formatArgs = (args) => {
+      const keys = Object.keys(args || {});
+      if (keys.length === 0) return '<span class="tool-args">(no args)</span>';
+      return '<span class="tool-args">' + keys.map(k => {
+        const v = typeof args[k] === 'string' ? `"${esc(args[k])}"` : esc(JSON.stringify(args[k]));
+        return `<span class="k">${esc(k)}</span>=${v}`;
+      }).join(' ') + '</span>';
+    };
+    const formatResult = (obs) => {
+      if (obs.error !== null) return `<div class="tool-result err">✗ ${esc(obs.error).slice(0, 240)}</div>`;
+      if (obs.result === null || obs.result === undefined) return '';
+      const summary = typeof obs.result === 'string' ? obs.result : JSON.stringify(obs.result);
+      return `<div class="tool-result">→ ${esc(summary).slice(0, 280)}</div>`;
+    };
+    const handleToolCall = (obs) => {
+      const card = $('tools-card');
+      if (toolCallCount === 0) card.innerHTML = '';
+      toolCallCount++;
+      $('tool-count').textContent = String(toolCallCount);
+      const row = document.createElement('div');
+      row.className = 'tool-row ' + (obs.error !== null ? 'err' : 'ok');
+      const timeShort = (obs.at || '').slice(11, 19);
+      row.innerHTML =
+        `<div class="tool-head"><span class="tool-name">${esc(obs.name)}</span>` +
+        formatArgs(obs.arguments) +
+        `<span class="tool-dur">${obs.durationMs}ms</span>` +
+        `<span class="tool-time">${esc(timeShort)}</span></div>` +
+        formatResult(obs);
+      card.insertBefore(row, card.firstChild);
+      while (card.childElementCount > TOOL_LOG_MAX) card.removeChild(card.lastChild);
+    };
+
     const connect = () => {
       const es = new EventSource('/events');
       es.addEventListener('init', e => { try { handleInit(JSON.parse(e.data)); } catch (err) { console.error(err); } });
       es.addEventListener('cascade', e => { try { handleCascade(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('tool_call', e => { try { handleToolCall(JSON.parse(e.data)); } catch (err) { console.error(err); } });
       es.addEventListener('error', () => {
         setStatus('disconnected — retrying…', false);
         es.close();

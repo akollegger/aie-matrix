@@ -36,3 +36,22 @@ export {
   type RegisterAndAdoptOptions,
   type StimulusContext,
 } from "./runtime/index.js";
+
+// RFC-0019 Barnacle Protocol — schemas, brain, and the encounter+pause+resume
+// surface peppers-agent now exposes for the host's mini-game supervisor.
+export {
+  PEPPERS_PAUSE_SCHEMA,
+  PEPPERS_RESUME_SCHEMA,
+  PLATFORM_ENCOUNTER_SCHEMA,
+  type SpawnContext,
+  type PeppersPause,
+  type PeppersResume,
+  type PlatformEncounter,
+  type PlatformEncounterReply,
+} from "./spawn-types.js";
+
+export {
+  decideEncounter,
+  type EncounterDecisionInput,
+  type EncounterDecisionOutput,
+} from "./encounter-brain.js";

@@ -436,6 +436,143 @@ function exitsEffect(
   });
 }
 
+/**
+ * Result shape for the `nearest` wayfinding tool.
+ * `found: false` means no cell in the connected map matches the spec.
+ */
+interface NearestResult {
+  readonly found: boolean;
+  readonly here: string;
+  readonly target?: {
+    readonly h3Index: string;
+    readonly tileClass: string;
+    readonly itemRefs: ReadonlyArray<string>;
+  };
+  /** Hex-grid distance from `here` (number of `go` steps). 0 if already there. */
+  readonly distance?: number;
+  /** Compass token of the first step to take. Omitted if distance is 0. */
+  readonly nextStep?: string;
+  /** Reason for found=false. */
+  readonly reason?: string;
+}
+
+/**
+ * BFS from the ghost's current cell over `neighbors` (compass-adjacent only;
+ * portals NOT followed) for the nearest cell matching the target spec.
+ * Returns the first cell whose items contain an itemRef whose definition's
+ * `itemClass` matches (or whose tileClass matches, if `tileClass` is given).
+ *
+ * The BFS records the FIRST compass step from `here` that led to each
+ * discovered cell, so the caller gets a usable directional hint.
+ */
+function nearestEffect(
+  spec: { itemClass?: string; tileClass?: string },
+  extra: McpToolExtra,
+): Effect.Effect<NearestResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const bridge = yield* WorldBridgeService;
+    const itemService = yield* ItemService;
+    const map = bridge.getLoadedMap();
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    const here = map.cells.get(hereId);
+    if (!here) {
+      return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(hereId) }));
+    }
+
+    const wantedItemClass = spec.itemClass?.trim();
+    const wantedTileClass = spec.tileClass?.trim();
+    if (!wantedItemClass && !wantedTileClass) {
+      return {
+        found: false,
+        here: hereId,
+        reason: "Pass at least one of itemClass or tileClass.",
+      } satisfies NearestResult;
+    }
+
+    const sidecar = itemService.getSidecar();
+    const matchingItemRefs: Set<string> = new Set();
+    if (wantedItemClass) {
+      const target = wantedItemClass.toLowerCase();
+      for (const [ref, def] of sidecar) {
+        // itemClass may be colon-separated multi-label (e.g. "Badge:Sponsor");
+        // match any segment.
+        const segments = def.itemClass.toLowerCase().split(":");
+        if (segments.includes(target)) matchingItemRefs.add(ref);
+      }
+    }
+
+    const cellMatches = (cellId: string): { hit: boolean; refs: string[] } => {
+      const refs = itemService.getItemsOnTile(cellId);
+      const itemHits = refs.filter((r) => matchingItemRefs.has(r));
+      if (wantedTileClass) {
+        const cell = map.cells.get(cellId);
+        if (cell?.tileClass.toLowerCase() === wantedTileClass.toLowerCase()) {
+          return { hit: true, refs: itemHits };
+        }
+      }
+      if (wantedItemClass && itemHits.length > 0) {
+        return { hit: true, refs: itemHits };
+      }
+      return { hit: false, refs: [] };
+    };
+
+    // Same-tile check first.
+    const hereHit = cellMatches(hereId);
+    if (hereHit.hit) {
+      return {
+        found: true,
+        here: hereId,
+        target: { h3Index: hereId, tileClass: here.tileClass, itemRefs: hereHit.refs },
+        distance: 0,
+      } satisfies NearestResult;
+    }
+
+    // BFS. firstStep[cellId] records the compass token of the first hop
+    // out of `hereId` on the path that discovered cellId.
+    const firstStep = new Map<string, string>();
+    const distance = new Map<string, number>();
+    distance.set(hereId, 0);
+    const queue: string[] = [hereId];
+
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      const curCell = map.cells.get(cur);
+      if (!curCell) continue;
+      const curDist = distance.get(cur)!;
+      for (const dir of COMPASS_DIRECTIONS) {
+        const nid = curCell.neighbors[dir];
+        if (!nid || distance.has(nid)) continue;
+        distance.set(nid, curDist + 1);
+        // First step from origin = the compass we used when popping the
+        // origin; for deeper nodes, inherit the parent's first step.
+        const step = cur === hereId ? dir : firstStep.get(cur)!;
+        firstStep.set(nid, step);
+
+        const hit = cellMatches(nid);
+        if (hit.hit) {
+          const ncell = map.cells.get(nid)!;
+          return {
+            found: true,
+            here: hereId,
+            target: { h3Index: nid, tileClass: ncell.tileClass, itemRefs: hit.refs },
+            distance: curDist + 1,
+            nextStep: step,
+          } satisfies NearestResult;
+        }
+        queue.push(nid);
+      }
+    }
+
+    return {
+      found: false,
+      here: hereId,
+      reason: "No matching cell reachable via adjacent steps.",
+    } satisfies NearestResult;
+  });
+}
+
 function goFailureToWorldApi(fromCell: CellId, failure: GoFailure): WorldApiError {
   const code = failure.code;
   if (code === "UNKNOWN_CELL") {
@@ -530,9 +667,33 @@ function goEffect(
   });
 }
 
+/**
+ * Resolve a `say.to` token to a real ghost ID. Accepts:
+ *   - a UUID-shaped string: returned as-is (assume it's already a ghostId)
+ *   - any other string: searched against the registry's displayNames
+ *     (case-insensitive, exact match). Returns the matched ghostId or
+ *     the original token if no match — the original might still be a
+ *     non-UUID ghostId from a non-standard adopter.
+ */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function resolveToGhostId(
+  store: { ghosts: Map<string, { displayName?: string }> },
+  to: string,
+): string {
+  if (UUID_RE.test(to)) return to;
+  const target = to.trim().toLowerCase();
+  for (const [ghostId, record] of store.ghosts) {
+    if (record.displayName && record.displayName.trim().toLowerCase() === target) {
+      return ghostId;
+    }
+  }
+  return to;
+}
+
 function sayEffect(
   content: string,
   extra: McpToolExtra,
+  intent: string,
   to?: string,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
   return Effect.gen(function* () {
@@ -540,7 +701,20 @@ function sayEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const conversation = yield* ConversationService;
     const bridge = yield* WorldBridgeService;
-    const result = yield* (conversation.say(ghostId, content, to).pipe(
+    // Resolve the speaker's persistent displayName from the registry
+    // so the stored conversation record carries it. Without this,
+    // recipients see the raw ghostId UUID in their inbox / chat
+    // (ConversationService falls back to ghostId when displayName is
+    // undefined).
+    const store = yield* RegistryStoreService;
+    const displayName = store.ghosts.get(ghostId)?.displayName;
+    // The agent sees peers by displayName in its worldContext (we hide
+    // UUIDs from the LLM), so when it sends a directed message it
+    // passes the recipient's displayName as `to`. ConversationService
+    // routes verbatim — it expects a ghostId — so unresolved
+    // displayNames would never reach an inbox. Resolve here.
+    const resolvedTo = to == null ? to : resolveToGhostId(store, to);
+    const result = yield* (conversation.say(ghostId, content, resolvedTo, displayName, intent).pipe(
       Effect.mapError((e) => {
         if (e instanceof ConversationGhostNoPosition) {
           return new WorldApiNoPosition({ ghostId: e.ghostId }) as WorldApiError;
@@ -558,10 +732,52 @@ function sayEffect(
           role: "ghost",
           priority,
           text: content,
+          intent,
         },
       });
     }
     return result;
+  });
+}
+
+/**
+ * `request_intent` meta-tool: the agent flags that the existing speech
+ * `intent` enum lacks an option it wants. The request is returned as
+ * the tool result (so it lands in the agent's reasoning trace via the
+ * cascade-persistence layer) and logged at the world-api level for
+ * direct visibility. No vocabulary growth happens until the project
+ * owner reviews the requests and edits the `say` tool's enum — the
+ * agent must continue with the closest existing intent for now.
+ */
+function requestIntentEffect(
+  name: string,
+  description: string,
+  exampleContent: string,
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const store = yield* RegistryStoreService;
+    const displayName = store.ghosts.get(ghostId)?.displayName ?? null;
+    const requestedAt = new Date().toISOString();
+    logJson({
+      kind: "world-api.intent-requested",
+      ghostId,
+      displayName,
+      requestedIntent: name.trim(),
+      description: description.trim(),
+      exampleContent: exampleContent.trim(),
+      requestedAt,
+    });
+    return {
+      ok: true,
+      acknowledged: true,
+      requestedIntent: name.trim(),
+      note:
+        "Request recorded into your reasoning trace and logged for the project owner. The vocabulary has NOT been changed yet — use the closest existing intent and proceed.",
+      requestedAt,
+    };
   });
 }
 
@@ -841,6 +1057,33 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   );
 
   server.registerTool(
+    "nearest",
+    {
+      description:
+        "Find the nearest cell in the world matching a target. Pass an itemClass (e.g. 'PokerTable', 'Badge') and/or a tileClass (e.g. 'Saloon'). Returns the target cell's H3 index, the distance in hexes, and the compass direction of the FIRST step to take to get there. Use this when you have a destination in mind but don't know which way to go — saves wandering blind.",
+      inputSchema: {
+        itemClass: z
+          .string()
+          .optional()
+          .describe(
+            "Match cells whose items include this item class (case-insensitive, matches any segment of colon-separated classes).",
+          ),
+        tileClass: z
+          .string()
+          .optional()
+          .describe("Match cells whose tile class equals this (case-insensitive)."),
+      },
+    },
+    async ({ itemClass, tileClass }, extra) =>
+      runTool(
+        "nearest",
+        { itemClass, tileClass },
+        nearestEffect({ itemClass, tileClass }, extra),
+        extra,
+      ),
+  );
+
+  server.registerTool(
     "go",
     {
       description:
@@ -856,20 +1099,63 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     "say",
     {
       description:
-        "Broadcast a message to all ghosts in your 7-cell H3 cluster. Enters conversational mode. Movement is blocked until you issue 'bye'. Optionally send to a specific ghost with 'to'.",
+        "Speak to ghosts in your 7-cell H3 cluster. Every utterance MUST declare its INTENT — the social act you're performing by speaking. The intent shapes how recipients interpret you and what world effects (if any) follow. If none of the existing intents fits what you want to do, call `request_intent` to propose adding a new one. Enters conversational mode. Movement is blocked until you issue 'bye'. Optionally send to a specific ghost (name or ghostId) with 'to'.",
       inputSchema: {
+        intent: z
+          .enum(["greet", "befriend", "propose", "agree", "decline", "depart"])
+          .describe(
+            "The social act this utterance performs. greet = acknowledge presence. befriend = warm overture, build relationship. propose = suggest a plan or course of action. agree = confirm a previous proposal. decline = refuse a proposal. depart = signal you're leaving (a conversation, a place, the group).",
+          ),
         content: z
           .string()
           .min(1)
           .max(2000)
-          .describe("The message text to broadcast."),
+          .describe("The actual words you speak."),
         to: z
           .string()
           .optional()
-          .describe("Ghost-id of the intended recipient. When set, delivers only to that ghost with DIRECT priority."),
+          .describe("Display name or ghostId of the intended recipient. When set, delivers only to that ghost with DIRECT priority."),
       },
     },
-    async ({ content, to }, extra) => runTool("say", { content, to }, sayEffect(content, extra, to), extra),
+    async ({ intent, content, to }, extra) =>
+      runTool(
+        "say",
+        { intent, content, to },
+        sayEffect(content, extra, intent, to),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "request_intent",
+    {
+      description:
+        "Meta-tool: request that a new speech `intent` be added to the `say` tool's enum. Use when you want to perform a speech act that none of the existing intents fits — e.g. you want to warn, reassure, interrogate, bluff, etc., but the enum only allows greet/befriend/propose/agree/decline/depart. The request is recorded into your memory graph for the project owner to review. After requesting, pick the closest existing intent and proceed (do not stall waiting for the request to be granted).",
+      inputSchema: {
+        name: z
+          .string()
+          .min(1)
+          .max(40)
+          .describe("Proposed intent name (lowercase, snake_case ideal): e.g. 'warn', 'reassure', 'interrogate'."),
+        description: z
+          .string()
+          .min(1)
+          .max(400)
+          .describe("Why this intent is needed and how it differs from existing intents."),
+        exampleContent: z
+          .string()
+          .min(1)
+          .max(400)
+          .describe("An example of what you would have said with this intent in the current situation."),
+      },
+    },
+    async ({ name, description, exampleContent }, extra) =>
+      runTool(
+        "request_intent",
+        { name, description, exampleContent },
+        requestIntentEffect(name, description, exampleContent, extra),
+        extra,
+      ),
   );
 
   server.registerTool(

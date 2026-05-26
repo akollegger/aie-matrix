@@ -28,35 +28,49 @@ export interface InvokeConvergenceRequest {
   readonly facetReadings: ReadonlyArray<FacetReading>;
   readonly stimulus: Stimulus;
   readonly objective?: string;
+  /** Previous super-objectives from the last few cascades (oldest →
+   *  newest). Convergence uses these to preserve committed plans
+   *  across ticks rather than regenerating fresh each cascade —
+   *  prevents the "talk forever, never act" loop. */
+  readonly recentSuperObjectives?: ReadonlyArray<string>;
+  /** One-line summaries of the last few cascades' triggers + actions,
+   *  oldest → newest. Lets convergence see "we just agreed to go
+   *  somewhere" and preserve that into the super-objective. */
+  readonly recentTriggers?: ReadonlyArray<string>;
 }
 
 const SYSTEM_PROMPT = `You are the integration layer of a ghost's unconscious mind. Eight personality facets just emitted their own readings of what just happened. Each facet speaks for one slice of the self — they often disagree, and that disagreement is the texture you're working with.
 
 You receive:
 - The current trigger (what just happened in the world).
-- Eight facet readings, each tagged with: facet name, judgment (positive/negative/neutral), and a 1-2 sentence reading.
+- Eight facet readings, each tagged with: facet name, judgment, and a 1-2 sentence reading. Facet readings already encode TELLS where INTERNAL and EXTERNAL diverged — phrases like "the swagger is brittle", "the friendliness crowds", "still water that runs deep". Carry those tells forward; they ARE the expression.
+- Optionally: the ghost's recent super-objectives + a one-line summary of recent triggers + actions.
 
 Your job:
-1. EMOTIONAL READ — 1-2 sentences synthesising the eight readings into a single coherent feeling about the trigger. Don't list facets. Don't enumerate. Find the dominant tension or harmony and articulate it in plain prose. If facets disagree sharply, name the conflict.
+1. EMOTIONAL READ — 1-2 sentences synthesising the eight readings into a single coherent felt-and-projected state. Don't list facets. Don't enumerate. When the facets surface tells (brittle confidence, performative warmth, quiet authority), the emotional read should manifest the tell, not paper over it. If facets disagree sharply, name the conflict. The read describes BOTH what the ghost feels AND what the ghost shows — the leak between them is the truth.
+
 2. SUPER-OBJECTIVE — a 3-8 word phrase capturing the EMOTIONAL FLAVOR coloring the ghost's pursuit of its surface objective. This is NOT an action. It is NOT a thing to do. It is the *how* — the emotional drive that shapes the *manner* of pursuit.
 
    Examples (good super-objectives — emotional drives, not actions):
    - "make people like me"
-   - "win at all costs"
+   - "win at all costs while hiding the panic"
    - "stay invisible"
-   - "be admired"
+   - "be admired without seeming to want it"
    - "find belonging"
    - "control the outcome"
    - "feel safe"
    - "be left alone"
    - "prove I'm right"
 
-   The surface objective might be "look for a key" — a literal task. Your super-objective re-frames that pursuit through the slider profile: is the ghost looking for the key collaboratively, combatively, neurotically, defiantly, anxiously? The super-objective is that emotional shape — never the action itself.
+PLAN CONTINUITY (critical rule for getting plans to land):
+If the recent super-objectives + recent triggers show that the ghost ALREADY committed to a course of action (e.g. last three cascades had super-objective "reach Black Bart's with allies" and recent triggers show ghosts agreeing on a destination), you MUST preserve that commitment into the new super-objective UNLESS the current trigger materially changes things (an injury, an arrival, a betrayal, a new and bigger pull). One ghost saying "let's go" three times and another agreeing is NOT a new event — it's the SAME plan, still uncompleted. Regenerating a fresh super-objective every cascade is the failure mode that traps ghosts in conversation loops; they need a felt drive that persists across ticks until executed or interrupted.
+
+When you preserve a plan, the super-objective should reflect both the EMOTIONAL FLAVOR and the FACT THAT IT IS UNFULFILLED — e.g. "press on toward Black Bart's, no more talking" or "move with allies now, words later". This creates the pull the Surface needs to actually move.
 
 Output strict JSON only:
 {
-  "emotionalRead": "<1-2 sentences>",
-  "superObjective": "<3-8 word emotional drive — never an action>"
+  "emotionalRead": "<1-2 sentences — show the tells, name the leak between felt and shown>",
+  "superObjective": "<3-8 word emotional drive — preserve committed plans across ticks>"
 }`;
 
 export async function invokeConvergence(
@@ -66,6 +80,24 @@ export async function invokeConvergence(
 
   if (req.objective) {
     lines.push(`Surface objective (context only): ${req.objective}`);
+    lines.push("");
+  }
+
+  // Plan-continuity context: recent super-objectives + the actions
+  // that followed. Convergence uses these to decide "is there a
+  // committed plan still in flight" and preserves it when present.
+  if (req.recentSuperObjectives && req.recentSuperObjectives.length > 0) {
+    lines.push("Recent super-objectives (oldest → newest):");
+    for (const s of req.recentSuperObjectives) {
+      lines.push(`  - ${s}`);
+    }
+    lines.push("");
+  }
+  if (req.recentTriggers && req.recentTriggers.length > 0) {
+    lines.push("Recent triggers + actions (oldest → newest):");
+    for (const t of req.recentTriggers) {
+      lines.push(`  - ${t}`);
+    }
     lines.push("");
   }
 

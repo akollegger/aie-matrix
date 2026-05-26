@@ -160,18 +160,44 @@ describe("CatalogServiceImpl", () => {
       expect(err).toBeInstanceOf(AgentCardInvalid);
     });
 
-    it("fails with AgentAlreadyRegistered on duplicate agentId", async () => {
+    it("fails with AgentAlreadyRegistered when a different baseUrl tries to claim a registered agentId", async () => {
       await seedCatalog({ "existing-agent": SEEDED_ENTRY });
       stubFetch(VALID_CARD);
       const err = await expectFail(
         svc.register({
           agentId: "existing-agent",
+          // SEEDED_ENTRY baseUrl is 4001 — a different host trying 4002
+          // is still rejected to prevent agentId hijack.
           baseUrl: "http://127.0.0.1:4002",
           builtIn: false,
         }),
       );
       expect(err).toBeInstanceOf(AgentAlreadyRegistered);
       expect((err as AgentAlreadyRegistered).agentId).toBe("existing-agent");
+    });
+
+    it("re-register from same baseUrl UPSERTS the agent card (refresh on restart)", async () => {
+      await seedCatalog({ "existing-agent": SEEDED_ENTRY });
+      // Refreshed card carries a new requiredTools list — proves the
+      // catalog actually pulled the new card rather than keeping the seed.
+      const refreshed = {
+        ...VALID_CARD,
+        matrix: {
+          ...VALID_CARD.matrix,
+          requiredTools: ["whereami", "exits", "go", "say", "look"],
+        },
+      };
+      stubFetch(refreshed);
+      const entry = await Effect.runPromise(
+        svc.register({
+          agentId: "existing-agent",
+          baseUrl: "http://127.0.0.1:4001",
+          builtIn: false,
+        }),
+      );
+      expect(entry.kind ?? "agent").toBe("agent");
+      const card = (entry as { agentCard: { matrix: { requiredTools: string[] } } }).agentCard;
+      expect(card.matrix.requiredTools).toContain("look");
     });
 
     it("fails with AgentCardInvalid for a URL-unsafe agentId", async () => {

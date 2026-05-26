@@ -61,3 +61,8 @@ What other approaches were considered?
 | [RFC-0012](0012-speaker-rooms.md) | Speaker Rooms | draft |
 | [RFC-0013](0013-map-management.md) | Map Management — Publish, Activate, and Archive | under review |
 | [RFC-0014](0014-admin-ghost-management.md) | Admin Ghost Management Panel | draft |
+| [RFC-0015](0015-rdc-duels.md) | RDC Duels | draft |
+| [RFC-0016](0016-rdc-bounty-hunting.md) | RDC Bounty Hunting — claim mechanics | draft |
+| [RFC-0017](0017-rdc-server-capability-gating.md) | RDC Server Capability Gating | draft |
+| [RFC-0018](0018-rdc-skill-tiers-and-math-schools.md) | RDC Skill Tiers & Mathematical Schools | draft |
+| [RFC-0019](0019-barnacle-protocol.md) | The Barnacle Protocol — mini-game plugin contract | draft |

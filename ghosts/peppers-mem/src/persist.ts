@@ -16,6 +16,7 @@ import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 
 import type {
   CascadeTrace,
+  Commitment,
   Event,
   Stimulus,
   SurfaceAction,
@@ -136,24 +137,34 @@ async function recordEventAsStep(
       const observation = event.outcome.ok
         ? "completed"
         : `denied: ${event.outcome.code}${event.outcome.reason ? ` (${event.outcome.reason})` : ""}`;
+      // Split tool name from args — `kind` is the tool name and
+      // shouldn't be duplicated inside `tool_args`. Persisting them as
+      // separate structured fields means Cypher queries can filter by
+      // `tool_name` directly instead of parsing a stringified action.
+      const { kind: _kind, ...toolArgs } = event.action;
       await callOrThrow(client, "memory_record_step", {
         trace_id: traceId,
-        action: formatSurfaceAction(event.action),
         tool_name: event.action.kind,
-        // tool_args is a dict (Pydantic), tool_result is a string. Cast
-        // through Record<string, unknown> for the MCP layer.
-        tool_args: event.action as unknown as Record<string, unknown>,
+        tool_args: toolArgs as Record<string, unknown>,
         tool_result: JSON.stringify(event.outcome),
         observation,
       });
-      // Outgoing speech also goes to the conversation tier.
+      // Outgoing speech also goes to the conversation tier. The say
+      // tool's MCP input schema names the spoken text `content`; older
+      // SurfaceAction shapes used `text`. Accept either so we don't
+      // crash on the shape transition.
       if (event.action.kind === "say" && event.outcome.ok) {
-        await callOrThrow(client, "memory_store_message", {
-          session_id: ghostId,
-          role: "assistant",
-          content: event.action.text,
-          metadata: { event_id: event.id, event_type: event.type },
-        });
+        const spoken =
+          (event.action as { content?: unknown }).content ??
+          (event.action as { text?: unknown }).text;
+        if (typeof spoken === "string" && spoken.length > 0) {
+          await callOrThrow(client, "memory_store_message", {
+            session_id: ghostId,
+            role: "assistant",
+            content: spoken,
+            metadata: { event_id: event.id, event_type: event.type },
+          });
+        }
       }
       return;
     }
@@ -214,6 +225,73 @@ export async function callOrThrow(
 }
 
 // ---------------------------------------------------------------------------
+// Commitment ledger persistence
+// ---------------------------------------------------------------------------
+
+/**
+ * Persist the result of one cascade's commitment evaluation. Opens a
+ * dedicated short-lived trace per evaluation so that:
+ *   - new commitments appear as ReasoningStep nodes with metadata
+ *     `{ kind: "commitment.open", commitment_id, owed,
+ *        recognizes_satisfaction, born_at_cascade }`
+ *   - satisfactions appear as ReasoningStep nodes with metadata
+ *     `{ kind: "commitment.satisfied", commitment_id }`
+ *
+ * Both are queryable in Cypher without scanning cascade traces. When
+ * the evaluation produced nothing (no new, no satisfied), the call is
+ * a no-op — we don't open an empty trace.
+ */
+export async function persistCommitmentEvaluation(
+  client: Client,
+  ghostId: string,
+  cascadeIndex: number,
+  satisfied: ReadonlyArray<{ id: string; owed: string }>,
+  newCommitments: ReadonlyArray<Commitment>,
+): Promise<void> {
+  if (satisfied.length === 0 && newCommitments.length === 0) return;
+
+  const startResult = await callOrThrow(client, "memory_start_trace", {
+    session_id: ghostId,
+    task: `commitment evaluation @ cascade ${cascadeIndex}`,
+    metadata: {
+      kind: "commitment_evaluation",
+      cascade_index: cascadeIndex,
+      ghost_id: ghostId,
+    },
+  });
+  const traceId = extractTraceId(startResult);
+
+  for (const s of satisfied) {
+    await callOrThrow(client, "memory_record_step", {
+      trace_id: traceId,
+      observation: `commitment satisfied: "${s.owed}"`,
+      tool_name: "commitment.satisfied",
+      tool_args: { commitment_id: s.id, owed: s.owed },
+    });
+  }
+
+  for (const c of newCommitments) {
+    await callOrThrow(client, "memory_record_step", {
+      trace_id: traceId,
+      observation: `commitment opened: "${c.owed}"`,
+      tool_name: "commitment.open",
+      tool_args: {
+        commitment_id: c.id,
+        owed: c.owed,
+        recognizes_satisfaction: c.recognizesSatisfaction,
+        born_at_cascade: c.bornAtCascade,
+      },
+    });
+  }
+
+  await callOrThrow(client, "memory_complete_trace", {
+    trace_id: traceId,
+    outcome: `opened ${newCommitments.length}, satisfied ${satisfied.length}`,
+    success: true,
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Event → message mapping
 // ---------------------------------------------------------------------------
 
@@ -242,31 +320,38 @@ function formatStimulus(s: Stimulus): string {
 }
 
 function formatSurfaceAction(a: SurfaceAction): string {
+  // Known shapes get a friendly compact rendering; everything else
+  // falls through to `<name> <json-args>` so new mini-game tools are
+  // legible without needing to extend this file.
   switch (a.kind) {
-    case "say":
-      return `say: ${a.text}`;
+    case "say": {
+      const intent = (a as { intent?: unknown }).intent;
+      const content =
+        (a as { content?: unknown }).content ?? (a as { text?: unknown }).text;
+      const intentTag = typeof intent === "string" && intent.length > 0 ? `[${intent}] ` : "";
+      return `say: ${intentTag}${String(content ?? "")}`;
+    }
     case "go":
-      return `go ${a.toward}`;
+      return `go ${String((a as { toward?: unknown }).toward ?? "")}`;
     case "take":
-      return `take ${a.itemRef}`;
+      return `take ${String((a as { itemRef?: unknown }).itemRef ?? "")}`;
     case "drop":
-      return `drop ${a.itemRef}`;
+      return `drop ${String((a as { itemRef?: unknown }).itemRef ?? "")}`;
     case "inspect":
-      return `inspect ${a.itemRef}`;
+      return `inspect ${String((a as { itemRef?: unknown }).itemRef ?? "")}`;
     case "look":
-      return `look ${a.at}`;
+      return `look ${String((a as { at?: unknown }).at ?? "")}`;
     case "exits":
-      return "exits";
     case "inventory":
-      return "inventory";
     case "whoami":
-      return "whoami";
     case "whereami":
-      return "whereami";
     case "bye":
-      return "bye";
-    default:
-      return unreachable(a);
+      return a.kind;
+    default: {
+      const { kind: _kind, ...args } = a;
+      const argStr = Object.keys(args).length > 0 ? ` ${JSON.stringify(args)}` : "";
+      return `${a.kind}${argStr}`;
+    }
   }
 }
 
