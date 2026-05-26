@@ -47,11 +47,15 @@ export function handleSpawnGhostEffect(
     const ghostId = createGhostId();
     bridge.setGhostCell(ghostId, spawnCell);
 
-    // Store in in-memory registry store (for within-pod reseed path in authoritativeGhostTileEffect)
+    // Store in in-memory registry store (for within-pod reseed path in
+    // authoritativeGhostTileEffect). spawnH3Index records the spawn
+    // position so Barnacle Protocol's /respawn route can teleport the
+    // ghost back here when a mini-game session ends.
     const store = yield* RegistryStoreService;
     store.ghosts.set(ghostId, {
       id: ghostId,
       h3Index: spawnCell,
+      spawnH3Index: spawnCell,
       status: "active",
     });
 
