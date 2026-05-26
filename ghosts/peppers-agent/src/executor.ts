@@ -20,6 +20,7 @@ import {
   type PersonalityState,
 } from "@aie-matrix/ghost-peppers-inner";
 import { decideEncounter } from "./encounter-brain.js";
+import { startOverlayServer, type OverlayServer } from "./overlay-server.js";
 import { runHouse } from "./run-house.js";
 import {
   PEPPERS_PAUSE_SCHEMA,
@@ -159,6 +160,44 @@ function allocateOverlayPort(ghostId: string): number | undefined {
   return port;
 }
 
+/**
+ * Per-ghost overlay server cache. The overlay outlives any individual
+ * cascade run — Barnacle pause/resume must NOT tear down the spectator
+ * UI, otherwise the `/all` hub would fill with refused-connection
+ * iframes the moment ghosts start mini-game sessions.
+ */
+const overlayByGhostId = new Map<string, OverlayServer>();
+
+async function ensureOverlay(
+  ghostId: string,
+  port: number,
+  peerPorts: ReadonlyArray<number>,
+): Promise<OverlayServer | null> {
+  const existing = overlayByGhostId.get(ghostId);
+  if (existing !== undefined) return existing;
+  try {
+    const server = await startOverlayServer({
+      port,
+      // Placeholder init — runHouse calls setInit() at the top of each
+      // cascade run with a fresh closure over current state.
+      getInit: () => ({ ghostId, displayName: null, personality: [], startedAt: new Date().toISOString() }),
+      peerPorts,
+    });
+    overlayByGhostId.set(ghostId, server);
+    return server;
+  } catch (err) {
+    console.warn(
+      JSON.stringify({
+        kind: "peppers-agent.overlay-start-failed",
+        ghostId,
+        port,
+        message: err instanceof Error ? err.message : String(err),
+      }),
+    );
+    return null;
+  }
+}
+
 /** Start (or restart) the social cascade for a ghost. The supervisor's
  *  pause/resume cycle reuses this. Returns the AbortController so callers
  *  can wire status events to its completion. */
@@ -217,38 +256,52 @@ function startSocialLoop(
     );
   }
 
-  void runHouse({
-    // Registry endpoints live on the world-api (e.g. http://127.0.0.1:8787),
-    // not on the agent-host. Use the explicit `registry` field from the
-    // spawn context; fall back to `a2a` only for older agent-host
-    // versions that didn't include it (in which case displayName
-    // resolution will fail until the host is upgraded).
-    registryBase:
-      ghost.spawnContext.houseEndpoints.registry ??
-      ghost.spawnContext.houseEndpoints.a2a,
-    memoryConnection,
-    initialPersonality: ghost.initialPersonality,
-    objective,
-    verbose: process.env.PEPPERS_VERBOSE === "1",
-    signal: ac.signal,
-    // Run the cascade indefinitely — only the abort signal (pause /
-    // process exit) should stop it. The default cap (40 stimuli) was
-    // killing the spawn task mid-demo, which then made agent-host's
-    // world-event pushes target a terminal A2A task → log spam.
-    maxStimuli: Number.POSITIVE_INFINITY,
-    ...(overlayPort !== undefined ? { overlayPort } : {}),
-    ...(overlayPeerPorts.length > 0 ? { overlayPeerPorts } : {}),
-    preProvisionedGhost: {
-      ghostId: ghost.spawnContext.ghostId,
-      worldApiBaseUrl: ghost.spawnContext.houseEndpoints.mcp,
-      token: ghost.spawnContext.token,
-      // Pass the persistent name through so the cascade + overlay use
-      // "Django Decypher" instead of `ghost_<prefix>`.
-      ...(ghost.spawnContext.ghostCard?.displayName
-        ? { displayName: ghost.spawnContext.ghostCard.displayName }
-        : {}),
-    },
-  })
+  void (async () => {
+    // Resolve (or lazily start) the per-ghost overlay BEFORE handing
+    // off to runHouse so the first cascade can broadcast events
+    // immediately. The overlay outlives this cascade run — pause/resume
+    // (Barnacle handoff) only aborts the loop, never the overlay.
+    const overlay =
+      overlayPort !== undefined
+        ? await ensureOverlay(
+            ghost.spawnContext.ghostId,
+            overlayPort,
+            overlayPeerPorts,
+          )
+        : null;
+
+    return runHouse({
+      // Registry endpoints live on the world-api (e.g. http://127.0.0.1:8787),
+      // not on the agent-host. Use the explicit `registry` field from the
+      // spawn context; fall back to `a2a` only for older agent-host
+      // versions that didn't include it (in which case displayName
+      // resolution will fail until the host is upgraded).
+      registryBase:
+        ghost.spawnContext.houseEndpoints.registry ??
+        ghost.spawnContext.houseEndpoints.a2a,
+      memoryConnection,
+      initialPersonality: ghost.initialPersonality,
+      objective,
+      verbose: process.env.PEPPERS_VERBOSE === "1",
+      signal: ac.signal,
+      // Run the cascade indefinitely — only the abort signal (pause /
+      // process exit) should stop it. The default cap (40 stimuli) was
+      // killing the spawn task mid-demo, which then made agent-host's
+      // world-event pushes target a terminal A2A task → log spam.
+      maxStimuli: Number.POSITIVE_INFINITY,
+      ...(overlay !== null ? { overlay } : {}),
+      preProvisionedGhost: {
+        ghostId: ghost.spawnContext.ghostId,
+        worldApiBaseUrl: ghost.spawnContext.houseEndpoints.mcp,
+        token: ghost.spawnContext.token,
+        // Pass the persistent name through so the cascade + overlay use
+        // "Django Decypher" instead of `ghost_<prefix>`.
+        ...(ghost.spawnContext.ghostCard?.displayName
+          ? { displayName: ghost.spawnContext.ghostCard.displayName }
+          : {}),
+      },
+    });
+  })()
     .then(() => {
       if (ac.signal.aborted) return;
       ghost.socialAbort = undefined;

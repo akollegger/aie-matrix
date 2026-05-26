@@ -27,7 +27,7 @@ import {
   type MemoryConnection,
 } from "@aie-matrix/ghost-peppers-mem";
 
-import { startOverlayServer, type OverlayServer } from "./overlay-server.js";
+import type { OverlayServer } from "./overlay-server.js";
 import { ID_SYSTEM_PROMPT } from "./reason-id.js";
 import { runOneStimulus } from "./run-loop.js";
 import {
@@ -76,17 +76,13 @@ export interface RunHouseOptions {
    */
   readonly verbose?: boolean;
   /**
-   * If set, starts an HTTP/SSE server on this port that powers the
-   * overlay UI at `http://127.0.0.1:<port>/`. Disabled by default.
+   * Optional pre-started overlay server owned by the caller (executor).
+   * runHouse rebinds the init payload at startup and broadcasts cascade
+   * / tool_call events, but does NOT start or close the server — that
+   * lifecycle is decoupled so the overlay survives pause/resume cycles
+   * during Barnacle mini-game handoffs.
    */
-  readonly overlayPort?: number;
-  /**
-   * If set on the ghost that owns the hub, exposes a `/all` route
-   * that grids every listed port in iframes. Pass the full per-ghost
-   * port list (including this ghost's own port) to ONE ghost in
-   * multi-ghost mode so the user can watch every ghost from one tab.
-   */
-  readonly overlayPeerPorts?: ReadonlyArray<number>;
+  readonly overlay?: OverlayServer;
   /**
    * Optional log-line prefix label, e.g. `"#0"` or `"#1"` when running
    * multiple peppers ghosts in parallel. When set, log lines read
@@ -210,7 +206,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   const idleStimulusEveryK = opts.idleStimulusEveryK ?? 3;
   const verbose = opts.verbose ?? false;
   const objective = opts.objective;
-  const overlayPort = opts.overlayPort;
+  const overlay: OverlayServer | null = opts.overlay ?? null;
   const tag = opts.label ? `peppers-agent ${opts.label}` : "peppers-agent";
   const log = (msg: string): void => console.info(`[${tag}] ${msg}`);
   const warn = (msg: string, err?: unknown): void =>
@@ -259,9 +255,8 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
     primeDisplayName(adopted.ghostId, selfDisplayName);
   }
 
-  // 2. Open MCP world connection. Forward-declare overlay so the
-  // tool-call observer can broadcast to it once it's started below.
-  let overlay: OverlayServer | null = null;
+  // 2. Open MCP world connection. Overlay (if any) is owned by the
+  // caller and reused across pause/resume cycles.
   const mcp = new GhostMcpClient({
     worldApiBaseUrl: adopted.worldApiBaseUrl,
     token: adopted.token,
@@ -337,24 +332,20 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   let cascadeIndex = 0;
   const startedAt = new Date().toISOString();
 
-  // Optional overlay server. Started after we have a ghost id and
-  // initial state so its `init` event has real data to send. `overlay`
-  // is declared above (next to the GhostMcpClient construction) so the
-  // tool-call observer can reference it.
-  if (overlayPort !== undefined) {
-    overlay = await startOverlayServer({
-      port: overlayPort,
-      getInit: () => ({
-        ghostId: adopted.ghostId,
-        // Spawn-context name only — never reach for resolver fallback
-        // here, the overlay should render its own fallback if absent.
-        displayName: selfDisplayName ?? null,
-        objective: objective ?? null,
-        personality: personalityForUi(state),
-        startedAt,
-      }),
-      peerPorts: opts.overlayPeerPorts,
-    });
+  // Rebind the externally-owned overlay's init payload to this run's
+  // current state, so any browser connecting (or reconnecting across a
+  // pause/resume cycle) sees the live snapshot instead of whichever
+  // snapshot was captured the first time the overlay was started.
+  if (overlay !== null) {
+    overlay.setInit(() => ({
+      ghostId: adopted.ghostId,
+      // Spawn-context name only — never reach for resolver fallback
+      // here, the overlay should render its own fallback if absent.
+      displayName: selfDisplayName ?? null,
+      objective: objective ?? null,
+      personality: personalityForUi(state),
+      startedAt,
+    }));
   }
 
   try {
@@ -528,13 +519,10 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
     } catch {
       /* ignore */
     }
-    if (overlay !== null) {
-      try {
-        await overlay.close();
-      } catch {
-        /* ignore */
-      }
-    }
+    // Note: overlay server is owned by the caller (executor) and
+    // intentionally NOT closed here. Closing it on every pause would
+    // black out the spectator UI whenever a Barnacle mini-game session
+    // started, which is the opposite of what observers want.
   }
 }
 

@@ -401,7 +401,10 @@ async function main(): Promise<void> {
 
   if (matrixMode === "development") {
     mapMgmtLayer = makeLocalMapManagementLayer().pipe(Layer.provide(mapSvcLayer), Layer.orDie);
-    liveSessionLayer = makeLocalLiveSessionLayer().pipe(Layer.provide(mapMgmtLayer));
+    liveSessionLayer = makeLocalLiveSessionLayer().pipe(
+      Layer.provide(Layer.mergeAll(mapMgmtLayer, mapSvcLayer)),
+      Layer.orDie,
+    );
     console.info(`[aie-matrix] development mode: maps auto-discovered from ${repoRoot}/maps/`);
   } else {
     // staging / production — require Neo4j
@@ -517,8 +520,8 @@ async function main(): Promise<void> {
     console.info(JSON.stringify({ kind: "startup-map-sync", ...syncSummary }));
   }
 
-  // T025 — Session binding for staging/production (skip in development mode where the
-  // local session is synthesised in-memory by makeLocalLiveSessionLayer).
+  // T025 — Session binding for staging/production (skip in development mode where
+  // makeLocalLiveSessionLayer synthesises a session for AIE_MATRIX_MAP at startup).
   const liveSessionId = process.env.LIVE_SESSION_ID?.trim();
   if (matrixMode !== "development" && neoDriver) {
     let sessionToBind: string | undefined;

@@ -12,6 +12,7 @@ import {
 
 import { loadRootEnv } from "@aie-matrix/root-env";
 
+import { startOverlayServer } from "./overlay-server.js";
 import { runHouse } from "./run-house.js";
 import { registerHouse } from "./runtime/index.js";
 
@@ -113,6 +114,21 @@ if (overlayPorts && ghostCount > 1) {
   );
 }
 
+// Start each ghost's overlay (if requested) before runHouse so it owns
+// the HTTP/SSE server and runHouse just broadcasts into it. Only ghost
+// #0 hosts the `/all` hub — give it the full port list.
+const overlays = overlayPorts
+  ? await Promise.all(
+      overlayPorts.map((port, i) =>
+        startOverlayServer({
+          port,
+          getInit: () => ({ port }),
+          peerPorts: i === 0 && overlayPorts.length > 1 ? overlayPorts : undefined,
+        }),
+      ),
+    )
+  : undefined;
+
 const runs = personalitiesAndSeeds.map(({ state }, i) =>
   runHouse({
     registryBase,
@@ -120,9 +136,7 @@ const runs = personalitiesAndSeeds.map(({ state }, i) =>
     initialPersonality: state,
     objective,
     verbose,
-    overlayPort: overlayPorts?.[i],
-    // Only ghost #0 hosts the hub — give it the full port list.
-    overlayPeerPorts: i === 0 && overlayPorts && overlayPorts.length > 1 ? overlayPorts : undefined,
+    ...(overlays ? { overlay: overlays[i] } : {}),
     label: ghostCount > 1 ? `#${i}` : undefined,
     preRegisteredHouseId,
   }),
