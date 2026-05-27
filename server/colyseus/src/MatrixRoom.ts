@@ -134,6 +134,20 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     return fromSchema;
   }
 
+  /** Remove a ghost from the world entirely — used by the Barnacle Protocol
+   *  (RFC-0019) when a mini-game session begins. Spectator + Colyseus state
+   *  drop the ghost; a subsequent `setGhostCell` (typically at session-end)
+   *  brings them back. Idempotent. */
+  removeGhostCell(ghostId: string): void {
+    const gid = String(ghostId).trim();
+    this.ghostCellByGhostId.delete(gid);
+    this.state.ghostTiles.delete(gid);
+    if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
+      console.info(`[aie-matrix] MatrixRoom.removeGhostCell ghost=${gid}`);
+    }
+    this.emitGhostPatch();
+  }
+
   listOccupantsOnCell(cellId: string): string[] {
     const cid = String(cellId).trim();
     const ids: string[] = [];

@@ -119,7 +119,7 @@ describe("POST /v1/catalog/register", () => {
     expect(res.body).toMatchObject({ ok: true, agentId: "new-agent" });
   });
 
-  it("409 ALREADY_REGISTERED on duplicate agentId", async () => {
+  it("409 ALREADY_REGISTERED when a different baseUrl tries to claim a registered agentId", async () => {
     await seedCatalog(catalogPath, { "existing-agent": SEEDED_ENTRY });
     stubFetchCard(VALID_CARD);
     const rt = await buildRuntime(catalogPath);
@@ -127,10 +127,31 @@ describe("POST /v1/catalog/register", () => {
     const res = await supertest(app)
       .post("/v1/catalog/register")
       .set("Authorization", `Bearer ${DEV_TOKEN}`)
-      .send({ agentId: "existing-agent", baseUrl: "http://127.0.0.1:4001" });
+      // SEEDED_ENTRY's baseUrl is 4001 — re-register from a DIFFERENT baseUrl
+      // (4002) is still rejected as a duplicate to prevent hijack.
+      .send({ agentId: "existing-agent", baseUrl: "http://127.0.0.1:4002" });
     await rt.dispose();
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("ALREADY_REGISTERED");
+  });
+
+  it("re-register from same baseUrl is an UPSERT — refreshes the agent card", async () => {
+    await seedCatalog(catalogPath, { "existing-agent": SEEDED_ENTRY });
+    // Return a card with NEW requiredTools to prove the catalog refreshed.
+    const refreshedCard = {
+      ...VALID_CARD,
+      matrix: { ...VALID_CARD.matrix, requiredTools: ["whereami", "exits", "go", "say"] },
+    };
+    stubFetchCard(refreshedCard);
+    const rt = await buildRuntime(catalogPath);
+    const app = createApp(rt, BASE_OPTS);
+    const res = await supertest(app)
+      .post("/v1/catalog/register")
+      .set("Authorization", `Bearer ${DEV_TOKEN}`)
+      .send({ agentId: "existing-agent", baseUrl: "http://127.0.0.1:4001" });
+    await rt.dispose();
+    expect(res.status).toBe(201);
+    expect(res.body).toMatchObject({ ok: true, agentId: "existing-agent" });
   });
 
   it("502 AGENT_CARD_FETCH_FAILED when the agent is unreachable", async () => {

@@ -3,11 +3,17 @@
  *
  * Maintains at most one session at a time. No Neo4j or Redis required.
  *
- * - list() returns [] initially; after start(), returns the current session.
+ * - When MapService.activeMapId() resolves (typically from AIE_MATRIX_MAP),
+ *   the layer synthesises an active "local" session on startup so the
+ *   world is browsable without requiring an admin POST /live. This
+ *   matches the Tier-1 fallback the `/live/@current/map` route already
+ *   implements.
+ * - list() returns the synthesised session (if any) initially; after
+ *   start(), returns the explicit session instead.
  * - start() replaces any existing session (the previous one is discarded).
  *   Map gcsPath values are resolved via MapManagementService.
  * - end() marks the current session as ended.
- * - switchMaps() is not supported and will die.
+ * - switchMaps() updates the in-memory record's maps.
  *
  * Session IDs are generated with ulid() — not stable across restarts.
  */
@@ -15,20 +21,60 @@ import { ulid } from "ulid";
 import { Effect, Layer } from "effect";
 import { LiveSessionService, type SessionRecord } from "./LiveSessionService.js";
 import { MapManagementService } from "../map/MapManagementService.js";
+import { MapService } from "../map/MapService.js";
 import {
   LiveSessionAlreadyEndedError,
   LiveSessionMapNotPublishedError,
   LiveSessionNotFoundError,
 } from "./live-errors.js";
 
-export function makeLocalLiveSessionLayer(): Layer.Layer<LiveSessionService, never, MapManagementService> {
+export function makeLocalLiveSessionLayer(): Layer.Layer<
+  LiveSessionService,
+  never,
+  MapManagementService | MapService
+> {
   return Layer.effect(
     LiveSessionService,
     Effect.gen(function* () {
       const mapMgmt = yield* MapManagementService;
+      const mapSvc = yield* MapService;
 
       // Mutable in-memory state — at most one session at a time.
       let currentSession: SessionRecord | null = null;
+
+      // Tier-1 synthesis: if MapService has an activeMapId (resolved from
+      // AIE_MATRIX_MAP), pre-populate currentSession so GET /live returns
+      // it without requiring an admin POST. This matches the Tier-1
+      // fallback the `/live/@current/map` route already implements.
+      // Failures here are non-fatal — the server starts with an empty
+      // session list (same as historic behaviour).
+      const activeMapId = mapSvc.activeMapId();
+      if (activeMapId !== undefined) {
+        const record = yield* mapMgmt.get(activeMapId).pipe(
+          Effect.catchAll(() => Effect.succeed(null)),
+        );
+        if (record !== null) {
+          currentSession = {
+            id: ulid(),
+            name: "local",
+            status: "active",
+            startedAt: new Date().toISOString(),
+            world: { name: "matrix" },
+            maps: [{ mapId: activeMapId, role: "primary", gcsPath: record.gcsPath }],
+          };
+          console.info(JSON.stringify({
+            kind: "local-live-session.synthesised",
+            sessionId: currentSession.id,
+            mapId: activeMapId,
+          }));
+        } else {
+          console.warn(JSON.stringify({
+            kind: "local-live-session.synthesise-skipped",
+            reason: "activeMapId not resolvable via MapManagementService",
+            mapId: activeMapId,
+          }));
+        }
+      }
 
       const start = (
         name: string,

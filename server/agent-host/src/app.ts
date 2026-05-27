@@ -7,9 +7,14 @@ import { AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { McpProxyService } from "./mcp-proxy/McpProxyService.js";
 import { ActiveSessionsPreventDeregister, Unauthorized } from "./errors.js";
 import type { WorldCredential } from "./types.js";
+import { BarnacleSupervisor } from "./barnacle/index.js";
+import {
+  BARNACLE_COMPLETE_SCHEMA,
+  type BarnacleComplete,
+} from "@aie-matrix/shared-types";
 
 export type AppRuntime = ManagedRuntime.ManagedRuntime<
-  CatalogService | AgentSupervisor | McpProxyService,
+  CatalogService | AgentSupervisor | McpProxyService | BarnacleSupervisor,
   never
 >;
 
@@ -141,17 +146,86 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
     res.status(worldApiOk ? 200 : 503).json({ status, checks: { "world-api": worldApiOk } });
   });
 
-  /** A2A agent → house push target (set via setTaskPushNotificationConfig; dev sink).
-   *  The A2A SDK sends the token via `X-A2A-Notification-Token` (not Authorization Bearer). */
-  app.post("/v1/internal/a2a-agent-push", express.json({ limit: "4mb" }), (req, res) => {
-    // SDK default header is X-A2A-Notification-Token; fall back to Authorization Bearer.
-    const tok =
-      (req.headers["x-a2a-notification-token"] as string | undefined) ?? getBearerValue(req);
-    if (!tok || tok !== devToken) {
-      res.status(401).json({ error: "invalid or missing push token", code: "UNAUTHORIZED" });
+  /**
+   * RFC-0019 — mini-game session-end ingest. Mini-games POST
+   * `BarnacleComplete` here when a ghost leaves the in-session
+   * experience (chose to leave, busted out, etc.). The supervisor uses
+   * the sessionId to find the active session, respawn the ghost, and
+   * resume peppers. v1: no bearer auth — the sessionId is the
+   * credential (only the mini-game we handed off to knows it).
+   *
+   * (Note: the A2A push endpoint that previously lived at this
+   * position has moved to `/v1/internal/a2a-agent-push` further down,
+   * with token-based auth via `X-A2A-Notification-Token`.)
+   */
+  app.post("/v1/internal/barnacle-complete", express.json({ limit: "4kb" }), (req, res) => {
+    const body = req.body as Partial<BarnacleComplete> | null;
+    if (
+      !body ||
+      body.schema !== BARNACLE_COMPLETE_SCHEMA ||
+      typeof body.sessionId !== "string" ||
+      typeof body.ghostId !== "string"
+    ) {
+      res.status(400).json({
+        error: "missing or invalid BarnacleComplete payload",
+        code: "VALIDATION_FAILED",
+      });
       return;
     }
+    const complete: BarnacleComplete = {
+      schema: BARNACLE_COMPLETE_SCHEMA,
+      sessionId: body.sessionId,
+      ghostId: body.ghostId,
+      ...(typeof body.narrative === "string" ? { narrative: body.narrative } : {}),
+      lastEventIso:
+        typeof body.lastEventIso === "string"
+          ? body.lastEventIso
+          : new Date().toISOString(),
+    };
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        const supervisor = yield* BarnacleSupervisor;
+        yield* supervisor.onCompleteReceived(complete);
+      }),
+    );
     res.status(204).end();
+  });
+
+  /**
+   * A2A push notification ingest.
+   *
+   * Per the A2A SDK, the sender ships the per-task push token in the
+   * `X-A2A-Notification-Token` header (NOT `Authorization`). We set
+   * that token to the session's mcpToken at spawn time via
+   * `setTaskPushNotificationConfig` (see A2AHostService). Validate
+   * against the supervisor's per-session token map.
+   *
+   * Falls back to the dev `Authorization: Bearer <devToken>` for
+   * out-of-band callers (curl probes, tests).
+   */
+  app.post("/v1/internal/a2a-agent-push", express.json({ limit: "4mb" }), (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        const supervisor = yield* AgentSupervisor;
+        const a2aToken =
+          typeof req.headers["x-a2a-notification-token"] === "string"
+            ? (req.headers["x-a2a-notification-token"] as string)
+            : null;
+        if (a2aToken !== null && a2aToken.length > 0) {
+          const session = supervisor.getByMcpToken(a2aToken);
+          if (session) {
+            res.status(204).end();
+            return;
+          }
+        }
+        const bearer = getBearerValue(req);
+        if (bearer === devToken && devToken.length > 0) {
+          res.status(204).end();
+          return;
+        }
+        res.status(401).json({ error: "invalid or missing push token", code: "UNAUTHORIZED" });
+      }),
+    );
   });
 
   app.post(
@@ -166,6 +240,39 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
   });
 
   app.use(express.json({ limit: "4mb" }));
+
+  /**
+   * Conversation thread proxy.
+   *
+   * Peppers ghosts spawned under this agent-host use `houseEndpoints.a2a`
+   * (this host) as the base for ALL their world calls — including
+   * fetching the body of an inbox notification at
+   * `GET /threads/{ghostId}/{messageId}`. That endpoint lives on the
+   * combined world-api server, not here, so without a proxy every
+   * inbound utterance silently 404s and ghosts never hear each other.
+   *
+   * Forward verbatim to world-api. No auth — the conversation router
+   * doesn't require it for thread reads.
+   */
+  app.use("/threads", async (req, res) => {
+    const target = `${worldApiUrl}/threads${req.url}`;
+    try {
+      const r = await fetch(target, { method: req.method });
+      res.status(r.status);
+      r.headers.forEach((v, k) => {
+        if (k === "transfer-encoding" || k === "connection") return;
+        res.setHeader(k, v);
+      });
+      const buf = Buffer.from(await r.arrayBuffer());
+      res.send(buf);
+    } catch (e) {
+      res.status(502).json({
+        error: "threads proxy failed",
+        target,
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  });
 
   app.get("/.well-known/agent-card.json", (_req, res) => {
     res
@@ -205,6 +312,12 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
       Effect.gen(function* () {
         const catalog = yield* CatalogService;
         const entry = yield* catalog.get(req.params.agentId!);
+        if (entry.kind === "mini-game") {
+          // Mini-games speak Barnacle and don't carry an AgentCard. Return the
+          // catalog entry directly so clients can still introspect what we know.
+          res.status(200).type("json").send(JSON.stringify(entry, null, 2) + "\n");
+          return;
+        }
         res.status(200).type("json").send(JSON.stringify(entry.agentCard, null, 2) + "\n");
       }).pipe(
         Effect.catchAll((e) =>
@@ -228,6 +341,60 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           return;
         }
         const out = yield* catalog.register({ agentId: body.agentId, baseUrl: body.baseUrl, builtIn: false });
+        res.status(201).json({ ok: true, agentId: out.agentId });
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.sync(() => {
+            const m = mapHouseError(e);
+            res.status(m.status).json(m.body);
+          }),
+        ),
+      ),
+    );
+  });
+
+  /**
+   * RFC-0019 — register a mini-game session host. Distinct from
+   * `/v1/catalog/register` because mini-games speak Barnacle, not
+   * A2A-agent, and don't carry a fetchable AgentCard. The payload
+   * declares which `platformClasses` the host claims (e.g.
+   * `["PokerTable"]`); the supervisor uses that mapping to route
+   * handoffs.
+   */
+  app.post("/v1/catalog/register-mini-game", (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        yield* requireBearer(req);
+        const catalog = yield* CatalogService;
+        const body = req.body as {
+          agentId?: string;
+          baseUrl?: string;
+          platformClasses?: ReadonlyArray<string>;
+          hardTimeoutMs?: number;
+          about?: string;
+        } | null;
+        if (
+          !body ||
+          typeof body.agentId !== "string" ||
+          typeof body.baseUrl !== "string" ||
+          !Array.isArray(body.platformClasses) ||
+          body.platformClasses.length === 0 ||
+          !body.platformClasses.every((c) => typeof c === "string")
+        ) {
+          res.status(400).json({
+            error: "agentId, baseUrl, and non-empty platformClasses are required",
+            code: "VALIDATION_FAILED",
+          });
+          return;
+        }
+        const out = yield* catalog.registerMiniGame({
+          agentId: body.agentId,
+          baseUrl: body.baseUrl,
+          platformClasses: body.platformClasses,
+          ...(body.hardTimeoutMs !== undefined ? { hardTimeoutMs: body.hardTimeoutMs } : {}),
+          builtIn: false,
+          ...(body.about !== undefined ? { about: body.about } : {}),
+        });
         res.status(201).json({ ok: true, agentId: out.agentId });
       }).pipe(
         Effect.catchAll((e) =>
@@ -273,6 +440,10 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
         const b = req.body as {
           ghostId?: string;
           credential?: { token?: string; worldApiBaseUrl?: string };
+          /** Optional human-readable name. Used as the ghost's
+           *  persistent identity from spawn through pause/resume and
+           *  Barnacle handoff. */
+          displayName?: string;
         } | null;
         if (!b || typeof b.ghostId !== "string") {
           res.status(400).json({ error: "ghostId is required", code: "VALIDATION_FAILED" });
@@ -293,7 +464,14 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           token: b.credential.token,
           worldApiBaseUrl: b.credential.worldApiBaseUrl,
         };
-        const session = yield* supervisor.spawn({ agentId, ghostId: b.ghostId, credential: worldCredential });
+        const session = yield* supervisor.spawn({
+          agentId,
+          ghostId: b.ghostId,
+          credential: worldCredential,
+          ...(typeof b.displayName === "string" && b.displayName.trim().length > 0
+            ? { displayName: b.displayName.trim() }
+            : {}),
+        });
         res.status(201).json({
           sessionId: session.sessionId,
           agentId: session.agentId,

@@ -1,0 +1,2020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Red Dead Convention — Saloon</title>
+  <style>
+    :root {
+      --bg: #1a0e0a;
+      --bg-card: #2a1810;
+      --bg-card-hi: #3a241a;
+      --border: #5a3a28;
+      --text: #f4e8d4;
+      --text-dim: #a89070;
+      --accent: #d4a05a;
+      --warm: #c47545;
+      --cool: #8aa890;
+      --ok: #6fa86c;
+      --bad: #c45a4a;
+      --gold: #e8c060;
+      --felt: #2a4a3a;
+      --card-bg: #faf3e3;
+      --card-red: #b03020;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0;
+      font-family: 'Iowan Old Style', 'Georgia', 'Times New Roman', serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      font-size: 14px;
+    }
+    body {
+      padding: 16px;
+      background-image:
+        radial-gradient(circle at 20% 10%, rgba(120, 60, 30, 0.2), transparent 50%),
+        radial-gradient(circle at 80% 90%, rgba(80, 40, 20, 0.3), transparent 50%);
+    }
+    header {
+      display: flex; align-items: center; gap: 16px;
+      padding: 8px 0 16px; border-bottom: 1px solid var(--border); margin-bottom: 16px;
+    }
+    header h1 {
+      font-size: 22px; margin: 0;
+      letter-spacing: 0.04em; font-weight: 700;
+      color: var(--gold);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.6);
+    }
+    header h1 span.lbl {
+      color: var(--text-dim);
+      font-size: 12px;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      font-weight: 500;
+    }
+    .status { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; font-size: 12px; color: var(--text-dim); }
+    .status .dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-dim);
+    }
+    .status.live .dot { background: var(--ok); animation: pulse 2s infinite; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 16px;
+      overflow: hidden;
+      min-width: 0;
+    }
+    .card h2 {
+      margin: 0 0 12px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--gold);
+      font-weight: 600;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+    }
+
+    /* Felt table */
+    .felt {
+      background: linear-gradient(135deg, #2a4a3a 0%, #1f3a2c 100%);
+      border-radius: 12px;
+      padding: 24px 16px;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+      min-height: 240px;
+    }
+
+    .community {
+      display: flex; gap: 6px; justify-content: center;
+      margin-bottom: 18px; min-height: 70px; align-items: center;
+    }
+    .pcard {
+      width: 44px; height: 64px;
+      background: var(--card-bg);
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-family: serif;
+      color: #1a1a2e;
+      font-weight: 700;
+      font-size: 18px;
+      letter-spacing: -1px;
+    }
+    .pcard.red { color: var(--card-red); }
+    .pcard.placeholder {
+      background: rgba(0,0,0,0.3);
+      box-shadow: inset 0 0 6px rgba(0,0,0,0.4);
+    }
+    .pcard.placeholder span { display: block; }
+    .pcard .rank { line-height: 1; }
+    .pcard .suit { font-size: 16px; line-height: 1; }
+    /* User-supplied card art layered on top of the CSS-rendered card.
+       Hidden until it loads successfully; on 404/error the <img> is
+       removed and the fallback rank+suit text remains visible. */
+    .pcard {
+      position: relative; overflow: hidden;
+    }
+    .pcard-art {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      object-position: center;
+      opacity: 0;
+      pointer-events: none;
+      background: var(--card-bg);
+    }
+    .pcard.placeholder .pcard-art { background: transparent; }
+    .pcard-art.loaded { opacity: 1; }
+    .pot {
+      text-align: center; color: var(--gold);
+      font-size: 14px; margin-bottom: 18px; font-weight: 600;
+    }
+
+    /* Player seats around the felt */
+    .seats {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
+    }
+    .seat {
+      background: rgba(0,0,0,0.25);
+      padding: 10px 12px;
+      border-radius: 6px;
+      border-left: 3px solid var(--border);
+      transition: border-color 0.2s;
+    }
+    .seat.acting { border-left-color: var(--gold); background: rgba(212, 160, 90, 0.1); }
+    .seat.folded { opacity: 0.45; }
+    .seat-name {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-weight: 600; font-size: 13px;
+    }
+    .seat-name .badges { display: inline-flex; gap: 4px; }
+    .seat-name .badge {
+      font-size: 9px; background: var(--bg-card-hi);
+      color: var(--text-dim); padding: 1px 5px; border-radius: 3px;
+      letter-spacing: 0.1em;
+    }
+    .seat-stack {
+      font-family: ui-monospace, 'SF Mono', monospace;
+      color: var(--gold); font-size: 12px; margin-top: 4px;
+    }
+    .seat-bet {
+      font-family: ui-monospace, monospace;
+      font-size: 11px; color: var(--cool);
+    }
+    .seat-hole {
+      display: flex; gap: 3px; margin-top: 6px;
+    }
+    .seat-hole .pcard { width: 30px; height: 42px; font-size: 14px; }
+    .seat-hole .pcard .suit { font-size: 12px; }
+
+    /* Action stream */
+    .action-line {
+      padding: 6px 0;
+      border-bottom: 1px dashed rgba(168, 144, 112, 0.2);
+      font-size: 12px;
+    }
+    .action-line:last-child { border-bottom: none; }
+    .action-line .who { color: var(--gold); font-weight: 600; }
+    .action-line .verb {
+      font-family: ui-monospace, monospace; color: var(--cool);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .action-line .reasoning {
+      font-size: 11px; color: var(--text-dim);
+      font-style: italic; margin-top: 2px;
+      padding-left: 8px;
+    }
+    .action-line .talk {
+      font-size: 12px; color: var(--warm);
+      margin-top: 2px; padding: 4px 8px;
+      background: rgba(196, 117, 69, 0.1); border-radius: 4px;
+      border-left: 2px solid var(--warm);
+    }
+    .action-stream { max-height: 360px; overflow-y: auto; }
+
+    /* Ledger */
+    .ledger-row {
+      display: flex; justify-content: space-between;
+      padding: 5px 0;
+      border-bottom: 1px dashed rgba(168, 144, 112, 0.2);
+      font-size: 13px;
+    }
+    .ledger-row:last-child { border: none; }
+    .ledger-name { color: var(--text); }
+    .ledger-amount {
+      font-family: ui-monospace, monospace;
+      color: var(--gold); font-weight: 600;
+    }
+    .ledger-amount.poor { color: var(--bad); }
+
+    /* Bounty */
+    .bounty {
+      padding: 10px 12px; margin: 8px 0;
+      background: rgba(196, 90, 74, 0.1);
+      border: 1px solid rgba(196, 90, 74, 0.3);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .bounty .target { color: var(--bad); font-weight: 600; }
+    .bounty .amount { color: var(--gold); font-family: ui-monospace, monospace; }
+
+    /* Hand history */
+    .hand-summary {
+      padding: 10px 12px; margin: 8px 0;
+      background: rgba(0,0,0,0.2);
+      border-left: 3px solid var(--accent);
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .hand-summary .winners { color: var(--gold); font-weight: 600; }
+    .hand-summary .net { font-family: ui-monospace, monospace; }
+
+    .empty {
+      color: var(--text-dim); font-style: italic;
+      padding: 16px 0; text-align: center;
+    }
+
+    footer {
+      margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--border);
+      font-size: 11px; color: var(--text-dim); text-align: center;
+      font-family: ui-monospace, monospace;
+    }
+
+    /* ---- Tabs ---- */
+    .tabs {
+      display: flex; gap: 4px; margin-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .tab-button {
+      background: transparent; color: var(--text-dim);
+      border: none; border-bottom: 2px solid transparent;
+      padding: 10px 18px; cursor: pointer;
+      font-family: inherit; font-size: 12px;
+      letter-spacing: 0.18em; text-transform: uppercase; font-weight: 600;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-button:hover { color: var(--text); }
+    .tab-button.active { color: var(--gold); border-bottom-color: var(--gold); }
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ---- Round poker table (ported from pokerswarm-ai) ---- */
+    .poker-controls {
+      display: flex; gap: 16px; align-items: center;
+      margin-bottom: 16px; flex-wrap: wrap;
+    }
+    .view-toggle {
+      display: inline-flex;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 6px; overflow: hidden;
+    }
+    .view-toggle button {
+      background: transparent; color: var(--text-dim);
+      border: none; padding: 8px 14px; cursor: pointer;
+      font-family: inherit; font-size: 11px;
+      letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600;
+      transition: background 0.15s, color 0.15s;
+    }
+    .view-toggle button:hover { color: var(--text); }
+    .view-toggle button.active {
+      background: var(--bg-card-hi); color: var(--gold);
+    }
+    .ghost-picker {
+      display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--text-dim);
+      letter-spacing: 0.08em; text-transform: uppercase;
+    }
+    .ghost-picker select {
+      background: var(--bg-card); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 7px 10px; font-family: inherit; font-size: 13px;
+    }
+    .ghost-picker.disabled { opacity: 0.4; pointer-events: none; }
+
+    .table-frame {
+      position: relative; width: 100%;
+      max-width: 1000px; aspect-ratio: 16 / 10;
+      margin: 0 auto;
+    }
+    .table-rim {
+      position: absolute; inset: 5%;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #6b3a20 0%, #4a2818 100%);
+      box-shadow:
+        inset 0 4px 20px rgba(0,0,0,0.5),
+        0 8px 32px rgba(0,0,0,0.6),
+        0 0 0 4px rgba(62,39,35,0.8);
+      padding: 14px;
+    }
+    .table-felt {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center,
+        #2a5a3a 0%, #143a26 70%, #082815 100%);
+      border: 3px solid var(--gold);
+      box-shadow: inset 0 2px 20px rgba(0,0,0,0.3);
+      position: relative;
+    }
+    .table-felt::after {
+      content: ''; position: absolute; inset: 10px;
+      border-radius: 50%;
+      border: 1px solid var(--gold); opacity: 0.35;
+      pointer-events: none;
+    }
+    .table-center {
+      position: absolute;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 5;
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+    }
+    .table-center .community {
+      display: flex; gap: 6px;
+    }
+    .table-center .pot-row {
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+    }
+    .table-center .pot-display {
+      font-family: ui-monospace, monospace;
+      color: var(--gold); font-weight: 600; font-size: 14px;
+      background: rgba(0,0,0,0.5); padding: 4px 16px;
+      border-radius: 14px;
+      border: 1px solid rgba(232, 192, 96, 0.4);
+      letter-spacing: 0.05em;
+    }
+    .table-center .phase-label {
+      font-size: 10px; color: var(--text-dim);
+      letter-spacing: 0.18em; text-transform: uppercase;
+      margin-top: 2px;
+    }
+
+    /* ---- "Jump to bottom" pill for scrollable streams ---- */
+    .scroll-to-live {
+      position: absolute;
+      bottom: 14px;
+      right: 16px;
+      padding: 6px 12px;
+      background: var(--gold);
+      color: #1a1208;
+      border: none;
+      border-radius: 999px;
+      font: 600 11px/1 system-ui, -apple-system, sans-serif;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(4px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+      z-index: 10;
+    }
+    .scroll-to-live.visible {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .scroll-to-live:hover {
+      background: #f7c95e;
+    }
+
+    /* ---- Poker tab vertical layout (table on top, commentary below) ---- */
+    .poker-layout {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .poker-table-side {
+      /* Let the table dominate the viewport. The felt + seats render
+       *  inside this; sized so the whole table is visible without
+       *  scrolling on a 1080p monitor. */
+      min-height: 60vh;
+    }
+    .poker-chat-side {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex; flex-direction: column;
+      /* Below the table, so size to its own content with a cap. */
+      max-height: 60vh;
+      min-height: 280px;
+    }
+    .poker-chat-head {
+      padding: 14px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--gold);
+      font-weight: 600;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .chat-stream {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+    .chat-stream .empty {
+      color: var(--text-dim); font-style: italic;
+      padding: 20px 0; text-align: center; font-size: 12px;
+    }
+
+    /* --- system / phase / action / speech entry styles --- */
+    .event-row {
+      margin-bottom: 10px;
+    }
+    .event-row.kind-system {
+      text-align: center;
+      font-family: ui-monospace, monospace;
+      font-size: 11px; letter-spacing: 0.12em;
+      color: var(--gold);
+      padding: 10px 8px; margin: 14px 0;
+      border-top: 1px dashed var(--gold);
+      border-bottom: 1px dashed var(--gold);
+      text-transform: uppercase;
+      background: rgba(232, 192, 96, 0.06);
+    }
+    .event-row.kind-system.complete {
+      color: var(--ok);
+      border-color: rgba(111, 168, 108, 0.6);
+      background: rgba(111, 168, 108, 0.08);
+    }
+    .event-row.kind-phase {
+      text-align: center;
+      font-family: ui-monospace, monospace;
+      font-size: 11px; letter-spacing: 0.14em;
+      color: var(--text-dim);
+      padding: 6px 8px; margin: 8px 16px;
+      text-transform: uppercase;
+    }
+    .event-row.kind-phase .phase-name {
+      color: var(--cool); font-weight: 600;
+      letter-spacing: 0.18em;
+    }
+    .event-row.kind-phase .phase-cards {
+      margin-left: 10px; color: var(--text);
+      font-family: 'Iowan Old Style', serif; font-size: 13px;
+      letter-spacing: 0;
+    }
+    .event-row.kind-phase .suit-red { color: var(--card-red); }
+
+    .event-row.kind-action {
+      display: flex; gap: 10px; align-items: center;
+      padding: 6px 0;
+    }
+    .event-row.kind-action .avatar {
+      width: 28px; height: 28px; flex: 0 0 28px;
+      font-size: 11px; border-width: 2px;
+    }
+    .event-row.kind-action .action-line {
+      flex: 1 1 auto; min-width: 0;
+      font-size: 13px; line-height: 1.4;
+    }
+    .event-row.kind-action .actor {
+      font-weight: 600; color: var(--text);
+    }
+    .event-row.kind-action .verb {
+      font-family: ui-monospace, monospace;
+      font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      color: var(--cool);
+      margin-left: 6px;
+    }
+    .event-row.kind-action .verb.aggressive { color: var(--warm); }
+    .event-row.kind-action .verb.passive { color: var(--text-dim); }
+    .event-row.kind-action .verb.exit { color: var(--bad); }
+    .event-row.kind-action .amount {
+      font-family: ui-monospace, monospace;
+      color: var(--gold); margin-left: 4px;
+    }
+    .event-row.kind-action .with-hand {
+      font-size: 12px; color: var(--text-dim);
+      font-style: italic;
+      margin-left: 6px;
+    }
+
+    .event-row.kind-speech.you-msg .chat-from { color: var(--cool); }
+    .chat-quote {
+      font-size: 11px; color: var(--text-dim);
+      border-left: 2px solid var(--border);
+      padding: 4px 10px; margin-bottom: 6px; margin-left: 42px;
+      background: rgba(0,0,0,0.2); border-radius: 0 4px 4px 0;
+      font-style: italic;
+      overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+    }
+    .chat-quote .quote-from { color: var(--text-dim); font-style: normal; font-weight: 600; margin-right: 4px; }
+    .chat-head {
+      display: flex; gap: 10px; align-items: center;
+      margin-bottom: 6px;
+    }
+    .chat-head .avatar {
+      width: 32px; height: 32px; flex: 0 0 32px;
+      border-width: 2px; font-size: 12px;
+    }
+    .chat-meta {
+      flex: 1; min-width: 0;
+      display: flex; align-items: baseline; gap: 8px;
+      flex-wrap: wrap;
+    }
+    .chat-from {
+      font-weight: 600; font-size: 13px; color: var(--text);
+    }
+    .chat-to {
+      font-size: 10px; color: var(--gold);
+      letter-spacing: 0.1em; text-transform: uppercase;
+      font-family: ui-monospace, monospace;
+    }
+    .chat-to::before { content: "→ "; opacity: 0.6; }
+    .chat-text {
+      font-size: 13px; line-height: 1.5;
+      color: var(--text); font-style: italic;
+      padding-left: 42px;
+      word-wrap: break-word; overflow-wrap: break-word;
+    }
+
+    /* ---- Chip stacks ---- */
+    .chip-stack {
+      display: inline-flex; align-items: flex-end;
+      gap: 4px;
+      vertical-align: bottom;
+    }
+    .chip-stack.pot { gap: 6px; min-height: 28px; }
+    .chip-column {
+      display: flex; flex-direction: column;
+      align-items: center;
+    }
+    .chip {
+      border-radius: 50%;
+      border: 2px solid;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+      flex-shrink: 0;
+      position: relative;
+    }
+    /* tight overlap so columns read as stacks of physical chips */
+    .chip-column .chip { margin-bottom: -10px; }
+    .chip-column .chip:last-child { margin-bottom: 0; }
+    /* sizes */
+    .chip-stack.player .chip { width: 12px; height: 12px; border-width: 1.5px; }
+    .chip-stack.player .chip-column .chip { margin-bottom: -8px; }
+    .chip-stack.player .chip-column .chip:last-child { margin-bottom: 0; }
+    .chip-stack.pot .chip { width: 18px; height: 18px; }
+    /* colours: 1=ivory, 10=red, 50=gold */
+    .chip-1  { background: linear-gradient(135deg, #faf3e3, #d4c094); border-color: #8a7548; }
+    .chip-10 { background: linear-gradient(135deg, #d24a38, #8c2a1c); border-color: #5a1a10; }
+    .chip-50 { background: linear-gradient(135deg, #f0c870, #b8902e); border-color: #6a4e18; }
+    .seat-circle {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      width: 200px;
+      z-index: 3;
+    }
+    .seat-circle .seat-card {
+      background: rgba(0, 0, 0, 0.78);
+      backdrop-filter: blur(4px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .seat-circle.acting .seat-card {
+      border-color: var(--gold);
+      box-shadow: 0 0 24px rgba(232, 192, 96, 0.4),
+                  0 4px 12px rgba(0,0,0,0.5);
+    }
+    .seat-circle.folded .seat-card { opacity: 0.45; }
+    .seat-circle.you .seat-card {
+      border-color: var(--cool);
+      box-shadow: 0 0 18px rgba(138, 168, 144, 0.35),
+                  0 4px 12px rgba(0,0,0,0.5);
+    }
+    .seat-circle .head-row {
+      display: flex; align-items: center; gap: 9px;
+    }
+    .seat-circle .avatar {
+      flex: 0 0 auto;
+      width: 36px; height: 36px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 13px; letter-spacing: 0.04em;
+      color: #fff;
+      border: 2px solid var(--gold);
+      box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+      font-family: 'Iowan Old Style', 'Georgia', serif;
+      user-select: none;
+    }
+    .seat-circle .name-block {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .seat-circle .name-row {
+      display: flex; justify-content: space-between; align-items: baseline;
+      font-weight: 600; font-size: 13px; gap: 6px;
+    }
+    .seat-circle .name-row .name-text {
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .seat-circle .you-tag {
+      font-size: 9px; color: var(--cool); letter-spacing: 0.12em;
+      background: rgba(138, 168, 144, 0.15);
+      padding: 1px 6px; border-radius: 3px;
+    }
+    .seat-circle .stack {
+      font-family: ui-monospace, monospace;
+      color: var(--gold); font-size: 11px; margin-top: 4px;
+      display: flex; align-items: flex-end; gap: 8px;
+      flex-wrap: wrap;
+    }
+    .seat-circle .stack > span { white-space: nowrap; }
+    .seat-circle .bet-chip {
+      position: absolute;
+      bottom: -22px; left: 50%; transform: translateX(-50%);
+      font-family: ui-monospace, monospace;
+      font-size: 10px; color: var(--text);
+      background: rgba(0, 0, 0, 0.7); border: 1px solid var(--gold);
+      padding: 2px 8px; border-radius: 10px;
+      white-space: nowrap;
+    }
+    .seat-circle .seat-cards {
+      display: flex; gap: 3px; justify-content: center; margin-top: 8px;
+    }
+    .seat-circle .seat-cards .pcard { width: 36px; height: 50px; font-size: 16px; }
+    .seat-circle .seat-cards .pcard .suit { font-size: 14px; }
+    .seat-circle .badges {
+      display: inline-flex; gap: 3px;
+    }
+    .seat-circle .badge {
+      font-size: 9px; color: var(--text-dim);
+      background: var(--bg-card-hi);
+      padding: 1px 5px; border-radius: 3px;
+      letter-spacing: 0.1em;
+    }
+    /* RFC-0015 — math school flavour name on each seat. Distinguishes
+       itself from the small letter-badges (D/SB/BB/etc.) by being a
+       short phrase and using the gold accent. */
+    .badge.school-badge {
+      font-size: 9px;
+      color: var(--gold);
+      background: rgba(168,144,112,0.10);
+      border: 1px solid rgba(168,144,112,0.35);
+      padding: 1px 5px;
+      border-radius: 3px;
+      letter-spacing: 0;
+      text-transform: none;
+      font-style: italic;
+    }
+    .animal-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      font-size: 9px; letter-spacing: 0.14em;
+      padding: 2px 6px; border-radius: 3px;
+      font-family: ui-monospace, monospace; font-weight: 700;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+    .animal-badge.mouse    { background: rgba(168,144,112,0.15); color: #c0a878; border: 1px solid rgba(168,144,112,0.45); }
+    .animal-badge.lion     { background: rgba(232,192,96,0.15);  color: var(--gold); border: 1px solid rgba(232,192,96,0.55); }
+    .animal-badge.jackal   { background: rgba(196,117,69,0.15);  color: var(--warm); border: 1px solid rgba(196,117,69,0.55); }
+    .animal-badge.elephant { background: rgba(138,168,144,0.15); color: var(--cool); border: 1px solid rgba(138,168,144,0.45); }
+    .animal-badge.eagle    { background: rgba(196,90,74,0.15);   color: var(--bad);  border: 1px solid rgba(196,90,74,0.55); }
+    .animal-glyph { font-size: 11px; }
+    .seat-circle .speech {
+      position: absolute;
+      width: 260px; max-width: 260px;
+      background: var(--bg-card); border: 1px solid var(--warm);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 12px; color: var(--text);
+      font-style: italic;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.6);
+      white-space: normal; word-wrap: break-word; overflow-wrap: break-word;
+      line-height: 1.4;
+      z-index: 20;
+    }
+    /* Four bubble directions, picked by the seat's clock-quadrant:
+     *   top    seats → bubble-right  (chat on the right)
+     *   right  seats → bubble-below  (chat below)
+     *   bottom seats → bubble-left   (chat on the left)
+     *   left   seats → bubble-above  (chat above)
+     * The pattern is clockwise — every bubble sits OUTSIDE the table
+     * centre, never covering pot/community cards/bet info. */
+    .seat-circle.bubble-below .speech { top: calc(100% + 14px); left: 50%; transform: translateX(-50%); }
+    .seat-circle.bubble-above .speech { bottom: calc(100% + 14px); left: 50%; transform: translateX(-50%); }
+    .seat-circle.bubble-right .speech { left: calc(100% + 14px); top: 50%; transform: translateY(-50%); }
+    .seat-circle.bubble-left  .speech { right: calc(100% + 14px); top: 50%; transform: translateY(-50%); }
+    /* Tail arrows — pointing back at the speaker's seat. */
+    .seat-circle .speech::after {
+      content: ""; position: absolute;
+      width: 0; height: 0;
+    }
+    .seat-circle.bubble-below .speech::after {
+      top: -8px; left: 50%; transform: translateX(-50%);
+      border-left: 8px solid transparent; border-right: 8px solid transparent;
+      border-bottom: 8px solid var(--warm);
+    }
+    .seat-circle.bubble-above .speech::after {
+      bottom: -8px; left: 50%; transform: translateX(-50%);
+      border-left: 8px solid transparent; border-right: 8px solid transparent;
+      border-top: 8px solid var(--warm);
+    }
+    .seat-circle.bubble-right .speech::after {
+      left: -8px; top: 50%; transform: translateY(-50%);
+      border-top: 8px solid transparent; border-bottom: 8px solid transparent;
+      border-right: 8px solid var(--warm);
+    }
+    .seat-circle.bubble-left .speech::after {
+      right: -8px; top: 50%; transform: translateY(-50%);
+      border-top: 8px solid transparent; border-bottom: 8px solid transparent;
+      border-left: 8px solid var(--warm);
+    }
+    .seat-circle .speech .addressee {
+      display: block; font-style: normal;
+      font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--gold); margin-bottom: 4px;
+      font-family: ui-monospace, monospace;
+    }
+    .seat-circle .speech .addressee::before { content: "→ "; }
+    .seat-circle .speech .text { display: block; }
+
+    /* Ring around a seat that's currently being addressed — completes
+     * the speaker→listener visual link alongside the "→ Name" tag in
+     * the speaker's bubble. Subtle gold pulse so it doesn't compete
+     * with the brighter "acting" ring on the player to act. */
+    .seat-circle.being-addressed .seat-card {
+      border-color: var(--gold);
+      box-shadow: 0 0 0 2px rgba(232, 192, 96, 0.45), 0 4px 14px rgba(0, 0, 0, 0.5);
+      animation: addressed-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes addressed-pulse {
+      0%, 100% { box-shadow: 0 0 0 2px rgba(232, 192, 96, 0.30), 0 4px 14px rgba(0, 0, 0, 0.5); }
+      50%      { box-shadow: 0 0 0 3px rgba(232, 192, 96, 0.65), 0 4px 18px rgba(0, 0, 0, 0.55); }
+    }
+    .empty-table {
+      display: flex; align-items: center; justify-content: center;
+      height: 100%; color: var(--text-dim); font-style: italic;
+    }
+    .table-action-row {
+      margin-top: 24px; padding: 14px;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .table-action-row .who { color: var(--gold); font-weight: 600; }
+    .table-action-row .verb {
+      font-family: ui-monospace, monospace; color: var(--cool);
+      text-transform: uppercase; letter-spacing: 0.05em;
+    }
+    .table-action-row .reasoning {
+      margin-top: 6px; font-style: italic; color: var(--text-dim);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>RED DEAD CONVENTION <span class="lbl">· saloon</span></h1>
+    <div class="status" id="status">
+      <span class="dot"></span><span id="status-text">connecting…</span>
+    </div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-button active" data-tab="saloon">Saloon</button>
+    <button class="tab-button" data-tab="poker">Poker Table</button>
+  </div>
+
+  <div id="tab-saloon" class="tab-pane active">
+    <div class="grid">
+      <div class="col">
+        <div class="card">
+          <h2>Active Table</h2>
+          <div class="felt" id="felt">
+            <div class="pot" id="pot">No hand in progress</div>
+            <div class="community" id="community"></div>
+            <div class="seats" id="seats"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2>Action Stream</h2>
+          <div class="action-stream" id="actions">
+            <div class="empty">Waiting for the first hand…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="col">
+        <div class="card">
+          <h2>Platforms</h2>
+          <div id="platforms-list"><div class="empty">No platforms yet.</div></div>
+        </div>
+
+        <div class="card">
+          <h2>Ledger — Cyphers</h2>
+          <div id="ledger"></div>
+        </div>
+
+        <div class="card">
+          <h2>Open Bounties</h2>
+          <div id="bounties"></div>
+        </div>
+
+        <div class="card">
+          <h2>Hand History</h2>
+          <div id="history"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="tab-poker" class="tab-pane">
+    <div class="poker-controls">
+      <div class="view-toggle" id="view-toggle">
+        <button data-view="god" class="active">God's Eye</button>
+        <button data-view="self">My Ghost</button>
+      </div>
+      <div class="ghost-picker disabled" id="ghost-picker">
+        <span>Viewing as</span>
+        <select id="ghost-select"></select>
+      </div>
+    </div>
+
+    <div class="poker-layout">
+      <div class="poker-table-side">
+        <div class="table-frame" id="table-frame">
+          <div class="table-rim">
+            <div class="table-felt">
+              <div class="empty-table" id="empty-table">No hand in progress.</div>
+            </div>
+          </div>
+          <!-- Centre + seats are injected by render() -->
+        </div>
+
+        <div class="table-action-row" id="table-action-row" style="display:none;">
+          <span class="who" id="last-action-who">—</span>
+          <span class="verb" id="last-action-verb">—</span>
+          <div class="reasoning" id="last-action-reasoning"></div>
+        </div>
+      </div>
+
+      <div class="poker-chat-side">
+        <div class="poker-chat-head">
+          <span>Live Commentary</span>
+          <span style="font-size:10px;color:var(--text-dim);letter-spacing:0.1em;font-weight:400;">action · speech · phase</span>
+        </div>
+        <div class="chat-stream" id="chat-stream">
+          <div class="empty">Waiting for the deal…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer><span id="meta">RDC orchestrator · live SSE feed</span></footer>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const status = $('status');
+    const statusText = $('status-text');
+
+    let agents = new Map();   // ghostId → {displayName, role}
+    let balances = {};
+    let openBounties = [];
+    let history = [];
+    let activeTable = null;   // { id, seats, lastEvent }
+
+    // RFC-0015 — ghostId → math-school identifier. Populated from
+    // `platform-state` snapshots. The flavour-name lookup below maps the
+    // identifier to the display string shown on the badge.
+    const ghostSchools = new Map();
+    const SCHOOL_FLAVOR_NAMES = {
+      Sklansky:    'Slim Lansky',
+      Chen:        'Wild Bill Chen',
+      Harrington:  'Doc Harrington',
+      GTO:         'Grand Theft Oro',
+      Exploitative:'Doyle the Drifter',
+      ICM:         'Independent Chip Marshal',
+      Hellmuth:    'Hellmouth',
+    };
+    const renderSchoolBadge = (school) =>
+      school && SCHOOL_FLAVOR_NAMES[school]
+        ? `<span class="badge school-badge" title="${esc(school)}">${esc(SCHOOL_FLAVOR_NAMES[school])}</span>`
+        : '';
+
+    const setStatus = (text, live = false) => {
+      statusText.textContent = text;
+      status.classList.toggle('live', live);
+    };
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+
+    const SUITS = { h: '♥', d: '♦', c: '♣', s: '♠' };
+    const SUIT_COLOR = { h: 'red', d: 'red', c: 'black', s: 'black' };
+    // Hellmuth animal type → glyph for compact badge display.
+    const ANIMAL_GLYPHS = {
+      mouse: '🐁',
+      lion: '🦁',
+      jackal: '🐺',
+      elephant: '🐘',
+      eagle: '🦅',
+    };
+    const RANKS = { '2':'2','3':'3','4':'4','5':'5','6':'6','7':'7','8':'8','9':'9','10':'T','J':'J','Q':'Q','K':'K','A':'A' };
+
+    const renderCard = (card) => {
+      const r = RANKS[card.rank] ?? card.rank;
+      const suit = card.suit[0]; // hearts → h
+      const sChar = SUITS[suit] ?? '?';
+      const cls = SUIT_COLOR[suit] === 'red' ? 'red' : '';
+      // Code for the art file: e.g. "AS", "TH", "9C". Tries .webp first,
+      // then .png, then .svg — whichever loads first wins. Falls back to
+      // the CSS-rendered card if all 404 / error.
+      const code = String(r).toUpperCase() + String(suit).toUpperCase();
+      return `<div class="pcard ${cls}">
+        <div class="rank">${esc(r)}</div>
+        <div class="suit">${sChar}</div>
+        ${cardArtImg(code, `${r}${sChar}`)}
+      </div>`;
+    };
+
+    // Face-down placeholder used in My-Ghost view for opponents'
+    // hole cards. Same fallback semantics as renderCard.
+    const renderCardBack = () => `
+      <div class="pcard placeholder">
+        <span>·</span>
+        ${cardArtImg('back', 'back')}
+      </div>`;
+
+    /**
+     * Build the card-art <img> with extension-fallback. Tries .webp →
+     * .png → .svg. The first that loads wins; if all fail, the <img>
+     * is removed and the CSS-rendered fallback shows through.
+     *
+     * Format choice: WebP for hand-illustrated / textured art (best
+     * size/quality), PNG if your tool can't export WebP, SVG only for
+     * geometric / iconographic styles.
+     */
+    function cardArtImg(code, alt) {
+      return `<img class="pcard-art" alt="${esc(alt)}"
+        src="/cards/${code}.webp"
+        onload="this.classList.add('loaded')"
+        onerror="this.onerror=function(){this.onerror=function(){this.remove()};this.src='/cards/${code}.svg'};this.src='/cards/${code}.png'" />`;
+    }
+
+    const renderCommunity = (cards) => {
+      const slots = [];
+      for (let i = 0; i < 5; i++) {
+        slots.push(cards[i] ? renderCard(cards[i]) : '<div class="pcard placeholder">·</div>');
+      }
+      $('community').innerHTML = slots.join('');
+    };
+
+    const renderSeats = (state, currentPlayerId) => {
+      const html = state.players.map((p) => {
+        const acting = p.id === currentPlayerId && state.phase !== 'hand-complete';
+        const cls = `seat${acting ? ' acting' : ''}${p.isFolded ? ' folded' : ''}`;
+        const badges = [];
+        const schoolBadge = renderSchoolBadge(ghostSchools.get(p.id));
+        if (schoolBadge) badges.push(schoolBadge);
+        if (p.isDealer) badges.push('<span class="badge">D</span>');
+        if (p.isSmallBlind) badges.push('<span class="badge">SB</span>');
+        if (p.isBigBlind) badges.push('<span class="badge">BB</span>');
+        if (p.isAllIn) badges.push('<span class="badge">ALL-IN</span>');
+        if (p.isFolded) badges.push('<span class="badge">FOLDED</span>');
+        const hole = (p.holeCards && p.holeCards.length > 0)
+          ? `<div class="seat-hole">${p.holeCards.map(renderCard).join('')}</div>`
+          : '';
+        return `
+          <div class="${cls}">
+            <div class="seat-name">
+              <span>${esc(p.name)}</span>
+              <span class="badges">${badges.join('')}</span>
+            </div>
+            <div class="seat-stack">${p.chipStack} chips</div>
+            ${p.currentBet > 0 ? `<div class="seat-bet">bet ${p.currentBet}</div>` : ''}
+            ${hole}
+          </div>
+        `;
+      }).join('');
+      $('seats').innerHTML = html;
+    };
+
+    const renderTable = () => {
+      if (!activeTable || !activeTable.lastState) {
+        $('pot').textContent = 'No hand in progress';
+        $('community').innerHTML = '';
+        $('seats').innerHTML = '';
+        return;
+      }
+      const state = activeTable.lastState;
+      $('pot').textContent = `Pot: ${state.pot}  ·  Phase: ${state.phase}  ·  To call: ${state.currentBet}`;
+      renderCommunity(state.communityCards || []);
+      const currentPlayerId = activeTable.dispatchedTo || (state.players[state.currentPlayerIndex]?.id);
+      renderSeats(state, currentPlayerId);
+    };
+
+    /**
+     * Sticky-scroll, split into BEFORE and AFTER halves because the
+     * measurement is only meaningful pre-append. (Earlier version
+     * measured after the append; `scrollHeight` had already grown,
+     * so even a user pinned to the bottom appeared "scrolled up" by
+     * the height of the new content. Result: the auto-scroll never
+     * fired and the user had to click "Jump to bottom" for every
+     * single event.)
+     *
+     * Usage:
+     *   const sticky = stickyScrollBefore(node);
+     *   ... mutate node (append / replace innerHTML) ...
+     *   stickyScrollAfter(node, sticky);
+     *
+     * The "Jump to bottom" pill stays visible whenever the user is
+     * not at the bottom — they can return to live at will.
+     */
+    function isNearBottom(node) {
+      const distance = node.scrollHeight - node.clientHeight - node.scrollTop;
+      return distance < 40;
+    }
+
+    function stickyScrollBefore(node) {
+      ensureJumpToBottomPill(node);
+      // First-paint case: scrollHeight may equal clientHeight (no
+      // overflow yet). Treat that as "at the bottom" so the FIRST
+      // appended item lands stuck to the bottom.
+      if (node.scrollHeight <= node.clientHeight + 5) return true;
+      return isNearBottom(node);
+    }
+
+    function stickyScrollAfter(node, wasAtBottom) {
+      if (wasAtBottom) {
+        node.scrollTop = node.scrollHeight;
+      }
+      updatePillVisibility(node);
+    }
+
+    function ensureJumpToBottomPill(node) {
+      if (node._jumpPill) return; // already installed
+      const parent = node.parentElement;
+      if (getComputedStyle(parent).position === 'static') {
+        parent.style.position = 'relative';
+      }
+      const pill = document.createElement('button');
+      pill.className = 'scroll-to-live';
+      pill.textContent = '↓ Jump to bottom';
+      pill.addEventListener('click', () => {
+        node.scrollTop = node.scrollHeight;
+        // updatePillVisibility will fire on the scroll event and hide it.
+      });
+      parent.appendChild(pill);
+      node._jumpPill = pill;
+      // Update on every scroll so the pill appears as soon as the user
+      // moves up, and disappears as soon as they return to the bottom.
+      node.addEventListener('scroll', () => updatePillVisibility(node));
+    }
+
+    function updatePillVisibility(node) {
+      const pill = node._jumpPill;
+      if (!pill) return;
+      const distance = node.scrollHeight - node.clientHeight - node.scrollTop;
+      // Only useful when the content actually overflows; if nothing to
+      // scroll to, hide the pill regardless of position.
+      const overflows = node.scrollHeight > node.clientHeight + 5;
+      if (!overflows || distance < 40) {
+        pill.classList.remove('visible');
+      } else {
+        pill.classList.add('visible');
+      }
+    }
+
+    const appendAction = (entry) => {
+      const node = $('actions');
+      const sticky = stickyScrollBefore(node);
+      if (node.querySelector('.empty')) node.innerHTML = '';
+      const div = document.createElement('div');
+      div.className = 'action-line';
+      div.innerHTML = entry;
+      node.appendChild(div);
+      stickyScrollAfter(node, sticky);
+    };
+
+    const renderLedger = () => {
+      const entries = Object.entries(balances)
+        .sort((a, b) => b[1] - a[1]);
+      if (entries.length === 0) {
+        $('ledger').innerHTML = '<div class="empty">No credits yet.</div>';
+        return;
+      }
+      $('ledger').innerHTML = entries.map(([id, amount]) => {
+        const a = agents.get(id);
+        const name = a ? a.displayName : id.slice(0, 8);
+        const cls = amount < 50 ? 'poor' : '';
+        return `<div class="ledger-row"><span class="ledger-name">${esc(name)}</span><span class="ledger-amount ${cls}">${amount}</span></div>`;
+      }).join('');
+    };
+
+    const renderBounties = () => {
+      if (openBounties.length === 0) {
+        $('bounties').innerHTML = '<div class="empty">No open bounties.</div>';
+        return;
+      }
+      $('bounties').innerHTML = openBounties.map((b) => {
+        const targetName = (agents.get(b.targetGhostId)?.displayName) || b.targetGhostId.slice(0, 8);
+        const placerName = (agents.get(b.placerId)?.displayName) || b.placerId.slice(0, 8);
+        return `
+          <div class="bounty">
+            <div><span class="target">${esc(targetName)}</span> · <span class="amount">${b.amount} cyphers</span></div>
+            <div style="font-size:11px;color:var(--text-dim);margin-top:4px;">placed by ${esc(placerName)} — ${esc(b.reason)}</div>
+          </div>
+        `;
+      }).join('');
+    };
+
+    const renderHistory = () => {
+      if (history.length === 0) {
+        $('history').innerHTML = '<div class="empty">No hands played yet.</div>';
+        return;
+      }
+      $('history').innerHTML = history.slice(-10).reverse().map((h) => {
+        const winners = (h.winners ?? []).map((w) => {
+          const n = agents.get(w.ghostId)?.displayName || w.ghostId.slice(0, 8);
+          return `${esc(n)} (+${w.amount}${w.description ? `, ${esc(w.description)}` : ''})`;
+        }).join(', ');
+        const nets = Object.entries(h.netChanges ?? {})
+          .map(([id, net]) => {
+            const n = agents.get(id)?.displayName || id.slice(0, 8);
+            return `${esc(n)}: ${net >= 0 ? '+' : ''}${net}`;
+          }).join('  ');
+        return `
+          <div class="hand-summary">
+            <div class="winners">${winners}</div>
+            <div class="net" style="margin-top:4px;color:var(--text-dim);font-size:11px;">${nets}</div>
+          </div>
+        `;
+      }).join('');
+    };
+
+    const handleSnapshot = (data) => {
+      for (const a of data.agents ?? []) agents.set(a.ghostId, a);
+      balances = data.balances ?? {};
+      renderLedger();
+
+      // Replay the most recent table's events so a freshly-opened tab
+      // catches up on the action that already happened (or is in flight).
+      const r = data.recentTable;
+      if (r) {
+        activeTable = { id: r.id, seats: r.seats, lastState: null, dispatchedTo: null };
+        $('actions').innerHTML = '';
+        appendAction(`<span class="who">Table opened</span> — ${r.seats.map((s) => esc(s.displayName)).join(', ')}`);
+        for (const inv of r.invites ?? []) {
+          handleInviteReply({ tableId: r.id, ...inv });
+        }
+        for (const ev of r.events ?? []) {
+          handleTableEvent({ id: r.id, event: ev });
+        }
+        if (r.result) {
+          history.push({ id: r.id, winners: r.result.winners, netChanges: r.result.netChanges });
+          renderHistory();
+        }
+      }
+    };
+
+    const handleAgentRegistered = (a) => {
+      agents.set(a.ghostId, a);
+      renderLedger();
+    };
+
+    let handleTableCreated = (t) => {
+      activeTable = {
+        id: t.id,
+        seats: t.seats,
+        lastState: null,
+        dispatchedTo: null,
+        animals: {}, // ghostId → animalType, populated by table-animals event
+      };
+      $('actions').innerHTML = '';
+      appendAction(`<span class="who">Table opened</span> — ${t.seats.map((s) => esc(s.displayName)).join(', ')}`);
+    };
+
+    // ─── Platform state and lifecycle events ──────────────────────────
+    const platformsByIdLocal = new Map();
+    function renderPlatformsList() {
+      const node = document.getElementById('platforms-list');
+      if (!node) return;
+      if (platformsByIdLocal.size === 0) {
+        node.innerHTML = '<div class="empty">No platforms yet.</div>';
+        return;
+      }
+      const html = [...platformsByIdLocal.values()].map((p) => {
+        const seatNames = (p.seated || []).map((s) => {
+          const badge = renderSchoolBadge(s.mathSchool);
+          return `${esc(s.displayName)}${badge ? ' ' + badge : ''}`;
+        }).join(', ');
+        const waitingNames = (p.waiting || []).map((id) => {
+          const a = agents.get(id);
+          return esc(a?.displayName ?? id.slice(0, 8));
+        }).join(', ');
+        return `
+          <div style="padding:10px 0;border-bottom:1px dashed rgba(168,144,112,0.25);">
+            <div style="font-size:13px;color:var(--text);margin-bottom:4px;">
+              <span style="color:var(--gold);font-weight:600;">${esc(p.type.toUpperCase())}</span>
+              · ${(p.seated?.length) ?? 0}/${p.capacity} seated · ${(p.waiting?.length) ?? 0} waiting · <span style="font-family:ui-monospace,monospace;">${esc(p.state)}</span>
+            </div>
+            <div style="font-size:11px;color:var(--text-dim);">Seats: ${seatNames || '<em>(empty)</em>'}</div>
+            ${waitingNames ? `<div style="font-size:11px;color:var(--text-dim);">Waiting: ${waitingNames}</div>` : ''}
+            <div style="font-size:10px;color:var(--text-dim);font-family:ui-monospace,monospace;margin-top:4px;">buy-in ${p.buyIn} · blinds ${p.smallBlind}/${p.bigBlind}</div>
+          </div>`;
+      }).join('');
+      node.innerHTML = html;
+    }
+
+    function handlePlatformState(p) {
+      platformsByIdLocal.set(p.id, p);
+      // Track schools per ghost so the round-table seat row can render
+      // the badge even though it pulls from gameState, not platform.
+      for (const seat of (p.seated || [])) {
+        if (seat.mathSchool) ghostSchools.set(seat.ghostId, seat.mathSchool);
+      }
+      renderPlatformsList();
+    }
+    function handlePlatformEncounterSent(data) {
+      appendActionEvent(data.ghostId, data.displayName, 'check', 0, null);
+      // Use a small system entry so the encounter is visible in the
+      // commentary feed too.
+      conversationLog.push({
+        kind: 'system',
+        subKind: null,
+        text: `${data.displayName} approaches the table…`,
+      });
+      renderConversation();
+    }
+    function handlePlatformEncounterReply(data) {
+      const verb = data.accept ? 'SITS DOWN' : 'WALKS PAST';
+      conversationLog.push({
+        kind: 'reflection', // reuse the action-row layout
+        speakerId: data.ghostId,
+        speakerName: data.displayName,
+        verb,
+        fromAnimal: 'encounter',
+        reasoning: data.reasoning,
+        swingTxt: '',
+      });
+      renderConversation();
+    }
+    function handlePlatformExit(data) {
+      const reasonText = data.reason === 'busted-out' ? 'busted out'
+        : data.reason === 'left-by-choice' ? 'cashed out'
+        : 'table broke';
+      conversationLog.push({
+        kind: 'reflection',
+        speakerId: data.ghostId,
+        speakerName: data.displayName,
+        verb: 'LEAVES',
+        fromAnimal: reasonText,
+        reasoning: `Final balance ${data.finalBalance}.`,
+        swingTxt: '',
+      });
+      renderConversation();
+    }
+    function handlePlatformSeatedFromWaiting(data) {
+      conversationLog.push({
+        kind: 'system',
+        subKind: null,
+        text: `${data.displayName} pulled from the queue, takes a seat.`,
+      });
+      renderConversation();
+    }
+
+    function handleReflectionStart(data) {
+      appendSystem(`Reflection · ${data.handsPlayed} hands · stick or switch?`, null);
+    }
+    function handleReflectionReply(data) {
+      const verb = data.decision === 'leave' ? 'LEAVES'
+        : data.decision === 'switch' ? 'SWITCHES'
+        : 'STAYS';
+      const swingTxt = data.swing > 0 ? `+${data.swing}` : `${data.swing}`;
+      // Render via a one-off speech-shaped row so the avatar shows.
+      const reflectionEntry = {
+        kind: 'reflection',
+        speakerId: data.ghostId,
+        speakerName: data.displayName,
+        verb,
+        fromAnimal: data.fromAnimal,
+        reasoning: data.reasoning,
+        swingTxt,
+      };
+      conversationLog.push(reflectionEntry);
+      renderConversation();
+    }
+    function handleReflectionEnd() { /* noop — table-animals follows */ }
+
+    // The orchestrator broadcasts a one-shot 'table-animals' event
+    // right after the invite phase resolves. It carries the unique
+    // Hellmuth assignment (one per seated player). We store it on the
+    // active table and re-render the round-table view so badges appear.
+    function handleTableAnimals(data) {
+      if (!activeTable || activeTable.id !== data.id) return;
+      activeTable.animals = data.animalsByGhostId ?? {};
+      if (currentTab === 'poker') renderPokerTable();
+    }
+
+    const handleInviteReply = (data) => {
+      const name = agents.get(data.ghostId)?.displayName || data.ghostId.slice(0, 8);
+      const verb = data.accept ? 'IN' : 'OUT';
+      appendAction(`<span class="who">${esc(name)}</span> <span class="verb">${verb}</span><div class="reasoning">${esc(data.reasoning)}</div>`);
+    };
+
+    let handleTableEvent = (data) => {
+      if (!activeTable || activeTable.id !== data.id) return;
+      const ev = data.event;
+      switch (ev.kind) {
+        case 'hand-start':
+          activeTable.lastState = ev.state;
+          appendAction(`<span class="verb">— Hand begins. Pot ${ev.state.pot} —</span>`);
+          renderTable();
+          break;
+        case 'turn-dispatched':
+          activeTable.lastState = ev.state;
+          activeTable.dispatchedTo = ev.toGhostId;
+          renderTable();
+          break;
+        case 'turn-applied': {
+          activeTable.lastState = ev.state;
+          activeTable.dispatchedTo = null;
+          const name = agents.get(ev.action.playerId)?.displayName || ev.action.playerId.slice(0, 8);
+          const amtStr = ev.action.amount > 0 ? ` ${ev.action.amount}` : '';
+          let html = `<span class="who">${esc(name)}</span> <span class="verb">${ev.action.action.toUpperCase()}${amtStr}</span>`;
+          if (ev.reasoning) html += `<div class="reasoning">${esc(ev.reasoning)}</div>`;
+          if (ev.tableTalk) html += `<div class="talk">"${esc(ev.tableTalk)}"</div>`;
+          appendAction(html);
+          renderTable();
+          break;
+        }
+        case 'phase-change':
+          activeTable.lastState = ev.state;
+          appendAction(`<span class="verb">— ${ev.state.phase.toUpperCase()} —</span>`);
+          renderTable();
+          break;
+        case 'hand-complete':
+          activeTable.lastState = ev.state;
+          activeTable.dispatchedTo = null;
+          if (ev.state.winners && ev.state.winners.length > 0) {
+            const w = ev.state.winners.map((win) => {
+              const n = agents.get(win.playerId)?.displayName || win.playerId.slice(0, 8);
+              return `${esc(n)} +${win.amount}${win.hand?.description ? ` — ${esc(win.hand.description)}` : ''}`;
+            }).join(', ');
+            appendAction(`<span class="verb">— Hand complete: ${w} —</span>`);
+          }
+          renderTable();
+          break;
+      }
+    };
+
+    const handleTableComplete = (data) => {
+      history.push({
+        id: data.id,
+        winners: data.winners,
+        netChanges: data.netChanges,
+      });
+      // Refresh balances
+      void fetch('/ledger').then(r => r.json()).then((l) => {
+        balances = l.balances || balances;
+        openBounties = l.openBounties || [];
+        renderLedger();
+        renderBounties();
+      });
+      renderHistory();
+    };
+
+    const handleBountyPlaced = (bounty) => {
+      openBounties.push(bounty);
+      renderBounties();
+    };
+
+    const handleTableCancelled = (data) => {
+      appendAction(`<span class="verb">— Table cancelled: ${esc(data.reason)} —</span>`);
+    };
+
+    const connect = () => {
+      const es = new EventSource('/events');
+      es.addEventListener('open', () => setStatus('live', true));
+      es.addEventListener('snapshot', (e) => { try { handleSnapshot(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('agent-registered', (e) => { try { handleAgentRegistered(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('table-created', (e) => { try { handleTableCreated(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('invite-reply', (e) => { try { handleInviteReply(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('table-event', (e) => { try { handleTableEvent(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('table-complete', (e) => { try { handleTableComplete(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('table-cancelled', (e) => { try { handleTableCancelled(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('table-failed', (e) => { try { handleTableCancelled(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('bounty-placed', (e) => { try { handleBountyPlaced(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('table-animals', (e) => { try { handleTableAnimals(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('reflection-start', (e) => { try { handleReflectionStart(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('reflection-reply', (e) => { try { handleReflectionReply(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('reflection-end', (e) => { try { handleReflectionEnd(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('platform-state', (e) => { try { handlePlatformState(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('platform-encounter-sent', (e) => { try { handlePlatformEncounterSent(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('platform-encounter-reply', (e) => { try { handlePlatformEncounterReply(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('platform-exit', (e) => { try { handlePlatformExit(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('platform-seated-from-waiting', (e) => { try { handlePlatformSeatedFromWaiting(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('error', () => {
+        setStatus('disconnected — retrying…', false);
+        es.close();
+        setTimeout(connect, 2000);
+      });
+    };
+
+    // ---- Tab navigation ----------------------------------------------------
+    let currentTab = 'saloon';
+    document.querySelectorAll('.tab-button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const tab = btn.getAttribute('data-tab');
+        if (!tab) return;
+        currentTab = tab;
+        document.querySelectorAll('.tab-button').forEach((b) => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('.tab-pane').forEach((p) => p.classList.toggle('active', p.id === `tab-${tab}`));
+        if (tab === 'poker') renderPokerTable();
+      });
+    });
+
+    // ---- Poker-table tab state ---------------------------------------------
+    // viewMode: 'god' = see all hole cards. 'self' = see only the chosen ghost's.
+    let viewMode = 'god';
+    // selfGhostId: which ghost to view as in 'self' mode. Defaults to first seated.
+    let selfGhostId = null;
+
+    document.querySelectorAll('#view-toggle button').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        viewMode = btn.getAttribute('data-view') || 'god';
+        document.querySelectorAll('#view-toggle button').forEach((b) =>
+          b.classList.toggle('active', b === btn),
+        );
+        const picker = document.getElementById('ghost-picker');
+        picker.classList.toggle('disabled', viewMode !== 'self');
+        renderPokerTable();
+      });
+    });
+
+    document.getElementById('ghost-select').addEventListener('change', (ev) => {
+      selfGhostId = ev.target.value || null;
+      renderPokerTable();
+    });
+
+    function refreshGhostPicker() {
+      const sel = document.getElementById('ghost-select');
+      const seats = activeTable?.seats ?? [];
+      const prev = selfGhostId;
+      sel.innerHTML = seats
+        .map((s) => `<option value="${esc(s.ghostId)}">${esc(s.displayName)}</option>`)
+        .join('');
+      if (seats.length > 0) {
+        if (!prev || !seats.find((s) => s.ghostId === prev)) {
+          selfGhostId = seats[0].ghostId;
+        } else {
+          selfGhostId = prev;
+        }
+        sel.value = selfGhostId;
+      } else {
+        selfGhostId = null;
+      }
+    }
+
+    // Seat positioning math — ported from
+    // pokerswarm-ai/src/lib/utils/positioning.ts:getSeatPositions
+    function getSeatPositions(n) {
+      if (n === 6) {
+        return [
+          { x: 50, y: 85 }, { x: 10, y: 65 }, { x: 10, y: 28 },
+          { x: 50, y: 8 },  { x: 90, y: 28 }, { x: 90, y: 65 },
+        ];
+      }
+      if (n === 9) {
+        return [
+          { x: 50, y: 88 }, { x: 18, y: 78 }, { x: 5, y: 55 },
+          { x: 8, y: 25 },  { x: 28, y: 8 },  { x: 50, y: 5 },
+          { x: 72, y: 8 },  { x: 92, y: 25 }, { x: 95, y: 55 },
+        ];
+      }
+      // Dynamic for arbitrary N: start from bottom (270°) and go clockwise.
+      const positions = [];
+      for (let i = 0; i < n; i++) {
+        const angle = (270 + (360 / n) * i) * (Math.PI / 180);
+        positions.push({
+          x: 50 + 42 * Math.cos(angle),
+          y: 50 + 42 * Math.sin(angle),
+        });
+      }
+      return positions;
+    }
+
+    /**
+     * Pick a bubble direction class for a seat at `pos` (percentages
+     * with origin top-left). Uses the seat's angle relative to table
+     * centre, mapped to the user's clockwise pattern:
+     *   top    sector → bubble-right
+     *   right  sector → bubble-below
+     *   bottom sector → bubble-left
+     *   left   sector → bubble-above
+     * Sectors are 90° wedges centred on each compass point.
+     */
+    function quadrantBubbleClass(pos) {
+      const dx = pos.x - 50;
+      const dy = pos.y - 50;
+      // atan2 in screen coordinates: 0° = east, 90° = south (down),
+      // 180° = west, 270° = north (up). Normalize to [0, 360).
+      const deg = (Math.atan2(dy, dx) * 180 / Math.PI + 360) % 360;
+      // 45° wedges around each compass point:
+      //   east   ( -45° to  45°) → seat on the right → bubble-below
+      //   south  (  45° to 135°) → seat on the bottom → bubble-left
+      //   west   ( 135° to 225°) → seat on the left → bubble-above
+      //   north  ( 225° to 315°) → seat on the top → bubble-right
+      if (deg >= 315 || deg < 45) return 'bubble-below';
+      if (deg < 135) return 'bubble-left';
+      if (deg < 225) return 'bubble-above';
+      return 'bubble-right';
+    }
+
+    /**
+     * Resolve a displayName addressee to its ghostId. Used to mark
+     * the addressed seat with `being-addressed` so the speaker→listener
+     * link is visible across the table.
+     */
+    function addresseeIdFromName(name, players) {
+      if (!name || !players) return null;
+      const want = name.trim().toLowerCase();
+      const match = players.find(
+        (p) => p.name && p.name.trim().toLowerCase() === want,
+      );
+      return match ? match.id : null;
+    }
+
+    // Track the most recent table-talk per ghost so we can render speech
+    // bubbles. Keyed by playerId; reset on hand-start. Each value is
+    // { text, to } where `to` is the displayName of the addressee (or null).
+    const recentSpeechByGhostId = new Map();
+
+    // Linear commentary log for the chat side panel — every event in
+    // play order, across the entire run (NOT cleared per hand). The
+    // viewer can follow the entire game from this stream alone.
+    //
+    // Entry shapes by kind:
+    //   { kind: 'system', subKind?, text }          // hand-start / hand-complete / cancellations
+    //   { kind: 'phase',  phase, cards }            // flop / turn / river
+    //   { kind: 'action', actorId, actorName, action, amount }
+    //   { kind: 'speech', speakerId, speakerName, text, to, handStartIndex }
+    const conversationLog = [];
+
+    let currentHandStartIndex = 0;
+    function markHandStart() {
+      currentHandStartIndex = conversationLog.length;
+    }
+
+    function appendSystem(text, subKind) {
+      conversationLog.push({ kind: 'system', subKind: subKind ?? null, text });
+      renderConversation();
+    }
+    function appendPhase(phase, cards) {
+      conversationLog.push({ kind: 'phase', phase, cards });
+      renderConversation();
+    }
+    function appendActionEvent(actorId, actorName, action, amount, handDescription) {
+      conversationLog.push({
+        kind: 'action',
+        actorId,
+        actorName,
+        action,
+        amount,
+        handDescription: handDescription ?? null,
+      });
+      renderConversation();
+    }
+    function appendChat(speakerId, speakerName, text, to) {
+      conversationLog.push({
+        kind: 'speech',
+        speakerId,
+        speakerName,
+        text,
+        to: to ?? null,
+        handStartIndex: currentHandStartIndex,
+      });
+      renderConversation();
+    }
+
+    function cardSpan(c) {
+      if (!c) return '';
+      const r = RANKS[c.rank] ?? c.rank;
+      const sChar = SUITS[c.suit?.[0]] ?? '?';
+      const isRed = SUIT_COLOR[c.suit?.[0]] === 'red';
+      return `<span class="${isRed ? 'suit-red' : ''}">${esc(r)}${sChar}</span>`;
+    }
+
+    function verbCss(action) {
+      switch (action) {
+        case 'raise':
+        case 'all-in': return 'aggressive';
+        case 'fold': return 'exit';
+        case 'check':
+        case 'call': return 'passive';
+        default: return '';
+      }
+    }
+
+    function actionVerbText(action, amount) {
+      switch (action) {
+        case 'fold': return 'folded';
+        case 'check': return 'checked';
+        case 'call': return amount > 0 ? `called <span class="amount">${amount}</span>` : 'called';
+        case 'raise': return `raised to <span class="amount">${amount}</span>`;
+        case 'all-in': return `went <span class="amount">all-in (${amount})</span>`;
+        default: return action;
+      }
+    }
+
+    function renderConversation() {
+      const node = document.getElementById('chat-stream');
+      if (!node) return;
+      const sticky = stickyScrollBefore(node);
+      if (conversationLog.length === 0) {
+        node.innerHTML = '<div class="empty">Waiting for the deal…</div>';
+        return;
+      }
+      node.innerHTML = conversationLog
+        .map((entry, idx) => {
+          if (entry.kind === 'system') {
+            const cls = entry.subKind ? ` ${entry.subKind}` : '';
+            return `<div class="event-row kind-system${cls}">${esc(entry.text)}</div>`;
+          }
+          if (entry.kind === 'phase') {
+            const cardsHtml = (entry.cards ?? []).map(cardSpan).join(' ');
+            return `
+              <div class="event-row kind-phase">
+                <span class="phase-name">${esc(entry.phase)}</span>
+                ${cardsHtml ? `<span class="phase-cards">${cardsHtml}</span>` : ''}
+              </div>`;
+          }
+          if (entry.kind === 'action') {
+            const av = avatarFor(entry.actorId, entry.actorName);
+            const verbCls = verbCss(entry.action);
+            const verbHtml = actionVerbText(entry.action, entry.amount);
+            const withHand = entry.handDescription
+              ? ` <span class="with-hand">with ${esc(entry.handDescription)}</span>`
+              : '';
+            return `
+              <div class="event-row kind-action">
+                ${av}
+                <div class="action-line">
+                  <span class="actor">${esc(entry.actorName)}</span>
+                  <span class="verb ${verbCls}">${verbHtml}</span>${withHand}
+                </div>
+              </div>`;
+          }
+          if (entry.kind === 'reflection') {
+            const av = avatarFor(entry.speakerId, entry.speakerName);
+            const verbCls = entry.verb === 'STAYS' ? 'passive' : 'aggressive';
+            return `
+              <div class="event-row kind-action">
+                ${av}
+                <div class="action-line">
+                  <span class="actor">${esc(entry.speakerName)}</span>
+                  <span class="verb ${verbCls}">${entry.verb}</span>
+                  <span class="amount">${esc(entry.fromAnimal.toUpperCase())}</span>
+                  <span class="with-hand">swing ${esc(entry.swingTxt)}</span>
+                  <div class="reasoning" style="font-size:11px;color:var(--text-dim);font-style:italic;margin-top:4px;padding-left:0;">${esc(entry.reasoning)}</div>
+                </div>
+              </div>`;
+          }
+          if (entry.kind === 'speech') {
+            const av = avatarFor(entry.speakerId, entry.speakerName);
+            const toTag = entry.to
+              ? `<span class="chat-to">${esc(entry.to)}</span>`
+              : '';
+            const youCls = (viewMode === 'self' && entry.speakerId === selfGhostId) ? ' you-msg' : '';
+
+            // Find the most recent prior speech from the addressee in
+            // this hand and surface it as a quote, so replies are
+            // visually grounded in what they're responding to.
+            let quoteHtml = '';
+            if (entry.to) {
+              for (let j = idx - 1; j >= entry.handStartIndex; j--) {
+                const prior = conversationLog[j];
+                if (prior.kind === 'speech' && prior.speakerName === entry.to) {
+                  quoteHtml = `
+                    <div class="chat-quote">
+                      <span class="quote-from">${esc(prior.speakerName)}:</span>
+                      "${esc(prior.text)}"
+                    </div>`;
+                  break;
+                }
+              }
+            }
+            return `
+              <div class="event-row kind-speech${youCls}">
+                <div class="chat-head">
+                  ${av}
+                  <div class="chat-meta">
+                    <span class="chat-from">${esc(entry.speakerName)}</span>
+                    ${toTag}
+                  </div>
+                </div>
+                ${quoteHtml}
+                <div class="chat-text">"${esc(entry.text)}"</div>
+              </div>`;
+          }
+          return '';
+        })
+        .join('');
+      stickyScrollAfter(node, sticky);
+    }
+
+    // Render a Cyphers amount as physical-looking chip columns:
+    // gold = 50, red = 10, ivory = 1. Used for player stacks (small)
+    // and the pot in the centre (larger). Caps the visible chips per
+    // column so an extreme stack doesn't overflow the seat card.
+    function renderChipStack(amount, klass) {
+      if (!Number.isFinite(amount) || amount <= 0) return '';
+      const denoms = [50, 10, 1];
+      const counts = {};
+      let remaining = Math.floor(amount);
+      for (const d of denoms) {
+        counts[d] = Math.floor(remaining / d);
+        remaining -= counts[d] * d;
+      }
+      const cap = klass === 'pot' ? 16 : 8;
+      const cols = [];
+      for (const d of denoms) {
+        if (counts[d] === 0) continue;
+        const n = Math.min(counts[d], cap);
+        let chips = '';
+        for (let i = 0; i < n; i++) chips += `<span class="chip chip-${d}"></span>`;
+        cols.push(`<div class="chip-column" title="${counts[d]} × ${d}">${chips}</div>`);
+      }
+      return `<div class="chip-stack ${klass || ''}">${cols.join('')}</div>`;
+    }
+
+    // Deterministic placeholder avatar — circle with initials, hue
+    // derived from a hash of the ghost id. We'll swap this for real
+    // avatar images when the ghost-adoption flow grows them.
+    function avatarFor(ghostId, displayName) {
+      let hash = 0;
+      const str = String(ghostId || displayName || '');
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+      }
+      const hue = Math.abs(hash) % 360;
+      const initials = String(displayName || '?')
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((s) => s[0] || '')
+        .join('')
+        .toUpperCase()
+        .slice(0, 2) || '?';
+      return `<div class="avatar" style="background:linear-gradient(135deg, hsl(${hue}, 55%, 42%), hsl(${(hue + 28) % 360}, 60%, 28%));">${esc(initials)}</div>`;
+    }
+
+    function renderPokerTable() {
+      if (currentTab !== 'poker') return;
+      const frame = document.getElementById('table-frame');
+      const empty = document.getElementById('empty-table');
+
+      // Refresh ghost picker against current seats.
+      refreshGhostPicker();
+
+      // Strip prior dynamically-added seats / center.
+      frame.querySelectorAll('.seat-circle, .table-center').forEach((n) => n.remove());
+
+      if (!activeTable || !activeTable.lastState) {
+        empty.style.display = 'flex';
+        empty.textContent = 'No hand in progress.';
+        return;
+      }
+      empty.style.display = 'none';
+      const state = activeTable.lastState;
+
+      // Center: community cards on top, pot stack + amount below them,
+      // phase label at the bottom. Pot lives in its own row so it
+      // doesn't fight the top seat for space.
+      const center = document.createElement('div');
+      center.className = 'table-center';
+      const pot = state.pot ?? 0;
+      const community = state.communityCards ?? [];
+      const slots = [];
+      for (let i = 0; i < 5; i++) {
+        slots.push(community[i] ? renderCard(community[i]) : '<div class="pcard placeholder">·</div>');
+      }
+      const potStack = pot > 0 ? renderChipStack(pot, 'pot') : '';
+      center.innerHTML = `
+        <div class="community">${slots.join('')}</div>
+        <div class="pot-row">
+          ${potStack}
+          <div class="pot-display">Pot ${pot}</div>
+        </div>
+        <div class="phase-label">${esc(state.phase ?? '')}</div>
+      `;
+      frame.appendChild(center);
+
+      // Seats around the table
+      const positions = getSeatPositions(state.players.length);
+      const currentActorId = activeTable.dispatchedTo
+        || (state.players[state.currentPlayerIndex]?.id);
+
+      // Compute the set of ghost ids that are currently being addressed
+      // by an active speech bubble. The speaker's bubble already shows
+      // "→ <Name>"; this set lets us also ring the LISTENER's seat so
+      // the visual link is bidirectional.
+      const beingAddressedIds = new Set();
+      for (const speech of recentSpeechByGhostId.values()) {
+        if (!speech || !speech.to) continue;
+        const targetId = addresseeIdFromName(speech.to, state.players);
+        if (targetId) beingAddressedIds.add(targetId);
+      }
+
+      state.players.forEach((p, i) => {
+        const pos = positions[i] || { x: 50, y: 50 };
+        const seat = document.createElement('div');
+        seat.className = 'seat-circle';
+        if (currentActorId === p.id && state.phase !== 'hand-complete') seat.classList.add('acting');
+        if (p.isFolded) seat.classList.add('folded');
+        if (beingAddressedIds.has(p.id)) seat.classList.add('being-addressed');
+
+        const isSelfPerspective = viewMode === 'self' && p.id === selfGhostId;
+        if (isSelfPerspective) seat.classList.add('you');
+
+        // Bubble direction by clock-quadrant. Pattern is a 90° clockwise
+        // rotation from the seat's compass position, so every bubble
+        // hangs outside the table — none cover pot, community cards,
+        // or bet info in the centre:
+        //   top    seats (~12 o'clock) → bubble-right
+        //   right  seats (~3  o'clock) → bubble-below
+        //   bottom seats (~6  o'clock) → bubble-left
+        //   left   seats (~9  o'clock) → bubble-above
+        seat.classList.add(quadrantBubbleClass(pos));
+
+        seat.style.left = `${pos.x}%`;
+        seat.style.top = `${pos.y}%`;
+
+        const badges = [];
+        const schoolBadge = renderSchoolBadge(ghostSchools.get(p.id));
+        if (schoolBadge) badges.push(schoolBadge);
+        if (p.isDealer) badges.push('<span class="badge">D</span>');
+        if (p.isSmallBlind) badges.push('<span class="badge">SB</span>');
+        if (p.isBigBlind) badges.push('<span class="badge">BB</span>');
+        if (p.isAllIn) badges.push('<span class="badge">ALL-IN</span>');
+        if (p.isFolded) badges.push('<span class="badge">FOLDED</span>');
+
+        // Hole-card visibility:
+        //   god mode → everyone visible
+        //   self mode → only the chosen ghost's cards visible; others face down.
+        const showCards = viewMode === 'god' || isSelfPerspective;
+        const holeCards = (p.holeCards && p.holeCards.length > 0)
+          ? (showCards
+              ? p.holeCards.map(renderCard).join('')
+              : renderCardBack() + renderCardBack())
+          : '';
+
+        const youTag = isSelfPerspective ? '<span class="you-tag">YOU</span>' : '';
+        const speech = recentSpeechByGhostId.get(p.id);
+        const addresseeLine = (speech && speech.to)
+          ? `<span class="addressee">${esc(speech.to)}</span>`
+          : '';
+        const speechHtml = speech
+          ? `<div class="speech">${addresseeLine}<span class="text">"${esc(speech.text)}"</span></div>`
+          : '';
+        const betChip = p.currentBet > 0 ? `<div class="bet-chip">bet ${p.currentBet}</div>` : '';
+        const avatar = avatarFor(p.id, p.name);
+
+        const stackChips = renderChipStack(p.chipStack, 'player');
+        const animalType = activeTable?.animals?.[p.id];
+        const animalBadge = animalType
+          ? `<span class="animal-badge ${animalType}"><span class="animal-glyph">${ANIMAL_GLYPHS[animalType] ?? ''}</span> ${animalType}</span>`
+          : '';
+        seat.innerHTML = `
+          <div class="seat-card">
+            <div class="head-row">
+              ${avatar}
+              <div class="name-block">
+                <div class="name-row">
+                  <span class="name-text">${esc(p.name)} ${youTag}</span>
+                  <span class="badges">${badges.join('')}</span>
+                </div>
+                <div class="stack">
+                  <span>${p.chipStack} chips</span>
+                  ${stackChips}
+                </div>
+                ${animalBadge}
+              </div>
+            </div>
+            ${holeCards ? `<div class="seat-cards">${holeCards}</div>` : ''}
+          </div>
+          ${betChip}
+          ${speechHtml}
+        `;
+        frame.appendChild(seat);
+      });
+    }
+
+    // Hook the existing event handlers so the round-table view stays in sync.
+    const _origHandleTableEvent = handleTableEvent;
+    handleTableEvent = (data) => {
+      _origHandleTableEvent(data);
+      // Keep recent speech for each ghost (clears at hand-start).
+      const ev = data.event;
+      if (ev?.kind === 'hand-start') {
+        recentSpeechByGhostId.clear();
+        markHandStart();
+        const handNum = ev.state?.handNumber ?? '?';
+        const playerNames = (ev.state?.players ?? []).map((p) => p.name).join(', ');
+        const pot = ev.state?.pot ?? 0;
+        appendSystem(`Hand ${handNum} · pot ${pot} · ${playerNames}`, null);
+      } else if (ev?.kind === 'phase-change') {
+        // ev.state.communityCards has all cards revealed so far.
+        // We only want the cards REVEALED in this transition.
+        const cards = ev.state?.communityCards ?? [];
+        const phase = ev.state?.phase;
+        let revealed = [];
+        if (phase === 'flop') revealed = cards.slice(0, 3);
+        else if (phase === 'turn') revealed = cards.slice(3, 4);
+        else if (phase === 'river') revealed = cards.slice(4, 5);
+        appendPhase(phase || '', revealed);
+      } else if (ev?.kind === 'hand-complete') {
+        const winners = ev.state?.winners ?? [];
+        if (winners.length === 1) {
+          const w = winners[0];
+          const seat = activeTable?.seats?.find((s) => s.ghostId === w.playerId);
+          const name = seat?.displayName || w.playerId.slice(0, 8);
+          const desc = w.hand?.description ? ` · ${w.hand.description}` : '';
+          appendSystem(`${name} won ${w.amount}${desc}`, 'complete');
+        } else if (winners.length > 1) {
+          const text = winners.map((w) => {
+            const seat = activeTable?.seats?.find((s) => s.ghostId === w.playerId);
+            const name = seat?.displayName || w.playerId.slice(0, 8);
+            return `${name} +${w.amount}`;
+          }).join(' · ');
+          appendSystem(`Split pot · ${text}`, 'complete');
+        } else {
+          appendSystem('Hand complete', 'complete');
+        }
+      } else if (ev?.kind === 'turn-applied') {
+        // Every action goes into the commentary feed.
+        const seat = activeTable?.seats?.find((s) => s.ghostId === ev.action.playerId);
+        const actorName = seat?.displayName || ev.action.playerId.slice(0, 8);
+        appendActionEvent(
+          ev.action.playerId,
+          actorName,
+          ev.action.action,
+          ev.action.amount,
+          ev.handDescription ?? null,
+        );
+
+        if (ev.tableTalk && ev.tableTalk.length > 0) {
+          recentSpeechByGhostId.set(ev.action.playerId, {
+            text: ev.tableTalk,
+            to: ev.tableTalkTo ?? null,
+          });
+          appendChat(
+            ev.action.playerId,
+            actorName,
+            ev.tableTalk,
+            ev.tableTalkTo ?? null,
+          );
+        }
+        // Update the "last action" panel below the table for the poker tab.
+        const who = activeTable?.seats?.find((s) => s.ghostId === ev.action.playerId);
+        document.getElementById('last-action-who').textContent =
+          who?.displayName || (ev.action.playerId.slice(0, 8));
+        document.getElementById('last-action-verb').textContent =
+          `${ev.action.action.toUpperCase()}${ev.action.amount > 0 ? ' ' + ev.action.amount : ''}`;
+        document.getElementById('last-action-reasoning').textContent = ev.reasoning ?? '';
+        document.getElementById('table-action-row').style.display = 'block';
+      }
+      if (currentTab === 'poker') renderPokerTable();
+    };
+
+    const _origHandleTableCreated = handleTableCreated;
+    handleTableCreated = (t) => {
+      _origHandleTableCreated(t);
+      recentSpeechByGhostId.clear();
+      document.getElementById('table-action-row').style.display = 'none';
+      if (currentTab === 'poker') renderPokerTable();
+    };
+
+    renderLedger();
+    renderBounties();
+    renderHistory();
+    renderConversation();
+    setStatus('connecting…', false);
+    connect();
+  </script>
+</body>
+</html>

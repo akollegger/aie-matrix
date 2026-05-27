@@ -12,6 +12,9 @@ export interface ColyseusWorldBridge {
   setLoadedMap(map: LoadedMap): void;
   getGhostCell(ghostId: string): string | undefined;
   setGhostCell(ghostId: string, cellId: string): void;
+  /** Remove a ghost from world state (RFC-0019 Barnacle Protocol — used when
+   *  a mini-game session begins so the ghost vanishes from the spectator). */
+  removeGhostCell(ghostId: string): void;
   /** Ghost ids whose authoritative tile is `cellId`. */
   listOccupantsOnCell(cellId: string): string[];
   setGhostMode(ghostId: string, mode: "normal" | "conversational"): void;
@@ -35,6 +38,7 @@ export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
     setLoadedMap: (map) => room.setLoadedMap(map),
     getGhostCell: (ghostId) => room.getGhostCell(ghostId),
     setGhostCell: (ghostId, cellId) => room.setGhostCell(ghostId, cellId),
+    removeGhostCell: (ghostId) => room.removeGhostCell(ghostId),
     listOccupantsOnCell: (cellId) => room.listOccupantsOnCell(cellId),
     setGhostMode: (ghostId, mode) => room.setGhostMode(ghostId, mode),
     getGhostMode: (ghostId) => room.getGhostMode(ghostId),

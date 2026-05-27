@@ -20,7 +20,13 @@ export interface GhostRecord {
   agentHostId?: string;
   caretakerId?: string;
   h3Index: string;
+  /** Cell this ghost was placed on at adoption. Used by /respawn to teleport
+   *  the ghost home (e.g. when a poker session ends, to clear the saloon tile). */
+  spawnH3Index: string;
   status: "active" | "stopped";
+  /** Human-readable name (e.g. "Django Decypher"). Optional; read back
+   *  via GET /registry/ghosts/:id so other ghosts can resolve names. */
+  displayName?: string;
 }
 
 export interface RegistryStoreLike {

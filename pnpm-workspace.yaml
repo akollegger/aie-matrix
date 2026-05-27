@@ -23,4 +23,7 @@ packages:
   - ghosts/peppers-inner
   - ghosts/peppers-mem
   - ghosts/peppers-agent
+  - ghosts/rdc-poker
+  - ghosts/rdc-ledger
+  - ghosts/rdc-poker-session
   - e2e

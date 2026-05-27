@@ -3,11 +3,24 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { SayResult, ByeResult, InboxResult } from "@aie-matrix/shared-types";
 
+/** One observed MCP tool call — fired AFTER the call resolves. */
+export interface ToolCallObservation {
+  readonly name: string;
+  readonly arguments: Record<string, unknown>;
+  readonly at: string;
+  readonly durationMs: number;
+  readonly result: unknown;
+  readonly error: string | null;
+}
+
 export interface GhostMcpClientOptions {
   /** Streamable HTTP MCP endpoint (e.g. `http://127.0.0.1:8787/mcp`). */
   worldApiBaseUrl: string;
   /** Ghost session JWT from registry adoption. */
   token: string;
+  /** Optional observer fired after every callTool resolves. Errors
+   *  thrown by the observer are swallowed. */
+  onToolCall?: (obs: ToolCallObservation) => void;
 }
 
 /**
@@ -63,31 +76,80 @@ export class GhostMcpClient {
     return (await this.callTool("inbox")) as InboxResult;
   }
 
+  /**
+   * List the MCP tools the server actually exposes — the authoritative
+   * runtime menu. Used by the agent to discover what's possible without
+   * the prompt having to enumerate tools by name.
+   */
+  async listTools(): Promise<ReadonlyArray<{
+    readonly name: string;
+    readonly description: string;
+    readonly inputSchema: Record<string, unknown>;
+  }>> {
+    if (!this.client) {
+      throw new Error("GhostMcpClient is not connected");
+    }
+    const result = await this.client.listTools();
+    return (result.tools ?? []).map((t) => ({
+      name: t.name,
+      description: t.description ?? "",
+      inputSchema: (t.inputSchema as Record<string, unknown>) ?? { type: "object", properties: {} },
+    }));
+  }
+
   async callTool(name: string, arguments_: Record<string, unknown> = {}): Promise<unknown> {
     if (!this.client) {
       throw new Error("GhostMcpClient is not connected");
     }
-    const result = (await this.client.callTool({
-      name,
-      arguments: arguments_,
-    })) as CallToolResult;
-    if (result.isError) {
-      const first = Array.isArray(result.content) ? result.content[0] : undefined;
-      const text =
-        first && first.type === "text" && "text" in first ? first.text : JSON.stringify(result);
-      throw new Error(text);
-    }
-    const content = Array.isArray(result.content) ? result.content : [];
-    const text = content.find((c) => c.type === "text" && "text" in c) as
-      | { type: "text"; text: string }
-      | undefined;
-    if (!text) {
-      return result;
-    }
+    const startedAt = Date.now();
+    let parsed: unknown = null;
+    let errorText: string | null = null;
     try {
-      return JSON.parse(text.text) as unknown;
-    } catch {
-      return text.text;
+      const result = (await this.client.callTool({
+        name,
+        arguments: arguments_,
+      })) as CallToolResult;
+      if (result.isError) {
+        const first = Array.isArray(result.content) ? result.content[0] : undefined;
+        const text =
+          first && first.type === "text" && "text" in first ? first.text : JSON.stringify(result);
+        errorText = text;
+        throw new Error(text);
+      }
+      const content = Array.isArray(result.content) ? result.content : [];
+      const text = content.find((c) => c.type === "text" && "text" in c) as
+        | { type: "text"; text: string }
+        | undefined;
+      if (!text) {
+        parsed = result;
+        return result;
+      }
+      try {
+        parsed = JSON.parse(text.text) as unknown;
+      } catch {
+        parsed = text.text;
+      }
+      return parsed;
+    } catch (err) {
+      if (errorText === null) {
+        errorText = err instanceof Error ? err.message : String(err);
+      }
+      throw err;
+    } finally {
+      if (this.options.onToolCall) {
+        try {
+          this.options.onToolCall({
+            name,
+            arguments: arguments_,
+            at: new Date().toISOString(),
+            durationMs: Date.now() - startedAt,
+            result: errorText === null ? parsed : null,
+            error: errorText,
+          });
+        } catch {
+          /* observer must never break a tool call */
+        }
+      }
     }
   }
 }

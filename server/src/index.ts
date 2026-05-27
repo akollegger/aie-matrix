@@ -301,6 +301,30 @@ async function main(): Promise<void> {
         ghost.h3Index = cid;
       }
     },
+    removeGhostCell(ghostId: string): void {
+      const gid = String(ghostId).trim();
+      const traceId = getRequestTraceId() ?? null;
+      console.info(
+        JSON.stringify({
+          kind: "world-bridge",
+          op: "removeGhostCell",
+          phase: "before-colyseus",
+          traceId,
+          ghostId: gid,
+        }),
+      );
+      colyseusBridge.removeGhostCell(gid);
+      console.info(
+        JSON.stringify({
+          kind: "world-bridge",
+          op: "removeGhostCell",
+          phase: "after-colyseus",
+          traceId,
+          ghostId: gid,
+        }),
+      );
+      ghostAuthority.delete(gid);
+    },
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
     setGhostMode: (ghostId: string, mode: "normal" | "conversational") =>
       colyseusBridge.setGhostMode(ghostId, mode),
@@ -377,7 +401,10 @@ async function main(): Promise<void> {
 
   if (matrixMode === "development") {
     mapMgmtLayer = makeLocalMapManagementLayer().pipe(Layer.provide(mapSvcLayer), Layer.orDie);
-    liveSessionLayer = makeLocalLiveSessionLayer().pipe(Layer.provide(mapMgmtLayer));
+    liveSessionLayer = makeLocalLiveSessionLayer().pipe(
+      Layer.provide(Layer.mergeAll(mapMgmtLayer, mapSvcLayer)),
+      Layer.orDie,
+    );
     console.info(`[aie-matrix] development mode: maps auto-discovered from ${repoRoot}/maps/`);
   } else {
     // staging / production — require Neo4j
@@ -493,8 +520,8 @@ async function main(): Promise<void> {
     console.info(JSON.stringify({ kind: "startup-map-sync", ...syncSummary }));
   }
 
-  // T025 — Session binding for staging/production (skip in development mode where the
-  // local session is synthesised in-memory by makeLocalLiveSessionLayer).
+  // T025 — Session binding for staging/production (skip in development mode where
+  // makeLocalLiveSessionLayer synthesises a session for AIE_MATRIX_MAP at startup).
   const liveSessionId = process.env.LIVE_SESSION_ID?.trim();
   if (matrixMode !== "development" && neoDriver) {
     let sessionToBind: string | undefined;

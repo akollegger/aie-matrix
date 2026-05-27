@@ -2,7 +2,14 @@
  * Optional HTTP + SSE server that powers the peppers ghost overlay.
  * Serves the static overlay HTML at `/` and a live event stream at
  * `/events`. Disabled by default; opt in by setting
- * `PEPPERS_OVERLAY_PORT` (or passing `overlayPort` to `runHouse`).
+ * `PEPPERS_OVERLAY_BASE_PORT` (executor-driven, multi-ghost) or
+ * `PEPPERS_OVERLAY_PORT` (single-ghost CLI).
+ *
+ * Ownership: the overlay is started by the caller (executor or CLI),
+ * not by `runHouse` — so it survives pause/resume cycles when a ghost
+ * hands off to a Barnacle mini-game session. Callers pass the
+ * `OverlayServer` handle into `runHouse`, which rebinds the init
+ * payload and broadcasts events but never closes the server.
  *
  * The overlay is intentionally separate from `client/phaser` — it's a
  * standalone debug surface, not part of the main spectator. Browsers
@@ -20,6 +27,13 @@ const moduleDir = dirname(fileURLToPath(import.meta.url));
 export interface OverlayServer {
   readonly port: number;
   broadcast(eventName: string, data: unknown): void;
+  /**
+   * Replace the init payload provider. Useful when overlay ownership is
+   * decoupled from the cascade lifecycle (pause/resume) — each new
+   * cascade run rebinds this so freshly-connecting browsers see current
+   * state, not stale state from the original startup.
+   */
+  setInit(getInit: () => unknown): void;
   close(): Promise<void>;
 }
 
@@ -42,6 +56,10 @@ export async function startOverlayServer(opts: OverlayServerOptions): Promise<Ov
   const overlayDir = join(moduleDir, "..", "overlay");
   const indexHtml = await readFile(join(overlayDir, "index.html"), "utf8");
 
+  // Mutable so the overlay can be rebound across cascade lifecycles
+  // without losing connected browsers or the bound port.
+  let currentGetInit: () => unknown = opts.getInit;
+
   const server: Server = createServer((req, res) => {
     const url = req.url ?? "/";
 
@@ -53,7 +71,7 @@ export async function startOverlayServer(opts: OverlayServerOptions): Promise<Ov
         "Access-Control-Allow-Origin": "*",
       });
       try {
-        const init = opts.getInit();
+        const init = currentGetInit();
         res.write(`event: init\ndata: ${JSON.stringify(init)}\n\n`);
       } catch (err) {
         res.write(
@@ -111,6 +129,9 @@ export async function startOverlayServer(opts: OverlayServerOptions): Promise<Ov
           clients.delete(client);
         }
       }
+    },
+    setInit(getInit: () => unknown): void {
+      currentGetInit = getInit;
     },
     async close(): Promise<void> {
       for (const c of [...clients]) {

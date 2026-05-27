@@ -2,11 +2,17 @@ import { loadRootEnv, isEnvTruthy } from "@aie-matrix/root-env";
 import { Effect, Layer, ManagedRuntime, pipe } from "effect";
 import { A2AHostServiceLive } from "./a2a-host/A2AHostService.js";
 import { McpProxyServiceLive } from "./mcp-proxy/mcp-proxy.layer.js";
-import { CatalogServiceLive } from "./catalog/CatalogService.js";
+import { CatalogService, CatalogServiceLive } from "./catalog/CatalogService.js";
 import { readHouseCapabilityManifest } from "./house-capabilities.js";
 import { AgentSupervisorLayer, AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { createApp } from "./app.js";
 import { startColyseusWorldBridge, type ColyseusWorldBridgeHandle } from "./colyseus-bridge/ColyseusWorldBridge.js";
+import {
+  BarnacleSupervisor,
+  BarnacleSupervisorLayer,
+  startBarnacleEncounterTrigger,
+  type EncounterTriggerHandle,
+} from "./barnacle/index.js";
 
 loadRootEnv();
 
@@ -48,8 +54,18 @@ export const appLayer = Layer.mergeAll(
     AgentSupervisorLayer({
       publicHouseBaseUrl: publicBase,
       internalHouseBaseUrl: internalBase,
+      worldHttpBase,
       defaultCapabilityManifest: readHouseCapabilityManifest(),
       pushIngestToken: devToken,
+    }),
+    base,
+  ),
+  // RFC-0019 Barnacle supervisor — handles mini-game session lifecycles.
+  Layer.provide(
+    BarnacleSupervisorLayer({
+      registryBaseUrl: worldHttpBase,
+      devToken,
+      publicSupervisorA2A: `${publicBase}/v1/internal/barnacle-complete`,
     }),
     base,
   ),
@@ -60,6 +76,7 @@ const runtime = ManagedRuntime.make(appLayer);
 const app = createApp(runtime, { devToken, publicBase, worldApiUrl });
 
 let colyseusHandle: ColyseusWorldBridgeHandle | undefined;
+let barnacleEncounterHandle: EncounterTriggerHandle | undefined;
 
 const server = app.listen(port, "0.0.0.0", () => {
   console.info(
@@ -96,10 +113,51 @@ const server = app.listen(port, "0.0.0.0", () => {
       }
     })();
   }
+
+  // RFC-0019 — Barnacle encounter trigger. ON by default since phase
+  // 5b.2c; set `AIE_MATRIX_BARNACLE_ENCOUNTERS=0` to opt out (legacy
+  // spectator-only smoke tests with no mini-games registered).
+  const barnacleEncountersEnabled =
+    process.env.AIE_MATRIX_BARNACLE_ENCOUNTERS !== "0";
+  if (barnacleEncountersEnabled) {
+    void (async () => {
+      try {
+        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "resolving-services" }));
+        const catalog = await runtime.runPromise(
+          pipe(CatalogService, Effect.map((c) => c)),
+        );
+        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "catalog-resolved" }));
+        const agentSupervisor = await runtime.runPromise(
+          pipe(AgentSupervisor, Effect.map((s) => s)),
+        );
+        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "agent-supervisor-resolved" }));
+        const barnacleSupervisor = await runtime.runPromise(
+          pipe(BarnacleSupervisor, Effect.map((s) => s)),
+        );
+        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "barnacle-supervisor-resolved" }));
+        barnacleEncounterHandle = await startBarnacleEncounterTrigger({
+          worldHttpBase,
+          registryBaseUrl: worldHttpBase,
+          devToken,
+          catalog,
+          agentSupervisor,
+          barnacleSupervisor,
+        });
+      } catch (e) {
+        console.error(
+          JSON.stringify({
+            kind: "barnacle.encounter-trigger.failed-to-start",
+            message: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      }
+    })();
+  }
 });
 
 const shutdown = async () => {
   colyseusHandle?.close();
+  await barnacleEncounterHandle?.close();
   await runtime.dispose();
   // closeAllConnections() force-closes keep-alive HTTP connections so server.close()
   // doesn't wait indefinitely for clients (health probes, registered ghosts) to disconnect.

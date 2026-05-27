@@ -62,6 +62,14 @@ export interface InvokeIdRequest {
   readonly recentCascades: readonly CascadeReplay[];
   readonly worldContext?: WorldContext;
   readonly objective?: string;
+  /** This ghost's persistent name. Threaded into every facet agent +
+   *  impulse + convergence + synthesis prompt as the self-identity
+   *  anchor. Removes any need to reason about routing UUIDs. */
+  readonly selfDisplayName?: string;
+  /** Last N super-objectives from prior cascades, oldest → newest.
+   *  Fed into convergence so committed plans persist across ticks
+   *  rather than regenerating fresh each cascade. */
+  readonly recentSuperObjectives?: ReadonlyArray<string>;
 }
 
 export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
@@ -100,10 +108,17 @@ export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
   ]);
 
   // Stage 2 — convergence: the eight facet readings → one feeling + flavor.
+  // Pass recent super-objectives + recent triggers so the prompt can
+  // preserve committed plans across ticks instead of regenerating
+  // fresh each cascade (the fix for "talk forever, never act" loops).
   const conv = await invokeConvergence({
     facetReadings,
     stimulus: req.stimulus,
     objective: req.objective,
+    ...(req.recentSuperObjectives && req.recentSuperObjectives.length > 0
+      ? { recentSuperObjectives: req.recentSuperObjectives }
+      : {}),
+    ...(recentTriggers.length > 0 ? { recentTriggers } : {}),
   });
 
   // Stage 3 — synthesis: voice it. Receives BOTH the emotional flavor
@@ -115,6 +130,7 @@ export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
     stimulus: req.stimulus,
     worldContext: req.worldContext,
     objective: req.objective,
+    ...(req.selfDisplayName ? { selfDisplayName: req.selfDisplayName } : {}),
   });
 
   const adjustments: Adjustment[] = [];

@@ -15,6 +15,7 @@
 import type { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 
 import type { Compass, Stimulus } from "@aie-matrix/ghost-peppers-inner";
+import { resolveDisplayNameSync, prefetchDisplayName } from "./name-resolver.js";
 
 /** Mutable per-loop bookkeeping for stimulus diffing. */
 export interface StimulusContext {
@@ -29,7 +30,7 @@ export interface StimulusContext {
   /** Ghost-house id — used as the bearer for `/threads/{tid}/{mid}` reads. */
   agentHostId: string;
   /** Notifications fetched but not yet replayed as stimuli. */
-  pendingMessages: Array<{ from: string; text: string }>;
+  pendingMessages: Array<{ from: string; text: string; intent?: string }>;
   /** Log prefix passed to fetchMessage so diagnostics carry the ghost label. */
   logTag: string;
 }
@@ -53,10 +54,6 @@ export function emptyStimulusContext(
   };
 }
 
-function shortenGhostId(id: string): string {
-  return id.length > 8 ? `ghost_${id.slice(0, 8)}` : id;
-}
-
 /**
  * Fetch the actual content of a message via the conversation server's
  * REST API. The MCP `inbox` tool only returns notification pointers
@@ -72,8 +69,13 @@ async function fetchMessage(
   threadId: string,
   messageId: string,
   logTag: string,
-): Promise<{ from: string; text: string } | null> {
-  const url = `${registryBase}/threads/${encodeURIComponent(threadId)}/${encodeURIComponent(messageId)}`;
+): Promise<{ from: string; text: string; intent?: string } | null> {
+  // Strip any trailing slash on registryBase before joining. If we don't,
+  // a base like "http://127.0.0.1:8787/" + "/threads/…" produces
+  // "//threads/…" which Express rejects with 404 (silently drops every
+  // inbound utterance — was the root cause of "ghosts don't respond").
+  const base = registryBase.replace(/\/+$/, "");
+  const url = `${base}/threads/${encodeURIComponent(threadId)}/${encodeURIComponent(messageId)}`;
   let res: Response;
   try {
     res = await fetch(url, {
@@ -97,9 +99,9 @@ async function fetchMessage(
     );
     return null;
   }
-  let record: { name?: unknown; content?: unknown };
+  let record: { name?: unknown; content?: unknown; intent?: unknown };
   try {
-    record = (await res.json()) as { name?: unknown; content?: unknown };
+    record = (await res.json()) as { name?: unknown; content?: unknown; intent?: unknown };
   } catch (err) {
     console.warn(
       `[${logTag}] inbox: bad JSON for ${threadId}/${messageId}: ${err instanceof Error ? err.message : String(err)}`,
@@ -113,8 +115,19 @@ async function fetchMessage(
     );
     return null;
   }
-  const fromRaw = typeof record.name === "string" ? record.name : threadId;
-  return { from: shortenGhostId(fromRaw), text: content };
+  // World-api's `sayEffect` now resolves the speaker's displayName from
+  // the registry before storing the message, so `record.name` is the
+  // persistent identity ("Yul B-Tree") — not a ghostId. Trust it
+  // directly. We only resolve when `record.name` is absent (legacy
+  // writes pre-dating that change) and we have nothing but the thread
+  // id (which IS the speaker's ghostId).
+  const fromRaw = typeof record.name === "string" ? record.name : null;
+  const from = fromRaw ?? resolveDisplayNameSync(registryBase, threadId);
+  const intent =
+    typeof record.intent === "string" && record.intent.trim().length > 0
+      ? record.intent.trim()
+      : undefined;
+  return intent === undefined ? { from, text: content } : { from, text: content, intent };
 }
 
 interface InboxResult {
@@ -190,7 +203,9 @@ export async function pollNextStimulus(
   }
   const next = ctx.pendingMessages.shift();
   if (next !== undefined) {
-    return { kind: "utterance", from: next.from, text: next.text };
+    return next.intent === undefined
+      ? { kind: "utterance", from: next.from, text: next.text }
+      : { kind: "utterance", from: next.from, text: next.text, intent: next.intent };
   }
 
   // 2 & 3. Look here AND around — combine into a 7-cell cluster view.
@@ -239,15 +254,18 @@ export async function pollNextStimulus(
   ctx.knownOccupants = clusterOccupants;
 
   if (arrived.length > 0) {
+    // Background prefetch — by the time the cascade prompts run a few
+    // ticks later, the resolver will have real names cached.
+    for (const g of arrived) void prefetchDisplayName(ctx.registryBase, g);
     return {
       kind: "cluster-entered",
-      ghostIds: arrived.map(shortenGhostId),
+      ghostIds: arrived.map((g) => resolveDisplayNameSync(ctx.registryBase, g)),
     };
   }
   if (departed.length > 0) {
     return {
       kind: "cluster-left",
-      ghostIds: departed.map(shortenGhostId),
+      ghostIds: departed.map((g) => resolveDisplayNameSync(ctx.registryBase, g)),
     };
   }
 

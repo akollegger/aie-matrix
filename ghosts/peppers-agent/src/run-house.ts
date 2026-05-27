@@ -27,9 +27,14 @@ import {
   type MemoryConnection,
 } from "@aie-matrix/ghost-peppers-mem";
 
-import { startOverlayServer, type OverlayServer } from "./overlay-server.js";
+import type { OverlayServer } from "./overlay-server.js";
 import { ID_SYSTEM_PROMPT } from "./reason-id.js";
 import { runOneStimulus } from "./run-loop.js";
+import {
+  prefetchDisplayName,
+  primeDisplayName,
+  resolveDisplayNameSync,
+} from "./runtime/name-resolver.js";
 import { SURFACE_SYSTEM_PROMPT, type WorldContext } from "./reason-surface.js";
 import {
   adoptUnderHouse,
@@ -71,17 +76,13 @@ export interface RunHouseOptions {
    */
   readonly verbose?: boolean;
   /**
-   * If set, starts an HTTP/SSE server on this port that powers the
-   * overlay UI at `http://127.0.0.1:<port>/`. Disabled by default.
+   * Optional pre-started overlay server owned by the caller (executor).
+   * runHouse rebinds the init payload at startup and broadcasts cascade
+   * / tool_call events, but does NOT start or close the server — that
+   * lifecycle is decoupled so the overlay survives pause/resume cycles
+   * during Barnacle mini-game handoffs.
    */
-  readonly overlayPort?: number;
-  /**
-   * If set on the ghost that owns the hub, exposes a `/all` route
-   * that grids every listed port in iframes. Pass the full per-ghost
-   * port list (including this ghost's own port) to ONE ghost in
-   * multi-ghost mode so the user can watch every ghost from one tab.
-   */
-  readonly overlayPeerPorts?: ReadonlyArray<number>;
+  readonly overlay?: OverlayServer;
   /**
    * Optional log-line prefix label, e.g. `"#0"` or `"#1"` when running
    * multiple peppers ghosts in parallel. When set, log lines read
@@ -106,6 +107,10 @@ export interface RunHouseOptions {
     readonly worldApiBaseUrl: string;
     readonly token: string;
     readonly agentHostId?: string;
+    /** Persistent display name (e.g. "Django Decypher"). Primed into
+     *  the name resolver and included in cascade payloads so the
+     *  overlay/prompts use this label instead of `ghost_<prefix>`. */
+    readonly displayName?: string;
   };
   /**
    * Optional AbortSignal. When aborted the stimulus loop exits cleanly
@@ -119,9 +124,22 @@ export interface ConversationalState {
   readonly inConversationalMode: boolean;
   readonly turnsSinceLastSayWithNoReply: number;
   readonly socialAnchorTurnsLeft: number;
+  /**
+   * IMPETUS counter — increments every consecutive cascade where the
+   * action was `say` (regardless of whether there was a reply). Resets
+   * on any non-`say` action. Surfaced into the Surface prompt as a
+   * rising urgency to leave the conversation once it's clear the ghost
+   * is stuck in a talk loop. Pure observation, not a hard cap —
+   * the prompt uses it to push toward `bye` (and then `go`).
+   */
+  readonly consecutiveSayTurns: number;
 }
 
 export const SOCIAL_ANCHOR_DURATION = 4;
+/** Threshold above which the Surface prompt starts pushing for `bye`
+ *  to break out of conversational lock. 3 is enough back-and-forth to
+ *  feel like a real exchange before the impetus kicks in. */
+export const IMPETUS_TALK_THRESHOLD = 3;
 
 /**
  * Pure state transition after one cascade. Given the previous state and the
@@ -135,14 +153,21 @@ export function nextConversationalState(
   outcome: import("@aie-matrix/ghost-peppers-inner").ActionOutcome,
   stimulus: import("@aie-matrix/ghost-peppers-inner").Stimulus,
 ): ConversationalState {
-  let { inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft } = prev;
+  let {
+    inConversationalMode,
+    turnsSinceLastSayWithNoReply,
+    socialAnchorTurnsLeft,
+    consecutiveSayTurns,
+  } = prev;
 
   if (action.kind === "say" && outcome.ok) {
     inConversationalMode = true;
     turnsSinceLastSayWithNoReply = 0;
+    consecutiveSayTurns++;
   } else if (action.kind === "bye" && outcome.ok) {
     inConversationalMode = false;
     turnsSinceLastSayWithNoReply = 0;
+    consecutiveSayTurns = 0;
   } else if (outcome.ok === false && outcome.code === "IN_CONVERSATION") {
     inConversationalMode = true;
   } else if (stimulus.kind === "utterance") {
@@ -152,9 +177,19 @@ export function nextConversationalState(
     turnsSinceLastSayWithNoReply++;
   }
 
+  // Any non-`say` action breaks the talk streak.
+  if (action.kind !== "say") {
+    consecutiveSayTurns = 0;
+  }
+
   if (socialAnchorTurnsLeft > 0) socialAnchorTurnsLeft--;
 
-  return { inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft };
+  return {
+    inConversationalMode,
+    turnsSinceLastSayWithNoReply,
+    socialAnchorTurnsLeft,
+    consecutiveSayTurns,
+  };
 }
 
 /**
@@ -171,7 +206,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   const idleStimulusEveryK = opts.idleStimulusEveryK ?? 3;
   const verbose = opts.verbose ?? false;
   const objective = opts.objective;
-  const overlayPort = opts.overlayPort;
+  const overlay: OverlayServer | null = opts.overlay ?? null;
   const tag = opts.label ? `peppers-agent ${opts.label}` : "peppers-agent";
   const log = (msg: string): void => console.info(`[${tag}] ${msg}`);
   const warn = (msg: string, err?: unknown): void =>
@@ -212,13 +247,33 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
       })());
   log(`adopted ghost=${adopted.ghostId} (caretaker=${adopted.caretakerId})`);
 
-  // 2. Open MCP world connection.
+  // Prime the name resolver with self — avoids the cascade ever
+  // referring to itself as `ghost_<prefix>` and bootstraps the cache
+  // for any peer ghost that subsequently asks about us.
+  const selfDisplayName = opts.preProvisionedGhost?.displayName;
+  if (selfDisplayName) {
+    primeDisplayName(adopted.ghostId, selfDisplayName);
+  }
+
+  // 2. Open MCP world connection. Overlay (if any) is owned by the
+  // caller and reused across pause/resume cycles.
   const mcp = new GhostMcpClient({
     worldApiBaseUrl: adopted.worldApiBaseUrl,
     token: adopted.token,
+    onToolCall: (obs) => {
+      if (overlay !== null) overlay.broadcast("tool_call", obs);
+    },
   });
   await mcp.connect();
   const executeAction = executeViaMcp(mcp);
+
+  // Discover the authoritative tool menu from the MCP server. This is
+  // what the Surface LLM picks from — no hardcoded action list in any
+  // prompt, no per-tool switch in any dispatcher. New tools (mini-game
+  // primitives, future world verbs) register on the server and become
+  // visible to every agent on the next cascade.
+  const tools = await mcp.listTools();
+  log(`discovered ${tools.length} MCP tool(s): ${tools.map((t) => t.name).join(", ")}`);
 
   // 3. Open Agent Memory connection.
   const memoryHandle = await connectMemory({ connection: opts.memoryConnection });
@@ -253,27 +308,44 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   // the conversation actually start without forever-trapping us when
   // the world is dense.
   let socialAnchorTurnsLeft = 0;
+  // IMPETUS: tracks consecutive `say` actions. Once it crosses
+  // IMPETUS_TALK_THRESHOLD, the Surface prompt starts pushing for
+  // `bye` (and then `go`) so the ghost can actually execute the plan
+  // that all the talk has been building toward. Resets on any non-`say`
+  // action.
+  let consecutiveSayTurns = 0;
   // Tracks which peers we saw last cascade so we can detect first-sighting
   // transitions (peer appears in look-around when we hadn't seen them before)
   // and re-arm the anchor — covers ghosts that started already-clustered
   // and so never received a `cluster-entered` event.
   let lastNearbyGhosts: Set<string> = new Set();
+  // In-process ring buffer of the last few super-objectives. Fed back
+  // into convergence so committed plans persist across cascades; this
+  // is the architectural counterweight to "every tick regenerates the
+  // emotional drive from scratch and ghosts get stuck in talk loops".
+  // Kept to 3 entries — matches the recent-cascades depth.
+  const recentSuperObjectives: string[] = [];
+  // Per-ghost commitment ledger — debts the inner voice resolved on
+  // but hasn't yet paid down. Threads across cascades; the run-loop
+  // returns the next ledger after every step.
+  let commitmentLedger: import("@aie-matrix/ghost-peppers-inner").CommitmentLedger = [];
+  let cascadeIndex = 0;
   const startedAt = new Date().toISOString();
 
-  // Optional overlay server. Started after we have a ghost id and
-  // initial state so its `init` event has real data to send.
-  let overlay: OverlayServer | null = null;
-  if (overlayPort !== undefined) {
-    overlay = await startOverlayServer({
-      port: overlayPort,
-      getInit: () => ({
-        ghostId: adopted.ghostId,
-        objective: objective ?? null,
-        personality: personalityForUi(state),
-        startedAt,
-      }),
-      peerPorts: opts.overlayPeerPorts,
-    });
+  // Rebind the externally-owned overlay's init payload to this run's
+  // current state, so any browser connecting (or reconnecting across a
+  // pause/resume cycle) sees the live snapshot instead of whichever
+  // snapshot was captured the first time the overlay was started.
+  if (overlay !== null) {
+    overlay.setInit(() => ({
+      ghostId: adopted.ghostId,
+      // Spawn-context name only — never reach for resolver fallback
+      // here, the overlay should render its own fallback if absent.
+      displayName: selfDisplayName ?? null,
+      objective: objective ?? null,
+      personality: personalityForUi(state),
+      startedAt,
+    }));
   }
 
   try {
@@ -314,7 +386,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
 
       // Snapshot world context for the Surface so it can ground "go" /
       // "take" / "say" choices in what's actually available right now.
-      const snapshot = await snapshotWorldContext(mcp, adopted.ghostId);
+      const snapshot = await snapshotWorldContext(mcp, adopted.ghostId, opts.registryBase);
 
       // Re-arm the anchor when a peer first appears in the cluster.
       // `cluster-entered` covers events that fire mid-run, but ghosts
@@ -332,6 +404,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         inConversationalMode,
         turnsSinceLastSayWithNoReply,
         socialAnchorTurnsLeft,
+        consecutiveSayTurns,
       };
 
       try {
@@ -343,10 +416,59 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
           executeAction,
           worldContext,
           objective,
+          tools,
+          commitmentLedger,
+          cascadeIndex,
+          ...(selfDisplayName ? { selfDisplayName } : {}),
+          ...(recentSuperObjectives.length > 0
+            ? { recentSuperObjectives }
+            : {}),
         });
+        commitmentLedger = record.nextLedger;
+        cascadeIndex += 1;
+        if (record.commitment !== null) {
+          const sat = record.commitment.satisfiedIds.length;
+          const minted = record.commitment.newCommitments.length;
+          if (sat > 0 || minted > 0) {
+            log(
+              `commitments: +${minted} new, -${sat} paid, open=${commitmentLedger.length}`,
+            );
+          }
+          for (const c of record.commitment.newCommitments) {
+            log(`  + owe: "${c.owed}" (satisfies-when: ${c.recognizesSatisfaction})`);
+          }
+        }
+        // Append this cascade's super-objective to the rolling buffer
+        // so the next tick's convergence sees the plan continuity.
+        recentSuperObjectives.push(record.id.superObjective);
+        if (recentSuperObjectives.length > 3) recentSuperObjectives.shift();
         state = record.nextState;
+        // 4-way reaction tag: when the stimulus was an utterance, label
+        // the chosen action. `go` covers both EVADE (escape) and
+        // DEPART (purposeful movement toward an agreed destination) —
+        // both are valid breakouts of a conversation loop; the
+        // monologue distinguishes intent. The Surface prompt only
+        // allows say|look|go on utterance; anything else falls through
+        // to UNKNOWN so prompt-rule violations stay detectable.
+        const reactionTag =
+          stimulus.kind === "utterance"
+            ? record.action.kind === "say"
+              ? "RESPOND"
+              : record.action.kind === "look"
+                ? "GHOST"
+                : record.action.kind === "go"
+                  ? "GO"
+                  : "UNKNOWN"
+            : null;
+        if (reactionTag !== null) {
+          log(`reaction: ${reactionTag} → ${(stimulus as { from?: string }).from ?? "?"}`);
+        }
         if (overlay !== null) {
-          overlay.broadcast("cascade", buildCascadePayload(record, state, worldContext, ctx, objective));
+          const payload = buildCascadePayload(record, state, worldContext, ctx, objective, selfDisplayName) as Record<string, unknown>;
+          overlay.broadcast("cascade", {
+            ...payload,
+            ...(reactionTag !== null ? { reaction: reactionTag } : {}),
+          });
         }
         if (verbose) {
           printVerbose(record, tag);
@@ -362,14 +484,23 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
           }
         }
 
-        // Update conversational-mode mirror and social anchor.
-        ({ inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft } =
-          nextConversationalState(
-            { inConversationalMode, turnsSinceLastSayWithNoReply, socialAnchorTurnsLeft },
-            record.action,
-            record.outcome,
-            record.stimulus,
-          ));
+        // Update conversational-mode mirror, social anchor, and impetus counter.
+        ({
+          inConversationalMode,
+          turnsSinceLastSayWithNoReply,
+          socialAnchorTurnsLeft,
+          consecutiveSayTurns,
+        } = nextConversationalState(
+          {
+            inConversationalMode,
+            turnsSinceLastSayWithNoReply,
+            socialAnchorTurnsLeft,
+            consecutiveSayTurns,
+          },
+          record.action,
+          record.outcome,
+          record.stimulus,
+        ));
       } catch (err) {
         warn("cascade failed:", err);
       }
@@ -388,13 +519,10 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
     } catch {
       /* ignore */
     }
-    if (overlay !== null) {
-      try {
-        await overlay.close();
-      } catch {
-        /* ignore */
-      }
-    }
+    // Note: overlay server is owned by the caller (executor) and
+    // intentionally NOT closed here. Closing it on every pause would
+    // black out the spectator UI whenever a Barnacle mini-game session
+    // started, which is the opposite of what observers want.
   }
 }
 
@@ -418,9 +546,15 @@ function buildCascadePayload(
   worldContext: WorldContext,
   ctx: StimulusContext,
   objective: string | undefined,
+  selfDisplayName: string | undefined,
 ): unknown {
   return {
     ghostId: record.ghostId,
+    // Use the spawn-context displayName directly — no resolver detour.
+    // If the spawn caller (the demo) supplied a name, it's the truth;
+    // otherwise we surface null so the overlay can render its own
+    // fallback rather than embedding a misleading `ghost_<prefix>`.
+    displayName: selfDisplayName ?? null,
     objective: objective ?? null,
     superObjective: record.id.superObjective,
     monologue: record.id.monologue,
@@ -440,7 +574,20 @@ function buildCascadePayload(
       nearbyGhosts: worldContext.nearbyGhostIds ?? null,
       itemsHere: worldContext.takeableItemRefs ?? null,
       inventory: worldContext.inventoryItemRefs ?? null,
+      bearings: worldContext.bearings ?? null,
     },
+    commitments: record.nextLedger.map((c) => ({
+      id: c.id,
+      owed: c.owed,
+      recognizesSatisfaction: c.recognizesSatisfaction,
+      bornAtCascade: c.bornAtCascade,
+    })),
+    commitmentEvaluation: record.commitment === null
+      ? null
+      : {
+          satisfiedIds: record.commitment.satisfiedIds,
+          newCommitmentIds: record.commitment.newCommitments.map((c) => c.id),
+        },
     tileClass: ctx.lastTileClass,
     timestamp: new Date().toISOString(),
   };
@@ -455,13 +602,10 @@ function delay(ms: number): Promise<void> {
  * on the current tile, other ghosts here, and current inventory.
  * Each tool failure is non-fatal — we just omit that field.
  */
-function shortenGhostId(id: string): string {
-  return id.length > 8 ? `ghost_${id.slice(0, 8)}` : id;
-}
-
 async function snapshotWorldContext(
   mcp: GhostMcpClient,
   selfGhostId: string,
+  registryBase: string,
 ): Promise<WorldContext> {
   const ctx: WorldContext = {};
   const next: {
@@ -518,7 +662,10 @@ async function snapshotWorldContext(
     /* leave whatever we have from look-here */
   }
   if (clusterOccupants.size > 0 || hereOccupants.length > 0) {
-    next.nearbyGhostIds = [...clusterOccupants].map(shortenGhostId);
+    for (const g of clusterOccupants) void prefetchDisplayName(registryBase, g);
+    next.nearbyGhostIds = [...clusterOccupants].map((g) =>
+      resolveDisplayNameSync(registryBase, g),
+    );
   }
 
   try {
@@ -532,6 +679,36 @@ async function snapshotWorldContext(
   } catch {
     /* leave undefined */
   }
+
+  // Pre-compute bearings to actionable points of interest. Saves the
+  // LLM from spending a full cascade calling `nearest` just to learn
+  // which direction Black Bart's lies. Empty array means no targets
+  // are reachable (or the tool isn't present); the prompt omits the
+  // section. Iterate sequentially — each call is cheap server-side
+  // and parallel calls would race the auth context.
+  const bearingTargets: Array<{ label: string; spec: { itemClass?: string; tileClass?: string } }> = [
+    { label: "Black Bart's Poker Table", spec: { itemClass: "PokerTable" } },
+  ];
+  const bearings: NonNullable<WorldContext["bearings"]>[number][] = [];
+  for (const target of bearingTargets) {
+    try {
+      const r = (await mcp.callTool("nearest", target.spec)) as {
+        found?: boolean;
+        distance?: number;
+        nextStep?: string;
+      };
+      if (r.found && typeof r.distance === "number") {
+        const direction: "here" | "n" | "s" | "ne" | "nw" | "se" | "sw" =
+          r.distance === 0
+            ? "here"
+            : (r.nextStep as "n" | "s" | "ne" | "nw" | "se" | "sw" | undefined) ?? "here";
+        bearings.push({ label: target.label, distance: r.distance, direction });
+      }
+    } catch {
+      /* tool may not be registered yet on older world-api builds */
+    }
+  }
+  if (bearings.length > 0) next.bearings = bearings;
 
   return ctx;
 }

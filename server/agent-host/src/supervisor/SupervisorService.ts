@@ -59,6 +59,8 @@ type Deps = {
    * Defaults to `publicHouseBaseUrl` when not set.
    */
   readonly internalHouseBaseUrl?: string;
+  /** World-api base URL — for `houseEndpoints.registry` in spawn ctx. */
+  readonly worldHttpBase: string;
   readonly defaultCapabilityManifest: ReadonlySet<string>;
   readonly getConfig: () => Readonly<SupervisionConfigValue>;
   /** Bearer token the agent-host expects on its push-ingest endpoint (= AGENT_HOST_TOKEN). */
@@ -277,10 +279,18 @@ export interface IAgentSupervisor {
     agentId: string;
     ghostId: string;
     credential: WorldCredential;
+    /** Optional human-readable name passed by the caller (e.g. demo
+     *  script). Preserved into spawnContext.ghostCard.displayName and
+     *  AgentSession.displayName so it flows through to peppers AND the
+     *  Barnacle handoff. */
+    displayName?: string;
   }) => Effect.Effect<AgentSession, SpawnFailed | SpawnTimeout | CapabilityUnmet>;
   readonly shutdown: (sessionId: string) => Effect.Effect<void, SessionNotFound>;
   readonly getSession: (sessionId: string) => AgentSession | undefined;
   readonly getByMcpToken: (mcpToken: string) => AgentSession | undefined;
+  /** RFC-0019 — used by the Barnacle encounter trigger to find peppers's
+   *  A2A baseUrl + session metadata for a given ghostId. */
+  readonly getSessionByGhostId: (ghostId: string) => AgentSession | undefined;
   readonly listSessionIdsByAgent: (agentId: string) => string[];
   readonly listSessions: () => ReadonlyArray<{ sessionId: string; ghostId: string; agentId: string; status: AgentSessionStatus }>;
   /** Routes IC-004 world events to the A2A push session for the target ghost, if any. */
@@ -332,6 +342,16 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
             () => new SpawnFailed({ message: `agent ${input.agentId} not found in catalog` }),
           ),
         );
+        // Mini-game entries (RFC-0019) can't be `spawn`ed — they
+        // receive ghosts via the Barnacle handoff flow, not the
+        // spawn-context flow. Reject here so the error is clear.
+        if (entry.kind === "mini-game") {
+          return yield* Effect.fail(
+            new SpawnFailed({
+              message: `agent ${input.agentId} is a mini-game; use the Barnacle handoff flow`,
+            }),
+          );
+        }
         const ac = entry.agentCard as {
           capabilities?: { pushNotifications?: boolean };
           matrix?: {
@@ -352,10 +372,19 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         const sessionId = ulid();
         const requiredTools = ac.matrix?.requiredTools ?? [];
         const cfg = getConfig();
+        // Use caller-supplied displayName when present; otherwise fall
+        // back to a short, ghostId-derived label so legacy callers
+        // (random-agent) still get a readable string.
+        const effectiveDisplayName =
+          input.displayName?.trim() && input.displayName.trim().length > 0
+            ? input.displayName.trim()
+            : `ghost-${input.ghostId.slice(0, 8)}`;
         const session: AgentSession = {
           sessionId,
           agentId: input.agentId,
           ghostId: input.ghostId,
+          displayName: effectiveDisplayName,
+          baseUrl: entry.baseUrl,
           status: "spawning",
           restartCount: 0,
           lastHealthCheckAt: null,
@@ -375,13 +404,17 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
           ghostId: input.ghostId,
           ghostCard: {
             class: tier,
-            displayName: `ghost-${input.ghostId.slice(0, 8)}`,
+            displayName: effectiveDisplayName,
             partnerEmail: null,
           },
           worldEntryPoint,
           houseEndpoints: {
             mcp: `${agentEndpointBase}/v1/mcp`,
             a2a: `${agentEndpointBase}/`,
+            // world-api registry — peppers uses this for displayName
+            // resolution and other read-side lookups distinct from the
+            // agent-host's own MCP / A2A endpoints.
+            registry: deps.worldHttpBase.replace(/\/$/, ""),
           },
           token: mcpToken,
           expiresAt,
@@ -485,6 +518,12 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
       return state.sessions.get(sid);
     },
 
+    getSessionByGhostId: (ghostId) => {
+      const sid = state.byGhostId.get(ghostId);
+      if (!sid) return undefined;
+      return state.sessions.get(sid);
+    },
+
     listSessionIdsByAgent: (agentId) => [...(state.byAgent.get(agentId) ?? [])],
 
     listSessions: () =>
@@ -527,6 +566,11 @@ export const AgentSupervisorLayer = (opts: {
   publicHouseBaseUrl: string;
   /** In-cluster base URL for endpoints sent to agents (MCP, push-ingest). Defaults to publicHouseBaseUrl. */
   internalHouseBaseUrl?: string;
+  /** World-api base URL — included in spawn-context's
+   *  houseEndpoints.registry so spawned agents can resolve peer
+   *  displayNames via GET /registry/ghosts/:id (the registry endpoints
+   *  live on world-api, not on agent-host). */
+  worldHttpBase: string;
   defaultCapabilityManifest: ReadonlySet<string>;
   pushIngestToken: string;
 }): Layer.Layer<AgentSupervisor, never, CatalogService | A2AHostService> => {
@@ -542,6 +586,7 @@ export const AgentSupervisorLayer = (opts: {
           a2a,
           publicHouseBaseUrl: opts.publicHouseBaseUrl,
           internalHouseBaseUrl: opts.internalHouseBaseUrl,
+          worldHttpBase: opts.worldHttpBase,
           defaultCapabilityManifest: opts.defaultCapabilityManifest,
           pushIngestToken: opts.pushIngestToken,
           getConfig: readSupervisionConfig,
