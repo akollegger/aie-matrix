@@ -66,3 +66,4 @@ What other approaches were considered?
 | [RFC-0017](0017-rdc-server-capability-gating.md) | RDC Server Capability Gating | draft |
 | [RFC-0018](0018-rdc-skill-tiers-and-math-schools.md) | RDC Skill Tiers & Mathematical Schools | draft |
 | [RFC-0019](0019-barnacle-protocol.md) | The Barnacle Protocol — mini-game plugin contract | draft |
+| [RFC-0020](0020-platform-links.md) | Platform Links — Pocket World Navigation Protocol | draft |
