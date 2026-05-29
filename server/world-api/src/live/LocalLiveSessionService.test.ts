@@ -58,7 +58,7 @@ const stubMapSvcLayer: Layer.Layer<MapService> = Layer.succeed(MapService, {
   listEntries: () => Effect.succeed([]),
   validate: () => Effect.void,
   activeMapId: () => undefined,
-  raw: (mapId, _format) => Effect.fail(new MapNotFoundError({ mapId })),
+  raw: (mapId) => Effect.fail(new MapNotFoundError({ mapId })),
 });
 
 /** Fresh layer for each test — new mutable state per test. */
