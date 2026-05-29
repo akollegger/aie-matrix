@@ -19,4 +19,4 @@
 ]
 [layers:LayerStack | ground, building-lyro3xkilq, rooms-lyr6m4dmw7]
 
-[rules:Rules | (floor)-[:GO]->(floor), (room)-[:GO]->(room), (void)-[:GO]->(void)]
+[rules:Rules | (floor)-[:GO]->(floor), (room)-[:GO]->(room)]
