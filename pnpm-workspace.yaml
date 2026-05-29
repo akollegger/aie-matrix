@@ -8,7 +8,6 @@ packages:
   - server/world-api
   - server/registry
   - server/auth
-  - clients/debugger/phaser
   - clients/debugger/map-overlay
   - clients/intermedium
   - shared/types
@@ -26,4 +25,3 @@ packages:
   - ghosts/rdc-poker
   - ghosts/rdc-ledger
   - ghosts/rdc-poker-session
-  - e2e
