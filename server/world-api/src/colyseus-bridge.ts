@@ -17,6 +17,10 @@ export interface ColyseusWorldBridge {
   removeGhostCell(ghostId: string): void;
   /** Ghost ids whose authoritative tile is `cellId`. */
   listOccupantsOnCell(cellId: string): string[];
+  /** Enumerate every ghost in the world with their authoritative cell.
+   *  Stable-sorted by ghostId for reproducible partitioning. Used by
+   *  the targeted food-rain mechanism. */
+  listAllGhostCells(): ReadonlyArray<{ ghostId: string; cellId: string }>;
   setGhostMode(ghostId: string, mode: "normal" | "conversational"): void;
   getGhostMode(ghostId: string): "normal" | "conversational";
   /** Replace the item list on a tile. Pass empty array to clear (IC-012). */
@@ -40,6 +44,7 @@ export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
     setGhostCell: (ghostId, cellId) => room.setGhostCell(ghostId, cellId),
     removeGhostCell: (ghostId) => room.removeGhostCell(ghostId),
     listOccupantsOnCell: (cellId) => room.listOccupantsOnCell(cellId),
+    listAllGhostCells: () => room.listAllGhostCells(),
     setGhostMode: (ghostId, mode) => room.setGhostMode(ghostId, mode),
     getGhostMode: (ghostId) => room.getGhostMode(ghostId),
     setTileItems: (h3Index, itemRefs) => room.setTileItems(h3Index, itemRefs),

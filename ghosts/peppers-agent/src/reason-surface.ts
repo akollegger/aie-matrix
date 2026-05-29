@@ -6,6 +6,7 @@
 
 import type {
   CommitmentLedger,
+  PrimalDrive,
   Stimulus,
   SurfaceAction,
 } from "@aie-matrix/ghost-peppers-inner";
@@ -89,6 +90,11 @@ export interface InvokeSurfaceRequest {
    *  so the Surface biases tool choice toward whatever pays down the
    *  oldest commitment. Empty/omitted ledger emits nothing. */
   readonly commitments?: CommitmentLedger;
+  /** Active primal drive (the body's call). When present, competes
+   *  with the surface objective for the Surface's tool choice. At
+   *  high urgency, the drive should win. Null when all needs are in
+   *  the healthy band. */
+  readonly primalDrive?: PrimalDrive | null;
 }
 
 export interface SurfaceReasoning {
@@ -165,6 +171,12 @@ BEARINGS (when the world has pre-computed directions for you):
 You may be shown one or more "Bearing — X: <direction> (<n> hexes away)" lines. These are pre-computed shortest paths from your current cell to known points of interest. They're given to you for free — you don't have to spend a tool call to learn them. If a bearing names a destination that matches your objective or an open debt, AND you have decided to move, the bearing's direction is the right movement token to pass to a "go" tool.
 - A bearing of "HERE" means you're standing on the target tile right now. Act on it directly (sit, take, talk to the person there) rather than moving.
 - Bearings can change between cascades as you move and the world updates. Trust the current one over a remembered one.
+
+PRIMAL DRIVE (the body's call — when present, OVERRIDES the surface objective at high urgency):
+You may receive a "Primal drive" line describing what the ghost's body is calling for — hunger, exhaustion, disorientation, overstimulation. This is corporeal pressure, not a preference. Honour it by urgency:
+- Urgency below 3: drive is present but the surface objective can still steer your tool choice. Factor it in when convenient.
+- Urgency 3+: the body is screaming. The Surface MUST pick a tool that addresses the drive, not the surface objective. A starving ghost picks tools toward food/sustenance, not toward the saloon. An exhausted ghost picks tools that produce stillness (look, observe, walk to an empty tile), not new conversation. An unmoored ghost picks tools that ground (say to engage someone, look around to orient).
+- The drive's description names the kind of action that would satisfy it. Take the description literally — it's the ghost's body telling you what to do.
 
 DEBTS TO YOURSELF (the private ledger — this is what actually drives you):
 You may be shown a "Debts to yourself" block listing commitments your inner voice has made and not yet paid down. Each debt has a "satisfies-when" cue describing the kind of action that would clear it.
@@ -256,6 +268,15 @@ export async function invokeSurface(req: InvokeSurfaceRequest): Promise<SurfaceR
     if (lines.length > 0) {
       sections.push(`World now:\n${lines.join("\n")}`);
     }
+  }
+
+  if (req.primalDrive) {
+    const d = req.primalDrive;
+    const urgencyLabel =
+      d.urgency >= 3 ? "the body is screaming" : "the body is calling";
+    sections.push(
+      `Primal drive (${urgencyLabel} — overrides the surface objective when strong):\n${d.drive}\n  (${d.need} ${d.direction}, current ${d.currentDisplay.toFixed(2)}/10, urgency ${d.urgency.toFixed(2)}/5)`,
+    );
   }
 
   if (req.commitments && req.commitments.length > 0) {

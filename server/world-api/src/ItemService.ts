@@ -3,12 +3,26 @@ import type { LoadedMap } from "@aie-matrix/server-colyseus";
 import { Context, Effect, Layer } from "effect";
 import type { ColyseusWorldBridge } from "./colyseus-bridge.js";
 import {
+  WorldApiInvalidConsumeAmount,
   WorldApiItemNotCarriable,
   WorldApiItemNotCarrying,
+  WorldApiItemNotConsumable,
   WorldApiItemNotFound,
   WorldApiItemNotHere,
   WorldApiTileFull,
 } from "./world-api-errors.js";
+
+/** Successful consume returns the actual energy taken and what's left. */
+export interface ConsumeResult {
+  readonly itemRef: string;
+  /** Tokens transferred from the item to the consumer. */
+  readonly consumed: number;
+  /** Tokens still in the instance after this consume. */
+  readonly remaining: number;
+  /** True when the instance was fully depleted by this consume and
+   *  removed from the tile. */
+  readonly depleted: boolean;
+}
 
 export interface ItemServiceOps {
   getItemsOnTile(h3Index: string): readonly string[];
@@ -35,6 +49,32 @@ export interface ItemServiceOps {
     tileCapacity: number | undefined,
     tileGhostCount: number,
   ): Effect.Effect<void, WorldApiItemNotCarrying | WorldApiTileFull>;
+  /**
+   * Eat some or all of a consumable item's energy in place. `amount`
+   * defaults to the instance's remaining tokens; values exceeding
+   * remaining are clamped down (no over-eating). Removes the instance
+   * when tokens hit zero. Items without `tokens` on their definition
+   * are rejected with `ItemNotConsumable`.
+   */
+  consumeItem(
+    h3Index: string,
+    itemRef: string,
+    amount: number | undefined,
+  ): Effect.Effect<
+    ConsumeResult,
+    WorldApiItemNotFound | WorldApiItemNotHere | WorldApiItemNotConsumable | WorldApiInvalidConsumeAmount
+  >;
+  /** Remaining tokens for a specific (cell, itemRef) instance, or
+   *  undefined when the item is not consumable / not present. Used by
+   *  `look` to expose the affordance to the LLM without a tool call. */
+  getInstanceTokens(h3Index: string, itemRef: string): number | undefined;
+  /** Out-of-band item creation — place an item on a tile and seed its
+   *  instance tokens from the type's definition. Used by the food-rain
+   *  test mechanism to keep ghosts fed during long-running observations.
+   *  Returns true on success; false when the type is unknown or the
+   *  tile already has an instance of the same type (no double-stack).
+   */
+  spawnItem(h3Index: string, itemRef: string): boolean;
   getSidecar(): Map<string, ItemDefinition>;
 }
 
@@ -47,6 +87,15 @@ export class ItemServiceImpl implements ItemServiceOps {
   private readonly tileItems: Map<string, string[]> = new Map();
   private readonly ghostInventory: Map<string, string[]> = new Map();
   private readonly sidecar: Map<string, ItemDefinition>;
+  /**
+   * Mutable per-instance state: remaining tokens for each (h3, itemRef)
+   * pair where the item type declared a `tokens` value. Parallel to
+   * `tileItems` rather than embedded in it so the existing string-list
+   * shape is preserved and most non-consume paths stay untouched.
+   * Key format: `${h3}|${itemRef}`. Entries are removed on full consume
+   * or take.
+   */
+  private readonly tileTokens: Map<string, number> = new Map();
   private bridge: ColyseusWorldBridge | null = null;
 
   constructor(loadedMap: LoadedMap) {
@@ -54,6 +103,14 @@ export class ItemServiceImpl implements ItemServiceOps {
     for (const [h3Index, cell] of loadedMap.cells) {
       if (cell.initialItemRefs.length > 0) {
         this.tileItems.set(h3Index, [...cell.initialItemRefs]);
+        // Seed instance tokens from the type's `tokens` field. Each
+        // cell that holds a consumable type gets one instance worth.
+        for (const ref of cell.initialItemRefs) {
+          const def = this.sidecar.get(ref);
+          if (def?.tokens !== undefined && def.tokens > 0) {
+            this.tileTokens.set(tokenKey(h3Index, ref), def.tokens);
+          }
+        }
       }
     }
   }
@@ -139,6 +196,11 @@ export class ItemServiceImpl implements ItemServiceOps {
       } else {
         this.tileItems.set(h3Index, newTile);
       }
+      // Taking discards the instance's remaining token state — for now,
+      // inventory items are not eat-from-inventory targets (eating
+      // works on tile only). When/if eat-from-inventory ships, this
+      // line moves the tokens to a ghost-keyed structure instead.
+      this.tileTokens.delete(tokenKey(h3Index, itemRef));
       const inv = this.ghostInventory.get(ghostId) ?? [];
       const newInv = [...inv, itemRef];
       this.ghostInventory.set(ghostId, newInv);
@@ -146,6 +208,85 @@ export class ItemServiceImpl implements ItemServiceOps {
       this.bridge?.setGhostInventory(ghostId, newInv);
       return { name: def.name };
     });
+  }
+
+  consumeItem(
+    h3Index: string,
+    itemRef: string,
+    amount: number | undefined,
+  ): Effect.Effect<
+    ConsumeResult,
+    WorldApiItemNotFound | WorldApiItemNotHere | WorldApiItemNotConsumable | WorldApiInvalidConsumeAmount
+  > {
+    return Effect.gen(this, function* () {
+      const def = this.sidecar.get(itemRef);
+      if (!def) {
+        yield* Effect.fail(new WorldApiItemNotFound({ itemRef }));
+        return undefined as never;
+      }
+      const onTile = this.tileItems.get(h3Index) ?? [];
+      const idx = onTile.indexOf(itemRef);
+      if (idx === -1) {
+        yield* Effect.fail(new WorldApiItemNotHere({ itemRef }));
+        return undefined as never;
+      }
+      if (def.tokens === undefined) {
+        yield* Effect.fail(new WorldApiItemNotConsumable({ itemRef }));
+        return undefined as never;
+      }
+      const key = tokenKey(h3Index, itemRef);
+      const remaining = this.tileTokens.get(key) ?? def.tokens;
+      // No `amount` → take everything the instance has left (the
+      // "affordance default"). Any positive request is clamped to
+      // remaining; non-positive numeric requests are an explicit error.
+      let consumed: number;
+      if (amount === undefined) {
+        consumed = remaining;
+      } else if (!Number.isFinite(amount) || amount <= 0) {
+        yield* Effect.fail(
+          new WorldApiInvalidConsumeAmount({ itemRef, requested: amount }),
+        );
+        return undefined as never;
+      } else {
+        consumed = Math.min(amount, remaining);
+      }
+      const next = remaining - consumed;
+      const depleted = next <= 0;
+      if (depleted) {
+        this.tileTokens.delete(key);
+        const newTile = [...onTile];
+        newTile.splice(idx, 1);
+        if (newTile.length === 0) {
+          this.tileItems.delete(h3Index);
+        } else {
+          this.tileItems.set(h3Index, newTile);
+        }
+        this.bridge?.setTileItems(h3Index, newTile);
+      } else {
+        this.tileTokens.set(key, next);
+      }
+      return { itemRef, consumed, remaining: depleted ? 0 : next, depleted };
+    });
+  }
+
+  getInstanceTokens(h3Index: string, itemRef: string): number | undefined {
+    const def = this.sidecar.get(itemRef);
+    if (def?.tokens === undefined) return undefined;
+    return this.tileTokens.get(tokenKey(h3Index, itemRef)) ?? def.tokens;
+  }
+
+  spawnItem(h3Index: string, itemRef: string): boolean {
+    const def = this.sidecar.get(itemRef);
+    if (!def) return false;
+    const existing = this.tileItems.get(h3Index) ?? [];
+    if (existing.includes(itemRef)) return false;
+    const newTile = [...existing, itemRef];
+    this.tileItems.set(h3Index, newTile);
+    if (def.tokens !== undefined && def.tokens > 0) {
+      this.tileTokens.set(tokenKey(h3Index, itemRef), def.tokens);
+    }
+    this.bridge?.setTileItems(h3Index, newTile);
+    return true;
   }
 
   dropItem(
@@ -190,6 +331,10 @@ export class ItemServiceImpl implements ItemServiceOps {
       this.bridge?.setTileItems(h3Index, newTile);
     });
   }
+}
+
+function tokenKey(h3: string, itemRef: string): string {
+  return `${h3}|${itemRef}`;
 }
 
 export const makeItemServiceLayer = (impl: ItemServiceImpl): Layer.Layer<ItemService> =>

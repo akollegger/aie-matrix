@@ -38,6 +38,17 @@ export class WorldApiTileFull extends Data.TaggedError("WorldApiError.TileFull")
   readonly h3Index: string;
 }> {}
 
+/** Item exists but is not consumable (no `tokens` field on its definition). */
+export class WorldApiItemNotConsumable extends Data.TaggedError("WorldApiError.ItemNotConsumable")<{
+  readonly itemRef: string;
+}> {}
+
+/** `consume` called with a non-positive amount. */
+export class WorldApiInvalidConsumeAmount extends Data.TaggedError("WorldApiError.InvalidConsumeAmount")<{
+  readonly itemRef: string;
+  readonly requested: number;
+}> {}
+
 export class GhostInLimboError extends Data.TaggedError("GhostInLimboError")<{
   readonly ghostId: string;
 }> {}
@@ -52,4 +63,6 @@ export type WorldApiError =
   | WorldApiItemNotCarriable
   | WorldApiItemNotCarrying
   | WorldApiTileFull
+  | WorldApiItemNotConsumable
+  | WorldApiInvalidConsumeAmount
   | GhostInLimboError;

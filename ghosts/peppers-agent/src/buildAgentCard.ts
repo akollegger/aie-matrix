@@ -32,7 +32,7 @@ export function buildPeppersAgentCard(publicBase: string): AgentCard {
       ghostClasses: ["any"],
       requiredTools: [
         "whereami", "exits", "go", "say", "look",
-        "take", "drop", "inspect", "inventory", "whoami", "inbox", "bye",
+        "take", "drop", "consume", "inspect", "inventory", "whoami", "inbox", "bye",
         "request_intent", "nearest",
       ],
       capabilitiesRequired: [],

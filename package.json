@@ -27,6 +27,7 @@
     "ghost:register": "node scripts/register-ghost.mjs",
     "ghost:cli": "pnpm --filter @aie-matrix/ghost-cli start",
     "demo": "node scripts/demo.mjs",
+    "lab": "node scripts/peppers-lab.mjs",
     "ports": "node scripts/kill-poc-ports.mjs",
     "ports:kill": "node scripts/kill-poc-ports.mjs --kill",
     "test": "pnpm run test:packages",

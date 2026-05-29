@@ -57,6 +57,7 @@ export async function loadGramMap(gramText: string): Promise<LoadedMap> {
       carriable: def.takeable ?? false,
       capacityCost: def.capacityCost ?? 0,
       ...(def.glyph !== undefined ? { glyph: def.glyph } : {}),
+      ...(def.tokens !== undefined ? { tokens: def.tokens } : {}),
     });
   }
 

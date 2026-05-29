@@ -326,6 +326,7 @@ async function main(): Promise<void> {
       ghostAuthority.delete(gid);
     },
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
+    listAllGhostCells: () => colyseusBridge.listAllGhostCells(),
     setGhostMode: (ghostId: string, mode: "normal" | "conversational") =>
       colyseusBridge.setGhostMode(ghostId, mode),
     getGhostMode: (ghostId: string) => colyseusBridge.getGhostMode(ghostId),
@@ -386,6 +387,69 @@ async function main(): Promise<void> {
   const itemServiceImpl = new ItemServiceImpl(loadedMap);
   itemServiceImpl.setBridge(bridge);
   broadcastInitialItemState(itemServiceImpl, bridge);
+
+  // Test-only food rain: when WORLD_FOOD_RAIN_INTERVAL_MS is set, a
+  // background ticker drops a random consumable (specified by class via
+  // WORLD_FOOD_RAIN_CLASS, default "Food") at a random tile every N ms.
+  // Existence is gated by env so production / staging never sees it.
+  // Drives observation of the primal-personality recovery dynamics
+  // when ghosts find food consecutively.
+  const foodRainInterval = parseInt(
+    process.env.WORLD_FOOD_RAIN_INTERVAL_MS ?? "0",
+    10,
+  );
+  if (Number.isFinite(foodRainInterval) && foodRainInterval > 0) {
+    const foodClass = process.env.WORLD_FOOD_RAIN_CLASS ?? "Food";
+    const tileIds = [...loadedMap.cells.keys()];
+    if (tileIds.length === 0) {
+      console.warn("[aie-matrix] WORLD_FOOD_RAIN_INTERVAL_MS set but map has no cells; food rain disabled");
+    } else {
+      console.info(
+        `[aie-matrix] food rain enabled — dropping one '${foodClass}' every ${foodRainInterval}ms at a random tile (${tileIds.length} candidates)`,
+      );
+      setInterval(() => {
+        const h3 = tileIds[Math.floor(Math.random() * tileIds.length)]!;
+        itemServiceImpl.spawnItem(h3, foodClass);
+      }, foodRainInterval);
+    }
+  }
+
+  // Targeted food rain — feeds the first N×fraction ghosts (sorted by
+  // ghostId, so the partition is stable across the run) at their
+  // CURRENT tiles every interval, leaving the rest unfed. Used to
+  // engineer a clean A/B contrast for the primal→personality wiring:
+  // the "fed" cohort should show sustained `+` streaks and rising
+  // personality drift; the "starved" cohort should show sustained `−`
+  // streaks and declining drift. Both groups walk the same map at the
+  // same depletion rate, so the only differing input is whether food
+  // appears at their tile.
+  const targetedInterval = parseInt(
+    process.env.WORLD_FOOD_TARGETED_INTERVAL_MS ?? "0",
+    10,
+  );
+  const targetedFraction = parseFloat(
+    process.env.WORLD_FOOD_TARGETED_FRACTION ?? "0.5",
+  );
+  if (
+    Number.isFinite(targetedInterval) &&
+    targetedInterval > 0 &&
+    Number.isFinite(targetedFraction) &&
+    targetedFraction > 0
+  ) {
+    const foodClass = process.env.WORLD_FOOD_RAIN_CLASS ?? "Food";
+    console.info(
+      `[aie-matrix] targeted food rain enabled — feeding the first ${(targetedFraction * 100).toFixed(0)}% of ghosts at their tile every ${targetedInterval}ms (class='${foodClass}')`,
+    );
+    setInterval(() => {
+      const allGhosts = bridge.listAllGhostCells();
+      if (allGhosts.length === 0) return;
+      const feedCount = Math.max(1, Math.floor(allGhosts.length * targetedFraction));
+      for (let i = 0; i < feedCount; i++) {
+        const { cellId } = allGhosts[i]!;
+        itemServiceImpl.spawnItem(cellId, foodClass);
+      }
+    }, targetedInterval);
+  }
 
   // Map management + live session layers — implementation selected by AIE_MATRIX_MODE.
   //

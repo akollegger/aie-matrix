@@ -66,3 +66,5 @@ What other approaches were considered?
 | [RFC-0017](0017-rdc-server-capability-gating.md) | RDC Server Capability Gating | draft |
 | [RFC-0018](0018-rdc-skill-tiers-and-math-schools.md) | RDC Skill Tiers & Mathematical Schools | draft |
 | [RFC-0019](0019-barnacle-protocol.md) | The Barnacle Protocol — mini-game plugin contract | draft |
+| [RFC-0021](0021-ghost-substrate-extraction.md) | Ghost cognitive substrate extraction — PeppersGhost as the default ghost | draft |
+| [RFC-0022](0022-third-party-mind-modeling.md) | Third-party-mind modeling — predictive peer models in the cascade | draft |

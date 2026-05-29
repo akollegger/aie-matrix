@@ -13,6 +13,7 @@ const IC003_TOOLS = new Set([
   "inspect",
   "take",
   "drop",
+  "consume",
   "say",
   "bye",
   "inbox",

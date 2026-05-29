@@ -15,6 +15,13 @@ export interface ItemDefinition {
   carriable: boolean;
   /** Capacity units consumed on the host tile. 0 = no capacity impact. */
   capacityCost: number;
+  /**
+   * Initial token energy each spawned instance of this item carries.
+   * Tokens are the LLM's literal substrate unit — consuming an item
+   * adds its tokens to the consumer's Fuel. Omit for non-consumable
+   * items (most existing world objects).
+   */
+  tokens?: number;
   /** Full text returned by inspect. Omitting means inspect returns name only. */
   description?: string;
   /**

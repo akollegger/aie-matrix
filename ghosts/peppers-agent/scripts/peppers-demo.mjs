@@ -34,6 +34,33 @@ import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { loadRootEnv } from "@aie-matrix/root-env";
+import {
+  adjectives,
+  animals,
+  colors,
+  uniqueNamesGenerator,
+} from "unique-names-generator";
+
+// Stable 32-bit FNV-1a hash so the same ghostId always resolves to the
+// same name across restarts — handy for cross-session log archaeology.
+function hashSeed(input) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  return h;
+}
+
+function generateGhostName(seedKey) {
+  return uniqueNamesGenerator({
+    dictionaries: [adjectives, colors, animals],
+    separator: " ",
+    style: "capital",
+    length: 3,
+    seed: hashSeed(seedKey),
+  });
+}
 
 loadRootEnv();
 
@@ -188,9 +215,16 @@ async function bootstrap() {
     }
     const { caretakerId } = await cr.json();
 
+    // Generate the displayName from the caretakerId so we have it BEFORE
+    // adopt. The adopt route persists it onto the registry's ghost
+    // record, which is what peer ghosts query via name-resolver.ts.
+    // Without this, peers fall back to `ghost_<hex>` when referring to
+    // each other and the cascade prose looks like database output.
+    const displayName = generateGhostName(caretakerId);
+
     const ar = await fetch(`${worldBase}/registry/adopt`, {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caretakerId, agentHostId }),
+      body: JSON.stringify({ caretakerId, agentHostId, displayName }),
     });
     if (!ar.ok) {
       console.error(`[peppers-demo] adopt ${i + 1} failed:`, ar.status, await ar.text());
@@ -200,7 +234,11 @@ async function bootstrap() {
 
     const sp = await fetch(`${houseBase}/v1/sessions/spawn/peppers-agent`, {
       method: "POST", headers: auth,
-      body: JSON.stringify({ ghostId: adopt.ghostId, credential: adopt.credential }),
+      body: JSON.stringify({
+        ghostId: adopt.ghostId,
+        credential: adopt.credential,
+        displayName,
+      }),
     });
     if (!sp.ok) {
       console.error(`[peppers-demo] spawn ${i + 1} failed:`, sp.status, await sp.text());
@@ -208,8 +246,8 @@ async function bootstrap() {
     }
     const { sessionId } = await sp.json();
     console.info(
-      `[peppers-demo] ghost ${i + 1}/${ghostCount}: session ${sessionId} ` +
-      `(ghostId ${adopt.ghostId}) — peppers loop starting.`,
+      `[peppers-demo] ghost ${i + 1}/${ghostCount}: ${displayName} ` +
+      `(ghostId ${adopt.ghostId}, session ${sessionId}) — peppers loop starting.`,
     );
   }
 }
@@ -233,6 +271,20 @@ if (!token) {
 console.info(`[peppers-demo] starting peppers-agent A2A server on port ${peppersPort}…`);
 start("peppers-agent", "pnpm", ["--filter", "@aie-matrix/ghost-peppers-agent", "dev"], {
   PEPPERS_AGENT_PORT: peppersPort,
+  // Bearing hint: which classes the substrate should auto-compute a
+  // nearest-bearing for every cascade. For freeplay this is "Food" so
+  // a hungry ghost has a direction to head when no food is in their
+  // 7-cell view. The world's `tokens` field on the ItemType decides
+  // whether something restores Fuel — this env var is navigation only.
+  PEPPERS_BEARING_ITEM_CLASSES:
+    process.env.PEPPERS_BEARING_ITEM_CLASSES ?? "Food",
+  // Per-ghost overlay servers: base port 4100, ghosts get 4100..4105.
+  // The aggregating hub at http://127.0.0.1:4100/all only runs when
+  // PEPPERS_OVERLAY_PEER_PORTS lists more than one peer (so it knows
+  // to fan in). Both must be set for the live spectator view.
+  PEPPERS_OVERLAY_BASE_PORT: process.env.PEPPERS_OVERLAY_BASE_PORT ?? "4100",
+  PEPPERS_OVERLAY_PEER_PORTS:
+    process.env.PEPPERS_OVERLAY_PEER_PORTS ?? "4100,4101,4102,4103,4104,4105",
 });
 
 await poll(`http://127.0.0.1:${housePort}/v1/catalog`,                       "ghost-house",    { token, maxMs: 30_000 });

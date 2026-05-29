@@ -45,6 +45,13 @@ export interface TileItemSummary {
   name: string;
   /** "here" when on the ghost's tile; compass face for adjacent tiles */
   at: "here" | "n" | "s" | "ne" | "nw" | "se" | "sw";
+  /**
+   * Remaining consumable energy on this instance, in tokens. Present
+   * only for items whose ItemDefinition declares `tokens`. The LLM
+   * sees this on `look` and can decide to `consume` (default: take all
+   * remaining) — no prompt-side cue needed.
+   */
+  tokens?: number;
 }
 
 export interface TileInspectResult {
@@ -79,6 +86,34 @@ export interface DropArgs {
 export type DropResult =
   | { ok: true }
   | { ok: false; code: "NOT_CARRYING" | "TILE_FULL" | "RULESET_DENY"; reason: string };
+
+export interface ConsumeArgs {
+  itemRef: string;
+  /**
+   * How much of the item's energy to consume, in tokens. Omit to take
+   * everything the instance has left (the affordance default). Positive
+   * numbers are clamped to remaining; non-positive numbers are an
+   * INVALID_AMOUNT error.
+   */
+  amount?: number;
+}
+
+export type ConsumeResult =
+  | {
+      ok: true;
+      itemRef: string;
+      /** Tokens transferred from the item to this ghost. */
+      consumed: number;
+      /** Tokens still in the instance after this call. */
+      remaining: number;
+      /** True when the instance was fully depleted and removed. */
+      depleted: boolean;
+    }
+  | {
+      ok: false;
+      code: "NOT_HERE" | "NOT_FOUND" | "NOT_CONSUMABLE" | "INVALID_AMOUNT";
+      reason: string;
+    };
 
 export interface InventoryResult {
   ok: true;

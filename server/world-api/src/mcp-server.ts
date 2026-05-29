@@ -9,6 +9,7 @@ import { Cause, Effect, Exit, Layer, Option, pipe } from "effect";
 import { z } from "zod";
 import {
   COMPASS_DIRECTIONS,
+  type ConsumeResult,
   type DropResult,
   type ExitInfo,
   type InspectResult,
@@ -188,6 +189,10 @@ function worldApiErrorToToolPayload(error: WorldApiError): Record<string, unknow
       return { ok: false, code: "NOT_CARRYING", reason: `You are not carrying "${error.itemRef}".` };
     case "WorldApiError.TileFull":
       return { ok: false, code: "TILE_FULL", reason: `Tile ${error.h3Index} is at full capacity.` };
+    case "WorldApiError.ItemNotConsumable":
+      return { ok: false, code: "NOT_CONSUMABLE", reason: `Item "${error.itemRef}" has no consumable energy.` };
+    case "WorldApiError.InvalidConsumeAmount":
+      return { ok: false, code: "INVALID_AMOUNT", reason: `Invalid consume amount ${error.requested} for "${error.itemRef}".` };
     default:
       return { error: "WORLD_API", message: String(error) };
   }
@@ -199,11 +204,18 @@ function tileItemsForAt(
   at: TileItemSummary["at"],
 ): TileItemSummary[] {
   const sidecar = itemService.getSidecar();
-  return itemService.getItemsOnTile(h3Index).map((itemRef) => ({
-    id: itemRef,
-    name: sidecar.get(itemRef)?.name ?? itemRef,
-    at,
-  }));
+  return itemService.getItemsOnTile(h3Index).map((itemRef) => {
+    const tokens = itemService.getInstanceTokens(h3Index, itemRef);
+    const summary: TileItemSummary = {
+      id: itemRef,
+      name: sidecar.get(itemRef)?.name ?? itemRef,
+      at,
+    };
+    if (tokens !== undefined) {
+      summary.tokens = tokens;
+    }
+    return summary;
+  });
 }
 
 function addObjectsField(
@@ -875,6 +887,54 @@ function takeEffect(
   });
 }
 
+function consumeEffect(
+  itemRef: string,
+  amount: number | undefined,
+  extra: McpToolExtra,
+): Effect.Effect<ConsumeResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const itemService = yield* ItemService;
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    return yield* itemService.consumeItem(hereId, itemRef, amount).pipe(
+      Effect.map((r) => ({
+        ok: true as const,
+        itemRef: r.itemRef,
+        consumed: r.consumed,
+        remaining: r.remaining,
+        depleted: r.depleted,
+      })),
+      Effect.catchTags({
+        "WorldApiError.ItemNotFound": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_FOUND" as const,
+            reason: `Item "${itemRef}" does not exist.`,
+          }),
+        "WorldApiError.ItemNotHere": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_HERE" as const,
+            reason: `Item "${itemRef}" is not on your current tile.`,
+          }),
+        "WorldApiError.ItemNotConsumable": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_CONSUMABLE" as const,
+            reason: `Item "${itemRef}" has no consumable energy.`,
+          }),
+        "WorldApiError.InvalidConsumeAmount": ({ requested }) =>
+          Effect.succeed({
+            ok: false as const,
+            code: "INVALID_AMOUNT" as const,
+            reason: `Invalid consume amount ${requested} — must be a positive number.`,
+          }),
+      }),
+    );
+  });
+}
+
 function dropEffect(
   itemRef: string,
   extra: McpToolExtra,
@@ -1207,6 +1267,26 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       },
     },
     async ({ itemRef }, extra) => runTool("drop", { itemRef }, dropEffect(itemRef, extra), extra),
+  );
+
+  server.registerTool(
+    "consume",
+    {
+      description:
+        "Consume some or all of a consumable item's energy on your current tile (e.g. eat food). Defaults to taking everything the instance has left; pass `amount` to take only a portion. Returns the actual amount transferred to you and what's left on the item.",
+      inputSchema: {
+        itemRef: z.string().describe("The itemRef of the item to consume from your current tile."),
+        amount: z
+          .number()
+          .positive()
+          .optional()
+          .describe(
+            "How many tokens to consume. Omit to take everything available (the typical case). Values above remaining are clamped down.",
+          ),
+      },
+    },
+    async ({ itemRef, amount }, extra) =>
+      runTool("consume", { itemRef, amount }, consumeEffect(itemRef, amount, extra), extra),
   );
 
   server.registerTool(

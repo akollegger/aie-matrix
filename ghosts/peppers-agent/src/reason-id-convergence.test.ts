@@ -52,6 +52,7 @@ function fixtureFacets(): FacetReading[] {
       usage: null,
       userPrompt: "",
       raw: "",
+      expression: null,
     },
     {
       facet: "Warmth",
@@ -62,6 +63,7 @@ function fixtureFacets(): FacetReading[] {
       usage: null,
       userPrompt: "",
       raw: "",
+      expression: null,
     },
     {
       facet: "Trust",
@@ -71,6 +73,7 @@ function fixtureFacets(): FacetReading[] {
       usage: null,
       userPrompt: "",
       raw: "",
+      expression: null,
     },
   ];
 }

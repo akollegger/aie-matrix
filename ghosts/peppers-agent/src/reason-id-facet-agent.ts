@@ -22,6 +22,12 @@ import { formatStimulus } from "./format-stimulus.js";
 import { chatJson } from "./llm-client.js";
 import { requireString } from "./parse-helpers.js";
 import { FACET_SEMANTICS, type FacetSemantics } from "./reason-id-facets.js";
+import {
+  formatCharacterList,
+  hasFacetData,
+  resolveFacetExpression,
+  type FacetExpression,
+} from "./reason-id-facets-resolver.js";
 
 export interface FacetReading {
   readonly facet: FacetName;
@@ -32,6 +38,13 @@ export interface FacetReading {
   readonly usage: { readonly prompt: number; readonly completion: number; readonly total: number } | null;
   readonly userPrompt: string;
   readonly raw: string;
+  /**
+   * The mechanically-resolved expression handed to the LLM (felt chars
+   * + projected chars + mask + compound). Null when this facet used the
+   * legacy numeric prompt path. Surfaced into the overlay so the
+   * operator can see what slider state the LLM actually saw.
+   */
+  readonly expression: FacetExpression | null;
 }
 
 export interface InvokeFacetAgentRequest {
@@ -53,17 +66,34 @@ export async function invokeFacetAgent(
   const diff = internal - external;
   const mean = (internal + external) / 2;
 
-  const system = buildSystem(req.facet, sem);
-  const user = buildUser({
-    facet: req.facet,
-    internal,
-    external,
-    diff,
-    mean,
-    stimulus: req.stimulus,
-    recentTriggers: req.recentTriggers,
-    objective: req.objective,
-  });
+  // Resolved facets get the mechanical (felt, projected) → prose
+  // mapping. Unauthored facets fall back to the legacy numeric output
+  // so they keep working until their content is filled in.
+  const resolved = hasFacetData(req.facet)
+    ? resolveFacetExpression(req.facet, req.state)
+    : null;
+
+  const system = resolved !== null
+    ? buildSystemResolved(req.facet, sem)
+    : buildSystem(req.facet, sem);
+  const user = resolved !== null
+    ? buildUserResolved({
+        facet: req.facet,
+        resolved,
+        stimulus: req.stimulus,
+        recentTriggers: req.recentTriggers,
+        objective: req.objective,
+      })
+    : buildUser({
+        facet: req.facet,
+        internal,
+        external,
+        diff,
+        mean,
+        stimulus: req.stimulus,
+        recentTriggers: req.recentTriggers,
+        objective: req.objective,
+      });
 
   const { value, usage, raw } = await chatJson<{
     judgment?: unknown;
@@ -83,7 +113,103 @@ export async function invokeFacetAgent(
     usage,
     userPrompt: user,
     raw,
+    expression: resolved,
   };
+}
+
+/**
+ * System prompt for the resolved path: the prose interpretation of
+ * (felt, projected) has already been computed in TypeScript, so the
+ * prompt no longer hands the model raw numbers or asks it to locate
+ * itself among quadrants. The model receives a resolved expression
+ * grounded in named characters — its training corpus has rich
+ * associations with these, far richer than any abstract label could
+ * give. The model uses the felt + projected character triangulations
+ * to inhabit the state directly.
+ */
+function buildSystemResolved(facet: FacetName, sem: FacetSemantics): string {
+  return `You are the ${facet} aspect of a ghost's unconscious mind — one of eight personality facets, each speaking with its own voice.
+
+What ${facet} measures: ${sem.meaning}
+
+How ${facet} reads the world: ${sem.perceptualLens}
+
+Each turn you receive: your current expressed state for this facet — what is felt inside (anchored by recognisable characters who exemplify that felt state), what is projected outside (anchored similarly), how the gap between them is working, and, when applicable, the compound archetype you most resemble right now. Then a brief history of recent triggers, and the current trigger.
+
+The character anchors are the primary signal. They are not a vague analogy — you ARE that triangulation right now, on this facet, on this turn. Speak from inside it.
+
+Your job — three things:
+1. JUDGMENT — decide whether the current trigger is positive, negative, or neutral FROM ${facet}'S PERSPECTIVE. Other facets will read it differently; that's fine. Read it through ${facet}'s lens only.
+2. ADJUSTMENT — optionally nudge your own slider (axis: internal or external; direction: up or down). Emit at most one. If the trigger doesn't move you, omit it (return null).
+3. READING — 1-2 sentences in plain prose describing what just happened FROM ${facet}'S PERSPECTIVE. Write in a voice consistent with the character triangulation. When the mask description says the gap leaks, let the leak show in the prose. Not a monologue. Not stream of consciousness. Just a clear note from this aspect of the self.
+
+Output strict JSON only:
+{
+  "judgment": "positive" | "negative" | "neutral",
+  "adjustment": null OR { "axis": "internal" | "external", "direction": "up" | "down" },
+  "reading": "<1-2 sentence reading from your perspective>"
+}`;
+}
+
+function buildUserResolved(args: {
+  facet: FacetName;
+  resolved: FacetExpression;
+  stimulus: Stimulus;
+  recentTriggers: ReadonlyArray<string>;
+  objective?: string;
+}): string {
+  const r = args.resolved;
+  const lines: string[] = [];
+
+  if (args.objective) {
+    lines.push(`Surface objective (the ghost's conscious task — context only): ${args.objective}`);
+    lines.push("");
+  }
+
+  lines.push(`Your current ${args.facet}:`);
+  lines.push("");
+
+  // Inside: composed sentence + character roster with per-character notes.
+  lines.push(`  Inside, you're ${r.feltSummary} — ${formatCharacterList(r.feltCharacters)}.`);
+  for (const c of r.feltCharacters) {
+    lines.push(`    · ${c.name}: ${c.note}`);
+  }
+  lines.push("");
+
+  // Outside: same shape.
+  lines.push(`  Outside, you're ${r.projectedSummary} — ${formatCharacterList(r.projectedCharacters)}.`);
+  for (const c of r.projectedCharacters) {
+    lines.push(`    · ${c.name}: ${c.note}`);
+  }
+  lines.push("");
+
+  // Mask state, derived from the gap.
+  lines.push(`  Mask: ${r.maskDescription}`);
+  lines.push("");
+
+  // Compound archetype, when one is authored for this corner. Mid-cells
+  // and quiet corners have no compound; the felt+projected+mask above
+  // carries them on their own.
+  if (r.compoundArchetype !== null) {
+    lines.push(`  Together, this resolves as ${r.compoundArchetype.name}:`);
+    lines.push(`    ${r.compoundArchetype.description}`);
+    lines.push("");
+  }
+
+  if (args.recentTriggers.length > 0) {
+    lines.push("Recent triggers (oldest → newest):");
+    for (const t of args.recentTriggers) {
+      lines.push(`  - ${t}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("Current trigger:");
+  lines.push(formatStimulus(args.stimulus));
+  lines.push("");
+  lines.push("Return JSON only.");
+
+  return lines.join("\n");
 }
 
 function buildSystem(facet: FacetName, sem: FacetSemantics): string {

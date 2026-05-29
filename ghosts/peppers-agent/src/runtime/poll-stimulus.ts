@@ -33,6 +33,11 @@ export interface StimulusContext {
   pendingMessages: Array<{ from: string; text: string; intent?: string }>;
   /** Log prefix passed to fetchMessage so diagnostics carry the ghost label. */
   logTag: string;
+  /** Item refs this ghost is BLIND to. Matching items are dropped from
+   *  `mcguffin-in-view` stimulus emission — they are never surfaced as
+   *  perceptual events. Default empty; the substrate has no built-in
+   *  knowledge of any specific item class. */
+  ignoredItemRefs: ReadonlySet<string>;
 }
 
 export function emptyStimulusContext(
@@ -40,6 +45,7 @@ export function emptyStimulusContext(
   registryBase: string,
   agentHostId: string,
   logTag = "peppers-house",
+  ignoredItemRefs: ReadonlyArray<string> = [],
 ): StimulusContext {
   return {
     lastTileH3: null,
@@ -51,6 +57,7 @@ export function emptyStimulusContext(
     agentHostId,
     pendingMessages: [],
     logTag,
+    ignoredItemRefs: new Set(ignoredItemRefs),
   };
 }
 
@@ -269,10 +276,27 @@ export async function pollNextStimulus(
     };
   }
 
+  // Tile-change perception reset. If the look-here reports a tile id
+  // we haven't seen before, the ghost has moved — clear the
+  // `inspectedItems` set so this new tile's items get a fresh chance
+  // to trigger `mcguffin-in-view`. Without this, after a ghost
+  // notices `Food` once, they never get the perceptual ping at any
+  // other tile that has Food, even though the items list changes.
+  // We do NOT update `lastTileH3` here — the tile-entered emission
+  // below still needs to fire (and will, since it makes its own
+  // whereami call).
+  if (look && typeof look.tileId === "string" && look.tileId !== ctx.lastTileH3) {
+    ctx.inspectedItems.clear();
+  }
+
   // Items in view — same-tile first, then neighbor-tile mcguffins.
+  // Items in `ctx.ignoredItemRefs` are never surfaced as perceptual
+  // events; the ghost is structurally blind to them, the same way a
+  // human doesn't notice background colour.
   if (look) {
     for (const obj of look.objects ?? []) {
       if (typeof obj.id !== "string" || ctx.inspectedItems.has(obj.id)) continue;
+      if (ctx.ignoredItemRefs.has(obj.id)) continue;
       ctx.inspectedItems.add(obj.id);
       const at = isCompass(obj.at) || obj.at === "here" ? obj.at : "here";
       return { kind: "mcguffin-in-view", itemRef: obj.id, at: at as "here" | Compass };

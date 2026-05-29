@@ -196,6 +196,108 @@
     .tool-result.err { color: var(--bad); }
     .tool-empty { color: var(--text-dim); font-style: italic; padding: 8px; }
 
+    /* Decommissioned banner — covers the entire viewport when the
+       ghost dies, so it can't be missed. */
+    .decommissioned-overlay {
+      position: fixed; inset: 0; z-index: 9999;
+      background: rgba(13, 17, 23, 0.92);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column;
+      backdrop-filter: blur(4px);
+    }
+    .decommissioned-overlay .skull {
+      font-size: 96px; line-height: 1;
+      filter: drop-shadow(0 0 24px rgba(248, 81, 73, 0.6));
+    }
+    .decommissioned-overlay .label {
+      font-size: 24px; font-weight: 600; color: var(--bad);
+      letter-spacing: 0.15em; margin-top: 16px;
+      text-transform: uppercase;
+    }
+    .decommissioned-overlay .who {
+      font-size: 16px; color: var(--text); margin-top: 8px;
+    }
+    .decommissioned-overlay .why {
+      font-size: 12px; color: var(--text-dim); margin-top: 12px;
+      font-family: ui-monospace, monospace;
+    }
+
+    /* Primal drive banner — appears above the need bars when the
+       lizard is calling. The colour intensifies with urgency. */
+    .primal-drive {
+      padding: 8px 12px; margin-bottom: 10px; border-radius: 4px;
+      font-size: 12px; line-height: 1.5; border-left: 3px solid;
+    }
+    .primal-drive.depleted-low { background: rgba(210, 153, 34, 0.08); border-left-color: var(--warm); color: var(--warm); }
+    .primal-drive.depleted-high { background: rgba(248, 81, 73, 0.10); border-left-color: var(--bad); color: var(--bad); }
+    .primal-drive .drive-head { font-weight: 600; margin-bottom: 4px; }
+    .primal-drive .drive-text { color: var(--text); font-style: italic; }
+    .primal-drive .drive-meta { font-size: 10px; color: var(--text-dim); font-family: ui-monospace, monospace; margin-top: 4px; }
+
+    /* Primal needs — single-slider per need with a sweet-spot at 5.
+       Coloured by distance from sweet spot: green near 5, amber at the
+       edges, red near 0 or 10. */
+    .need-row { padding: 6px 0; }
+    .need-row + .need-row { border-top: 1px dashed var(--border); }
+    .need-label { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+    .need-name { font-size: 12px; color: var(--text); font-weight: 500; }
+    .need-state { font-size: 10px; color: var(--text-dim); margin-left: auto; font-family: ui-monospace, monospace; }
+    .need-bar-wrap { position: relative; height: 8px; background: #21262d; border-radius: 4px; overflow: hidden; }
+    .need-bar { position: absolute; top: 0; left: 0; height: 100%; border-radius: 4px; transition: width 0.25s ease, background 0.25s ease; }
+    /* Sweet spot marker at 50% */
+    .need-bar-wrap::after {
+      content: ""; position: absolute; top: -2px; bottom: -2px; left: 50%; width: 1px;
+      background: rgba(230, 237, 243, 0.4);
+    }
+    .need-bar.healthy { background: var(--ok); }
+    .need-bar.warning { background: var(--warm); }
+    .need-bar.critical { background: var(--bad); }
+
+    /* Facet readings — what the mechanical resolver handed the LLM, plus what the LLM said back */
+    .facet-readings-scroll { max-height: 520px; overflow-y: auto; }
+    .facet-reading { padding: 10px 0; }
+    .facet-reading + .facet-reading { border-top: 1px dashed var(--border); }
+    .facet-reading-head {
+      display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px;
+    }
+    .facet-reading-name {
+      font-size: 13px; font-weight: 600; color: var(--accent);
+    }
+    .judgment {
+      font-size: 10px; padding: 1px 6px; border-radius: 8px;
+      font-family: ui-monospace, monospace; text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .judgment.positive { background: rgba(63, 185, 80, 0.18); color: var(--ok); }
+    .judgment.negative { background: rgba(248, 81, 73, 0.18); color: var(--bad); }
+    .judgment.neutral { background: rgba(139, 148, 158, 0.18); color: var(--text-dim); }
+    .facet-adj {
+      font-family: ui-monospace, monospace; font-size: 10px; color: var(--text-dim);
+    }
+    .expr-grid {
+      display: grid; grid-template-columns: 60px 1fr; gap: 4px 10px;
+      font-size: 12px; line-height: 1.5;
+    }
+    .expr-label {
+      font-size: 10px; color: var(--text-dim); text-transform: uppercase;
+      letter-spacing: 0.05em; padding-top: 2px;
+    }
+    .expr-cell .summary { color: var(--text); }
+    .expr-cell .chars { color: var(--cool); font-style: italic; }
+    .expr-cell.mask { color: var(--text-dim); font-size: 11px; }
+    .expr-cell.compound { color: var(--gold); }
+    .expr-cell.compound .name { font-weight: 600; }
+    .facet-reading-text {
+      margin-top: 8px; padding: 8px 12px;
+      background: rgba(88, 166, 255, 0.06);
+      border-left: 2px solid var(--accent);
+      font-size: 12px; font-style: italic; color: var(--text);
+      border-radius: 3px;
+    }
+    .expr-cell.unauthored {
+      color: var(--text-dim); font-style: italic; font-size: 11px;
+    }
+
     /* Cascade index */
     .cascade-tag {
       display: inline-block; padding: 2px 8px; border-radius: 10px;
@@ -245,8 +347,21 @@
     </div>
 
     <div class="card">
+      <h2>Primal Needs</h2>
+      <div id="primal-drive-card"></div>
+      <div id="needs-card">—</div>
+    </div>
+
+    <div class="card">
       <h2>Chats</h2>
       <div id="chats-card" class="chats-scroll"><div class="chat-empty">No utterances yet.</div></div>
+    </div>
+
+    <div class="card wide">
+      <h2>Facet Readings <span class="cascade-tag" id="facet-readings-tag">—</span></h2>
+      <div id="facet-readings-card" class="facet-readings-scroll">
+        <div class="chat-empty">Waiting for first cascade…</div>
+      </div>
     </div>
 
     <div class="card wide">
@@ -350,6 +465,109 @@
       `).join('');
     };
 
+    const formatCharList = (chars) => {
+      if (!chars || chars.length === 0) return '';
+      const names = chars.map(c => c.name);
+      if (names.length === 1) return `like ${names[0]}`;
+      if (names.length === 2) return `like ${names[0]} and ${names[1]}`;
+      const initial = names.slice(0, -1).join(', ');
+      const last = names[names.length - 1];
+      return `like ${initial}, even a little ${last}`;
+    };
+
+    const renderFacetReadings = (readings) => {
+      const node = $('facet-readings-card');
+      if (!readings || readings.length === 0) {
+        node.innerHTML = '<div class="chat-empty">No facet readings in this cascade.</div>';
+        return;
+      }
+      $('facet-readings-tag').textContent = `${readings.length} facets`;
+      node.innerHTML = readings.map(r => {
+        const expr = r.expression;
+        const exprBlock = expr ? `
+          <div class="expr-grid">
+            <div class="expr-label">Felt</div>
+            <div class="expr-cell">
+              <div class="summary">${esc(expr.feltSummary)}</div>
+              <div class="chars">${esc(formatCharList(expr.feltCharacters))}</div>
+            </div>
+            <div class="expr-label">Outside</div>
+            <div class="expr-cell">
+              <div class="summary">${esc(expr.projectedSummary)}</div>
+              <div class="chars">${esc(formatCharList(expr.projectedCharacters))}</div>
+            </div>
+            <div class="expr-label">Mask</div>
+            <div class="expr-cell mask">${esc(expr.maskDescription)}</div>
+            ${expr.compoundArchetype ? `
+              <div class="expr-label">→</div>
+              <div class="expr-cell compound">
+                <span class="name">${esc(expr.compoundArchetype.name)}</span> · ${esc(expr.compoundArchetype.description)}
+              </div>
+            ` : ''}
+          </div>` : `
+          <div class="expr-cell unauthored">(no resolved expression — legacy numeric prompt path)</div>
+        `;
+        const adjPart = r.adjustment
+          ? `<span class="facet-adj">${r.adjustment.direction === 'up' ? '↑' : '↓'} ${esc(r.adjustment.axis)}</span>`
+          : '';
+        return `
+          <div class="facet-reading">
+            <div class="facet-reading-head">
+              <span class="facet-reading-name">${esc(r.facet)}</span>
+              <span class="judgment ${esc(r.judgment)}">${esc(r.judgment)}</span>
+              ${adjPart}
+            </div>
+            ${exprBlock}
+            <div class="facet-reading-text">${esc(r.reading)}</div>
+          </div>
+        `;
+      }).join('');
+    };
+
+    const renderPrimalDrive = (drive) => {
+      const node = $('primal-drive-card');
+      if (!drive) {
+        node.innerHTML = '';
+        return;
+      }
+      const cls = drive.urgency >= 3 ? 'depleted-high' : 'depleted-low';
+      const head = drive.urgency >= 3 ? 'THE BODY IS SCREAMING' : 'The body is calling';
+      node.innerHTML = `
+        <div class="primal-drive ${cls}">
+          <div class="drive-head">${esc(head)} — ${esc(drive.need)} ${esc(drive.direction)}</div>
+          <div class="drive-text">${esc(drive.drive)}</div>
+          <div class="drive-meta">current ${drive.currentDisplay.toFixed(2)}/10 · urgency ${drive.urgency.toFixed(2)}/5</div>
+        </div>
+      `;
+    };
+
+    const renderNeeds = (needs) => {
+      if (!needs || needs.length === 0) {
+        $('needs-card').innerHTML = '—';
+        return;
+      }
+      $('needs-card').innerHTML = needs.map(n => {
+        // Sweet spot is 5. Distance from 5 in either direction determines
+        // the bar colour. Healthy band: 3.5–6.5. Warning: 2–8. Critical
+        // outside that. Mirrors the binLevel3 thresholds used by the
+        // feeling resolver so the visual matches the mechanical bins.
+        const dist = Math.abs(n.urgency - 5);
+        const cls = dist < 1.5 ? 'healthy' : dist < 3 ? 'warning' : 'critical';
+        const label = n.urgency < 3.5 ? 'depleted' : n.urgency > 6.5 ? 'over' : 'satiated';
+        return `
+          <div class="need-row">
+            <div class="need-label">
+              <span class="need-name">${esc(n.need)}</span>
+              <span class="need-state">${n.urgency.toFixed(2)} · ${label}</span>
+            </div>
+            <div class="need-bar-wrap">
+              <div class="need-bar ${cls}" style="width: ${(n.urgency / 10 * 100).toFixed(1)}%"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    };
+
     const renderChats = () => {
       const node = $('chats-card');
       if (chats.length === 0) {
@@ -381,6 +599,25 @@
       renderChats();
     };
 
+    const handleDecommissioned = (data) => {
+      // Full-viewport banner — the ghost is dead. Renders on top of
+      // everything else so it's impossible to miss from outside the
+      // terminal.
+      setStatus('decommissioned', false);
+      const existing = document.querySelector('.decommissioned-overlay');
+      if (existing) existing.remove();
+      const node = document.createElement('div');
+      node.className = 'decommissioned-overlay';
+      const name = data.displayName || (data.ghostId ? data.ghostId.slice(0, 8) + '…' : '—');
+      node.innerHTML = `
+        <div class="skull">💀</div>
+        <div class="label">Decommissioned</div>
+        <div class="who">${esc(name)}</div>
+        <div class="why">${esc(data.cause || 'unknown')} · Fuel ${(data.fuelDisplay ?? 0).toFixed(2)} · cascade ${data.cascadeIndex ?? '?'}</div>
+      `;
+      document.body.appendChild(node);
+    };
+
     const handleInit = (data) => {
       ghostId = data.ghostId || null;
       selfDisplayName = data.displayName || null;
@@ -390,6 +627,7 @@
       setStatus('live', true);
       renderObjective(data.objective, null);
       renderPersonality(data.personality);
+      renderNeeds(data.needs);
       $('meta').textContent = `started ${data.startedAt ?? '—'}`;
     };
 
@@ -406,6 +644,9 @@
       renderEnvironment(record.worldContext, record.tileClass);
       renderHead(record);
       renderPersonality(record.personality);
+      renderPrimalDrive(record.primalDrive);
+      renderNeeds(record.needs);
+      renderFacetReadings(record.facetReadings);
       trackChats(record);
     };
 
@@ -449,6 +690,7 @@
       es.addEventListener('init', e => { try { handleInit(JSON.parse(e.data)); } catch (err) { console.error(err); } });
       es.addEventListener('cascade', e => { try { handleCascade(JSON.parse(e.data)); } catch (err) { console.error(err); } });
       es.addEventListener('tool_call', e => { try { handleToolCall(JSON.parse(e.data)); } catch (err) { console.error(err); } });
+      es.addEventListener('decommissioned', e => { try { handleDecommissioned(JSON.parse(e.data)); } catch (err) { console.error(err); } });
       es.addEventListener('error', () => {
         setStatus('disconnected — retrying…', false);
         es.close();

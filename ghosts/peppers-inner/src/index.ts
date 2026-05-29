@@ -66,3 +66,33 @@ export {
   type CascadeTrigger,
   type CompleteOptions,
 } from "./cascade.js";
+
+export {
+  DEFAULT_NEED_DEPLETION,
+  STARTER_NEEDS,
+  adjustNeed,
+  applyCascadeDepletion,
+  midpointNeeds,
+  selectPrimalDrive,
+  startingNeeds,
+  type NeedBirthConfig,
+  type NeedName,
+  type NeedProfile,
+  type NeedState,
+  type PrimalDirection,
+  type PrimalDrive,
+} from "./needs.js";
+
+export {
+  DEFAULT_PRIMAL_BASE_STEP,
+  DEFAULT_PRIMAL_PERSONALITY_EDGES,
+  DEFAULT_PRIMAL_RECOVERY_MULTIPLIER,
+  computePrimalForces,
+  emptyPrimalStreaks,
+  primalEdgeKey,
+  updateStreaks,
+  type PrimalFlux,
+  type PrimalForce,
+  type PrimalPersonalityEdge,
+  type PrimalPersonalityStreaks,
+} from "./primal-personality-wiring.js";

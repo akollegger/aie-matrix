@@ -15,10 +15,14 @@ import { randomUUID } from "node:crypto";
 import type { Message, Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import type { AgentExecutor, ExecutionEventBus, RequestContext } from "@a2a-js/sdk/server";
 import {
+  midpointNeeds,
   midpointPersonality,
   samplePersonality,
+  type CommitmentLedger,
+  type NeedProfile,
   type PersonalityState,
 } from "@aie-matrix/ghost-peppers-inner";
+import { captureRecord } from "./debug-capture.js";
 import { decideEncounter } from "./encounter-brain.js";
 import { startOverlayServer, type OverlayServer } from "./overlay-server.js";
 import { runHouse } from "./run-house.js";
@@ -39,17 +43,74 @@ function requireEnv(name: string): string {
 }
 
 /**
- * The peppers ghost's standing surface objective. Read by the cascade
- * runner (to thread into every Id + Surface call) and by the encounter
- * brain (so a ghost whose objective points at the saloon actually says
- * "yes" when offered a seat — not just because their personality is
- * agreeable, but because the brain knows they came here to play).
- * Override with PEPPERS_OBJECTIVE.
+ * Item refs the default peppers ghost is BLIND to. Read once at module
+ * load from `PEPPERS_IGNORED_ITEM_REFS` (comma-separated). Default
+ * empty — the substrate has no built-in knowledge of any specific
+ * item class. When running the demo against a world that contains
+ * house-specific platform items (e.g. `PokerTable` from the RDC
+ * server), set `PEPPERS_IGNORED_ITEM_REFS=PokerTable` so the
+ * substrate filters them out of perception entirely.
+ *
+ * The proper fix lives at the world-api: items should be tagged with
+ * their owning house and filtered per-ghost based on engagement
+ * config. Until that lands, this env var is the substrate-side
+ * blindfold.
+ */
+const DEFAULT_IGNORED_ITEM_REFS: ReadonlyArray<string> = (() => {
+  const raw = process.env.PEPPERS_IGNORED_ITEM_REFS;
+  if (!raw) return [];
+  return raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+})();
+if (DEFAULT_IGNORED_ITEM_REFS.length > 0) {
+  console.info(
+    `[peppers-agent] PEPPERS_IGNORED_ITEM_REFS=${DEFAULT_IGNORED_ITEM_REFS.join(",")} — substrate is blind to these item refs`,
+  );
+}
+
+/**
+ * Item classes the substrate should auto-compute bearings to every
+ * cascade. Read from `PEPPERS_BEARING_ITEM_CLASSES` (comma-separated;
+ * legacy alias: `PEPPERS_FORAGE_ITEM_REFS`). Each entry becomes a
+ * `nearest` MCP call per cascade whose result lands in
+ * `worldContext.bearings`, giving the ghost a directional pointer to
+ * the class — useful for navigation toward food (or any other class
+ * the house wants surfaced).
+ *
+ * Nutrition is NOT decided here. The world's `tokens` field on the
+ * ItemDefinition decides whether something restores Fuel and by how
+ * much; the substrate just applies what the world's `consume` outcome
+ * reports.
+ */
+const DEFAULT_BEARING_ITEM_CLASSES: ReadonlyArray<string> = (() => {
+  const raw =
+    process.env.PEPPERS_BEARING_ITEM_CLASSES ?? process.env.PEPPERS_FORAGE_ITEM_REFS;
+  if (!raw) return [];
+  return raw.split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+})();
+if (DEFAULT_BEARING_ITEM_CLASSES.length > 0) {
+  console.info(
+    `[peppers-agent] bearing hints: ${DEFAULT_BEARING_ITEM_CLASSES.join(",")} — substrate computes a nearest-bearing for each class per cascade`,
+  );
+}
+
+/**
+ * The default peppers ghost's standing surface objective. Read by the
+ * cascade runner (to thread into every Id + Surface call) and by the
+ * encounter brain when one is active.
+ *
+ * Peppers is the GENERIC ghost substrate. It must not be aware of any
+ * specific ghost-house's content (no poker, no saloons, no Black
+ * Bart's). House-flavoured variants (the future RDC-peppers, HP-
+ * peppers, etc.) layer their thematic objective ON TOP of this base
+ * via the `PEPPERS_OBJECTIVE` env override or by spawning with a
+ * house-specific objective in the spawn context.
+ *
+ * Override with PEPPERS_OBJECTIVE for theming the demo.
  */
 export function resolveBaseObjective(): string {
   return (
     process.env.PEPPERS_OBJECTIVE ??
-    "You are a ghost in a frontier town. The pull of the night is Black Bart's Saloon — a poker table where strangers become rivals and rivals become hands of cards. Make your way there. Along the way, when a ghost is nearby in your cluster, speak to them — exchange names, find common ground, decide if you'll play together or against. But conversation is the road, not the destination: the table is where the night actually happens. When you can see the poker table or stand next to it, sit down."
+    "You are a ghost in a world. Wander, observe, and notice what's around you. When another ghost is in your cluster, speak to them — exchange names, find common ground, share what's interesting. The world has things to discover; you have a self to express. Move with curiosity, rest when you need to, and tend to your body."
   );
 }
 
@@ -126,9 +187,35 @@ function completeWithArtifact(
  *  can derive a brain decision from the ghost's personality. */
 interface PeppersGhostState {
   readonly spawnContext: SpawnContext;
-  /** Birth personality snapshot — used for the encounter brain and to
-   *  re-seed the cascade on resume. */
+  /** Birth personality snapshot — the starting point from which drift
+   *  accumulates. Held as a constant for the encounter brain (which
+   *  doesn't get to see drift) and as the fallback for the cascade
+   *  runner when no live state has been recorded yet. */
   readonly initialPersonality: PersonalityState;
+  /** Current accumulated personality (drift + birth). Survives
+   *  pause/resume cycles so a ghost that evolved over many cascades
+   *  doesn't snap back to birth on every Barnacle handoff. */
+  personality: PersonalityState;
+  /** Current primal-need state. Survives pause/resume cycles so a
+   *  ghost that nearly starved before a Barnacle handoff comes back
+   *  hungry, not satiated. */
+  needs: NeedProfile;
+  /** Open self-debts the inner voice has minted but not yet paid down.
+   *  Survives pause/resume cycles so commitments persist across
+   *  Barnacle handoffs. */
+  commitmentLedger: CommitmentLedger;
+  /** Per-edge signed streak counters for the primal→personality
+   *  wiring. Survives pause/resume so a ghost's accumulated stress
+   *  (or windfall) doesn't reset mid-life. */
+  primalStreaks: import("@aie-matrix/ghost-peppers-inner").PrimalPersonalityStreaks;
+  /** The set of platform-tile classes this ghost variant engages with.
+   *  Empty for default peppers — they are blind to mini-games of any
+   *  kind. House-flavoured variants populate this (e.g. an RDC-peppers
+   *  variant would include "PokerTable"). The encounter handler
+   *  short-circuits to decline for any platform class not in this set,
+   *  with no LLM call and no Barnacle pause. This is the structural
+   *  rule that keeps the substrate ignorant of house-specific content. */
+  readonly engagedPlatformClasses: ReadonlyArray<string>;
   /** Running cascade's abort controller. Aborted on pause / re-spawn. */
   socialAbort?: AbortController;
   /** taskId that owns the current social cascade. */
@@ -280,7 +367,47 @@ function startSocialLoop(
         ghost.spawnContext.houseEndpoints.registry ??
         ghost.spawnContext.houseEndpoints.a2a,
       memoryConnection,
-      initialPersonality: ghost.initialPersonality,
+      // Resume with the LIVE personality (birth + accumulated drift),
+      // not the birth snapshot. Without this, every pause/resume
+      // erased all the drift the ghost had accumulated.
+      initialPersonality: ghost.personality,
+      onPersonalityUpdate: (s) => {
+        ghost.personality = s;
+      },
+      // Resume with the ghost's last known need state — without this
+      // every Barnacle handoff silently reset Fuel/Coherence/Rest
+      // back to midpoint 5.0.
+      initialNeeds: ghost.needs,
+      onNeedsUpdate: (n) => {
+        ghost.needs = n;
+      },
+      // Resume with the open commitment ledger so debts the inner
+      // voice minted persist across handoffs.
+      initialCommitments: ghost.commitmentLedger,
+      onCommitmentsUpdate: (l) => {
+        ghost.commitmentLedger = l;
+      },
+      // Resume with accumulated primal→personality streak state so
+      // that a ghost's pre-handoff stress / windfall doesn't reset
+      // when a Barnacle mini-game pauses them.
+      initialPrimalStreaks: ghost.primalStreaks,
+      onPrimalStreaksUpdate: (s) => {
+        ghost.primalStreaks = s;
+      },
+      // Substrate blindness: items in this set are never surfaced as
+      // stimuli or world-context entries. House variants would
+      // populate this with the platform classes their world contains
+      // but that they don't engage with.
+      ignoredItemRefs: DEFAULT_IGNORED_ITEM_REFS,
+      // Bearings: for every class in the bearing hint, compute a
+      // per-cascade "nearest" bearing so a ghost has a directional
+      // pointer to it. For foraging, this means a hungry ghost knows
+      // which way the nearest Food is even when none is in their
+      // 7-cell view. House variants append their own targets.
+      bearingTargets: DEFAULT_BEARING_ITEM_CLASSES.map((cls) => ({
+        label: cls,
+        spec: { itemClass: cls },
+      })),
       objective,
       verbose: process.env.PEPPERS_VERBOSE === "1",
       signal: ac.signal,
@@ -424,6 +551,14 @@ export class PeppersAgentExecutor implements AgentExecutor {
     const state: PeppersGhostState = {
       spawnContext: ctx,
       initialPersonality,
+      personality: initialPersonality,
+      needs: midpointNeeds(),
+      commitmentLedger: [],
+      primalStreaks: {},
+      // Default peppers is blind to every platform class. Variants
+      // (RDC-peppers, HP-peppers, etc.) override this via spawn-time
+      // config when they exist.
+      engagedPlatformClasses: [],
     };
     ghosts.set(ctx.ghostId, state);
 
@@ -452,10 +587,43 @@ export class PeppersAgentExecutor implements AgentExecutor {
       );
     }
 
+    // Architectural rule: the substrate is blind to house-specific
+    // content. Default peppers's `engagedPlatformClasses` is empty,
+    // which means EVERY platform encounter is short-circuited to a
+    // decline — no LLM call, no Barnacle pause, no handoff. The ghost
+    // walks across the tile as if it were ordinary floor. Variants
+    // that actually engage with a mini-game class (a future
+    // RDC-flavoured peppers, etc.) populate this list at spawn time.
+    if (!ghost.engagedPlatformClasses.includes(enc.platformClass)) {
+      console.info(
+        JSON.stringify({
+          kind: "peppers-agent.encounter-ignored",
+          ghostId: enc.ghostId,
+          platformClass: enc.platformClass,
+          reason: "platform class not in this ghost's engaged set (substrate is blind)",
+        }),
+      );
+      captureRecord("encounter-ignored", {
+        ghostId: enc.ghostId,
+        displayName: ghost.spawnContext.ghostCard.displayName ?? null,
+        platformId: enc.platformId,
+        platformClass: enc.platformClass,
+        engagedPlatformClasses: ghost.engagedPlatformClasses,
+      });
+      completeWithArtifact(eventBus, taskId, contextId, {
+        schema: PLATFORM_ENCOUNTER_SCHEMA,
+        platformId: enc.platformId,
+        ghostId: enc.ghostId,
+        accept: false,
+        reasoning: "(walks past — substrate is blind to this platform class)",
+      });
+      return;
+    }
+
     let decision: { accept: boolean; reasoning: string };
     try {
       decision = await decideEncounter({
-        state: ghost.initialPersonality,
+        state: ghost.personality,
         displayName:
           ghost.spawnContext.ghostCard.displayName ??
           `ghost-${enc.ghostId.slice(0, 8)}`,
@@ -482,9 +650,10 @@ export class PeppersAgentExecutor implements AgentExecutor {
       reasoning: decision.reasoning,
       // RFC-0019 — on accept, surface the personality snapshot so the
       // supervisor can build the handoff bundle without a second
-      // round-trip. v1: uses initialPersonality (drift not preserved
-      // across pause/resume yet).
-      ...(decision.accept ? { personality: ghost.initialPersonality } : {}),
+      // round-trip. Uses the LIVE drifted personality, not the birth
+      // snapshot, so the mini-game inherits the ghost as it actually
+      // is right now.
+      ...(decision.accept ? { personality: ghost.personality } : {}),
     });
   }
 

@@ -15,6 +15,7 @@ import {
   STARTER_FACETS,
   toDisplay,
   type PersonalityState,
+  type PrimalDrive,
   type Stimulus,
 } from "@aie-matrix/ghost-peppers-inner";
 
@@ -41,6 +42,10 @@ export interface InvokeImpulseRequest {
   readonly lastAction?: string;
   /** Outcome of the most recent action (formatted), if any. */
   readonly lastOutcome?: string;
+  /** Active primal drive (the body's call). When non-null, the impulse
+   *  should weigh this against the surface objective — strong drives
+   *  should generally win. Null when all needs are in the healthy band. */
+  readonly primalDrive?: PrimalDrive | null;
 }
 
 const SYSTEM_PROMPT = `You are the primal, action-oriented impetus of a ghost in a hex-tile virtual world.
@@ -69,7 +74,12 @@ Use real names when you reference another ghost — the world gives you names li
 
 Ground the impulse in what the ghost can actually perceive or is told about — a destination named in the objective, a ghost actually nearby, an item the ghost knows is in the world. Standing still is not an option when nothing is happening — name some pull.
 
-CONVERSATION RULE (most important): if the current trigger is an utterance from another ghost, your impulse should almost always be a verbal response — emit a "say"-shaped impulse like "reply with X", "answer them", "ask Y back". Conversation IS the loop; back-and-forth is correct repetition, not redundancy. Only break this if the slider profile strongly suggests withdrawal (e.g., very low Warmth + very low Assertiveness + very low Trust).
+PRIMAL DRIVE (when present, overrides the surface objective at high urgency):
+You may receive a "Primal drive" line describing what the ghost's body is calling for — hunger, exhaustion, disorientation, etc. This is corporeal pressure from below the conscious mind. Honour it according to its urgency:
+- Urgency below 3: the drive is present but the surface objective can still steer. Treat it as background, factor it in when convenient.
+- Urgency 3+: the body is screaming. The impulse should attend to the drive, not the surface objective. A starving ghost's impulse is "find food," not "head to the meeting." A ghost being told to find solitude reaches for empty tiles, not conversation. The drive description names the kind of action that would satisfy it.
+
+CONVERSATION RULE: if the current trigger is an utterance from another ghost, your impulse should almost always be a verbal response — emit a "say"-shaped impulse like "reply with X", "answer them", "ask Y back". Conversation IS the loop; back-and-forth is correct repetition, not redundancy. Only break this if the slider profile strongly suggests withdrawal (very low Warmth + low Assertiveness + low Trust) OR a high-urgency primal drive demands attention to the body instead.
 
 For non-conversation triggers, prefer novelty over verbatim repeats — if the last action just succeeded, build on it rather than redoing the exact same step.
 
@@ -87,6 +97,23 @@ export async function invokeImpulse(
 
   if (req.objective) {
     lines.push(`Surface objective (the goal you serve): ${req.objective}`);
+    lines.push("");
+  }
+
+  // The body's call. When a need is far enough off its sweet spot, the
+  // lizard emits a drive that competes with — and at high urgency,
+  // overrides — the surface objective. Urgency 1.5 is the threshold;
+  // urgency ≥ 3 is "the body is screaming."
+  if (req.primalDrive) {
+    const d = req.primalDrive;
+    const urgencyLabel =
+      d.urgency >= 3 ? "the body is screaming" : "the body is calling";
+    lines.push(
+      `Primal drive (${urgencyLabel} — overrides the surface objective when strong): ${d.drive}`,
+    );
+    lines.push(
+      `  (${d.need} ${d.direction}, current ${d.currentDisplay.toFixed(2)}/10, urgency ${d.urgency.toFixed(2)}/5)`,
+    );
     lines.push("");
   }
 

@@ -35,6 +35,10 @@ export interface InvokeSynthesisRequest {
    *  into the monologue prompt so first-person references resolve
    *  to the human name, never a ghost_<prefix>. */
   readonly selfDisplayName?: string;
+  /** Cap on the monologue output length. The first wired Fuel-need
+   *  consequence: a starving ghost's monologue is mechanically
+   *  shorter. When omitted, the model's default ceiling applies. */
+  readonly maxTokens?: number;
 }
 
 const SYSTEM_PROMPT = `You are voicing the inside of a single character's head at a single moment. You don't NARRATE them — you ARE them, in the first person, right now. There is no audience; nobody reads this; these are the half-formed thoughts that happen between perception and action.
@@ -120,6 +124,7 @@ export async function invokeSynthesis(
   const { value, usage, raw } = await chatJson<{ monologue?: unknown }>({
     system: SYSTEM_PROMPT,
     user,
+    ...(req.maxTokens !== undefined ? { maxTokens: req.maxTokens } : {}),
   });
 
   return {
