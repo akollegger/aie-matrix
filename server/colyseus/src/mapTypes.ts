@@ -35,6 +35,6 @@ export interface LoadedMap {
   cells: Map<CellId, CellRecord>;
   /** Item definitions keyed by itemRef / ItemType typeName. */
   itemSidecar: Map<string, ItemDefinition>;
-  /** Non-adjacent traversal links. Populated from gram Portal elements; empty for tmj-loaded maps. */
+  /** Non-adjacent traversal links. Populated from gram Portal elements. */
   portals?: ParsedPortal[];
 }

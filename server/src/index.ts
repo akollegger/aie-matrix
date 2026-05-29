@@ -481,7 +481,7 @@ async function main(): Promise<void> {
           }
 
           // Read file bytes
-          const bytes = yield* mapSvc.raw(entry.mapId, "gram").pipe(
+          const bytes = yield* mapSvc.raw(entry.mapId).pipe(
             Effect.catchAll((e) => {
               console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "read-error", error: String(e) }));
               return Effect.succeed(null as Buffer | null);

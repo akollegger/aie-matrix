@@ -1,0 +1,22 @@
+{ kind: "matrix-map", name: "untitled-map", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor" })
+(room:TileType:Room { name: "Room", style: css`background: #46074b` })
+(void:TileType:Void { name: "Void", style: css`background: #454545` })
+
+[ground:Layer {kind: "tile", name: "Ground"}]
+[building-lyro3xkilq:Layer {kind: "polygon", name: "Building"} | (:Polygon:Floor { geometry: [h3`8f283082aa33654`, h3`8f283082ab8dbac`, h3`8f283082ab1838c`, h3`8f283082aa20ce5`], name: "First Floor" })]
+[rooms-lyr6m4dmw7:Layer {kind: "polygon", name: "Rooms"} |
+    (:Polygon:Room { geometry: [h3`8f283082aa33654`, h3`8f283082ab8dbac`, h3`8f283082aa3619e`, h3`8f283082aa33ac4`], name: "Lobby", description: "Ideal for spawning, greeting, badging, and taking calls" }),
+    (:Polygon:Room { geometry: [h3`8f283082aa221a9`, h3`8f283082aa22da1`, h3`8f283082aa26333`, h3`8f283082aa20503`], name: "Expo Stage U1" }),
+    (:Polygon:Room { geometry: [h3`8f283082aa35a59`, h3`8f283082aa35809`, h3`8f283082aa26d5b`, h3`8f283082aa2606b`], name: "Poster Area" }),
+    (:Polygon:Room { geometry: [h3`8f283082aa35800`, h3`8f283082ab1b7a8`, h3`8f283082ab1bb02`, h3`8f283082aa26d52`], name: "Expo Stage L1" }),
+    (:Polygon:Room { geometry: [h3`8f283082ab1b459`, h3`8f283082ab1a209`, h3`8f283082ab1875b`, h3`8f283082ab1b86b`], name: "Catering 1" }),
+    (:Polygon:Room { geometry: [h3`8f283082aa34a83`, h3`8f283082aa34d6b`, h3`8f283082ab1a2f1`, h3`8f283082ab1b4c9`], name: "Catering 2" }),
+    (:Polygon:Room { geometry: [h3`8f283082aa34604`, h3`8f283082aa345ac`, h3`8f283082aa34d5b`, h3`8f283082aa3406b`], name: "Catering 2" }),
+    (:Polygon:Room { geometry: [h3`8f283082aa30db6`, h3`8f283082aa368e6`, h3`8f283082aa3459c`, h3`8f283082aa346ac`], name: "Expo Stage L2" }),
+    (:Polygon:Void { geometry: [h3`8f283082aa362ae`, h3`8f283082aa3619e`, h3`8f283082aa368d4`, h3`8f283082aa36364`], name: "Offices" })
+]
+[layers:LayerStack | ground, building-lyro3xkilq, rooms-lyr6m4dmw7]
+
+[rules:Rules | (floor)-[:GO]->(floor), (room)-[:GO]->(room)]

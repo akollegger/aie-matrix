@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -43,45 +42,6 @@ function httpGet(url: string): Promise<{ status: number; headers: NodeJS.Dict<st
   });
 }
 
-function httpGetBuffer(url: string): Promise<{ status: number; headers: NodeJS.Dict<string | string[]>; body: Buffer }> {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const req = http.request(
-      {
-        hostname: u.hostname,
-        port: u.port,
-        path: `${u.pathname}${u.search}`,
-        method: "GET",
-      },
-      (res) => {
-        const chunks: Buffer[] = [];
-        res.on("data", (c: Buffer) => chunks.push(Buffer.from(c)));
-        res.on("end", () => {
-          resolve({
-            status: res.statusCode ?? 0,
-            headers: res.headers as NodeJS.Dict<string | string[]>,
-            body: Buffer.concat(chunks),
-          });
-        });
-      },
-    );
-    req.on("error", reject);
-    req.end();
-  });
-}
-
-/** Minimal Tiled TMJ shape (Phaser / map loader expectations). */
-function assertTmjJsonShape(data: unknown): void {
-  assert.ok(data !== null && typeof data === "object");
-  const o = data as Record<string, unknown>;
-  for (const k of ["width", "height", "layers", "tilesets"] as const) {
-    assert.ok(k in o, `missing TMJ field: ${k}`);
-  }
-  assert.ok(Array.isArray(o.layers));
-  assert.ok(Array.isArray(o.tilesets));
-  assert.equal(typeof o.width, "number");
-  assert.equal(typeof o.height, "number");
-}
 
 test("GET /maps/freeplay → 200 text/plain; charset=utf-8", async () => {
   const layer = makeMapServiceLayer(repoRoot);
@@ -190,7 +150,7 @@ test("GET /maps/freeplay?format=unknown → 400 JSON", async () => {
   }
 });
 
-test("US3: GET /maps/freeplay?format=tmj — 200, application/json, byte-identical TMJ", async () => {
+test("GET /maps/freeplay?format=tmj → 400 (TMJ no longer supported)", async () => {
   const layer = makeMapServiceLayer(repoRoot);
   const runtime = ManagedRuntime.make(layer);
   try {
@@ -204,13 +164,13 @@ test("US3: GET /maps/freeplay?format=tmj — 200, application/json, byte-identic
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
-    const r = await httpGetBuffer(`http://127.0.0.1:${port}/maps/freeplay?format=tmj`);
+    const r = await httpGet(`http://127.0.0.1:${port}/maps/freeplay?format=tmj`);
     server.close();
-    assert.equal(r.status, 200);
+    assert.equal(r.status, 400);
     assert.equal(r.headers["content-type"], "application/json");
-    const onDisk = await readFile(join(repoRoot, "maps/sandbox/freeplay.tmj"));
-    assert.ok(r.body.equals(onDisk), "response body must match source .tmj bytes exactly");
-    assertTmjJsonShape(JSON.parse(r.body.toString("utf8")));
+    const j = JSON.parse(r.body) as { error: string; requested: string };
+    assert.equal(j.error, "UnsupportedFormatError");
+    assert.equal(j.requested, "tmj");
   } finally {
     await runtime.dispose();
   }
@@ -234,15 +194,15 @@ test("GET /maps → 200 application/json; lists known map ids with links", async
       const r = await httpGet(`http://127.0.0.1:${port}${path}`);
       assert.equal(r.status, 200);
       assert.equal(r.headers["content-type"], "application/json; charset=utf-8");
-      const j = JSON.parse(r.body) as { maps: { id: string; links: { self: string; gram: string; tmj: string } }[] };
+      const j = JSON.parse(r.body) as { maps: { id: string; links: { self: string; gram: string } }[] };
       assert.ok(Array.isArray(j.maps), "body.maps must be an array");
-      assert.ok(j.maps.length > 0, "repo must index at least one map pair");
+      assert.ok(j.maps.length > 0, "repo must index at least one map");
       const freeplay = j.maps.find((m) => m.id === "freeplay");
       assert.ok(freeplay, "expected freeplay in index");
       const base = `http://127.0.0.1:${port}`;
       assert.equal(freeplay!.links.self, `${base}/maps/freeplay`);
       assert.equal(freeplay!.links.gram, `${base}/maps/freeplay?format=gram`);
-      assert.equal(freeplay!.links.tmj, `${base}/maps/freeplay?format=tmj`);
+      assert.ok(!("tmj" in freeplay!.links), "links must not include tmj");
     }
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
