@@ -3,6 +3,7 @@ import { gridDisk } from "h3-js";
 import { ulid } from "ulid";
 import { Context, Data, Effect, Layer } from "effect";
 import type { PendingNotification, SayResult, ByeResult, InboxResult } from "@aie-matrix/shared-types";
+import { worldNow } from "@aie-matrix/shared-types";
 import { JsonlStore } from "./store.js";
 import type { ConversationStore } from "./store.js";
 
@@ -75,7 +76,7 @@ function makeConversationService(
     say(ghostId, content, to?: string, displayName?: string, intent?: string) {
       return Effect.gen(function* () {
         const message_id = ulid();
-        const timestamp = new Date().toISOString();
+        const timestamp = worldNow();
 
         const rawCell = bridge.getGhostCell(ghostId);
         if (!rawCell) {

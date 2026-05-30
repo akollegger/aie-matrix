@@ -1,4 +1,4 @@
-# RFC-0021: Group Exam Eval Protocol — Survival-Driven Multi-Agent Evaluation
+# RFC-0022: Group Exam Eval Protocol — Survival-Driven Multi-Agent Evaluation
 
 **Status:** draft  
 **Date:** 2026-05-30  

@@ -46,6 +46,8 @@ import { evaluateGo, evaluateTraverse } from "./movement.js";
 import { ItemService, type ItemServiceOps } from "./ItemService.js";
 import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
+import type { WorldCalendarService } from "./calendar/WorldCalendarService.js";
+import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -60,7 +62,8 @@ type ToolServices =
   | Neo4jGraphService
   | ConversationService
   | ItemService
-  | RedisGhostStoreService;
+  | RedisGhostStoreService
+  | WorldCalendarService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -941,6 +944,12 @@ function inventoryEffect(
   });
 }
 
+function timecheckEffect(
+  _extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.sync(() => ({ now: worldNow(), timezone: WORLD_TIMEZONE }));
+}
+
 function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServer {
   const runTool = <A>(
     toolName: string,
@@ -1215,6 +1224,15 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       description: "List the items you are currently carrying. Always succeeds, even when empty.",
     },
     async (extra) => runTool("inventory", {}, inventoryEffect(extra), extra),
+  );
+
+  server.registerTool(
+    "timecheck",
+    {
+      description:
+        "Return the current conference time (US/Pacific) and timezone. Use this to reason about when scheduled events are happening relative to now.",
+    },
+    async (extra) => runTool("timecheck", {}, timecheckEffect(extra), extra),
   );
 
   return server;
