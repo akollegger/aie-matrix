@@ -51,6 +51,11 @@ Edit the fixture to set `startsAt` to a time ~15 seconds in the future. Restart 
 
 After the event fires, restart the server. The event should not re-fire. Confirm via server logs and Neo4j: `MATCH (e:CalendarEvent {id: "opening-keynote"}) RETURN e.started`.
 
+## Known pending items
+
+- **Step 3 / `activate` and `deactivate` commands**: The coffee-tile activation commands (`activate lobby-coffee`, `deactivate lobby-coffee`) are registered as stubs returning `CommandNotYetImplemented` — logged at warn level, scheduler continues. These will be wired to actual world-object state when RFC-0006 is implemented.
+- **Step 4 / Neo4j idempotency**: The fired-event idempotency check via Neo4j (Steps 4 and 6 in the RFC demo) requires a live Neo4j connection (`NEO4J_URI`). In local development without Neo4j, the in-memory state prevents re-firing within a single process lifetime, but the cross-restart guarantee requires the database. See plan.md Phase F for the integration test coverage gap documentation.
+
 ## Running tests
 
 ```bash

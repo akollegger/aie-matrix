@@ -177,3 +177,8 @@ export {
   LiveSessionMapNotPublishedError,
   LiveSessionAlreadyEndedError,
 } from "./live/live-errors.js";
+
+export type { ScheduleEvent, ScheduledEvent, ScheduleEventKind } from "./calendar/CalendarEvent.js";
+export { toScheduledEvent } from "./calendar/CalendarEvent.js";
+export { CalendarParseError, parseCalendarGramFile, parseCalendarGramText } from "./calendar/parse-calendar-gram.js";
+export { WorldCalendarService, makeWorldCalendarLayer, makeWorldCalendarService } from "./calendar/WorldCalendarService.js";

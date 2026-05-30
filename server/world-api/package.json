@@ -17,12 +17,13 @@
     "test": "node --import tsx --test \"src/**/*.test.ts\" \"test/**/*.test.ts\""
   },
   "dependencies": {
+    "@aie-matrix/map-gram": "workspace:*",
     "@aie-matrix/server-auth": "workspace:*",
     "@aie-matrix/server-colyseus": "workspace:*",
     "@aie-matrix/server-conversation": "workspace:*",
     "@aie-matrix/shared-types": "workspace:*",
-    "@aie-matrix/map-gram": "workspace:*",
     "@google-cloud/storage": "^7.15.2",
+    "@js-temporal/polyfill": "^0.5.1",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@relateby/pattern": "^0.4.0",
     "busboy": "^1.6.0",

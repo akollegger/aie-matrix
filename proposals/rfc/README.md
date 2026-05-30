@@ -67,4 +67,4 @@ What other approaches were considered?
 | [RFC-0018](0018-rdc-skill-tiers-and-math-schools.md) | RDC Skill Tiers & Mathematical Schools | draft |
 | [RFC-0019](0019-barnacle-protocol.md) | The Barnacle Protocol — mini-game plugin contract | draft |
 | [RFC-0020](0020-platform-links.md) | Platform Links — Pocket World Navigation Protocol | draft |
-| [RFC-0021](0021-world-calendar.md) | World Calendar — Temporal Dimension and Scheduled Events | draft |
+| [RFC-0021](0021-world-calendar.md) | World Calendar — Temporal Dimension and Scheduled Events | accepted |

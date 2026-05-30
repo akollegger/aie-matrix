@@ -151,3 +151,27 @@ World item definitions load from a `*.items.json` sidecar at startup and live in
 | `inventory` | _(none)_ | `{ ok: true, objects: [{ itemRef, name }] }` | Never fails |
 
 `look` is also extended: `TileInspectResult` always includes `objects: TileItemSummary[]` for the focal tile slice (empty when no items on that slice).
+
+## World Calendar — RFC-0021
+
+The calendar adds a temporal dimension to the world: wall-clock time anchored to US/Pacific, a `timecheck` MCP tool, and a scheduler that fires enter/exit commands at scheduled times.
+
+| Env | Values | Purpose |
+|-----|--------|---------|
+| `CALENDAR_TICK_MS` | Integer ms (default: `30000`) | Scheduler poll interval. Use `5000` locally to see events fire quickly. |
+
+### Calendar Gram format
+
+Events are authored directly in the `.map.gram` file as a `[:Calendar | ...]` block — the map is the complete world description. A map with no `[:Calendar | ...]` block runs in timeless mode. See `src/calendar/fixtures/sample.calendar.gram` for a standalone example (used by unit tests only; not loaded at runtime).
+
+### `timecheck` MCP tool
+
+Returns `{ now, timezone, upcoming }` — the current Pacific time and up to 3 upcoming events. Available to all adopted ghosts, no parameters required.
+
+### Running calendar tests
+
+```bash
+pnpm test   # from server/world-api/
+# or to run only calendar tests:
+pnpm exec node --import tsx --test "src/calendar/*.test.ts"
+```

@@ -1,0 +1,45 @@
+(opening-keynote:Event {
+  title: "Opening Keynote",
+  description: "Welcome address and opening session in the main hall.",
+  kind: "session",
+  startsAt: "09:00:00",
+  duration: 60,
+  location: "hall-a",
+  enterCommands: ["claim hall-a ghost_keynote_speaker"],
+  exitCommands: ["yield hall-a"]
+})
+
+(morning-break:Event {
+  title: "Morning Coffee Break",
+  description: "Coffee and networking in the main lobby. The coffee cart is open.",
+  kind: "break",
+  startsAt: "10:00:00",
+  duration: 30,
+  location: "lobby-coffee",
+  enterCommands: ["activate lobby-coffee"],
+  exitCommands: ["deactivate lobby-coffee"]
+})
+
+(booth-12-raffle:Event {
+  title: "Vendor Raffle — Booth 12",
+  description: "End-of-day raffle at the Booth 12 vendor area. Must be present to win.",
+  kind: "raffle",
+  startsAt: "17:00:00",
+  duration: 0,
+  location: "vendor-booth-12",
+  enterCommands: ["raffle vendor-booth-12"],
+  exitCommands: []
+})
+
+(hourly-checkin:Event {
+  title: "Info Booth Check-in",
+  description: "Stop by the info booth for conference updates.",
+  kind: "custom",
+  startsAt: "09:00:00",
+  duration: 10,
+  repeat: 60,
+  until: "18:00:00",
+  location: "info-booth",
+  enterCommands: ["activate info-booth"],
+  exitCommands: ["deactivate info-booth"]
+})

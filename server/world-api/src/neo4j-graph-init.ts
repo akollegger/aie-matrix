@@ -19,6 +19,9 @@ export const TILETYPE_MAP_IDENTITY_UNIQUE_CONSTRAINT_CYPHER =
 export const ITEMTYPE_MAP_IDENTITY_UNIQUE_CONSTRAINT_CYPHER =
   "CREATE CONSTRAINT itemtype_map_identity_unique IF NOT EXISTS FOR (t:ItemType) REQUIRE (t.mapId, t.identity) IS UNIQUE";
 
+export const CALENDAR_EVENT_ID_UNIQUE_CONSTRAINT_CYPHER =
+  "CREATE CONSTRAINT calendar_event_id_unique IF NOT EXISTS FOR (e:CalendarEvent) REQUIRE e.id IS UNIQUE";
+
 /** @returns A driver if `NEO4J_URI` is set; otherwise `undefined` (Neo4j is optional until graph features land). */
 export function createNeo4jDriverFromEnv(env: NodeJS.ProcessEnv = process.env): Driver | undefined {
   const uri = env.NEO4J_URI?.trim();
@@ -47,6 +50,7 @@ export async function ensureMapManagementConstraints(driver: Driver): Promise<vo
       LIVESESSION_ID_UNIQUE_CONSTRAINT_CYPHER,
       TILETYPE_MAP_IDENTITY_UNIQUE_CONSTRAINT_CYPHER,
       ITEMTYPE_MAP_IDENTITY_UNIQUE_CONSTRAINT_CYPHER,
+      CALENDAR_EVENT_ID_UNIQUE_CONSTRAINT_CYPHER,
     ]) {
       await session.executeWrite((tx) => tx.run(cypher));
     }

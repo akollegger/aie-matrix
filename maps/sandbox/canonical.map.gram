@@ -12,3 +12,37 @@
 [layers:LayerStack | ground, overrides, collectibles]
 
 [rules:Rules | (floor)-[:GO]->(floor), (floor)-[:GO]->(pillar)]
+
+[schedule:Schedule |
+  (morning-standup:Event {
+    title: "Morning Standup",
+    description: "Daily check-in at the info pillar. Ghosts gather to exchange notes.",
+    kind: "session",
+    startsAt: "09:00:00",
+    duration: 15,
+    location: "ground",
+    enterCommands: ["announce Morning standup begins — gather at the info pillar."],
+    exitCommands: ["announce Morning standup complete."]
+  }),
+  (key-hunt:Event {
+    title: "Brass Key Hunt",
+    description: "The brass key appears on the floor tile. First ghost to take it wins.",
+    kind: "raffle",
+    startsAt: "12:00:00",
+    duration: 0,
+    location: "ground",
+    enterCommands: ["announce The brass key hunt has begun — find it before anyone else!"],
+    exitCommands: []
+  }),
+  (hourly-ping:Event {
+    title: "Hourly World Ping",
+    description: "A regular pulse to confirm the scheduler is running.",
+    kind: "custom",
+    startsAt: "09:00:00",
+    duration: 0,
+    repeat: 60,
+    until: "18:00:00",
+    enterCommands: ["announce World ping — all systems nominal."],
+    exitCommands: []
+  })
+]

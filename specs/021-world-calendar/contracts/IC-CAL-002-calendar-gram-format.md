@@ -5,10 +5,10 @@
 
 ## Standalone file: `.calendar.gram`
 
-A flat sequence of `CalendarEvent` nodes, one per event, no enclosing wrapper:
+A flat sequence of `Event` nodes, one per event, no enclosing wrapper:
 
 ```gram
-(opening-keynote:CalendarEvent {
+(opening-keynote:Event {
   title: "Opening Keynote",
   description: "Welcome address and opening session in the main hall.",
   kind: "session",
@@ -19,7 +19,7 @@ A flat sequence of `CalendarEvent` nodes, one per event, no enclosing wrapper:
   exitCommands: ["yield hall-a"]
 })
 
-(morning-break:CalendarEvent {
+(morning-break:Event {
   title: "Morning Coffee Break",
   description: "Coffee and networking in the main lobby.",
   kind: "break",
@@ -30,7 +30,7 @@ A flat sequence of `CalendarEvent` nodes, one per event, no enclosing wrapper:
   exitCommands: ["deactivate lobby-coffee"]
 })
 
-(booth-12-raffle:CalendarEvent {
+(booth-12-raffle:Event {
   title: "Vendor Raffle — Booth 12",
   description: "End-of-day raffle. Must be present to win.",
   kind: "raffle",
@@ -44,16 +44,16 @@ A flat sequence of `CalendarEvent` nodes, one per event, no enclosing wrapper:
 
 ## Embedded in `.map.gram`
 
-An anonymous `Calendar`-labeled block, analogous to `[rules:Rules | ...]`:
+An anonymous `Schedule`-labeled block, analogous to `[rules:Rules | ...]`:
 
 ```gram
-[:Calendar |
-  (opening-keynote:CalendarEvent { ... })
-  (morning-break:CalendarEvent { ... })
+[:Schedule |
+  (opening-keynote:Event { ... })
+  (morning-break:Event { ... })
 ]
 ```
 
-The standalone and embedded representations are equivalent. The parser produces identical `CalendarEvent[]` output from either source.
+The standalone and embedded representations are equivalent. The parser produces identical `ScheduleEvent[]` output from either source.
 
 ## Required properties
 

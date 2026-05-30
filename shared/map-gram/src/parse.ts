@@ -28,6 +28,7 @@ type PropMap = HashMap.HashMap<
 const CATEGORY_LABELS = new Set([
   "TileType", "ItemType", "Tile", "Polygon", "Item", "Portal",
   "Layer", "LayerStack", "Rules",
+  "Schedule", "Event", // calendar blocks — parsed by WorldCalendarService, not the map parser
 ]);
 
 function getNonCategoryLabel(labels: HashSet.HashSet<string>): string | undefined {

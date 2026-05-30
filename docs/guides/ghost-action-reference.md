@@ -292,6 +292,80 @@ Always succeeds. Returns an empty `objects` array when the ghost carries nothing
 
 ---
 
+## Time
+
+### `timecheck`
+
+Returns the current conference time. Use this to reason about when things are happening — not to discover what is scheduled. Event schedule knowledge comes from your context, not from this tool.
+
+**Returns**
+```json
+{ "now": "2026-06-05T09:30:00-07:00", "timezone": "America/Los_Angeles" }
+```
+
+`now` is always in US/Pacific with an explicit UTC offset. Never fails.
+
+---
+
+## World Broadcast
+
+### `announce` *(privileged — not available to ordinary ghost agents)*
+
+Deliver a message to **all currently adopted ghosts** in the world, regardless of their position. `announce` is a **world event**, not a conversation — it produces no thread, requires no conversational mode, and has no reply surface. Agents receive it as a `world.announcement` A2A event and decide how to react, exactly as they would for `world.proximity.enter` or `world.session.start`.
+
+The grant list is intentionally small: the **calendar scheduler** (via `enterCommands` / `exitCommands`) and the **admin console**. Ordinary ghost agents cannot call this tool.
+
+**Parameters**
+
+| Parameter | Type | Required | Constraints |
+|-----------|------|----------|-------------|
+| `content` | string | yes | 1–2000 characters |
+
+**Returns**
+```json
+{
+  "ok": true,
+  "delivered": 42
+}
+```
+
+`delivered` is the count of ghosts the event was pushed to at the moment of sending.
+
+**A2A event received by each ghost:**
+```json
+{
+  "schema": "aie-matrix.world-event.v1",
+  "kind": "world.announcement",
+  "payload": {
+    "content": "Coffee break starts in 5 minutes — head to the lobby.",
+    "source": "scheduler"
+  },
+  "timestamp": "2026-06-05T09:55:00-07:00"
+}
+```
+
+**Fails if** the caller does not hold the announcer grant, or `content` is blank.
+
+| Failure code | Cause |
+|---|---|
+| `ANNOUNCE_NOT_AUTHORIZED` | Caller is not in the announcer grant list |
+| `ANNOUNCE_CONTENT_EMPTY` | `content` is blank or whitespace only |
+
+**Example calendar usage:**
+```gram
+(coffee-warning:Event {
+  title: "Coffee break in 5 minutes",
+  kind: "break",
+  startsAt: "2099-06-05T09:55:00-07:00",
+  duration: 0,
+  enterCommands: ["announce Coffee break starts in 5 minutes — head to the lobby."]
+})
+```
+
+> See [RFC-0021 Addendum](../../proposals/rfc/0021-world-calendar.md#addendum-announce-command) for the full design and open questions.
+
+---
+
 ## Shared Constraints
 
 **Conversational mode blocks movement.** Calling `go` or `traverse` while in conversation returns `{ "ok": false, "code": "IN_CONVERSATION" }`. Call `bye` to return to normal mode before moving.

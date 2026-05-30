@@ -1,6 +1,6 @@
 # Data Model: World Calendar
 
-## CalendarEvent
+## ScheduleEvent
 
 Represents a scheduled happening. Loaded from a `.calendar.gram` file at startup; persisted to Neo4j for fired-event tracking.
 
@@ -30,7 +30,7 @@ Returned by the `timecheck` MCP tool. Command lists are omitted — agents see w
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | Same as `CalendarEvent.id` |
+| `id` | string | Same as `ScheduleEvent.id` |
 | `title` | string | |
 | `description` | string | |
 | `kind` | string | |
@@ -41,16 +41,16 @@ Returned by the `timecheck` MCP tool. Command lists are omitted — agents see w
 ## Neo4j schema
 
 ```cypher
-(:CalendarEvent {
+(:Event {
   id: string,       // unique constraint
   started: boolean, // true after enterCommands fire
   ended: boolean    // true after exitCommands fire (window events only)
 })
 
-(:CalendarEvent)-[:LOCATED_AT]->(:Tile|:Polygon)
+(:Event)-[:LOCATED_AT]->(:Tile|:Polygon)
 ```
 
-Uniqueness constraint: `CREATE CONSTRAINT calendar_event_id_unique IF NOT EXISTS FOR (e:CalendarEvent) REQUIRE e.id IS UNIQUE`
+Uniqueness constraint: `CREATE CONSTRAINT event_id_unique IF NOT EXISTS FOR (e:Event) REQUIRE e.id IS UNIQUE`
 
 The `started` and `ended` properties are write-once by the scheduler. Only these two properties need Neo4j persistence; all other event data is loaded from the Gram file at startup.
 
@@ -78,7 +78,7 @@ type WorldEvent = {
 
 ## State transitions
 
-### CalendarEvent lifecycle
+### ScheduleEvent lifecycle
 
 ```
 [loaded]

@@ -1,6 +1,6 @@
 # RFC-0021: World Calendar — Temporal Dimension and Scheduled Events
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-05-29  
 **Authors:** @akollegger  
 **Related:** [RFC-0012](0012-speaker-rooms.md), [RFC-0006](0006-world-objects.md), [RFC-0005](0005-ghost-conversation-model.md)
@@ -67,29 +67,14 @@ Both fields are required and always set server-side. Clients and agents that ign
 
 ### 3. `timecheck` MCP tool
 
-A new read-only MCP tool available to all adopted ghosts:
+A new read-only MCP tool available to all adopted ghosts. `timecheck` is a clock — it tells an agent what time it is. Agents are expected to be temporally aware: if they need to correlate the current time with a scheduled event, that reasoning is theirs to perform using context they already hold.
 
 ```typescript
 timecheck() => {
-  now: string                // ISO 8601 current time in Pacific
-  timezone: string           // "America/Los_Angeles"
-  upcoming: ScheduledEvent[] // next N events visible to this ghost (default N=3)
-}
-
-interface ScheduledEvent {
-  id: string                 // stable event identifier
-  title: string              // human-readable label
-  description: string        // sentence or two of context
-  startsAt: string           // ISO 8601
-  duration: number           // minutes; 0 for point events
-  location?: string          // polygon node identifier if spatially scoped
-  kind: "session" | "break" | "raffle" | "custom"
+  now: string       // ISO 8601 current time in Pacific
+  timezone: string  // "America/Los_Angeles"
 }
 ```
-
-`duration` expresses the length of the event in minutes, matching the human-scale granularity of the calendar (the same philosophy as using tiles rather than continuous coordinates). `endsAt` is a derived value — `startsAt + duration` — and is not stored or returned directly. The `upcoming` list excludes events whose window has fully elapsed.
-
-"Visible to this ghost" initially means all events — no ghost-specific filtering. A future iteration can scope by location proximity or ghost class.
 
 ### 4. WorldCalendar service
 
@@ -98,14 +83,14 @@ interface ScheduledEvent {
 Calendar events are stored as Neo4j nodes with the properties defined by the Gram format: `id`, `title`, `description`, `kind`, `startsAt`, `duration`, `enterCommands`, `exitCommands`. For events tied to a world location, a relationship links the event to its target:
 
 ```cypher
-(:CalendarEvent)-[:LOCATED_AT]->(:Tile|:Polygon)
+(:Event)-[:LOCATED_AT]->(:Tile|:Polygon)
 ```
 
 The service tracks which events have already fired so they are not re-executed after a server restart. The storage mechanism for this tracking (node properties, a separate audit relationship, or similar) is left to the implementer, provided the invariant holds: an event's `enterCommands` fire exactly once, and its `exitCommands` fire exactly once (for window events).
 
 #### Commands as the mutation model
 
-Rather than encoding bespoke state-change payloads, each `CalendarEvent` carries two lists of **commands** — the same command strings that any ghost or operator issues through the existing command processing engine. The scheduler executes commands through the same `CommandExecutor` service used by ghost MCP handlers. It supplies a `SchedulerContext` as the caller identity — a fixed system identity with no `h3Index` (hence `NO_ACTOR_ORIGIN` for movement commands) but with `role: "system"` that bypasses ghost-ownership checks. This context type is defined in the shared package alongside the existing ghost context types.
+Rather than encoding bespoke state-change payloads, each `ScheduleEvent` carries two lists of **commands** — the same command strings that any ghost or operator issues through the existing command processing engine. The scheduler executes commands through the same `CommandExecutor` service used by ghost MCP handlers. It supplies a `SchedulerContext` as the caller identity — a fixed system identity with no `h3Index` (hence `NO_ACTOR_ORIGIN` for movement commands) but with `role: "system"` that bypasses ghost-ownership checks. This context type is defined in the shared package alongside the existing ghost context types.
 
 ```
 // Window event: session in Hall A
@@ -133,9 +118,9 @@ A long-running Effect fiber starts with the server and polls for due events at a
 SchedulerFiber:
   loop:
     now = worldNow()
-    starting = query Neo4j for CalendarEvents where startsAt <= now AND started = false
+    starting = query Neo4j for ScheduleEvents where startsAt <= now AND started = false
     for each event: executeCommands(event.enterCommands); mark event.started = true
-    ending = query Neo4j for CalendarEvents
+    ending = query Neo4j for ScheduleEvents
                where startsAt + duration <= now AND started = true AND ended = false
                AND duration > 0
     for each event: executeCommands(event.exitCommands); mark event.ended = true
@@ -153,68 +138,89 @@ The fiber is a `Layer.scoped` Effect service (`WorldCalendarService`) composed i
 
 The raffle is a point event. Sessions and breaks are window events.
 
+#### Recurring events
+
+A `ScheduleEvent` with `repeat` (minutes) and `until` (ISO 8601) repeats on a fixed interval. Both fields are optional; omitting `repeat` gives a one-off event. `until` is required when `repeat` is set — open-ended recurrence is not supported (a conference has defined hours).
+
+```gram
+(hourly-checkin:Event {
+  title: "Info Booth Check-in",
+  description: "Stop by the info booth for conference updates.",
+  kind: "custom",
+  startsAt: "09:00:00",
+  duration: 10,
+  repeat: 60,
+  until: "18:00:00",
+  location: "info-booth",
+  enterCommands: ["activate info-booth"],
+  exitCommands: ["deactivate info-booth"]
+})
+```
+
+At map load time the server **expands** recurring events into discrete one-off occurrences before handing them to the scheduler. Each occurrence gets a derived stable ID: `{id}#{n}` (1-indexed). The scheduler itself has no knowledge of recurrence — it operates only on the expanded flat list, exactly as it does for one-off events.
+
+The `hourly-checkin` event above produces 10 occurrences: `hourly-checkin#1` at 09:00, `hourly-checkin#2` at 10:00, … `hourly-checkin#10` at 18:00. This mirrors Google Calendar's behaviour — a recurring event is a template that generates a concrete series of dated instances.
+
 #### Environment variables
 
 | Variable | Purpose |
 |---|---|
-| `AIE_MATRIX_CALENDAR` | Path to a `.calendar.gram` file. Unset → no events loaded; world runs in a timeless state with `timecheck` still available. |
 | `CALENDAR_TICK_MS` | Scheduler poll interval in milliseconds. Default: `30000`. |
+
+`AIE_MATRIX_CALENDAR` is not used. The calendar is loaded from the active map's `[schedule:Schedule | ...]` block at map load time. No calendar block → world runs in timeless mode; `timecheck` still works.
 
 ### 5. Calendar Gram format
 
-Calendar events live in a dedicated `.calendar.gram` file — a sibling to the map and rules files, not embedded inside them. Like rules, the format is a flat sequence of nodes with no enclosing layer or wrapper:
+A calendar is authored directly in the `.map.gram` file as a `[schedule:Schedule | ...]` block, exactly as rules are embedded with `[rules:Rules | ...]`. The map is the complete description of the world — tiles, polygons, rules, and schedule together.
 
 ```gram
-(opening-keynote:CalendarEvent {
-  title: "Opening Keynote",
-  description: "Welcome address and opening session in the main hall.",
-  kind: "session",
-  startsAt: "2026-06-05T09:00:00-07:00",
-  duration: 60,
-  location: "hall-a",
-  enterCommands: ["claim hall-a ghost_keynote_speaker"],
-  exitCommands: ["yield hall-a"]
-})
-
-(morning-break:CalendarEvent {
-  title: "Morning Coffee Break",
-  description: "Coffee and networking in the main lobby. The coffee cart is open.",
-  kind: "break",
-  startsAt: "2026-06-05T10:00:00-07:00",
-  duration: 30,
-  location: "lobby-coffee",
-  enterCommands: ["activate lobby-coffee"],
-  exitCommands: ["deactivate lobby-coffee"]
-})
-
-(booth-12-raffle:CalendarEvent {
-  title: "Vendor Raffle — Booth 12",
-  description: "End-of-day raffle at the Booth 12 vendor area. Must be present to win.",
-  kind: "raffle",
-  startsAt: "2026-06-05T17:00:00-07:00",
-  duration: 0,
-  location: "vendor-booth-12",
-  enterCommands: ["raffle vendor-booth-12"],
-  exitCommands: []
-})
-```
-
-The node identifier (e.g. `opening-keynote`) is the stable machine key used in logging and Neo4j; it does not change when `title` or `description` are edited. Multiple `.calendar.gram` files can be composed for multi-day conferences by concatenating them or pointing `AIE_MATRIX_CALENDAR` at each in sequence (open question — see below).
-
-A calendar can also be embedded directly in a `.map.gram` file using an anonymous `Calendar` block, exactly as rules are embedded with `[rules:Rules | ...]`:
-
-```gram
-[:Calendar |
-  (opening-keynote:CalendarEvent {
+[schedule:Schedule |
+  (opening-keynote:Event {
     title: "Opening Keynote",
-    ...
+    description: "Welcome address and opening session in the main hall.",
+    kind: "session",
+    startsAt: "09:00:00",
+    duration: 60,
+    location: "hall-a",
+    enterCommands: ["claim hall-a ghost_keynote_speaker"],
+    exitCommands: ["yield hall-a"]
+  }),
+  (morning-break:Event {
+    title: "Morning Coffee Break",
+    description: "Coffee and networking in the main lobby. The coffee cart is open.",
+    kind: "break",
+    startsAt: "10:00:00",
+    duration: 30,
+    location: "lobby-coffee",
+    enterCommands: ["activate lobby-coffee"],
+    exitCommands: ["deactivate lobby-coffee"]
+  }),
+  (booth-12-raffle:Event {
+    title: "Vendor Raffle — Booth 12",
+    description: "End-of-day raffle at the Booth 12 vendor area. Must be present to win.",
+    kind: "raffle",
+    startsAt: "17:00:00",
+    duration: 0,
+    location: "vendor-booth-12",
+    enterCommands: ["raffle vendor-booth-12"],
+    exitCommands: []
+  }),
+  (hourly-checkin:Event {
+    title: "Info Booth Check-in",
+    description: "Stop by the info booth for conference updates.",
+    kind: "custom",
+    startsAt: "09:00:00",
+    duration: 10,
+    repeat: 60,
+    until: "18:00:00",
+    location: "info-booth",
+    enterCommands: ["activate info-booth"],
+    exitCommands: ["deactivate info-booth"]
   })
-
-  (morning-break:CalendarEvent { ... })
 ]
 ```
 
-The standalone `.calendar.gram` file and the embedded `[:Calendar | ...]` block are equivalent representations. The parser treats them the same way.
+The node identifier (e.g. `opening-keynote`) is the stable machine key used in logging and Neo4j; it does not change when `title` or `description` are edited. A map with no `[schedule:Schedule | ...]` block loads normally and runs in timeless mode.
 
 ## Demo Scenario
 
@@ -223,23 +229,79 @@ A contributor can verify the full mechanic end-to-end in roughly fifteen minutes
 1. Start the server with `AIE_MATRIX_CALENDAR` pointing at the sample `.calendar.gram` fixture (to be committed at `server/world-api/src/calendar/fixtures/sample.calendar.gram`). Set `CALENDAR_TICK_MS=5000` for fast iteration.
 2. Adopt a ghost. Issue `timecheck`. Verify the response includes `now` (ISO 8601 with Pacific offset), `timezone: "America/Los_Angeles"`, and at least one upcoming event with `title`, `description`, `startsAt`, and `duration`.
 3. Issue `say` from the ghost. Verify the emitted message record includes a `timestamp` field. Verify a received A2A event envelope also includes a `timestamp` field.
-4. Set a `CalendarEvent`'s `startsAt` to a value a few seconds in the future. Wait one tick. Verify the `enterCommands` executed — e.g. the target tile is now active, or the designated speaker ghost holds the room claim.
+4. Set a `ScheduleEvent`'s `startsAt` to a value a few seconds in the future. Wait one tick. Verify the `enterCommands` executed — e.g. the target tile is now active, or the designated speaker ghost holds the room claim.
 5. Wait past `startsAt + duration`. Wait one tick. Verify `exitCommands` executed — e.g. the tile is inactive again.
 6. Restart the server. Verify already-fired events do not re-fire.
 
 ## Open Questions
 
-1. **Ghost visibility for `timecheck`**: Should upcoming events be filtered by the ghost's current location or class? A Scavenger probably doesn't need session schedules; a Scholar doesn't need raffle times. Filtering could be added without changing the tool surface.
+1. ~~**Ghost visibility for `timecheck`**~~ **Resolved**: `timecheck` returns only the current time and timezone — no event list. Agents are temporally aware by design; correlating a known schedule with the current time is their responsibility, not the tool's.
 
-2. **`claim` precondition with calendar dispatch**: The `ClaimRule` in RFC-0012 requires the speaker to be physically inside the room. If the speaker ghost hasn't arrived yet when the calendar fires the `claim` command, the command fails. Should the scheduler retry? Should speaker ghosts have a pre-positioning convention?
+2. ~~**`claim` precondition with calendar dispatch**~~ **Resolved**: The scheduler is command-agnostic — it fires and forgets. A failed `claim` (speaker not yet in the room, room already claimed, etc.) is logged at warn level and the scheduler continues. No retry, no special handling. World authors are responsible for authoring calendars where commands are likely to succeed; the scheduler does not second-guess them.
 
-3. **Calendar management at runtime**: The Gram seed file covers the known conference schedule. Should an operator endpoint exist to add one-off events at runtime (e.g., an impromptu BoF)?
+3. ~~**Calendar management at runtime**~~ **Deferred**: For MVP, the calendar is part of world/map authoring — events are defined in `.calendar.gram` alongside the map and rules, and loaded at startup. Runtime additions are out of scope for now. When this becomes necessary, the right surface is privileged `schedule` and `cancel` commands (not a new HTTP endpoint), consistent with the command-based model used throughout. The scheduler fiber would need to query Neo4j for live event state rather than iterating the startup-loaded in-memory array.
 
-4. **`CALENDAR_TICK_MS` floor**: A 30-second poll granularity means events can fire up to 30 seconds late. Is this acceptable, or should the fiber sleep until the *next* scheduled event rather than polling at a fixed interval?
+4. ~~**`CALENDAR_TICK_MS` floor**~~ **Resolved**: The scheduler polls every `CALENDAR_TICK_MS` milliseconds (default `30000` = 30 seconds), so an event may fire up to 30 seconds after its `startsAt`. This is acceptable for conference-scale events where the meaningful granularity is minutes. World authors should treat `startsAt` precision as ± `CALENDAR_TICK_MS`. A sleep-until-next-event approach would give sub-second precision but adds complexity and is not worth it unless sub-minute scheduling becomes a requirement.
 
-5. **Multi-file calendars**: For a multi-day conference, should `AIE_MATRIX_CALENDAR` accept a glob or a comma-separated list of `.calendar.gram` paths, or is a single concatenated file the expected authoring convention?
+5. ~~**Multi-file calendars**~~ **Resolved**: Standalone `.calendar.gram` files are not supported. A calendar belongs in the `.map.gram` file as a `[schedule:Schedule | ...]` block — the map is the complete description of the world at a point in time. Multi-day schedules are handled by map switching. `AIE_MATRIX_CALENDAR` is removed; the world server loads the calendar from the active map's `[schedule:Schedule | ...]` block the same way it loads tiles and rules.
 
-6. **Command sequence atomicity**: If `enterCommands` or `exitCommands` contains multiple commands and one fails mid-sequence, should execution halt or continue? The raffle and speaker-claim scenarios both use single-command lists, but the model permits multi-command sequences.
+6. ~~**Command sequence atomicity**~~ **Resolved**: The scheduler is fire-and-forget — execution continues past individual command failures. Each command in a sequence is attempted independently; a failure is logged at warn level and the next command runs. This is consistent with the scheduler's agnosticism toward command semantics.
+
+## Addendum: `announce` command
+
+The calendar scheduler needs a way to deliver a message to all adopted ghosts regardless of their position — for example, "Morning coffee break starts in 5 minutes, head to the lobby." The existing `say` command is position-scoped (local cluster) and room-scoped `say` (RFC-0012) is polygon-scoped. Neither covers world-wide reach. Crucially, `announce` is **not** a conversation mechanic: it is a one-shot, single-direction world event — no thread, no reply, no conversational mode side-effects.
+
+### Design
+
+`announce` fires a `world.announcement` A2A event directly to all currently adopted ghosts. It does not touch conversation threads, does not enter or require conversational mode, and carries no `thread_id`. It is structurally identical to other `WorldEventKind` events (proximity, session start/end) — a typed push notification agents observe and act on.
+
+It is not available to ordinary ghost agents — the grant list is intentionally small:
+
+- **Scheduler** (`SchedulerContext`) — fires announce as part of `enterCommands` / `exitCommands`
+- **Admin console** — operator-initiated announcements at runtime
+
+```gram
+(coffee-warning:Event {
+  title: "Coffee break in 5 minutes",
+  kind: "break",
+  startsAt: "09:55:00",
+  duration: 0,
+  enterCommands: ["announce Coffee break starts in 5 minutes — head to the lobby."]
+})
+```
+
+### A2A event shape
+
+```typescript
+// WorldEventKind gains: "world.announcement"
+{
+  schema: "aie-matrix.world-event.v1",
+  kind: "world.announcement",
+  payload: {
+    content: string,       // the announcement text
+    source: "scheduler" | "admin"
+  },
+  timestamp: string        // ISO 8601, Pacific offset
+}
+```
+
+No `thread_id`, no `message_id`, no reply surface. Agents handle it the same way they handle `world.proximity.enter` — observe and decide.
+
+### Command surface
+
+```typescript
+announce({ content: string }) => {
+  ok: true,
+  delivered: number   // count of ghost IDs the event was pushed to
+}
+```
+
+Rejected with `ANNOUNCE_NOT_AUTHORIZED` if called without the announcer grant. Rejected with `ANNOUNCE_CONTENT_EMPTY` if `content` is blank.
+
+### Open questions
+
+- Should there be a `title` field on `world.announcement` separate from `content`, so agents can triage without parsing the message body?
+- Should the admin console surface `announce` as a dedicated UI action, or compose it from the existing command input?
 
 ## Alternatives
 
