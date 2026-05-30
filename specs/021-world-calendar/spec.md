@@ -13,19 +13,19 @@
 
 ## User Scenarios & Testing *(mandatory)*
 
-### User Story 1 — Ghost queries current time and upcoming events (Priority: P1)
+### User Story 1 — Ghost queries current time (Priority: P1)
 
-A ghost agent needs to know what time it is and what is scheduled next so it can decide where to move and when to act.
+A ghost agent needs to know what time it is so it can reason about when things happen. Agents are expected to be temporally aware — `timecheck` is a clock, not a schedule.
 
-**Why this priority**: The `timecheck` tool is the entry point for all temporal reasoning by agents. Without it, ghosts are time-blind. It also validates the canonical clock and the calendar data pipeline end-to-end.
+**Why this priority**: The `timecheck` tool is the entry point for all temporal reasoning by agents. Without it, ghosts are time-blind.
 
-**Independent Test**: Register a ghost, issue `timecheck`, and observe a well-formed response with a current Pacific timestamp and at least one upcoming event from a loaded `.calendar.gram` fixture.
+**Independent Test**: Register a ghost, issue `timecheck`, and observe a well-formed response with a current Pacific timestamp and timezone.
 
 **Acceptance Scenarios**:
 
-1. **Given** a ghost is adopted and a calendar fixture is loaded, **When** the ghost issues `timecheck`, **Then** the response includes `now` (ISO 8601 with Pacific UTC offset), `timezone: "America/Los_Angeles"`, and an `upcoming` array of up to 3 events, each with `id`, `title`, `description`, `startsAt`, `duration`, `kind`, and optional `location`.
-2. **Given** no `AIE_MATRIX_CALENDAR` is set, **When** the ghost issues `timecheck`, **Then** the response includes `now` and `timezone` with an empty `upcoming` array — the server does not error.
-3. **Given** all events in the calendar have already elapsed, **When** the ghost issues `timecheck`, **Then** `upcoming` is empty.
+1. **Given** a ghost is adopted, **When** the ghost issues `timecheck`, **Then** the response includes `now` (ISO 8601 with Pacific UTC offset) and `timezone: "America/Los_Angeles"`.
+2. **Given** any calendar state (events loaded or not), **When** the ghost issues `timecheck`, **Then** the response is `{ now, timezone }` — no upcoming array, no event data.
+3. **Given** the server has just started, **When** the ghost issues `timecheck`, **Then** `now` reflects the current wall-clock time in Pacific.
 
 ---
 
@@ -108,8 +108,8 @@ A world author writes the conference schedule in a `.calendar.gram` file or inli
 - **FR-001**: The server MUST expose a canonical clock source returning the current time as ISO 8601 with US/Pacific UTC offset; all services MUST use this source rather than accessing the system clock directly.
 - **FR-002**: MCP conversation message records MUST include a `timestamp` field (ISO 8601, Pacific offset) set at write time.
 - **FR-003**: A2A world event envelopes (IC-004) MUST include a `timestamp` field (ISO 8601, Pacific offset) set at emit time.
-- **FR-004**: The server MUST expose a `timecheck` MCP tool available to all adopted ghosts, returning current time, timezone, and up to 3 upcoming calendar events.
-- **FR-005**: The `timecheck` response MUST include `now` (ISO 8601), `timezone` (IANA name), and `upcoming` (array of `ScheduledEvent`); `upcoming` MUST be empty — not absent — when no events are loaded or all have elapsed.
+- **FR-004**: The server MUST expose a `timecheck` MCP tool available to all adopted ghosts, returning current Pacific time and timezone.
+- **FR-005**: The `timecheck` response MUST include `now` (ISO 8601 with Pacific UTC offset) and `timezone` (IANA name `"America/Los_Angeles"`). No event schedule is surfaced — agents reason about time themselves.
 - **FR-006**: The server MUST load calendar events from a `.calendar.gram` file specified by `AIE_MATRIX_CALENDAR`; if the variable is unset, the server starts without events (timeless mode).
 - **FR-007**: The Gram parser MUST accept `CalendarEvent` nodes in a standalone `.calendar.gram` file and in an inline `[:Calendar | ...]` block within a `.map.gram` file; both representations MUST produce identical runtime behavior.
 - **FR-008**: The `WorldCalendarService` MUST execute each event's `enterCommands` exactly once at or after `startsAt`, and each event's `exitCommands` exactly once at or after `startsAt + duration` (for window events); these invariants MUST hold across server restarts.
@@ -133,7 +133,7 @@ A world author writes the conference schedule in a `.calendar.gram` file or inli
 
 ### Measurable Outcomes
 
-- **SC-001**: A ghost agent issues `timecheck` and receives a valid response (current Pacific time + upcoming events) within the same round-trip latency budget as other read-only MCP tools.
+- **SC-001**: A ghost agent issues `timecheck` and receives `{ now, timezone }` within the same round-trip latency budget as other read-only MCP tools.
 - **SC-002**: Every message in the conversation JSONL and every A2A event envelope produced after this feature lands includes a `timestamp` field; zero messages are produced without one.
 - **SC-003**: A calendar event's `enterCommands` execute within one scheduler tick (≤ 30 seconds by default) of its `startsAt`; across 10 events in unit tests using stub Neo4j state, no event fires more than once and no event is skipped after a service restart.
 - **SC-004**: A world author can load a `.calendar.gram` fixture and observe all events in `timecheck` output without writing any code outside the Gram file and environment variable.
@@ -145,7 +145,7 @@ A world author writes the conference schedule in a `.calendar.gram` file or inli
 - The scheduler tick granularity of 30 seconds (configurable via `CALENDAR_TICK_MS`) is acceptable for conference-scale events; sub-minute precision is not required.
 - No general `CommandExecutor` service exists in the codebase. This feature introduces a narrow `CalendarCommandDispatcher` that maps the known calendar command strings to their handler Effects. A full `CommandExecutor` refactor is out of scope and deferred to a future RFC.
 - For MVP, a single `.calendar.gram` file (or inline `[:Calendar | ...]` block) covers the full schedule; multi-file composition is deferred (RFC-0021 Open Question 5).
-- Ghost-class-filtered `timecheck` results are deferred; all adopted ghosts see all upcoming events initially.
+- `timecheck` is a clock only — no event schedule is surfaced. Agents correlate time with schedule context they hold in memory.
 - The `claim` precondition issue (speaker ghost must be in the room when `enterCommands` fires) is an open question in RFC-0021 and is not resolved by this spec; the MVP accepts that the claim may fail if the ghost is not pre-positioned.
 
 ## Documentation Impact *(mandatory)*

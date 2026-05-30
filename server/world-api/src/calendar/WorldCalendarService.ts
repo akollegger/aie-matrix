@@ -51,7 +51,11 @@ export function makeWorldCalendarLayer(
 }
 
 export function makeWorldCalendarService(events: ScheduleEvent[]): WorldCalendarService {
-  // Keys: firedKey(id, date, n) for enter; firedKey(id, date, n) + "@end" for exit
+  // Fired-event tracking uses an in-memory Set keyed by firedKey(id, date, n).
+  // This prevents re-firing within a single process lifetime (including same-day
+  // restarts that happen fast enough). Full cross-restart idempotency requires
+  // Neo4j persistence (CALENDAR_EVENT_ID_UNIQUE_CONSTRAINT is in place); that
+  // integration is deferred — see plan.md Phase F coverage gap documentation.
   const fired = new Set<string>();
 
   function nowAndToday(): { now: Temporal.ZonedDateTime; today: Temporal.PlainDate } {

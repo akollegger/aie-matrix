@@ -21,8 +21,8 @@
     startsAt: "09:00:00",
     duration: 15,
     location: "ground",
-    enterCommands: ["announce Morning standup begins — gather at the info pillar."],
-    exitCommands: ["announce Morning standup complete."]
+    enterCommands: [],
+    exitCommands: []
   }),
   (key-hunt:Event {
     title: "Brass Key Hunt",
@@ -31,7 +31,7 @@
     startsAt: "12:00:00",
     duration: 0,
     location: "ground",
-    enterCommands: ["announce The brass key hunt has begun — find it before anyone else!"],
+    enterCommands: ["raffle vendor-booth-12"],
     exitCommands: []
   }),
   (hourly-ping:Event {
@@ -42,7 +42,7 @@
     duration: 0,
     repeat: 60,
     until: "18:00:00",
-    enterCommands: ["announce World ping — all systems nominal."],
+    enterCommands: [],
     exitCommands: []
   })
 ]

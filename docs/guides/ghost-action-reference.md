@@ -309,7 +309,7 @@ Returns the current conference time. Use this to reason about when things are ha
 
 ## World Broadcast
 
-### `announce` *(privileged — not available to ordinary ghost agents)*
+### `announce` *(designed, not yet implemented — see RFC-0021 Addendum)*
 
 Deliver a message to **all currently adopted ghosts** in the world, regardless of their position. `announce` is a **world event**, not a conversation — it produces no thread, requires no conversational mode, and has no reply surface. Agents receive it as a `world.announcement` A2A event and decide how to react, exactly as they would for `world.proximity.enter` or `world.session.start`.
 
@@ -356,7 +356,7 @@ The grant list is intentionally small: the **calendar scheduler** (via `enterCom
 (coffee-warning:Event {
   title: "Coffee break in 5 minutes",
   kind: "break",
-  startsAt: "2099-06-05T09:55:00-07:00",
+  startsAt: "09:55:00",
   duration: 0,
   enterCommands: ["announce Coffee break starts in 5 minutes — head to the lobby."]
 })

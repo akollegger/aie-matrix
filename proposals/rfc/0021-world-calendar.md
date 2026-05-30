@@ -167,7 +167,7 @@ The `hourly-checkin` event above produces 10 occurrences: `hourly-checkin#1` at 
 |---|---|
 | `CALENDAR_TICK_MS` | Scheduler poll interval in milliseconds. Default: `30000`. |
 
-`AIE_MATRIX_CALENDAR` is not used. The calendar is loaded from the active map's `[schedule:Schedule | ...]` block at map load time. No calendar block → world runs in timeless mode; `timecheck` still works.
+**Current implementation (transitional)**: `AIE_MATRIX_CALENDAR` points to a standalone `.calendar.gram` file loaded at startup. **Target design**: the calendar is loaded from the active map's `[schedule:Schedule | ...]` block, eliminating the separate file. The `canonical.map.gram` already demonstrates this format. The standalone-file path will be removed once the map-loading integration is complete. No calendar block → world runs in timeless mode; `timecheck` still works.
 
 ### 5. Calendar Gram format
 

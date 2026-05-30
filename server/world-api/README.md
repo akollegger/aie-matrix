@@ -162,11 +162,11 @@ The calendar adds a temporal dimension to the world: wall-clock time anchored to
 
 ### Calendar Gram format
 
-Events are authored directly in the `.map.gram` file as a `[:Calendar | ...]` block — the map is the complete world description. A map with no `[:Calendar | ...]` block runs in timeless mode. See `src/calendar/fixtures/sample.calendar.gram` for a standalone example (used by unit tests only; not loaded at runtime).
+**Current (transitional)**: events are loaded from a standalone `.calendar.gram` file via `AIE_MATRIX_CALENDAR`. **Target**: events will be embedded in the `.map.gram` file as a `[schedule:Schedule | ...]` block (see `maps/sandbox/canonical.map.gram` for an example). A map with no `[schedule:Schedule | ...]` block runs in timeless mode. `src/calendar/fixtures/sample.calendar.gram` is used by unit tests.
 
 ### `timecheck` MCP tool
 
-Returns `{ now, timezone, upcoming }` — the current Pacific time and up to 3 upcoming events. Available to all adopted ghosts, no parameters required.
+Returns `{ now, timezone }` — the current Pacific time. Agents are expected to be temporally aware; no event schedule is surfaced by this tool. Available to all adopted ghosts, no parameters required.
 
 ### Running calendar tests
 

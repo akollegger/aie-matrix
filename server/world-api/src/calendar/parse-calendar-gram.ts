@@ -26,22 +26,26 @@ function getString(subject: Subject, key: string): string | undefined {
   });
 }
 
+/** Returns the integer value of a property, or undefined if absent.
+ *  Returns NaN for FloatVal to let callers detect and reject non-integer values. */
 function getInt(subject: Subject, key: string): number | undefined {
   return Option.match(HashMap.get(subject.properties, key), {
     onNone: () => undefined,
     onSome: (val) => {
       if (val && typeof val === "object" && "_tag" in val) {
         const v = val as { _tag: string; value?: unknown };
-        if ((v._tag === "IntVal" || v._tag === "FloatVal") && typeof v.value === "number") {
-          return v.value;
-        }
+        if (v._tag === "IntVal" && typeof v.value === "number") return v.value;
+        // FloatVal is rejected — duration/repeat must be whole minutes
+        if (v._tag === "FloatVal") return NaN;
       }
       return undefined;
     },
   });
 }
 
-function getStringArray(subject: Subject, key: string): string[] | undefined {
+/** Returns a string-only array, or undefined if absent.
+ *  Returns null if the array contains any non-string items, so callers can surface a parse error. */
+function getStringArray(subject: Subject, key: string): string[] | null | undefined {
   return Option.match(HashMap.get(subject.properties, key), {
     onNone: () => undefined,
     onSome: (val) => {
@@ -54,8 +58,10 @@ function getStringArray(subject: Subject, key: string): string[] | undefined {
               const iv = item as { _tag: string; value?: unknown };
               if (iv._tag === "StringVal" && typeof iv.value === "string") {
                 result.push(iv.value);
+                continue;
               }
             }
+            return null; // non-string item — signal a parse error
           }
           return result;
         }
@@ -108,8 +114,8 @@ function extractCalendarEvent(
   if (!kindRaw) missing.push("kind");
   if (!startsAt) missing.push("startsAt");
   if (duration === undefined) missing.push("duration");
-  if (!enterCommands) missing.push("enterCommands");
-  if (!exitCommands) missing.push("exitCommands");
+  if (enterCommands === undefined) missing.push("enterCommands");
+  if (exitCommands === undefined) missing.push("exitCommands");
 
   if (missing.length > 0) {
     return Effect.fail(
@@ -120,10 +126,37 @@ function extractCalendarEvent(
     );
   }
 
+  // Non-string items in command arrays
+  if (enterCommands === null) {
+    return Effect.fail(
+      new CalendarParseError({
+        message: `Event "${id}" enterCommands must be a string array — all items must be strings`,
+        source,
+      }),
+    );
+  }
+  if (exitCommands === null) {
+    return Effect.fail(
+      new CalendarParseError({
+        message: `Event "${id}" exitCommands must be a string array — all items must be strings`,
+        source,
+      }),
+    );
+  }
+
   if (!VALID_KINDS.has(kindRaw!)) {
     return Effect.fail(
       new CalendarParseError({
         message: `Event "${id}" has invalid kind "${kindRaw}". Must be one of: session, break, raffle, custom`,
+        source,
+      }),
+    );
+  }
+
+  if (duration !== undefined && Number.isNaN(duration)) {
+    return Effect.fail(
+      new CalendarParseError({
+        message: `Event "${id}" duration must be a whole number of minutes, not a decimal`,
         source,
       }),
     );
@@ -162,6 +195,15 @@ function extractCalendarEvent(
 
   const repeat = getInt(subject, "repeat");
   const until = getString(subject, "until");
+
+  if (repeat !== undefined && (Number.isNaN(repeat) || !Number.isInteger(repeat))) {
+    return Effect.fail(
+      new CalendarParseError({
+        message: `Event "${id}" repeat must be a whole number of minutes, not a decimal`,
+        source,
+      }),
+    );
+  }
 
   if (repeat !== undefined && repeat <= 0) {
     return Effect.fail(

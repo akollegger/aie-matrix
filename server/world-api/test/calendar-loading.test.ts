@@ -23,12 +23,13 @@ test("calendar loading: sample fixture loads 4 event templates", async () => {
   assert.ok(ids.includes("booth-12-raffle"));
   assert.ok(ids.includes("hourly-checkin"));
 
-  // Verify time-of-day format (no date, no timezone)
+  // Verify time-of-day format: HH:MM or HH:MM:SS with no date or timezone component
+  const TIME_ONLY_RE = /^\d{2}:\d{2}(:\d{2})?$/;
   for (const event of events) {
-    assert.ok(!event.startsAt.includes("T") || event.startsAt.startsWith("T"),
-      `startsAt should be time-only, got: ${event.startsAt}`);
-    assert.ok(!event.startsAt.includes("-07") && !event.startsAt.includes("-08"),
-      `startsAt should not contain UTC offset, got: ${event.startsAt}`);
+    assert.ok(
+      TIME_ONLY_RE.test(event.startsAt),
+      `startsAt should be time-only (e.g. "09:00:00"), got: ${event.startsAt}`,
+    );
   }
 });
 

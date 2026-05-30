@@ -102,7 +102,8 @@ World items are currently a PoC-layer extension around the existing map + MCP st
 |---|---|
 | `AIE_MATRIX_RULES` | Optional path to a Gram movement rules file. Unset keeps adjacent movement permissive. |
 | `AIE_MATRIX_ITEMS` | Optional path to a `*.items.json` sidecar. Unset falls back to the co-located sidecar next to the active map. |
-| `CALENDAR_TICK_MS` | Scheduler poll interval in milliseconds (default: `30000`). Set lower (e.g. `5000`) for local testing. Calendar events are loaded from the active map's `[:Schedule | ...]` block; no separate calendar file. |
+| `AIE_MATRIX_CALENDAR` | Path to a standalone `.calendar.gram` file (current transitional loading path). Target: calendar will be loaded from the active map's `[schedule:Schedule | ...]` block; standalone file support will be removed once map-loading integration is complete. |
+| `CALENDAR_TICK_MS` | Scheduler poll interval in milliseconds (default: `30000`). Set lower (e.g. `5000`) for local testing. |
 | `GCS_BUCKET` | GCS bucket name for map artifact storage (e.g. `aie-matrix-maps`). Unset in Tier 1 — `GcsService` uses a local `tmp/gcs/` stub. |
 | `ADMIN_TOKEN` | Static bearer token for admin-only `/maps/` and `/live/` endpoints. Never logged. Required when using map management API. |
 | `LIVE_SESSION_ID` | ULID of the live session this process instance serves. Required in multi-session Tier 2/3 deployments. Unset → auto-discover single active session; fail if multiple exist. |

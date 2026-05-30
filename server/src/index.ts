@@ -575,19 +575,20 @@ async function main(): Promise<void> {
   // Polls for due CalendarEvents and dispatches enterCommands / exitCommands.
   // Uses CALENDAR_TICK_MS (default 30s); set lower (e.g. 5000) for local testing.
   const calendarTickMs = Math.max(1000, parseInt(process.env.CALENDAR_TICK_MS ?? "30000", 10) || 30000);
+  const runCalendarTick = () =>
+    runtime.runPromise(
+      Effect.gen(function* () {
+        const calendar = yield* WorldCalendarService;
+        yield* calendar.tick();
+      }),
+    ).catch((e) => console.error("[aie-matrix] calendar scheduler tick error:", e));
+
   void (async () => {
+    // Tick immediately on startup so past-due events fire without waiting a full interval
+    await runCalendarTick();
     while (true) {
       await new Promise<void>((resolve) => setTimeout(resolve, calendarTickMs));
-      try {
-        await runtime.runPromise(
-          Effect.gen(function* () {
-            const calendar = yield* WorldCalendarService;
-            yield* calendar.tick();
-          }),
-        );
-      } catch (e) {
-        console.error("[aie-matrix] calendar scheduler tick error:", e);
-      }
+      await runCalendarTick();
     }
   })();
   if (calendarPath) {

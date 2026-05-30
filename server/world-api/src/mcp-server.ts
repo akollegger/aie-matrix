@@ -46,7 +46,7 @@ import { evaluateGo, evaluateTraverse } from "./movement.js";
 import { ItemService, type ItemServiceOps } from "./ItemService.js";
 import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
-import { WorldCalendarService } from "./calendar/WorldCalendarService.js";
+import type { WorldCalendarService } from "./calendar/WorldCalendarService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;

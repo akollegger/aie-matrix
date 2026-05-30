@@ -37,9 +37,12 @@ export function dispatchCalendarCommand(
     case "claim":
     case "yield":
     case "raffle":
-      // Active commands — currently no-op stubs; will be wired to real handler
-      // Effects once the full CommandExecutor refactor lands (separate future RFC).
-      return Effect.logDebug(`[calendar] dispatched: ${command}`).pipe(
+      // These commands are registered as valid but currently no-op: the full
+      // CommandExecutor refactor that wires them to real handler Effects is a
+      // separate future RFC. Once implemented, claim/yield will invoke the
+      // speaker-room mechanics (RFC-0012) and raffle will invoke booth logic.
+      // For now the scheduler confirms dispatch via debug log without mutating state.
+      return Effect.logDebug(`[calendar] dispatched (stub): ${command}`).pipe(
         Effect.asVoid,
       );
 

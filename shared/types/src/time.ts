@@ -9,6 +9,7 @@ const _fmt = new Intl.DateTimeFormat("en-CA", {
   minute: "2-digit",
   second: "2-digit",
   hour12: false,
+  hourCycle: "h23", // prevents "24:00:00" at midnight in some environments
   timeZoneName: "shortOffset",
 });
 
