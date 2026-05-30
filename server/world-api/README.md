@@ -151,3 +151,27 @@ World item definitions load from a `*.items.json` sidecar at startup and live in
 | `inventory` | _(none)_ | `{ ok: true, objects: [{ itemRef, name }] }` | Never fails |
 
 `look` is also extended: `TileInspectResult` always includes `objects: TileItemSummary[]` for the focal tile slice (empty when no items on that slice).
+
+## World Calendar — RFC-0021
+
+The calendar adds a temporal dimension to the world: wall-clock time anchored to US/Pacific, a `timecheck` MCP tool, and a scheduler that fires enter/exit commands at scheduled times.
+
+| Env | Values | Purpose |
+|-----|--------|---------|
+| `CALENDAR_TICK_MS` | Integer ms (default: `30000`) | Scheduler poll interval. Use `5000` locally to see events fire quickly. |
+
+### Calendar Gram format
+
+**Current (transitional)**: events are loaded from a standalone `.calendar.gram` file via `AIE_MATRIX_CALENDAR`. **Target**: events will be embedded in the `.map.gram` file as a `[schedule:Schedule | ...]` block (see `maps/sandbox/canonical.map.gram` for an example). A map with no `[schedule:Schedule | ...]` block runs in timeless mode. `src/calendar/fixtures/sample.calendar.gram` is used by unit tests.
+
+### `timecheck` MCP tool
+
+Returns `{ now, timezone }` — the current Pacific time. Agents are expected to be temporally aware; no event schedule is surfaced by this tool. Available to all adopted ghosts, no parameters required.
+
+### Running calendar tests
+
+```bash
+pnpm test   # from server/world-api/
+# or to run only calendar tests:
+pnpm exec node --import tsx --test "src/calendar/*.test.ts"
+```

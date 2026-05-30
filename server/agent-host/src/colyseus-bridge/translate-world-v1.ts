@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { worldNow } from "@aie-matrix/shared-types";
 import type { WorldEvent, WorldEventKind } from "../types.js";
 
 /** Colyseus `room.broadcast("world-v1", …)` payload from the world server (see internal fanout). */
@@ -42,6 +43,7 @@ export function translateColyseusWorldV1(raw: unknown): WorldEvent | null {
     ghostId: o.targetGhostId,
     kind,
     payload: { ...payload },
-    sentAt: new Date().toISOString(),
+    sentAt: new Date().toISOString(), // deprecated alias
+    timestamp: worldNow(),
   };
 }
