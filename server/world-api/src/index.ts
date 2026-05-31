@@ -76,6 +76,21 @@ export {
   type WorldApiError,
 } from "./world-api-errors.js";
 export {
+  LedgerInsufficientFunds,
+  LedgerConservationViolation,
+  LedgerDuplicateTransaction,
+  LedgerUnknownResource,
+  LedgerUnknownActor,
+  LedgerChainTamperedError,
+  LedgerPersistenceError,
+  LedgerConsentRequired,
+  LedgerProposalNotFound,
+  LedgerSelfAgreeDenied,
+  LedgerProposalExpired,
+  LedgerMonotonicTradeRejected,
+  type LedgerError,
+} from "./ledger-errors.js";
+export {
   GramParseError,
   MapFileReadError,
   MapIdCollisionError,

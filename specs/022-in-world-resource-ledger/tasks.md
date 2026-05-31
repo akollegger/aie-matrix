@@ -15,10 +15,10 @@
 
 **Purpose**: Shared types and error infrastructure that all phases depend on.
 
-- [ ] T001 Add `shared/types/src/ledger.ts` — export `ResourceId`, `ActorId`, `TransactionId`, `ResourceClass`, `ResourceType`, `Transfer`, `Transaction`, `BagEntry`, `BagResult`, `ActionCost`, `CostQuote` per `specs/022-in-world-resource-ledger/data-model.md`
-- [ ] T002 Re-export ledger types from `shared/types/src/index.ts`
-- [ ] T003 Add `server/world-api/src/ledger-errors.ts` — `Data.TaggedError` types: `InsufficientFunds`, `ConservationViolation`, `DuplicateTransaction`, `UnknownResource`, `UnknownActor`, `ChainTamperedError`, `PersistenceError` per `specs/022-in-world-resource-ledger/contracts/ic-ledger-service.md`
-- [ ] T004 Extend `HttpMappingError` union in `server/src/errors.ts` to include ledger errors; add exhaustive `_tag` cases in `errorToResponse()` per `specs/022-in-world-resource-ledger/contracts/ic-ledger-service.md` HTTP mapping table
+- [x] T001 Add `shared/types/src/ledger.ts` — export `ResourceId`, `ActorId`, `TransactionId`, `ResourceClass`, `ResourceType`, `Transfer`, `Transaction`, `BagEntry`, `BagResult`, `ActionCost`, `CostQuote` per `specs/022-in-world-resource-ledger/data-model.md`
+- [x] T002 Re-export ledger types from `shared/types/src/index.ts`
+- [x] T003 Add `server/world-api/src/ledger-errors.ts` — `Data.TaggedError` types: `InsufficientFunds`, `ConservationViolation`, `DuplicateTransaction`, `UnknownResource`, `UnknownActor`, `ChainTamperedError`, `PersistenceError` per `specs/022-in-world-resource-ledger/contracts/ic-ledger-service.md`
+- [x] T004 Extend `HttpMappingError` union in `server/src/errors.ts` to include ledger errors; add exhaustive `_tag` cases in `errorToResponse()` per `specs/022-in-world-resource-ledger/contracts/ic-ledger-service.md` HTTP mapping table
 
 ---
 
@@ -28,9 +28,9 @@
 
 **⚠️ CRITICAL**: US1, US2, and US3 integration work cannot begin until this phase is complete.
 
-- [ ] T005 Add `server/world-api/src/LedgerService.ts` — define `LedgerServiceOps` interface and `LedgerService` Effect `Context.Tag` per `specs/022-in-world-resource-ledger/contracts/ic-ledger-service.md`
-- [ ] T006 Add `server/world-api/src/LedgerServiceInMemory.ts` — in-memory implementation of `LedgerServiceOps`: SHA-256 hash-chaining (`node:crypto`), ULID idempotency set, in-memory `Map<ActorId, Map<ResourceId, number>>` bag cache, conservation validation, floor enforcement, monotonic-class transfer rejection, `PersistenceError` not applicable (in-memory always succeeds)
-- [ ] T007 Add `server/world-api/test/LedgerService.test.ts` — unit tests using in-memory implementation (no live services required):
+- [x] T005 Add `server/world-api/src/LedgerService.ts` — define `LedgerServiceOps` interface and `LedgerService` Effect `Context.Tag` per `specs/022-in-world-resource-ledger/contracts/ic-ledger-service.md`
+- [x] T006 Add `server/world-api/src/LedgerServiceInMemory.ts` — in-memory implementation of `LedgerServiceOps`: SHA-256 hash-chaining (`node:crypto`), ULID idempotency set, in-memory `Map<ActorId, Map<ResourceId, number>>` bag cache, conservation validation, floor enforcement, monotonic-class transfer rejection, `PersistenceError` not applicable (in-memory always succeeds)
+- [x] T007 Add `server/world-api/test/LedgerService.test.ts` — unit tests using in-memory implementation (no live services required):
   - `bag()` returns empty holdings for a new actor
   - `commit()` reward: conservation invariant holds (world loses, ghost gains, sum unchanged)
   - `commit()` spend: ghost balance decremented, world balance incremented
@@ -42,7 +42,7 @@
   - `verify()` `ChainTamperedError`: detected when a historical entry hash is mutated
   - `commit()` monotonic mint: balance accumulates; `Transfer` from monotonic source accepted
   - `commit()` monotonic transfer: rejected when a ghost attempts to transfer monotonic resource to another actor
-- [ ] T008 Extend `server/world-api/src/LedgerServiceInMemory.ts` — add `resourceTypes()` method returning registered types; add session-start seed method that appends a genesis transaction seeding the world bag from a `ResourceType[]` declaration
+- [x] T008 Extend `server/world-api/src/LedgerServiceInMemory.ts` — add `resourceTypes()` method returning registered types; add session-start seed method that appends a genesis transaction seeding the world bag from a `ResourceType[]` declaration
 - [ ] T009 Add `@aie-matrix/map-gram` parser support for `[resources:Resources | ...]` layer block — parse `(:Resource { id, class, qty, floor, label })` nodes into `ResourceType[]`; update gram AST types as needed
 - [ ] T010 Add `@aie-matrix/map-gram` parser support for `cost` array property on `:GO` rule edges — parse `[{ qty, resource, payee }]` into `ActionCost[]` on the rule edge AST node
 
