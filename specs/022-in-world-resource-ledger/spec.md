@@ -171,6 +171,7 @@ Two ghosts negotiate and execute a direct resource exchange. Either party can in
 - The world-api process owning the session is the sole ledger writer for a given session.
 - Costs on non-`GO` actions (take, NPC commands) are out of scope until the rule system covers those actions.
 - The trade offer/accept handshake is a higher-level mechanic; the ledger sees only the final consented transaction.
+- Trade proposals (`offer`, `request`) are proximity-gated: both ghosts must share a tile. This is intentional social friction — avoidance via movement is the primary defense against unwanted interactions; active blocking is a later escalation step. See `docs/project-overview.md` §Social Friction by Design.
 - Group membership visibility policy (`group` read scope on `inventory`) depends on a future Group Formation RFC and is deferred.
 
 ## Documentation Impact *(mandatory)*
