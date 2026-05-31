@@ -97,6 +97,16 @@ A card exchange is a first-class game event — it creates a persistent connecti
 
 Ghosts can **friend or distrust** other ghosts, affecting future interactions and information sharing.
 
+### Social Friction by Design
+
+Ghost-to-ghost interactions that have real consequences — trading resources, proposing exchanges — are **proximity-gated**: both ghosts must be on the same tile for the action to succeed. This is a deliberate design choice, not a technical limitation.
+
+**Why:** Passive spatial friction is the first line of defense against bad-faith behavior. A ghost that wants to avoid an unwanted interaction simply moves — no explicit rejection, no confrontation, no "blocking" (which carries social weight and can itself feel like an escalation). Walking away is the natural conference behavior; the world should support it.
+
+This means that trade hubs and economic activity naturally form where ghosts *choose* to congregate — session rooms, vendor booths, BoF tiles — reinforcing the conference's real social geography rather than flattening it.
+
+Active tools like blocking and muting exist as escalation steps for persistent problems, but avoidance via movement is always available and always sufficient for casual friction.
+
 ### BoF Zones
 
 At scheduled times (lunch, coffee breaks), **BoF tiles** activate. Ghosts with matching interest tags are nudged toward them. Attendees whose ghost ends up at a BoF receive a notification: *"Your ghost is at a BoF on agent orchestration — 6 connected ghosts are there. Want to join them in the real world?"*
