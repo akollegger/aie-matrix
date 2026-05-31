@@ -11,11 +11,14 @@ import { ulid } from "ulid";
 import type { ActorId, Proposal, ResourceId } from "@aie-matrix/shared-types";
 import {
   LedgerCounterpartyNotNearby,
+  LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
   LedgerMonotonicTradeRejected,
+  LedgerPersistenceError,
   LedgerProposalExpired,
   LedgerProposalNotFound,
   LedgerSelfAgreeDenied,
+  LedgerUnknownResource,
 } from "./ledger-errors.js";
 import { LedgerService } from "./LedgerService.js";
 
@@ -47,7 +50,14 @@ export interface ProposalServiceOps {
     callerId: ActorId,
   ): Effect.Effect<
     Proposal,
-    LedgerProposalNotFound | LedgerProposalExpired | LedgerSelfAgreeDenied | LedgerInsufficientFunds | LedgerMonotonicTradeRejected
+    | LedgerProposalNotFound
+    | LedgerProposalExpired
+    | LedgerSelfAgreeDenied
+    | LedgerInsufficientFunds
+    | LedgerMonotonicTradeRejected
+    | LedgerDuplicateTransaction
+    | LedgerUnknownResource
+    | LedgerPersistenceError
   >;
 
   /** Cancel or reject a proposal. Either party may call this. */
@@ -165,14 +175,13 @@ export function makeProposalService(
       return agreed;
     });
 
-  const decline = (proposalId: string, callerId: ActorId) =>
+  const decline = (proposalId: string, _callerId: ActorId) =>
     Effect.gen(function* () {
       const p = proposals.get(proposalId);
       if (!p) {
         yield* Effect.fail(new LedgerProposalNotFound({ proposalId }));
         return undefined as never;
       }
-      // Either party can decline; callerId is recorded for future audit use
       const declined: Proposal = { ...p, status: "declined" };
       proposals.set(proposalId, declined);
       return declined;

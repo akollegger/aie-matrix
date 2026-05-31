@@ -3,6 +3,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CellId } from "@aie-matrix/server-colyseus";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -1406,54 +1407,47 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "offer",
     {
-      description: "Propose a resource trade to another ghost. You offer to give one resource in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded.",
+      description: "Propose a resource trade to another ghost. You offer to give one resource in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded. Both ghosts must be on the same tile.",
       inputSchema: {
-        type: "object" as const,
-        properties: {
-          to: { type: "string", description: "The ghost ID of the counterparty." },
-          give_resource: { type: "string", description: "The resource you are offering to give." },
-          give_qty: { type: "number", description: "The quantity you are offering to give." },
-          for_resource: { type: "string", description: "The resource you want in return." },
-          for_qty: { type: "number", description: "The quantity you want in return." },
-        },
-        required: ["to", "give_resource", "give_qty", "for_resource", "for_qty"],
+        to: z.string().describe("The ghost ID of the counterparty."),
+        give_resource: z.string().describe("The resource you are offering to give."),
+        give_qty: z.number().int().positive().describe("The quantity you are offering to give."),
+        for_resource: z.string().describe("The resource you want in return."),
+        for_qty: z.number().int().positive().describe("The quantity you want in return."),
       },
     },
-    async (input, extra) => runTool("offer", input, offerEffect(input as any, extra), extra),
+    async ({ to, give_resource, give_qty, for_resource, for_qty }, extra) =>
+      runTool("offer", { to, give_resource, give_qty, for_resource, for_qty },
+        offerEffect({ to, give_resource, give_qty, for_resource, for_qty }, extra), extra),
   );
 
   server.registerTool(
     "request",
     {
-      description: "Request a resource from another ghost, offering something in return. The same as `offer` but framed from the receiver's perspective. The other ghost must call `agree` to complete the trade.",
+      description: "Request a resource from another ghost, offering something in return. Same as `offer` but framed from the receiver's perspective. Both ghosts must be on the same tile.",
       inputSchema: {
-        type: "object" as const,
-        properties: {
-          from: { type: "string", description: "The ghost ID to request the resource from." },
-          want_resource: { type: "string", description: "The resource you want to receive." },
-          want_qty: { type: "number", description: "The quantity you want to receive." },
-          offering_resource: { type: "string", description: "The resource you are offering in exchange." },
-          offering_qty: { type: "number", description: "The quantity you are offering in exchange." },
-        },
-        required: ["from", "want_resource", "want_qty", "offering_resource", "offering_qty"],
+        from: z.string().describe("The ghost ID to request the resource from."),
+        want_resource: z.string().describe("The resource you want to receive."),
+        want_qty: z.number().int().positive().describe("The quantity you want to receive."),
+        offering_resource: z.string().describe("The resource you are offering in exchange."),
+        offering_qty: z.number().int().positive().describe("The quantity you are offering in exchange."),
       },
     },
-    async (input, extra) => runTool("request", input, requestEffect(input as any, extra), extra),
+    async ({ from, want_resource, want_qty, offering_resource, offering_qty }, extra) =>
+      runTool("request", { from, want_resource, want_qty, offering_resource, offering_qty },
+        requestEffect({ from, want_resource, want_qty, offering_resource, offering_qty }, extra), extra),
   );
 
   server.registerTool(
     "agree",
     {
-      description: "Accept a pending trade proposal. You must be the counterparty — the ghost who initiated the proposal cannot agree to their own offer. Commits both transfers atomically.",
+      description: "Accept a pending trade proposal. You must be the counterparty — the initiator cannot agree to their own offer. Commits both transfers atomically.",
       inputSchema: {
-        type: "object" as const,
-        properties: {
-          proposalId: { type: "string", description: "The proposal ID returned by `offer` or `request`." },
-        },
-        required: ["proposalId"],
+        proposalId: z.string().describe("The proposal ID returned by `offer` or `request`."),
       },
     },
-    async (input, extra) => runTool("agree", input, agreeEffect(input as any, extra), extra),
+    async ({ proposalId }, extra) =>
+      runTool("agree", { proposalId }, agreeEffect({ proposalId }, extra), extra),
   );
 
   server.registerTool(
@@ -1461,14 +1455,11 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     {
       description: "Cancel or reject a pending trade proposal. Either the initiator or counterparty may call this. No ledger changes occur.",
       inputSchema: {
-        type: "object" as const,
-        properties: {
-          proposalId: { type: "string", description: "The proposal ID to cancel." },
-        },
-        required: ["proposalId"],
+        proposalId: z.string().describe("The proposal ID to cancel."),
       },
     },
-    async (input, extra) => runTool("decline", input, declineEffect(input as any, extra), extra),
+    async ({ proposalId }, extra) =>
+      runTool("decline", { proposalId }, declineEffect({ proposalId }, extra), extra),
   );
 
   return server;
