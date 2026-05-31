@@ -9,8 +9,9 @@
 [layers:LayerStack | tiles]
 
 [resources:Resources { name: "Sandbox Resources" } |
-  (:Resource { id: "gold", class: "conserved", qty: 100, floor: 0, label: "Gold" }),
-  (:Resource { id: "xp",   class: "monotonic",  qty: 0,   floor: 0, label: "Experience" })
+  (:Resource { id: "gold", class: "conserved", qty: 100,  floor: 0, label: "Gold" }),
+  (:Resource { id: "xp",   class: "monotonic",  qty: 0,   floor: 0, label: "Experience" }),
+  (:Resource { id: "badge", class: "monotonic",  qty: 0,   floor: 0, label: "Badge" })
 ]
 
 [rules:Rules |

@@ -189,3 +189,64 @@ test("resourceTypes() returns registered types", () => {
   assert.ok(types.find(t => t.id === "gold"));
   assert.ok(types.find(t => t.id === "xp"));
 });
+
+// ---------------------------------------------------------------------------
+// Phase 5 (US3): monotonic resource accumulation — extended coverage
+// ---------------------------------------------------------------------------
+
+test("monotonic: multiple mints accumulate cumulatively", () => {
+  const svc = makeLedger([GOLD, XP]);
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-001", "xp", 50)])));
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-001", "xp", 30)])));
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-001", "xp", 20)])));
+  const bag = Effect.runSync(svc.bag("ghost-001"));
+  assert.equal(bag.holdings.find(h => h.resource === "xp")?.qty, 100);
+});
+
+test("monotonic: two different actors accumulate independently", () => {
+  const svc = makeLedger([GOLD, XP]);
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-001", "xp", 40)])));
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-002", "xp", 60)])));
+  const bag1 = Effect.runSync(svc.bag("ghost-001"));
+  const bag2 = Effect.runSync(svc.bag("ghost-002"));
+  assert.equal(bag1.holdings.find(h => h.resource === "xp")?.qty, 40);
+  assert.equal(bag2.holdings.find(h => h.resource === "xp")?.qty, 60);
+});
+
+test("monotonic: XP does not appear in inventory of actor with none", () => {
+  const svc = makeLedger([GOLD, XP]);
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-001", "xp", 50)])));
+  const bag2 = Effect.runSync(svc.bag("ghost-002"));
+  assert.ok(!bag2.holdings.find(h => h.resource === "xp"), "ghost-002 should have no XP holdings");
+});
+
+test("monotonic: XP does not affect gold conservation sum", () => {
+  const svc = makeLedger([GOLD, XP]);
+  Effect.runSync(svc.commit(tx([transfer("world", "ghost-001", "gold", 20)])));
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-001", "xp", 50)])));
+  const worldBag = Effect.runSync(svc.bag("world"));
+  const ghostBag = Effect.runSync(svc.bag("ghost-001"));
+  const goldSum = (worldBag.holdings.find(h => h.resource === "gold")?.qty ?? 0)
+    + (ghostBag.holdings.find(h => h.resource === "gold")?.qty ?? 0);
+  assert.equal(goldSum, 100, "gold conservation holds regardless of XP minting");
+});
+
+test("monotonic: MonotonicTradeRejected when ghost tries to transfer XP to world", () => {
+  const svc = makeLedger([GOLD, XP]);
+  Effect.runSync(svc.commit(tx([transfer("world.xp-issuer", "ghost-001", "xp", 50)])));
+  const err = Effect.runSync(Effect.flip(
+    svc.commit(tx([transfer("ghost-001", "world", "xp", 10)]))
+  ));
+  assert.equal(err._tag, "LedgerError.MonotonicTradeRejected");
+});
+
+test("mechanics: rewardXp mints XP via LedgerService", async () => {
+  const { rewardXp } = await import("../src/mechanics.js");
+  const { LedgerServiceInMemoryLayer } = await import("../src/LedgerServiceInMemory.js");
+  const { Layer } = await import("effect");
+  const svc = makeLedger([GOLD, XP]);
+  const layer = Layer.succeed((await import("../src/LedgerService.js")).LedgerService, svc);
+  Effect.runSync(Effect.provide(rewardXp("ghost-abc", 25), layer));
+  const bag = Effect.runSync(svc.bag("ghost-abc"));
+  assert.equal(bag.holdings.find(h => h.resource === "xp")?.qty, 25);
+});

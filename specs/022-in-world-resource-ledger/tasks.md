@@ -95,9 +95,9 @@
 
 **Independent Test**: Mint 50 XP to a ghost. `inventory` returns `{ xp: 50 }`. Mint 30 more — `inventory` returns `{ xp: 80 }`. Ghost attempts `commit` transferring XP to another ghost → rejected. Conservation check: XP total is not bounded (monotonic), but no XP disappears from a bag once minted.
 
-- [ ] T020 [US3] Add XP resource to sandbox map in `maps/sandbox/sandbox.map.gram` — `(:Resource { id: "xp", class: "monotonic", qty: 0, floor: 0, label: "Experience" })`
-- [ ] T021 [US3] Add a `rewardXp(actorId, qty)` helper in `server/world-api/src/` (e.g. a mechanic utility) that calls `LedgerService.commit()` with a monotonic XP mint transaction — demonstrates the trust-by-call-site authorization pattern
-- [ ] T022 [US3] Add unit tests for monotonic behaviour to `server/world-api/test/LedgerService.test.ts` (extend existing file):
+- [x] T020 [US3] Add XP resource to sandbox map in `maps/sandbox/sandbox.map.gram` — `(:Resource { id: "xp", class: "monotonic", qty: 0, floor: 0, label: "Experience" })`
+- [x] T021 [US3] Add a `rewardXp(actorId, qty)` helper in `server/world-api/src/` (e.g. a mechanic utility) that calls `LedgerService.commit()` with a monotonic XP mint transaction — demonstrates the trust-by-call-site authorization pattern
+- [x] T022 [US3] Add unit tests for monotonic behaviour to `server/world-api/test/LedgerService.test.ts` (extend existing file):
   - Multiple mints accumulate correctly in `bag()`
   - Transfer of monotonic resource between two ghost actors → rejected with appropriate error
   - Monotonic resource does not affect conservation sum check for conserved resources
