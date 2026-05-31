@@ -45,7 +45,7 @@ Tiles are **not** actors and own nothing. An item resting on a tile is owned by 
 
 The conservation invariant applies only to conserved resources: `Σ(all bags' holdings of a conserved resource) == seeded total`, for all time. This makes scarcity real and designed — how much exam-token exists in the world is a deliberate lever, not an accident.
 
-**Transactions.** The ledger's only write is `append(transaction)`. A transaction is an atomic, ordered set of **movements**, each a double-entry transfer:
+**Transactions.** The ledger's only write is `append(transaction)`. A transaction is an atomic, ordered set of **movements**, each a double-entry transfer. The shape below is illustrative; field names and types are not normative **except** the chain fields (`prevHash` / `hash`) and `id` as the idempotency key, which the verifiability contract depends on:
 
 ```ts
 interface Movement {
@@ -74,8 +74,10 @@ There is no `credit`, `debit`, `distribute`, `transfer`, or `drain` as distinct 
 - *reward* — one movement, `world → ghost`
 - *cost* — one movement, `ghost → payee` (payee defaults to `world`)
 - *trade* — two movements, committed atomically, carrying both actors' consent
-- *jackpot* — N movements from a coin-holding actor to each recipient (see §5)
+- *jackpot* — N movements from a coin-holding actor to each recipient (see "Jackpots" below)
 - *scheduled drain* — a recurring transaction, `ghost → world`, fired by the calendar (§6)
+
+**Jackpots are a promise of exchange, not a bag.** A jackpot is not a standing pool; it is a coin-holding actor (an NPC bank, or the world) plus a deferred, event-triggered transaction that distributes to recipients. The transaction draws from that actor's bag and therefore cannot pay out more than the actor holds — conservation stays honest. (RFC-0022's "prize pool" is modeled this way: a coin-holding actor plus an event-triggered N-movement transaction, not a standing bag.)
 
 ### 2. The Log, the Chain, and Bags-as-Caches
 
@@ -86,6 +88,8 @@ The ledger is an **append-only log** of transactions, the single source of truth
 **Single writer.** An append-only chain requires exactly one serialization point per session. The world-api process that owns the session (`LIVE_SESSION_ID`) is the sole ledger writer. This is mandatory, not advisory — it constrains the multi-replica deployment story for a session to a single ledger authority.
 
 **Durability.** The log is persisted (durable across restarts); bags are rebuilt from it on startup. **Snapshots** (periodic bag checkpoints + log-tail replay, to bound recovery time) are noted as necessary at scale but are **not required for MVP** — MVP replays from genesis.
+
+**Persistence (candidate).** The append-only log persists to Neo4j as an ordered chain of `(:LedgerEntry)` nodes within the session subgraph, consistent with the decided world model and with RFC-0021 (World Calendar), which already persists to Neo4j and `.calendar.gram`. This RFC proposes the ledger log as the resolution to the open *Time-Series / Event Log Backend* question in `docs/architecture.md`. Whether Neo4j suffices at conference scale or a dedicated append store (JSONL-to-S3, ClickHouse, or similar) is needed is Open Question 9.
 
 ### 3. Scope: One Ledger per Session
 
@@ -115,8 +119,6 @@ Any action with a cost follows a two-phase protocol at the MCP boundary, riding 
 1. **Quote** — a costed action discloses its cost before committing. The cost appears in the action's description/response.
 2. **Accept** — confirmation per the ghost's autonomy preference for that transaction kind. A ghost may set preferences from "always ask" to "yolo" (auto-accept) per kind of transaction; below an auto-accept threshold the action proceeds without a checkpoint.
 3. **Receipt** — the committed cost is reported in the action's response message.
-
-A jackpot is **not a bag** — it is a *promise of exchange*: a coin-holding actor (an NPC bank, or the world) and a deferred transaction to recipients, triggered by an event. The jackpot transaction draws from that actor's bag and therefore cannot pay out more than the actor holds — conservation stays honest. (RFC-0022's "prize pool" should be modeled this way: a coin-holding actor plus an event-triggered N-movement transaction, not a standing bag.)
 
 ### 6. Scheduled Transactions via the World Calendar
 
@@ -151,11 +153,27 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 |---|---|
 | `server/world-api/src/LedgerService.ts` | Append-only log, hash chaining, single-writer guard, transaction validation (conservation + floors), bag materialization & validation |
 | `server/world-api/src/movement.ts` | Cost evaluation on `:GO` rules; quote/accept/receipt integration into the `go` path |
-| `server/world-api/src/errors.ts` | New tagged errors: `InsufficientFunds`, `ConservationViolation`, `ConsentRequired`, `UnknownResource` |
+| `server/world-api/src/errors.ts` | New `Data.TaggedError` types: `InsufficientFunds`, `ConservationViolation`, `ConsentRequired`, `UnknownResource`. Any that surface through `/mcp` must be added to `errorToResponse()` (`server/src/errors.ts`) under `Match.exhaustive`. |
 | `server/world-api/src/mcp-server.ts` | New `bag` MCP tool; consent fields on costed actions |
 | `shared/types/` | `Movement`, `Transaction`, `ResourceType`, `BagResult` types |
 | `server/colyseus/` | Subscribes to transaction events; broadcasts bag changes for spectator-visible resources |
 | `maps/<scene>/` | Map definition seeds the world bag; ruleset `.gram` carries `:GO` costs |
+
+---
+
+## Demo Scenario
+
+With a sandbox map seeding `gold: 100` into the world bag and a ruleset `:GO` rule charging 5 gold across one edge, and a ghost adopted:
+
+1. Call `bag` → observe empty holdings.
+2. A server mechanic credits the ghost 20 gold (a `world → ghost` reward transaction). `bag` → `{ gold: 20 }`; the world bag now holds `gold: 80`. **(Conservation: 20 + 80 = 100.)**
+3. `go` across the costed edge. The response carries a **quote** (5 gold). On accept, the move commits and the **receipt** reports `-5 gold`. `bag` → `{ gold: 15 }`; world bag → `gold: 85`.
+4. Drain the ghost to `gold: 0`, then attempt the costed move → denied with `INSUFFICIENT_FUNDS` (the rule matches; the cost movement breaches the floor).
+5. Re-submit a transaction with an already-seen `id` → rejected as a duplicate (idempotency).
+6. Validate the ghost's bag against the log → matches. Tamper with any historical log entry and re-walk the chain → tampering detected.
+7. Restart the server → bags rebuild from the persisted log; all balances are identical to before the restart.
+
+**Observable acceptance criteria** (a contributor can confirm the work is done by observing these): conservation holds across steps 2–3; an unaffordable costed action is denied (4); duplicate transactions are rejected (5); a bag validates against and is reconstructable from the log, and tampering is detectable (6); balances survive a restart (7).
 
 ---
 
@@ -177,6 +195,10 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 
 8. **Snapshot trigger (post-MVP).** When snapshots land, what triggers one — transaction count, wall-clock interval, or session checkpoint — and where are they stored relative to the log?
 
+9. **Persistence backend at scale.** §2 proposes Neo4j `(:LedgerEntry)` nodes as the candidate store and the resolution to the open *Time-Series / Event Log Backend* question in `docs/architecture.md`. Does Neo4j suffice at conference scale, or does the append log warrant a dedicated store (JSONL-to-S3, ClickHouse, Redis stream)? This is the storage half of the durability requirement.
+
+10. **Append throughput under load.** A single writer serializes every costed movement for up to ~3000 concurrent ghosts (a latency concern `docs/architecture.md` flags). Is in-process append with async persist sufficient, or does the writer need batching, or partitioning per session, to keep movement actions responsive?
+
 ---
 
 ## Alternatives
@@ -184,6 +206,8 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 **Mutable balance store (the earlier draft of this RFC).** Per-actor balance rows mutated in place by `credit`/`debit`/`distribute` helpers. Simpler to implement, but no conservation guarantee, no tamper-evidence, no provenance, and no natural durability/replay story. Rejected in favor of the event-sourced log, which gives verifiability, the time-series backend, and conservation for free.
 
 **Per-mechanic storage (status quo).** Each mechanic stores its own quantities (Neo4j properties, in-memory maps). Produces n storage shapes, no atomicity across mechanics, no shared observability. Rejected; does not scale past a couple of mechanics.
+
+**Mutable graph state (Neo4j relationships only).** Model holdings as `(:Actor)-[:HOLDS {qty}]->(:Resource)` and mutate them in place, as RFC-0006 already does for items, with no event log. Native to the decided Neo4j world model and simplest to query. Rejected because it provides no tamper-evidence, no provenance, and no replay/audit trail — verifiability is the whole point of this RFC. Note this is not mutually exclusive with the chosen design: the materialized *bags* may well be Neo4j relationships; the distinction is that they are a derived, rebuildable cache, not the source of truth.
 
 **Items as a separate system from resources.** Keep RFC-0006's discrete-object model wholly distinct from fungible quantities. Rejected because stateless items *are* conserved quantity-1 resources; unifying them removes a whole parallel ownership/persistence system. (Stateful/animate items remain a future actor-layer concern either way.)
 
