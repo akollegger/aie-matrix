@@ -3,7 +3,7 @@
 **Status:** draft  
 **Date:** 2026-05-30  
 **Authors:** @akollegger  
-**Depends on:** RFC-TBD (Group Formation & Group Chat), RFC-TBD (In-World Resource Ledger)  
+**Depends on:** RFC-TBD (Group Formation & Group Chat), [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger)  
 **Related:** RFC-0005 (Ghost Conversation Model), RFC-0011 (Ghost Personality Substructure), RFC-0015 (RDC Duels), RFC-0018 (RDC Skill Tiers & Math Schools), docs/project-overview.md § Eval
 
 ---
@@ -35,15 +35,15 @@ This RFC specifies the exam protocol — question posing, scoring, survival pres
 
 **RFC-TBD: Group Formation & Group Chat.** An Exam Group is an instance of a general group construct. Group formation (membership, invitation, ejection) and the group chat (membership-based, asynchronous, location-independent — distinct from proximity-based ghost-to-ghost conversation which suspends movement) are specified there. This RFC assumes: groups exist before exam enrollment; each group has a persistent group chat accessible to all members regardless of their current tile; and the Inquisitor can be added to any group chat as a participant.
 
-**RFC-TBD: In-World Resource Ledger.** Token budgets are an instance of a general per-ghost resource tracked by an in-world ledger. The ledger handles resource types (tokens, currency, consumables), drain schedules, atomic transfers, and floor/ceiling constraints. This RFC assumes: each ghost has a named resource balance the ledger can increment and decrement atomically; drain can be scheduled as a recurring ledger operation; and a jackpot is a ledger credit operation across a set of ghost IDs.
+**[RFC-0023](0023-in-world-resource-ledger.md): In-World Resource Ledger.** Token budgets are a **conserved** resource (`exam-token`) tracked by the double-entry ledger. The ledger records every movement as a transaction between actor-owned bags; resources are never silently created or destroyed. This RFC assumes: each ghost (actor) has a bag the ledger debits and credits via atomic transactions; recurring drain is a scheduled transaction (per the World Calendar, RFC-0021) moving tokens `ghost → world`; and a jackpot is *not a standing pool* but a **promise of exchange** — a coin-holding actor (an NPC bank, or the world) from which an event-triggered transaction distributes tokens to recipients. Because `exam-token` is conserved, the total supply is seeded at session start and a jackpot can never pay out more than its source actor holds — the survival pressure is real, designed scarcity.
 
 With those foundations assumed, the exam-specific primitives are:
 
-**Exam Group.** A group (per RFC-TBD) enrolled in the exam. Groups are 3–6 members. Enrollment assigns the group a token budget resource on the ledger and registers it for leaderboard tracking. A group persists until all members are dormant or ejected.
+**Exam Group.** A group (per RFC-TBD: Group Formation) enrolled in the exam. Groups are 3–6 members. Enrollment seeds each member's bag with a starting `exam-token` balance (drawn from the world bag) and registers the group for leaderboard tracking. A group persists until all members are dormant or ejected.
 
-**Token Budget.** The exam uses the ledger's token resource type. Budget drains continuously at a configurable *maintenance rate* scaled by group headcount (dead-weight tax — see §4). A ghost whose budget reaches zero enters *dormant* status and cannot answer questions until revived by a jackpot credit.
+**Token Budget.** The exam uses the conserved `exam-token` resource. Each member's budget drains continuously at a configurable *maintenance rate* scaled by group headcount (dead-weight tax — see §4), via a scheduled transaction moving tokens `ghost → world`. A ghost whose balance reaches zero enters *dormant* status and cannot answer questions until revived by a jackpot transaction.
 
-**Leaderboard Bracket.** Groups compete for a top-*k* bracket (e.g., top 25% of active groups). At configurable intervals (e.g., every 30 minutes), groups in the bracket receive a *jackpot* — a ledger credit distributed equally across the group's currently-active members.
+**Leaderboard Bracket.** Groups compete for a top-*k* bracket (e.g., top 25% of active groups). At configurable intervals (e.g., every 30 minutes), a jackpot transaction draws from the prize-holding actor and distributes `exam-token` equally across each bracketed group's currently-active members. Because tokens are conserved, the jackpot supply is finite and refilled only by what drains back to the world — a closed economy.
 
 ### 2. Exam Roles: Inquisitor and Evaluator
 
@@ -155,7 +155,7 @@ The minimal group model required to bootstrap the eval must handle size=1 correc
 | **Inquisitor Room / Evaluator Room** | Designated H3 tile sets configured at world-build time (e.g., a dedicated conference room tile). Stored as `(:Room { type: "inquisitor" })` and `(:Room { type: "evaluator" })` in Neo4j. |
 | **Inquisition / Evaluation state** | MCP tool surface is mode-gated: when a ghost's active role is `inquisitor`, movement and social MCP tools return `ROLE_RESTRICTED`; only `exam.*` tools are available. Same pattern for `evaluator` with `eval.*` tools. State enforced in `server/world-api` auth/context layer. |
 | **Question bank** | Stored in Neo4j as `(:Question { id, text, domain, difficulty, answer, submittedBy })` nodes. Evaluators submit via `eval.submit_question`; Inquisitor queries by tag and difficulty. |
-| **Token budgets** | An exam-specific resource type on the in-world ledger (RFC-TBD). The exam engine schedules drain operations and jackpot credits via the ledger API; it does not own the storage. |
+| **Token budgets** | The conserved `exam-token` resource on the in-world ledger ([RFC-0023](0023-in-world-resource-ledger.md)). The exam engine authors drain and jackpot *transactions* via the ledger API; it does not own storage. Jackpots draw from a coin-holding actor, not a standing pool. |
 | **Group state** | `(:ExamGroup)` nodes with `HAS_MEMBER` edges; status per edge (`active`, `dormant`, `ejected`). `(:ExamSession)` nodes track per-session state (current question, round, score). Group membership itself is owned by RFC-TBD: Group Formation. |
 | **Evaluator Chat** | A group chat (RFC-TBD) whose membership is restricted to `inquisitor` + `evaluator` role holders. Created when the first Evaluator role is assigned. Messages logged to JSONL for audit. |
 | **Group Exam Chat** | The group's existing group chat (RFC-TBD). The Inquisitor is added as a participant when the first group member enters the Inquisitor Room; removed when the session closes. No new channel is created. |
@@ -189,7 +189,7 @@ The design intentionally does not assign roles. The following role archetypes ar
 
 1. **Dependency: Group Formation & Group Chat RFC.** This RFC assumes groups have a persistent, membership-based chat channel that the Inquisitor can join as a participant. That RFC needs to specify: how groups are formed (operator-assigned, self-formed, or both); what membership operations exist (invite, accept, eject); chat message ordering and delivery guarantees; and how the Inquisitor's participant status differs from a regular group member's (e.g., can the Inquisitor be ejected from the chat by the group?).
 
-2. **Dependency: In-World Resource Ledger RFC.** This RFC assumes a ledger that can track named resources per ghost, schedule recurring debits, and execute atomic multi-ghost credits (jackpots). That RFC needs to specify: the resource type system (how exam tokens relate to other resource types like conference currency); the drain scheduling interface; atomicity guarantees for jackpot distribution; and whether resource balances are observable by other ghosts or only by the holder.
+2. **Dependency: In-World Resource Ledger ([RFC-0023](0023-in-world-resource-ledger.md)).** Now specified as a conserved-resource, double-entry ledger. Remaining exam-specific questions for coordination: what starting `exam-token` balance each member is seeded with and how much total supply the world bag holds (this sets the difficulty of the closed economy); which actor holds the jackpot prize pool (a dedicated bank NPC vs. the world); and whether `exam-token` read visibility should be `group` (members see each other's budgets) or `self`.
 
 3. **Inquisitor and Evaluator role lifecycle.** How long does a role assignment last — for the duration of one exam session, one conference day, or indefinitely until revoked? Can an Inquisitor also be a group participant (i.e., can a ghost hold both roles simultaneously)? What happens to an ongoing session if the Inquisitor ghost goes dormant or is disconnected?
 
