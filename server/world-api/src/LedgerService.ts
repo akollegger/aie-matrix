@@ -6,13 +6,12 @@ import type {
   CostQuote,
   ResourceType,
   Transaction,
-  TransactionId,
 } from "@aie-matrix/shared-types";
 import type {
   LedgerChainTamperedError,
-  LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
+  LedgerMonotonicTradeRejected,
   LedgerPersistenceError,
   LedgerUnknownActor,
   LedgerUnknownResource,
@@ -49,9 +48,9 @@ export interface LedgerServiceOps {
   ): Effect.Effect<
     Transaction,
     | LedgerInsufficientFunds
-    | LedgerConservationViolation
     | LedgerDuplicateTransaction
     | LedgerUnknownResource
+    | LedgerMonotonicTradeRejected
     | LedgerPersistenceError
   >;
 

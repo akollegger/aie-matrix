@@ -43,8 +43,8 @@
   - `commit()` monotonic mint: balance accumulates; `Transfer` from monotonic source accepted
   - `commit()` monotonic transfer: rejected when a ghost attempts to transfer monotonic resource to another actor
 - [x] T008 Extend `server/world-api/src/LedgerServiceInMemory.ts` — add `resourceTypes()` method returning registered types; add session-start seed method that appends a genesis transaction seeding the world bag from a `ResourceType[]` declaration
-- [ ] T009 Add `@aie-matrix/map-gram` parser support for `[resources:Resources | ...]` layer block — parse `(:Resource { id, class, qty, floor, label })` nodes into `ResourceType[]`; update gram AST types as needed
-- [ ] T010 Add `@aie-matrix/map-gram` parser support for `cost` array property on `:GO` rule edges — parse `[{ qty, resource, payee }]` into `ActionCost[]` on the rule edge AST node
+- [x] T009 Add `@aie-matrix/map-gram` parser support for `[resources:Resources | ...]` layer block — parse `(:Resource { id, class, qty, floor, label })` nodes into `ResourceType[]`; update gram AST types as needed
+- [x] T010 Add `@aie-matrix/map-gram` parser support for `cost` array property on `:GO` rule edges — parse `[{ qty, resource, payee }]` into `ActionCost[]` on the rule edge AST node
 
 **Checkpoint**: `pnpm --filter @aie-matrix/server-world-api test` passes. In-memory ledger is fully exercised; map parser handles resource seeds and GO costs.
 
@@ -56,15 +56,15 @@
 
 **Independent Test**: Seed a sandbox map with `gold: 100`. Credit a ghost 20 gold. `inventory` returns `{ gold: 20 }`, world holds `gold: 80`. Cross a costed edge (5 gold). `inventory` returns `{ gold: 15 }`, world holds `gold: 85`. Sum stays 100. Attempt with 3 gold → `INSUFFICIENT_FUNDS`, balance unchanged.
 
-- [ ] T011 [US1] Add `server/world-api/src/LedgerServiceLive.ts` — Neo4j-backed implementation of `LedgerServiceOps`:
+- [x] T011 [US1] Add `server/world-api/src/LedgerServiceLive.ts` — Neo4j-backed implementation of `LedgerServiceOps`:
   - On `init()`: read `LEDGER_HEAD` from `(:LiveSession)` if present; replay `[:NEXT_ENTRY]` chain to rebuild bag cache and idempotency set; if no head, append genesis seed transaction and set `LEDGER_HEAD` + `LEDGER_TIP`
   - On `commit()`: validate (conservation, floor, duplicate, unknown resource) → write `(:LedgerEntry)` node → create `[:NEXT_ENTRY]` from old tip → move `[:LEDGER_TIP]` to new entry (atomic Neo4j transaction) → update in-memory cache; on Neo4j failure roll back cache update and return `PersistenceError`
   - Use `LEDGER_TIP` relationship to read chain tip hash without scanning the full chain
-- [ ] T012 [US1] Wire `LedgerService` Layer into the session startup sequence in `server/world-api/src/index.ts` (or wherever `LiveSessionService` is provided) — provide `LedgerServiceLive` layer; call `LedgerService.init()` after session is established; provide `LedgerServiceInMemory` as a fallback for local dev without Neo4j
-- [ ] T013 [US1] Add `inventory` MCP tool to `server/world-api/src/mcp-server.ts` per `specs/022-in-world-resource-ledger/contracts/ic-mcp-inventory.md` — call `LedgerService.bag(actorId)`; apply `public`/`self` read policy (default `public` for MVP); return `BagResult` as JSON
-- [ ] T014 [US1] Modify `server/world-api/src/movement.ts` — before committing a `GO` action, read cost array from rule edge AST; if costs present: call `LedgerService.quote(actorId, costs)` and include quote in response; apply autonomy-threshold consent (auto-accept below threshold, MCP checkpoint above); on acceptance call `LedgerService.commit(costTransaction)` atomically with the movement; on `InsufficientFunds` deny the `GO` with that error
-- [ ] T015 [US1] Add maps resource seed to `maps/sandbox/sandbox.map.gram` — add `[resources:Resources | (:Resource { id: "gold", class: "conserved", qty: 100, floor: 0, label: "Gold" })]` and a costed `:GO` rule edge example
-- [ ] T016 [US1] Add integration tests in `server/world-api/test/LedgerService.integration.test.ts` — skip when `NEO4J_URI` unset; cover:
+- [x] T012 [US1] Wire `LedgerService` Layer into the session startup sequence in `server/world-api/src/index.ts` (or wherever `LiveSessionService` is provided) — provide `LedgerServiceLive` layer; call `LedgerService.init()` after session is established; provide `LedgerServiceInMemory` as a fallback for local dev without Neo4j
+- [x] T013 [US1] Add `inventory` MCP tool to `server/world-api/src/mcp-server.ts` per `specs/022-in-world-resource-ledger/contracts/ic-mcp-inventory.md` — call `LedgerService.bag(actorId)`; apply `public`/`self` read policy (default `public` for MVP); return `BagResult` as JSON
+- [x] T014 [US1] Modify `server/world-api/src/movement.ts` — before committing a `GO` action, read cost array from rule edge AST; if costs present: call `LedgerService.quote(actorId, costs)` and include quote in response; apply autonomy-threshold consent (auto-accept below threshold, MCP checkpoint above); on acceptance call `LedgerService.commit(costTransaction)` atomically with the movement; on `InsufficientFunds` deny the `GO` with that error
+- [x] T015 [US1] Add maps resource seed to `maps/sandbox/sandbox.map.gram` — add `[resources:Resources | (:Resource { id: "gold", class: "conserved", qty: 100, floor: 0, label: "Gold" })]` and a costed `:GO` rule edge example
+- [x] T016 [US1] Add integration tests in `server/world-api/test/LedgerService.integration.test.ts` — skip when `NEO4J_URI` unset; cover:
   - Genesis seed written and replayed correctly after restart
   - `(:LedgerEntry)` nodes present in Neo4j after commits
   - `LEDGER_HEAD` / `LEDGER_TIP` relationships correct after N appends

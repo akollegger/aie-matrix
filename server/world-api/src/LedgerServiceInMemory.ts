@@ -13,12 +13,9 @@ import type {
 } from "@aie-matrix/shared-types";
 import {
   LedgerChainTamperedError,
-  LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
   LedgerMonotonicTradeRejected,
-  LedgerPersistenceError,
-  LedgerUnknownActor,
   LedgerUnknownResource,
 } from "./ledger-errors.js";
 import { LedgerService } from "./LedgerService.js";
@@ -27,15 +24,13 @@ import { LedgerService } from "./LedgerService.js";
 // Hashing
 // ---------------------------------------------------------------------------
 
-function hashTransaction(tx: Omit<Transaction, "hash">, prevHash: string): string {
-  const body = JSON.stringify({
-    id: tx.id,
-    transfers: tx.transfers,
-    cause: tx.cause,
-    actors: tx.actors,
-    ts: tx.ts,
-    prevHash,
-  }, Object.keys({ id: 1, transfers: 1, cause: 1, actors: 1, ts: 1, prevHash: 1 }).sort());
+type HashableFields = Pick<Transaction, "id" | "transfers" | "cause" | "actors" | "ts">;
+
+function hashTransaction(tx: HashableFields, prevHash: string): string {
+  const body = JSON.stringify(
+    { id: tx.id, transfers: tx.transfers, cause: tx.cause, actors: tx.actors, ts: tx.ts, prevHash },
+    ["actors", "cause", "id", "prevHash", "transfers", "ts"]
+  );
   return createHash("sha256").update(body).digest("hex");
 }
 
@@ -73,13 +68,6 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
     for (const t of transfers) {
       setBalance(t.from, t.resource, balance(t.from, t.resource) - t.qty);
       setBalance(t.to, t.resource, balance(t.to, t.resource) + t.qty);
-    }
-  }
-
-  function revertTransfers(transfers: Transfer[]): void {
-    for (const t of transfers) {
-      setBalance(t.from, t.resource, balance(t.from, t.resource) + t.qty);
-      setBalance(t.to, t.resource, balance(t.to, t.resource) - t.qty);
     }
   }
 

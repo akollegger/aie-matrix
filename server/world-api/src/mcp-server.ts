@@ -47,6 +47,7 @@ import { ItemService, type ItemServiceOps } from "./ItemService.js";
 import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
 import type { WorldCalendarService } from "./calendar/WorldCalendarService.js";
+import { LedgerService } from "./LedgerService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -63,7 +64,8 @@ type ToolServices =
   | ConversationService
   | ItemService
   | RedisGhostStoreService
-  | WorldCalendarService;
+  | WorldCalendarService
+  | LedgerService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -933,13 +935,19 @@ function inventoryEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const itemService = yield* ItemService;
+    const ledgerService = yield* LedgerService;
     const sidecar = itemService.getSidecar();
+    const bagResult = yield* Effect.orElse(
+      ledgerService.bag(ghostId),
+      () => Effect.succeed({ actorId: ghostId, holdings: [] as InventoryResult["holdings"] })
+    );
     return {
       ok: true,
       objects: itemService.getGhostInventory(ghostId).map((itemRef) => ({
         itemRef,
         name: sidecar.get(itemRef)?.name ?? itemRef,
       })),
+      holdings: bagResult.holdings,
     };
   });
 }
