@@ -80,6 +80,13 @@ export {
   LedgerService,
 } from "./LedgerService.js";
 export {
+  ProposalService,
+  ProposalServiceLayer,
+  makeProposalService,
+  makeProposalServiceLayer,
+  PROPOSAL_TTL_MS,
+} from "./ProposalService.js";
+export {
   LedgerServiceInMemoryLayer,
   makeLedgerServiceInMemory,
 } from "./LedgerServiceInMemory.js";

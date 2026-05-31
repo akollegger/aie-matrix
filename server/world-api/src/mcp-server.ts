@@ -49,6 +49,7 @@ import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
 import { WorldCalendarService } from "./calendar/WorldCalendarService.js";
 import { LedgerService } from "./LedgerService.js";
+import { ProposalService } from "./ProposalService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -66,7 +67,8 @@ type ToolServices =
   | ItemService
   | RedisGhostStoreService
   | WorldCalendarService
-  | LedgerService;
+  | LedgerService
+  | ProposalService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -1000,6 +1002,76 @@ function timecheckEffect(
   return Effect.sync(() => ({ now: worldNow(), timezone: WORLD_TIMEZONE }));
 }
 
+// ---------------------------------------------------------------------------
+// Trade tools: offer, request, agree, decline
+// ---------------------------------------------------------------------------
+
+function offerEffect(
+  input: { to: string; give_resource: string; give_qty: number; for_resource: string; for_qty: number },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const result = yield* proposals.propose({
+      initiatorId: ghostId,
+      counterpartyId: input.to,
+      give: { resource: input.give_resource, qty: input.give_qty },
+      want: { resource: input.for_resource, qty: input.for_qty },
+    }).pipe(Effect.mapError(e => new WorldApiMovementBlocked({ message: e.resource + " cannot be traded (monotonic)", code: "INSUFFICIENT_FUNDS" })));
+    return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
+  });
+}
+
+function requestEffect(
+  input: { from: string; want_resource: string; want_qty: number; offering_resource: string; offering_qty: number },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const result = yield* proposals.propose({
+      initiatorId: ghostId,
+      counterpartyId: input.from,
+      give: { resource: input.offering_resource, qty: input.offering_qty },
+      want: { resource: input.want_resource, qty: input.want_qty },
+    }).pipe(Effect.mapError(e => new WorldApiMovementBlocked({ message: e.resource + " cannot be traded (monotonic)", code: "INSUFFICIENT_FUNDS" })));
+    return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
+  });
+}
+
+function agreeEffect(
+  input: { proposalId: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const result = yield* proposals.agree(input.proposalId, ghostId).pipe(
+      Effect.mapError(e => new WorldApiMovementBlocked({ message: e._tag, code: "RULESET_DENY" }))
+    );
+    return { ok: true, proposalId: result.proposalId, status: result.status };
+  });
+}
+
+function declineEffect(
+  input: { proposalId: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId: _ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const result = yield* proposals.decline(input.proposalId, _ghostId).pipe(
+      Effect.mapError(e => new WorldApiMovementBlocked({ message: e._tag, code: "RULESET_DENY" }))
+    );
+    return { ok: true, proposalId: result.proposalId, status: result.status };
+  });
+}
+
 function ledgerVerifyEffect(
   extra: McpToolExtra,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
@@ -1311,6 +1383,74 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     async (extra) => runTool("ledger_verify", {}, ledgerVerifyEffect(extra), extra),
   );
 
+  server.registerTool(
+    "offer",
+    {
+      description: "Propose a resource trade to another ghost. You offer to give one resource in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          to: { type: "string", description: "The ghost ID of the counterparty." },
+          give_resource: { type: "string", description: "The resource you are offering to give." },
+          give_qty: { type: "number", description: "The quantity you are offering to give." },
+          for_resource: { type: "string", description: "The resource you want in return." },
+          for_qty: { type: "number", description: "The quantity you want in return." },
+        },
+        required: ["to", "give_resource", "give_qty", "for_resource", "for_qty"],
+      },
+    },
+    async (input, extra) => runTool("offer", input, offerEffect(input as any, extra), extra),
+  );
+
+  server.registerTool(
+    "request",
+    {
+      description: "Request a resource from another ghost, offering something in return. The same as `offer` but framed from the receiver's perspective. The other ghost must call `agree` to complete the trade.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          from: { type: "string", description: "The ghost ID to request the resource from." },
+          want_resource: { type: "string", description: "The resource you want to receive." },
+          want_qty: { type: "number", description: "The quantity you want to receive." },
+          offering_resource: { type: "string", description: "The resource you are offering in exchange." },
+          offering_qty: { type: "number", description: "The quantity you are offering in exchange." },
+        },
+        required: ["from", "want_resource", "want_qty", "offering_resource", "offering_qty"],
+      },
+    },
+    async (input, extra) => runTool("request", input, requestEffect(input as any, extra), extra),
+  );
+
+  server.registerTool(
+    "agree",
+    {
+      description: "Accept a pending trade proposal. You must be the counterparty — the ghost who initiated the proposal cannot agree to their own offer. Commits both transfers atomically.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          proposalId: { type: "string", description: "The proposal ID returned by `offer` or `request`." },
+        },
+        required: ["proposalId"],
+      },
+    },
+    async (input, extra) => runTool("agree", input, agreeEffect(input as any, extra), extra),
+  );
+
+  server.registerTool(
+    "decline",
+    {
+      description: "Cancel or reject a pending trade proposal. Either the initiator or counterparty may call this. No ledger changes occur.",
+      inputSchema: {
+        type: "object" as const,
+        properties: {
+          proposalId: { type: "string", description: "The proposal ID to cancel." },
+        },
+        required: ["proposalId"],
+      },
+    },
+    async (input, extra) => runTool("decline", input, declineEffect(input as any, extra), extra),
+  );
+
   return server;
 }
 
@@ -1358,6 +1498,7 @@ export function handleGhostMcpEffect(
     const redisGhostStore = yield* RedisGhostStoreService;
     const ledger = yield* LedgerService;
     const calendarSvc = yield* WorldCalendarService;
+    const proposalSvc = yield* ProposalService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -1368,6 +1509,7 @@ export function handleGhostMcpEffect(
       Layer.succeed(RedisGhostStoreService, redisGhostStore),
       Layer.succeed(LedgerService, ledger),
       Layer.succeed(WorldCalendarService, calendarSvc),
+      Layer.succeed(ProposalService, proposalSvc),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
