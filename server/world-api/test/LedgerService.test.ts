@@ -100,6 +100,38 @@ test("commit() DuplicateTransaction: same ULID rejected on second submission", (
 // commit() — UnknownResource
 // ---------------------------------------------------------------------------
 
+test("commit() rejects zero quantity transfer", () => {
+  const svc = makeLedger([GOLD]);
+  const err = Effect.runSync(Effect.flip(
+    svc.commit(tx([transfer("world", "ghost-001", "gold", 0)]))
+  ));
+  assert.equal(err._tag, "LedgerError.ConservationViolation");
+});
+
+test("commit() rejects negative quantity transfer (prevents resource minting exploit)", () => {
+  const svc = makeLedger([GOLD]);
+  const before = Effect.runSync(svc.bag("world")).holdings.find(h => h.resource === "gold")?.qty ?? 0;
+  const err = Effect.runSync(Effect.flip(
+    svc.commit(tx([transfer("world", "ghost-001", "gold", -10)]))
+  ));
+  assert.equal(err._tag, "LedgerError.ConservationViolation");
+  // Balance must be unchanged — no minting occurred
+  const after = Effect.runSync(svc.bag("world")).holdings.find(h => h.resource === "gold")?.qty ?? 0;
+  assert.equal(after, before);
+});
+
+test("hash includes transfer amounts: changing qty produces a different hash", () => {
+  const svc1 = makeLedger([GOLD]) as any;
+  const svc2 = makeLedger([GOLD]) as any;
+  // Commit different amounts to two fresh ledgers
+  Effect.runSync(svc1.commit(tx([transfer("world", "ghost-001", "gold", 10)])));
+  Effect.runSync(svc2.commit(tx([transfer("world", "ghost-001", "gold", 99)])));
+  const log1: any[] = svc1._getLog();
+  const log2: any[] = svc2._getLog();
+  // The last entry (after genesis) should have different hashes
+  assert.notEqual(log1.at(-1).hash, log2.at(-1).hash, "transfers with different qty must produce different hashes");
+});
+
 test("commit() UnknownResource: rejected when resource not registered", () => {
   const svc = makeLedger([GOLD]);
   const err = Effect.runSync(Effect.flip(

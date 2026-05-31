@@ -120,6 +120,23 @@ test("agree() atomically transfers both resources and marks proposal agreed", ()
   assert.equal(bagB.holdings.find(h => h.resource === "gold")?.qty, 10, "ghost-b received 10 gold");
 });
 
+test("agree() rejects when a third party (not initiator or counterparty) tries to agree", () => {
+  const ledger = makeLedger();
+  creditGold(ledger, "ghost-a", 20);
+  creditEnergy(ledger, "ghost-b", 10);
+  const svc = makeProposalService(ledger);
+  const { proposalId } = Effect.runSync(svc.propose({
+    initiatorId: "ghost-a", counterpartyId: "ghost-b",
+    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+  }));
+  // ghost-c is not a party — should be rejected
+  const err = Effect.runSync(Effect.flip(svc.agree(proposalId, "ghost-c")));
+  assert.equal(err._tag, "LedgerError.SelfAgreeDenied");
+  // Balances must be unchanged
+  const bagA = Effect.runSync(ledger.bag("ghost-a"));
+  assert.equal(bagA.holdings.find(h => h.resource === "gold")?.qty, 20, "ghost-a balance unchanged");
+});
+
 test("agree() rejects when caller is the initiator (SelfAgreeDenied)", () => {
   const ledger = makeLedger();
   creditGold(ledger, "ghost-a", 20);
@@ -204,6 +221,22 @@ test("decline() by initiator also works", () => {
   }));
   const result = Effect.runSync(svc.decline(proposalId, "ghost-a"));
   assert.equal(result.status, "declined");
+});
+
+test("decline() rejects when caller is not a party to the proposal", () => {
+  const ledger = makeLedger();
+  creditGold(ledger, "ghost-a", 20);
+  const svc = makeProposalService(ledger);
+  const { proposalId } = Effect.runSync(svc.propose({
+    initiatorId: "ghost-a", counterpartyId: "ghost-b",
+    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+  }));
+  // ghost-c is not a party — should get ProposalNotFound (not revealing the proposal exists)
+  const err = Effect.runSync(Effect.flip(svc.decline(proposalId, "ghost-c")));
+  assert.equal(err._tag, "LedgerError.ProposalNotFound");
+  // Proposal should still be pending
+  const [pending] = Effect.runSync(svc.listFor("ghost-a"));
+  assert.equal(pending?.status, "pending", "proposal should still be pending");
 });
 
 test("decline() on nonexistent proposal returns ProposalNotFound", () => {
