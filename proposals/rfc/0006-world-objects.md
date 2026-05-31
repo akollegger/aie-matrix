@@ -4,7 +4,8 @@
 **Date:** 2026-04-22  
 **Authors:** @akollegger  
 **Related:** [RFC-0002](0002-rule-based-movement.md) (resolves Open Question 3: ghost inventory),
-[IC-005](../specs/001-minimal-poc/contracts/sample-map.md) (map contract)
+[IC-005](../specs/001-minimal-poc/contracts/sample-map.md) (map contract),
+[RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger — supersedes this RFC's deferred persistence; stateless items become quantity-1 conserved resources owned by actor bags)
 
 ## Summary
 
@@ -133,6 +134,8 @@ The tile's `HAS_OBJECT` relationship is removed. The item definition remains
 unchanged in the sidecar; only the world-state relationships mutate.
 
 For the current PoC implementation, these relationships are modeled in-memory by `ItemService` and mirrored to Colyseus. Neo4j persistence is intentionally deferred until a follow-on RFC covers durable object state.
+
+> **Update (RFC-0023, In-World Resource Ledger):** the deferred durable layer is now specified. Under the ledger model, a stateless item is a **quantity-1 conserved resource** owned by an actor's bag. The `HAS_OBJECT` / `CARRIES` relationships above become bag holdings, with one correction: a placed item is owned by the **world** actor (not the tile) and carries a *location attribute*; tiles own nothing. Picking up transfers ownership `world → ghost` and clears the location; dropping transfers `ghost → world` and sets a new location. Item exchange between ghosts is a two-movement ledger transaction. The MCP surface in this RFC (`take`, `drop`, `inventory`, the `objects` field on `look`) remains the ghost-facing interface; the ledger is the durable backing it reads and mutates.
 
 **Multiplicity** is handled naturally by this model. An `itemRef` is a
 reference to a stateless definition, not a unique instance identifier. If three
@@ -289,7 +292,7 @@ With the sandbox map running and a ghost adopted:
 
 ## Open Questions
 
-- Neo4j persistence for object placement is deferred to a follow-on RFC; the current PoC uses in-memory `ItemService` state plus Colyseus broadcast.
+- Neo4j persistence for object placement is deferred to a follow-on RFC; the current PoC uses in-memory `ItemService` state plus Colyseus broadcast. **(Addressed by [RFC-0023](0023-in-world-resource-ledger.md): durable item ownership becomes bag holdings in the resource ledger, with the world owning placed items.)**
 
 ## Alternatives
 
