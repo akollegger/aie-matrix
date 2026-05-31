@@ -77,6 +77,13 @@ export {
   type WorldApiError,
 } from "./world-api-errors.js";
 export {
+  LedgerService,
+} from "./LedgerService.js";
+export {
+  LedgerServiceInMemoryLayer,
+  makeLedgerServiceInMemory,
+} from "./LedgerServiceInMemory.js";
+export {
   LedgerInsufficientFunds,
   LedgerConservationViolation,
   LedgerDuplicateTransaction,

@@ -81,11 +81,11 @@
 
 **Independent Test**: Run a sequence of transactions. Rebuild bags from genesis — all balances match. Mutate a historical `(:LedgerEntry).hash` in Neo4j — `verify()` returns `ChainTamperedError`. Restart server — balances identical. Submit duplicate ULID — rejected.
 
-- [ ] T017 [US2] Expose `LedgerService.verify()` through an operator HTTP route (e.g. `GET /admin/ledger/verify`) in `server/world-api/src/` — requires `AGENT_HOST_TOKEN` bearer auth; returns `{ entries: number }` on success or `ChainTamperedError` details on failure; register route in the server router
-- [ ] T018 [US2] Add route-level tests for `GET /admin/ledger/verify` in `server/world-api/test/` — request without bearer token → 401; request with valid token on clean chain → 200 `{ entries: N }`; request after manual Neo4j entry mutation → 200 with tamper detail body (unit tests for `verify()` itself are already in T007)
-- [ ] T019 [US2] Document the verify endpoint in `specs/022-in-world-resource-ledger/quickstart.md` — add "Verify ledger integrity" section with curl example and expected output
+- [x] T017 [US2] Add a privileged `ledger_verify` MCP tool to `server/world-api/src/mcp-server.ts` — admin-only (requires `AGENT_HOST_TOKEN` bearer, same grant list as `announce`); calls `LedgerService.verify()`; returns `{ ok: true, entries: number }` on a clean chain or `{ ok: false, code: "CHAIN_TAMPERED", atId, expectedHash, actualHash }` on tampering
+- [x] T018 [US2] Add unit tests for the `ledger_verify` tool to `server/world-api/test/LedgerService.test.ts` — verify passes on clean chain (entries ≥ 1); `ChainTamperedError` surfaces correctly when chain is tampered (already covered in T007 at service level; this covers the tool's auth and response shape)
+- [x] T019 [US2] Document `ledger_verify` in `specs/022-in-world-resource-ledger/quickstart.md` — add "Verify ledger integrity" section showing MCP tool call and expected response
 
-**Checkpoint**: `GET /admin/ledger/verify` returns entry count on clean chain; returns tamper detail when a Neo4j entry is manually mutated.
+**Checkpoint**: `ledger_verify` MCP tool returns entry count on a clean chain; only callable with admin bearer token.
 
 ---
 

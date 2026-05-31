@@ -19,6 +19,8 @@ import {
   handleGhostMcpEffect,
   loadMovementRulesFromEnv,
   rulesetFromParsedMap,
+  LedgerService,
+  LedgerServiceInMemoryLayer,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
   makeLocalLiveSessionLayer,
@@ -474,7 +476,8 @@ async function main(): Promise<void> {
     | RedisGhostStoreService
     | MapManagementService
     | LiveSessionService
-    | WorldCalendarService;
+    | WorldCalendarService
+    | LedgerService;
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -491,6 +494,7 @@ async function main(): Promise<void> {
     mapMgmtLayer,
     liveSessionLayer,
     calendarLayer,
+    LedgerServiceInMemoryLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);

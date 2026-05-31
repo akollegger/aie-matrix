@@ -86,6 +86,34 @@ Integration tests additionally cover:
 - Balance survival across server restart (replay-from-genesis)
 - `(:LedgerEntry)` nodes written and read back correctly
 
+## 7. Verify Ledger Integrity (admin MCP tool)
+
+The `ledger_verify` tool is admin-only. Call it via MCP with the `ADMIN_TOKEN` bearer:
+
+```bash
+# Using ghost-cli in admin mode (bearer = ADMIN_TOKEN value from .env)
+pnpm ghost:cli --bearer "$ADMIN_TOKEN"
+> ledger_verify
+```
+
+Expected response on a clean chain:
+```json
+{ "ok": true, "entries": 3 }
+```
+
+Response when tampering is detected:
+```json
+{
+  "ok": false,
+  "code": "CHAIN_TAMPERED",
+  "atId": "01JXYZ...",
+  "expectedHash": "abc123...",
+  "actualHash": "def456..."
+}
+```
+
+Note: calling `ledger_verify` with a ghost token (not admin) returns a `401` auth error.
+
 ## Verification Checklist
 
 - [ ] `inventory` returns correct holdings after a reward transaction

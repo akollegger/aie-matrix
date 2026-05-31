@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CellId } from "@aie-matrix/server-colyseus";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -46,7 +47,7 @@ import { evaluateGo, evaluateTraverse } from "./movement.js";
 import { ItemService, type ItemServiceOps } from "./ItemService.js";
 import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
-import type { WorldCalendarService } from "./calendar/WorldCalendarService.js";
+import { WorldCalendarService } from "./calendar/WorldCalendarService.js";
 import { LedgerService } from "./LedgerService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
@@ -999,6 +1000,23 @@ function timecheckEffect(
   return Effect.sync(() => ({ now: worldNow(), timezone: WORLD_TIMEZONE }));
 }
 
+function ledgerVerifyEffect(
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    if (!extra.authInfo?.scopes?.includes("admin")) {
+      yield* Effect.fail(new AuthMissingCredentials({ message: "ledger_verify requires admin authentication" }));
+    }
+    const ledger = yield* LedgerService;
+    const result = yield* Effect.either(ledger.verify());
+    if (result._tag === "Right") {
+      return { ok: true, entries: result.right.entries };
+    }
+    const err = result.left;
+    return { ok: false, code: "CHAIN_TAMPERED", atId: err.atId, expectedHash: err.expectedHash, actualHash: err.actualHash };
+  });
+}
+
 function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServer {
   const runTool = <A>(
     toolName: string,
@@ -1284,6 +1302,15 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     async (extra) => runTool("timecheck", {}, timecheckEffect(extra), extra),
   );
 
+  server.registerTool(
+    "ledger_verify",
+    {
+      description:
+        "Admin-only. Re-walk the ledger hash chain from genesis and verify every entry. Returns the number of entries on a clean chain, or details of the first tampered entry. Grant list: admin token only.",
+    },
+    async (extra) => runTool("ledger_verify", {}, ledgerVerifyEffect(extra), extra),
+  );
+
   return server;
 }
 
@@ -1291,6 +1318,19 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
  * Stateless Streamable HTTP MCP handler (one `McpServer` instance per request), per SDK guidance.
  * Requires `WorldBridgeService`, `RegistryStoreService`, `MovementRulesService`, and `Neo4jGraphService` in the Effect context (combined server `ManagedRuntime`).
  */
+/** Attempt to authenticate as an admin using ADMIN_TOKEN. Returns admin-scoped authInfo. */
+function tryAdminAuth(req: IncomingMessage): AuthInfo | undefined {
+  const raw = req.headers.authorization;
+  if (!raw?.startsWith("Bearer ")) return undefined;
+  const token = raw.slice("Bearer ".length).trim();
+  const adminToken = process.env.ADMIN_TOKEN;
+  if (!adminToken || !token) return undefined;
+  const supplied = Buffer.from(token);
+  const expected = Buffer.from(adminToken);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return undefined;
+  return { token, clientId: "admin", scopes: ["admin"], extra: { ghostId: "admin", caretakerId: undefined, agentHostId: undefined } };
+}
+
 export function handleGhostMcpEffect(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1305,7 +1345,9 @@ export function handleGhostMcpEffect(
       method: req.method ?? null,
       path: "/mcp",
     });
-    const auth = yield* authenticateGhostRequestEffect(req);
+    // Accept ghost JWT auth OR admin token auth (for privileged admin-only tools).
+    const adminAuth = tryAdminAuth(req);
+    const auth = adminAuth ?? (yield* authenticateGhostRequestEffect(req));
     req.auth = auth;
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
@@ -1314,6 +1356,8 @@ export function handleGhostMcpEffect(
     const conversation = yield* ConversationService;
     const itemService = yield* ItemService;
     const redisGhostStore = yield* RedisGhostStoreService;
+    const ledger = yield* LedgerService;
+    const calendarSvc = yield* WorldCalendarService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -1322,6 +1366,8 @@ export function handleGhostMcpEffect(
       Layer.succeed(ConversationService, conversation),
       Layer.succeed(ItemService, itemService),
       Layer.succeed(RedisGhostStoreService, redisGhostStore),
+      Layer.succeed(LedgerService, ledger),
+      Layer.succeed(WorldCalendarService, calendarSvc),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
