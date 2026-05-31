@@ -9,7 +9,7 @@
 
 ## Summary
 
-Introduce an in-world resource ledger: an append-only, hash-chained, double-entry transaction log that records every movement of every resource between actor-owned "bags," scoped to a single map session. All resources begin in the world bag, seeded by the map definition, and move between bags by transactions — they are never silently created or destroyed (conservation). The ledger is the authoritative source of truth; per-actor bags are materialized caches that can always be rebuilt and validated against the log. This one primitive backs item ownership, action costs, currency, exam token budgets, jackpots, and accumulating rewards like XP and badges.
+Introduce an in-world resource ledger: an append-only, hash-chained, double-entry transaction log that records every movement of every resource between actor-owned "bags," scoped to a single map session. All resources begin in the world bag, seeded by the map definition. Two resource classes are supported: **conserved** resources move between bags and are never silently created or destroyed; **monotonic** resources (XP, badges, certificates) are explicitly minted by authorized mechanics and only accumulate. The ledger is the authoritative source of truth; per-actor bags are materialized caches that can always be rebuilt and validated against the log. This one primitive backs item ownership, action costs, currency, exam token budgets, jackpots, and accumulating rewards like XP and badges.
 
 ---
 
@@ -114,7 +114,7 @@ For AIEWF 2026, the Moscone West map runs as a single long-lived session spannin
 
 ### 5. Consent: Quote → Accept → Receipt
 
-Any action with a cost follows a two-phase protocol at the MCP boundary, riding the existing five-point autonomy scale (`docs/project-overview.md` — *Let it run* → *I'm driving*; the invariant "irreversible actions always checkpoint" already covers the dangerous end):
+Any action with a cost follows a three-step quote/accept/receipt protocol at the MCP boundary, riding the existing five-point autonomy scale (`docs/project-overview.md` — *Let it run* → *I'm driving*; the invariant "irreversible actions always checkpoint" already covers the dangerous end):
 
 1. **Quote** — a costed action discloses its cost before committing. The cost appears in the action's description/response.
 2. **Accept** — confirmation per the ghost's autonomy preference for that transaction kind. A ghost may set preferences from "always ask" to "yolo" (auto-accept) per kind of transaction; below an auto-accept threshold the action proceeds without a checkpoint.
@@ -122,15 +122,15 @@ Any action with a cost follows a two-phase protocol at the MCP boundary, riding 
 
 ### 6. Scheduled Transactions via the World Calendar
 
-Recurring movements — the exam's token drain, periodic upkeep — are **scheduled transactions**, not a bespoke ledger feature. They ride the **World Calendar (RFC-0021)**: a calendar event fires a transaction (`ghost → world`) at its interval. When a drain would reduce a bag below the floor, it clamps and the resulting bag state (balance at floor) is an ordinary post-transaction condition that consuming mechanics (e.g. the exam engine detecting dormancy) read directly. No special "floored" event type is needed.
+Recurring movements — the exam's token drain, periodic upkeep — are **scheduled transactions**, not a bespoke ledger feature. They ride the **World Calendar (RFC-0021)**: a calendar event fires a transaction (`ghost → world`) at its interval. When a drain would reduce a bag below the floor, it clamps to the floor. The ledger emits a standard `ledger.transaction.committed` event for every transaction (including floor-clamped ones); the `newBalance` field in that event payload signals floor-state to consumers. Mechanics that need to react to floor-hit (e.g. the exam engine detecting dormancy) subscribe to that event and check the balance — no special `ledger.balance-floored` event type is needed.
 
 ### 7. Ghost MCP Surface
 
-Ghosts read their own holdings and inspect others where policy allows:
+Ghosts read their own holdings and inspect others where policy allows via the `ledger.balance` MCP tool:
 
 ```
-bag                              → { ok: true, holdings: [ { resource, qty } ] }
-bag { actorId: "ghost-42" }      → subject to read policy
+ledger.balance                              → { ok: true, holdings: [ { resource, qty } ] }
+ledger.balance { actorId: "ghost-42" }      → subject to read policy
 ```
 
 Ghosts **cannot author transactions directly** for arbitrary resources — minting, charging, and jackpots are server-side, authored by game mechanics with authority. Ghost-initiated movements (trades, paying a cost) flow through the **consent protocol** (§5): a two-party trade is a single transaction carrying both actors' acceptance; a costed action carries the acting ghost's acceptance.
@@ -153,8 +153,8 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 |---|---|
 | `server/world-api/src/LedgerService.ts` | Append-only log, hash chaining, single-writer guard, transaction validation (conservation + floors), bag materialization & validation |
 | `server/world-api/src/movement.ts` | Cost evaluation on `:GO` rules; quote/accept/receipt integration into the `go` path |
-| `server/world-api/src/errors.ts` | New `Data.TaggedError` types: `InsufficientFunds`, `ConservationViolation`, `ConsentRequired`, `UnknownResource`. Any that surface through `/mcp` must be added to `errorToResponse()` (`server/src/errors.ts`) under `Match.exhaustive`. |
-| `server/world-api/src/mcp-server.ts` | New `bag` MCP tool; consent fields on costed actions |
+| `server/world-api/src/world-api-errors.ts` | New `Data.TaggedError` types: `InsufficientFunds`, `ConservationViolation`, `ConsentRequired`, `UnknownResource`. Any that surface through `/mcp` must be added to the `HttpMappingError` union in `server/src/errors.ts` and handled in `errorToResponse()` via the `_tag` switch + `assertNever` pattern. |
+| `server/world-api/src/mcp-server.ts` | New `ledger.balance` MCP tool; consent fields on costed actions |
 | `shared/types/` | `Movement`, `Transaction`, `ResourceType`, `BagResult` types |
 | `server/colyseus/` | Subscribes to transaction events; broadcasts bag changes for spectator-visible resources |
 | `maps/<scene>/` | Map definition seeds the world bag; ruleset `.gram` carries `:GO` costs |
@@ -165,9 +165,9 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 
 With a sandbox map seeding `gold: 100` into the world bag and a ruleset `:GO` rule charging 5 gold across one edge, and a ghost adopted:
 
-1. Call `bag` → observe empty holdings.
-2. A server mechanic credits the ghost 20 gold (a `world → ghost` reward transaction). `bag` → `{ gold: 20 }`; the world bag now holds `gold: 80`. **(Conservation: 20 + 80 = 100.)**
-3. `go` across the costed edge. The response carries a **quote** (5 gold). On accept, the move commits and the **receipt** reports `-5 gold`. `bag` → `{ gold: 15 }`; world bag → `gold: 85`.
+1. Call `ledger.balance` → observe empty holdings.
+2. A server mechanic credits the ghost 20 gold (a `world → ghost` reward transaction). `ledger.balance` → `{ gold: 20 }`; the world bag now holds `gold: 80`. **(Conservation: 20 + 80 = 100.)**
+3. `go` across the costed edge. The response carries a **quote** (5 gold). On accept, the move commits and the **receipt** reports `-5 gold`. `ledger.balance` → `{ gold: 15 }`; world bag → `gold: 85`.
 4. Drain the ghost to `gold: 0`, then attempt the costed move → denied with `INSUFFICIENT_FUNDS` (the rule matches; the cost movement breaches the floor).
 5. Re-submit a transaction with an already-seen `id` → rejected as a duplicate (idempotency).
 6. Validate the ghost's bag against the log → matches. Tamper with any historical log entry and re-walk the chain → tampering detected.
