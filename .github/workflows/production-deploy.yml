@@ -265,7 +265,7 @@ jobs:
         run: |
           gcloud compute url-maps invalidate-cdn-cache aie-matrix-frontend \
             --path "/*" \
-            --host play.matrix.relateby.dev \
+            --host matrix.neo4j.gg \
             --async
 
       # ── Verify ────────────────────────────────────────────────────────────

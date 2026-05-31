@@ -13,10 +13,10 @@ defaultService: https://www.googleapis.com/compute/v1/projects/aie-matrix/global
 
 hostRules:
   - hosts:
-      - play.matrix.relateby.dev
+      - matrix.neo4j.gg
     pathMatcher: intermedium-paths
   - hosts:
-      - admin.matrix.relateby.dev
+      - admin.matrix.neo4j.gg
     pathMatcher: admin-paths
 
 pathMatchers:

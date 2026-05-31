@@ -13,7 +13,7 @@ service:
 env:
   NODE_ENV: production
   AGENT_HOST_PORT: "4000"
-  AGENT_HOST_PUBLIC_BASE_URL: "https://matrix.relateby.dev"
+  AGENT_HOST_PUBLIC_BASE_URL: "https://api.matrix.neo4j.gg"
   # Inter-service URLs — use Kubernetes Service DNS within the same namespace
   WORLD_API_URL: "http://server:8787"
   COLYSEUS_URL: "ws://server:8787"
