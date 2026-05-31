@@ -34,7 +34,7 @@ function setRoom(next: Room<WorldSpectatorState> | null) {
   }
 }
 
-/** HTTP base URL for all server endpoints (e.g. https://matrix.relateby.dev). */
+/** HTTP base URL for all server endpoints (e.g. https://api.matrix.neo4j.gg). */
 function getHttpBase(): string {
   return import.meta.env.VITE_API_BASE_URL ?? "";
 }
