@@ -3,211 +3,190 @@
 **Status:** draft  
 **Date:** 2026-05-31  
 **Authors:** @akollegger  
-**Related:** RFC-0006 (World Items — discrete carriable objects, a complementary but separate system), RFC-0018 (RDC Skill Tiers — sketches a per-ghost `rdc-ledger`; this RFC supersedes that sketch with a general implementation), RFC-0022 (Group Exam Eval Protocol — depends on this RFC for token budgets and jackpot distribution)
+**Related:** RFC-0002 (Rule-Based Movement — costs attach to `:GO` rules), RFC-0006 (World Items — discrete carriable objects, unified into the ledger as quantity-1 conserved resources), RFC-0018 (RDC Skill Tiers — sketches a bespoke `rdc-ledger`; this RFC supersedes that sketch), RFC-0021 (World Calendar — scheduled transfers ride the calendar), RFC-0022 (Group Exam Eval Protocol — depends on this RFC for token budgets and jackpot distribution)
 
 ---
 
 ## Summary
 
-Introduce a general-purpose in-world resource ledger that tracks named, fungible resource balances per ghost. Resources are typed quantities — integers or bounded decimals — that can be credited, debited, drained on a schedule, and transferred atomically across multiple ghosts in a single operation. The ledger is the authoritative layer for all "how much does this ghost have of X" questions, covering exam token budgets, conference currency, raffle tickets, skill experience points, and any other quantifiable resource a mechanic requires — without the mechanics needing to own their own storage.
+Introduce an in-world resource ledger: an append-only, hash-chained, double-entry transaction log that records every movement of every resource between actor-owned "bags," scoped to a single map session. All resources begin in the world bag, seeded by the map definition, and move between bags by transactions — they are never silently created or destroyed (conservation). The ledger is the authoritative source of truth; per-actor bags are materialized caches that can always be rebuilt and validated against the log. This one primitive backs item ownership, action costs, currency, exam token budgets, jackpots, and accumulating rewards like XP and badges.
 
 ---
 
 ## Motivation
 
-Several existing and planned mechanics need to track per-ghost quantities:
+Many existing and planned mechanics need to track per-actor quantities and ownership:
 
-- **Exam eval (RFC-0022)** — token budgets that drain over time and are replenished by jackpot distributions across a group.
-- **RDC skill tiers (RFC-0018)** — `handsPlayed` counter and skill tier, sketched as a bespoke `rdc-ledger` package but never specified as a shared primitive.
-- **Leaderboard points** — per-class metrics (steps taken, sessions attended, cards exchanged, quests completed) mentioned in `docs/project-overview.md § Game Mechanics`.
-- **Conference currency** — raffle entries, vendor quest rewards, and collectible prizes imply some notion of earnable, spendable value.
-- **Future mechanics** — bounty hunting (RFC-0016), platform links (RFC-0020), and any vendor-contributed quest can plausibly need to credit or check a ghost's balance of something.
+- **World items (RFC-0006)** — discrete objects placed, picked up, carried, and exchanged. Currently modeled as ad-hoc `HAS_OBJECT`/`CARRIES` relationships with in-memory state and deferred persistence.
+- **Action costs** — "any ghost action may have an associated cost" in time, energy, currency, or another limited resource. There is no system for this today.
+- **Exam eval (RFC-0022)** — token budgets that drain over time and replenish via jackpot distributions across a group.
+- **RDC skill tiers (RFC-0018)** — a `handsPlayed` counter, sketched as a bespoke `rdc-ledger` never specified as a shared primitive.
+- **Leaderboard points, currency, raffle tickets** — earnable, spendable, or accumulating quantities mentioned across `docs/project-overview.md`.
+- **Future earned credentials** — badges and certificates that can only accumulate and can never be traded away.
 
-Without a shared ledger, each mechanic invents its own storage (a Neo4j property here, an in-memory map there) with no consistent API, no atomicity guarantees across mechanics, and no unified observability surface. The ledger solves this once.
-
-The ledger is explicitly **not** an item system. RFC-0006 covers discrete, named world objects that occupy space, can be carried, and are picked up or dropped. The ledger covers fungible quantities — amounts that add and subtract, not things that sit on tiles or move between inventories.
+Without a shared ledger, each mechanic invents its own storage with no consistent API, no atomicity across mechanics, no durability guarantee, and no unified observability. A single double-entry ledger solves this once, and as a bonus its append-only log *is* the time-series event backend that `docs/architecture.md` lists as an open question.
 
 ---
 
 ## Design
 
-### 1. Resource Types
+### 1. Core Model: Bags, Resources, Transactions
 
-A **resource type** is a named, system-wide definition. Types are registered at world-build time (config file or admin API) and are immutable once ghosts hold balances.
+**Actors and bags.** Every identifiable entity that can hold resources is an **actor**, and every actor has exactly one **bag**. The **world** is an actor; ghosts are actors; NPCs are actors. (Future *animate objects* — chests, dispensers — will be actors too, with their own bags and interaction commands; the ledger needs no change to accommodate them.)
+
+Tiles are **not** actors and own nothing. An item resting on a tile is owned by the **world**; its tile location is an *attribute of the holding*, not a claim by the tile. Picking it up transfers ownership `world → ghost` and clears the location; dropping it transfers `ghost → world` and sets a new location.
+
+**Resources** are named, typed quantities tracked in bags. Two classes:
+
+| Class | Semantics | Examples |
+|---|---|---|
+| **Conserved** | Total supply is fixed at seed time. Resources only *move* between bags; never minted or destroyed. A bag cannot go negative because you cannot transfer what you do not hold. | gold, energy, exam-token, raffle-ticket, world items (quantity-1) |
+| **Monotonic** | Minted by authorized mechanics, never moved or destroyed. Accumulate only. Cannot be traded away. | xp, hands-played, badges, certificates |
+
+The conservation invariant applies only to conserved resources: `Σ(all bags' holdings of a conserved resource) == seeded total`, for all time. This makes scarcity real and designed — how much exam-token exists in the world is a deliberate lever, not an accident.
+
+**Transactions.** The ledger's only write is `append(transaction)`. A transaction is an atomic, ordered set of **movements**, each a double-entry transfer:
 
 ```ts
-interface ResourceType {
-  id: string            // e.g. "exam-token", "raffle-ticket", "hands-played"
-  label: string         // display name, e.g. "Exam Token"
-  unit: "integer" | "decimal"
-  min: number           // floor, typically 0
-  max: number | null    // ceiling, null = unbounded
-  visibility: "self" | "group" | "public"
-                        // who can read another ghost's balance
-  decayable: boolean    // whether scheduled drain is permitted for this type
+interface Movement {
+  resource: string        // resource type id
+  qty: number             // integer
+  from: string            // source bag (actor id); for monotonic mint, a designated source
+  to: string              // destination bag (actor id)
+  location?: Location     // optional: set when an item movement establishes a world location
+}
+
+interface Transaction {
+  id: string              // ULID; also the idempotency key
+  movements: Movement[]   // all-or-nothing
+  cause: string           // what authored this (e.g. "go", "exam.jackpot", "trade")
+  actors: string[]        // actors whose consent this transaction carries
+  ts: number              // server timestamp
+  prevHash: string        // hash of the previous transaction (chain link)
+  hash: string            // hash(this transaction body + prevHash)
 }
 ```
 
-Initial resource types for AIEWF 2026:
+Every conserved movement balances (`from` loses exactly what `to` gains). A monotonic mint is represented as a movement whose `from` is the resource's authorized source actor (e.g. the world acting as an XP issuer); it is logged identically but exempt from the conservation check.
 
-| ID | Label | Unit | Min | Max | Visibility | Decayable |
-|---|---|---|---|---|---|---|
-| `exam-token` | Exam Token | integer | 0 | null | group | yes |
-| `raffle-ticket` | Raffle Ticket | integer | 0 | null | public | no |
-| `xp` | Experience | integer | 0 | null | public | no |
-| `hands-played` | Hands Played | integer | 0 | null | public | no |
+There is no `credit`, `debit`, `distribute`, `transfer`, or `drain` as distinct operations — they are all **transactions of one or more movements**:
 
-Additional types can be registered by vendor-contributed mechanics. The type registry is the only point of coupling between the ledger and game content.
+- *reward* — one movement, `world → ghost`
+- *cost* — one movement, `ghost → payee` (payee defaults to `world`)
+- *trade* — two movements, committed atomically, carrying both actors' consent
+- *jackpot* — N movements from a coin-holding actor to each recipient (see §5)
+- *scheduled drain* — a recurring transaction, `ghost → world`, fired by the calendar (§6)
 
-### 2. Balance Model
+### 2. The Log, the Chain, and Bags-as-Caches
 
-Each ghost has at most one balance record per resource type. A balance record is created on first credit; it does not exist until then (no "zero balance for everyone" pre-seeding).
+The ledger is an **append-only log** of transactions, the single source of truth. It is **hash-chained**: each transaction embeds the hash of its predecessor, so any tampering with historical entries is detectable by re-walking the chain. (A merkle structure — enabling light verifiers to prove a single bag's balance without replaying the whole log — is a deliberate future extension; the transaction shape leaves room for it.)
 
-```
-(:Ghost)-[:HAS_BALANCE { amount: Int, resourceTypeId: String }]->(:ResourceBalance)
-```
+**Bags are materialized caches**, not the source of truth. A bag's contents are the fold of all movements touching that actor. Any bag can be rebuilt by replaying the log, and any cached bag can be *validated* against the log on demand. This is the CQRS read-model pattern: the log is the write model; bags are the read model.
 
-Or equivalently as a property map on the relationship if Neo4j traversal performance favors it. The storage shape is an implementation detail; the invariants are:
+**Single writer.** An append-only chain requires exactly one serialization point per session. The world-api process that owns the session (`LIVE_SESSION_ID`) is the sole ledger writer. This is mandatory, not advisory — it constrains the multi-replica deployment story for a session to a single ledger authority.
 
-- `amount >= resourceType.min` always
-- `amount <= resourceType.max` if max is non-null
-- Balance mutations are serialized per ghost per resource type (no lost updates)
+**Durability.** The log is persisted (durable across restarts); bags are rebuilt from it on startup. **Snapshots** (periodic bag checkpoints + log-tail replay, to bound recovery time) are noted as necessary at scale but are **not required for MVP** — MVP replays from genesis.
 
-### 3. Operations
+### 3. Scope: One Ledger per Session
 
-The ledger exposes five operations. All are performed by the ledger service, never directly against Neo4j by callers.
+There is no "conference" concept in the game. The model is **map** (static definition) + **session** (an instance of playing a map). The ledger is scoped to a **single session**: one world bag, one chain, one writer, seeded from that session's map definition.
 
-#### `credit(ghostId, resourceTypeId, amount)`
+For AIEWF 2026, the Moscone West map runs as a single long-lived session spanning the fair's dates, so all resources — including accumulating ones like badges and XP — simply live in that session's ledger for its duration. Cross-session carryover (a ghost replaying a different map) is out of scope.
 
-Add `amount` to the ghost's balance. Creates the balance record if absent. Clamps to `max` if the type has one. Returns the new balance.
+### 4. Action Costs as Rule Properties
 
-#### `debit(ghostId, resourceTypeId, amount)`
-
-Subtract `amount` from the ghost's balance. Fails with `INSUFFICIENT_BALANCE` if `balance - amount < min`. Returns the new balance.
-
-#### `transfer(fromGhostId, toGhostId, resourceTypeId, amount)`
-
-Atomic debit from one ghost, credit to another. Fails atomically — if the debit would violate the floor, neither side changes. Useful for peer-to-peer exchanges (e.g. paying for a quest hint).
-
-#### `distribute(ghostIds[], resourceTypeId, totalAmount)`
-
-Atomic multi-ghost credit: divide `totalAmount` equally across all listed ghost IDs, crediting each ghost `floor(totalAmount / n)`. Any remainder (from integer division) is credited to the first ghost in the list. This is the jackpot operation RFC-0022 depends on. All credits succeed or none do.
-
-#### `balance(ghostId, resourceTypeId)`
-
-Read a ghost's current balance. Returns 0 if no balance record exists (never-credited ghost). Subject to `visibility` rules — callers without permission receive `VISIBILITY_DENIED`.
-
-### 4. Scheduled Drain
-
-For `decayable` resource types, the ledger supports a recurring drain: a periodic debit applied automatically by a background fiber.
-
-```ts
-interface DrainSchedule {
-  ghostId: string
-  resourceTypeId: string
-  amountPerTick: number
-  intervalMs: number
-  // when balance reaches min, drain stops automatically and fires a domain event
-}
-```
-
-Drain schedules are registered and cancelled via the ledger API:
-
-- `scheduleDrain(ghostId, resourceTypeId, amountPerTick, intervalMs)` — idempotent; re-registering replaces the existing schedule for that ghost+type.
-- `cancelDrain(ghostId, resourceTypeId)` — stops the scheduled drain.
-
-When a drain tick would reduce the balance below `min`, it clamps to `min` and fires a `ledger.balance-floored` domain event (ghostId, resourceTypeId, finalBalance). Callers (e.g. the exam engine) subscribe to this event to detect dormancy transitions.
-
-Drain is implemented as a scheduled Effect fiber in `server/world-api`, one fiber per active schedule, scoped to the ghost's session lifetime.
-
-### 5. Domain Events
-
-The ledger emits structured domain events for every mutation, consumed by Colyseus (for spectator broadcast) and the telemetry pipeline:
-
-| Event | Payload |
-|---|---|
-| `ledger.credited` | ghostId, resourceTypeId, delta, newBalance |
-| `ledger.debited` | ghostId, resourceTypeId, delta, newBalance |
-| `ledger.transferred` | fromGhostId, toGhostId, resourceTypeId, amount |
-| `ledger.distributed` | ghostIds[], resourceTypeId, totalAmount, amountEach |
-| `ledger.balance-floored` | ghostId, resourceTypeId, finalBalance |
-| `ledger.drain-scheduled` | ghostId, resourceTypeId, amountPerTick, intervalMs |
-| `ledger.drain-cancelled` | ghostId, resourceTypeId |
-
-Events are emitted on the Effect `PubSub` layer (consistent with the existing `transcript` broadcast pattern).
-
-### 6. Visibility and Ghost MCP Surface
-
-Ghosts can query their own balances via a new MCP tool:
+"Any action may have a cost." Today, **movement is the only rule-checked action**: a `go` is permitted iff the ruleset graph (RFC-0002) contains a matching `(fromClass)-[:GO]->(toClass)` edge. Costs attach to that rule edge.
 
 ```
-ledger.balance { resourceTypeId: "exam-token" }
-→ { ok: true, amount: 450 }
+(red)-[:GO { cost: [ { qty: 5, resource: "gold", payee: "world" },
+                     { qty: 10, resource: "energy", payee: "world" } ] }]->(blue)
 ```
 
-For `public` resources, ghosts can query another ghost's balance:
+- **Costs are a list** — a move may cost several resources at once.
+- **Each cost has a payee** — double-entry requires a destination. A toll names a gatekeeper NPC; ambient cost defaults to `payee: "world"`.
+- **"Can't afford" is a denial reason** — the rule matches, but if any cost movement would breach the floor, the action is denied with `INSUFFICIENT_FUNDS`, alongside the existing `RULESET_DENY`.
+
+**Known limit (not a blocker):** because only `GO` is rule-checked today, costs are movement-only for now. Cost is specified as a property of *any* action rule; extending costs to `take`, NPC commands, or quest turn-ins requires the rule system to first cover those actions. That expansion is future work.
+
+### 5. Consent: Quote → Accept → Receipt
+
+Any action with a cost follows a two-phase protocol at the MCP boundary, riding the existing five-point autonomy scale (`docs/project-overview.md` — *Let it run* → *I'm driving*; the invariant "irreversible actions always checkpoint" already covers the dangerous end):
+
+1. **Quote** — a costed action discloses its cost before committing. The cost appears in the action's description/response.
+2. **Accept** — confirmation per the ghost's autonomy preference for that transaction kind. A ghost may set preferences from "always ask" to "yolo" (auto-accept) per kind of transaction; below an auto-accept threshold the action proceeds without a checkpoint.
+3. **Receipt** — the committed cost is reported in the action's response message.
+
+A jackpot is **not a bag** — it is a *promise of exchange*: a coin-holding actor (an NPC bank, or the world) and a deferred transaction to recipients, triggered by an event. The jackpot transaction draws from that actor's bag and therefore cannot pay out more than the actor holds — conservation stays honest. (RFC-0022's "prize pool" should be modeled this way: a coin-holding actor plus an event-triggered N-movement transaction, not a standing bag.)
+
+### 6. Scheduled Transactions via the World Calendar
+
+Recurring movements — the exam's token drain, periodic upkeep — are **scheduled transactions**, not a bespoke ledger feature. They ride the **World Calendar (RFC-0021)**: a calendar event fires a transaction (`ghost → world`) at its interval. When a drain would reduce a bag below the floor, it clamps and the resulting bag state (balance at floor) is an ordinary post-transaction condition that consuming mechanics (e.g. the exam engine detecting dormancy) read directly. No special "floored" event type is needed.
+
+### 7. Ghost MCP Surface
+
+Ghosts read their own holdings and inspect others where policy allows:
 
 ```
-ledger.balance { ghostId: "ghost-42", resourceTypeId: "raffle-ticket" }
-→ { ok: true, amount: 3 }
+bag                              → { ok: true, holdings: [ { resource, qty } ] }
+bag { actorId: "ghost-42" }      → subject to read policy
 ```
 
-For `group` and `self` visibility types, the query is denied if the requesting ghost is not in the same group or is not the ghost itself.
+Ghosts **cannot author transactions directly** for arbitrary resources — minting, charging, and jackpots are server-side, authored by game mechanics with authority. Ghost-initiated movements (trades, paying a cost) flow through the **consent protocol** (§5): a two-party trade is a single transaction carrying both actors' acceptance; a costed action carries the acting ghost's acceptance.
 
-Ghosts cannot directly call `credit`, `debit`, `distribute`, or `scheduleDrain` — those are server-side operations invoked by game mechanics (exam engine, quest engine, etc.), not by ghost agents.
+Read visibility is governed by a per-resource-type policy (`self` / `group` / `public`). World items and currency are typically `public`; an exam-token budget might be `group`. (Whether finer scopes like `friends` are needed is an open question.)
 
-### 7. Relationship to RFC-0006 World Items
+### 8. Relationship to RFC-0006 World Items
 
-Items (RFC-0006) are discrete, named objects that occupy tiles and ghost inventories. The ledger tracks fungible quantities. The two systems are complementary and do not overlap:
+RFC-0006 items unify into the ledger as **conserved, quantity-1 resources** owned by actor bags, with an optional location attribute when held by the world. This works cleanly **while items remain stateless** — RFC-0006's current design (stateless refs, multiplicity by counting) fits exactly. The ledger supersedes RFC-0006's deferred persistence: `HAS_OBJECT`/`CARRIES` relationships become bag holdings; the world (not the tile) owns placed items.
 
-- A `Brass Key` is a world item — it exists somewhere specific, has identity, and is picked up as a whole.
-- `exam-token: 450` is a ledger balance — it has no location, no identity, and changes by arithmetic.
+Stateful items, and eventually animate objects (chests with their own commands and bags), are later complications layered on the actor model — not changes to the ledger core. We optimize for stateless items now.
 
-Quest mechanics may bridge both: completing a quest (returning a world item to a location) triggers a ledger credit as a reward. That bridge is in the quest engine, not in either primitive.
+### 9. Relationship to RFC-0018 RDC Ledger
 
-### 8. Relationship to RFC-0018 RDC Ledger
+RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **monotonic** resource minted on each hand completion; skill tier remains a value *derived* from that count against RFC-0018's threshold table (computed on read, not stored as a resource — a tier is not independently additive).
 
-RFC-0018 sketches a bespoke `rdc-ledger` package with `handsPlayed + skillTier per ghostId`. This RFC provides the general foundation; the RDC mechanic would use:
-
-- `hands-played` resource type (integer, unbounded, public) — `credit` by 1 per hand completion.
-- Tier promotion is computed client-side from the `hands-played` balance against the threshold table in RFC-0018. The tier itself can be stored as a derived view in Neo4j or computed on read — it is not a ledger resource because it is not independently additive.
-
-The bespoke `rdc-ledger` package described in RFC-0018 should not be built; this ledger serves that need.
-
-### 9. Package Ownership
+### 10. Package Ownership
 
 | Package | Responsibility |
 |---|---|
-| `server/world-api/src/LedgerService.ts` | Core ledger: balance model, operations, drain scheduler fibers |
-| `server/world-api/src/errors.ts` | New tagged errors: `InsufficientBalance`, `VisibilityDenied`, `UnknownResourceType` |
-| `server/world-api/src/mcp-server.ts` | New `ledger.balance` MCP tool |
-| `shared/types/` | `ResourceType`, `BalanceResult`, `LedgerEvent` types |
-| `server/colyseus/` | Subscribes to ledger domain events; broadcasts balance changes for spectator-visible resource types |
+| `server/world-api/src/LedgerService.ts` | Append-only log, hash chaining, single-writer guard, transaction validation (conservation + floors), bag materialization & validation |
+| `server/world-api/src/movement.ts` | Cost evaluation on `:GO` rules; quote/accept/receipt integration into the `go` path |
+| `server/world-api/src/errors.ts` | New tagged errors: `InsufficientFunds`, `ConservationViolation`, `ConsentRequired`, `UnknownResource` |
+| `server/world-api/src/mcp-server.ts` | New `bag` MCP tool; consent fields on costed actions |
+| `shared/types/` | `Movement`, `Transaction`, `ResourceType`, `BagResult` types |
+| `server/colyseus/` | Subscribes to transaction events; broadcasts bag changes for spectator-visible resources |
+| `maps/<scene>/` | Map definition seeds the world bag; ruleset `.gram` carries `:GO` costs |
 
 ---
 
 ## Open Questions
 
-1. **Resource type registration.** Should resource types be declared in a config file (static, loaded at startup), an admin API (dynamic, requires a running server), or both? Config-file registration is simpler and auditable; API registration enables vendor-contributed mechanics to register their own types without a server restart.
+1. **Resource type & seed declaration.** Where are resource types and the world bag's initial seed declared — in the map definition (`.map.gram`), a sidecar, or an admin API? Static map-embedded declaration is auditable and fits the "seeded by the map definition" model; an API enables vendor mechanics to register types at runtime without a restart. Likely map-embedded for MVP.
 
-2. **Drain fiber reliability.** Effect fibers are in-process and lost on server restart. For the exam use case, a server restart during an active exam session would zero out all drain schedules. Options: persist active drain schedules to Neo4j and reload them on startup; accept restarts as resetting drain state (requires the exam engine to re-register drains on reconnect); use a Redis TTL as the drain clock instead of an in-process fiber. Which reliability level is required for AIEWF 2026?
+2. **Hashing & chain detail.** Which hash (SHA-256?), what exactly is included in the hashed body, and is the chain per-session-genesis only or does it anchor to anything external? Enough to be tamper-evident for v1; designed so a merkle layer can be added without reshaping transactions.
 
-3. **Integer vs. decimal resource types.** The current design supports both, but the implementation complexity of `decimal` (precision, rounding rules for `distribute`) may not be worth it for v1. Should `decimal` be deferred and only `integer` implemented initially?
+3. **Read policy granularity.** `self` / `group` / `public` cover the obvious cases. Is `friends` (visible to card-exchanged ghosts) or `team` needed? And does "group" visibility require the ledger to know about group membership (RFC-0022 / the Group Formation RFC), creating a dependency?
 
-4. **Visibility enforcement granularity.** The three visibility levels (`self`, `group`, `public`) cover obvious cases. Is there a need for `friends` (visible to ghosts you've exchanged cards with) or `team` (visible to members of any shared group, not just exam groups)?
+4. **Trade protocol surface.** Two-party trades need an offer/accept handshake. Is that a ledger concern (the ledger exposes a `propose`/`accept` pair that culminates in one transaction) or a higher-level mechanic that calls the ledger only at commit? Leaning higher-level, with the ledger seeing only the final consented transaction.
 
-5. **Ledger history and audit trail.** Should every balance mutation be logged to an append-only event log (useful for post-conference analysis and dispute resolution), or is the current balance sufficient? If logged, is the JSONL-on-disk pattern (consistent with conversation threads) adequate, or does this belong in the time-series backend (open question in `docs/architecture.md`)?
+5. **Cost beyond movement.** Extending costs to non-movement actions requires the rule system (RFC-0002) to cover actions other than `GO`. Is that in scope soon, or do early non-movement costs need a different home (e.g. cost declared on an NPC command rather than a tile-class rule)?
 
-6. **Negative balances.** `min: 0` is the default, but some mechanics (debt, deficit scoring) may want to permit negative balances. Should the `min` floor be per-type only, or should individual ghost balance records be able to override the floor?
+6. **Idempotency window.** Transaction IDs are idempotency keys, but how long must the ledger remember seen IDs to reject duplicates — the whole session, or a bounded window? Whole-session is simplest given the log is durable anyway.
 
-7. **Cross-mechanic resource spending.** If two mechanics both debit the same resource type simultaneously (e.g., exam drain fires at the same moment a quest engine charges a fee), how is contention handled? Neo4j write locks per balance node are likely sufficient, but worth stating explicitly.
+7. **Negative balances for special mechanics.** Conservation forbids negative conserved balances by construction. Do any mechanics legitimately need debt/deficit (a bag allowed below zero)? If so, that resource is effectively monotonic-negative and breaks conservation — probably better modeled as owing a separate resource than as a negative balance.
+
+8. **Snapshot trigger (post-MVP).** When snapshots land, what triggers one — transaction count, wall-clock interval, or session checkpoint — and where are they stored relative to the log?
 
 ---
 
 ## Alternatives
 
-**Per-mechanic storage (status quo).** Each mechanic stores its own resource balances as Neo4j properties or in-memory maps. Simplest to implement incrementally but produces n independent storage shapes, no shared observability, and no atomicity across mechanics. Rejected because it does not scale past two or three mechanics.
+**Mutable balance store (the earlier draft of this RFC).** Per-actor balance rows mutated in place by `credit`/`debit`/`distribute` helpers. Simpler to implement, but no conservation guarantee, no tamper-evidence, no provenance, and no natural durability/replay story. Rejected in favor of the event-sourced log, which gives verifiability, the time-series backend, and conservation for free.
 
-**World items as fungible resources.** Represent tokens, tickets, and XP as carriable items (RFC-0006) with high multiplicity. Rejected because fungible quantities have different semantics (arithmetic, no location, no tile capacity) than discrete objects. Conflating them would break both systems.
+**Per-mechanic storage (status quo).** Each mechanic stores its own quantities (Neo4j properties, in-memory maps). Produces n storage shapes, no atomicity across mechanics, no shared observability. Rejected; does not scale past a couple of mechanics.
 
-**External ledger service.** Use a third-party ledger or accounting service (e.g., a payments API, a blockchain). Rejected for AIEWF 2026 on operational complexity grounds. The ledger described here is simple enough to own in-process.
+**Items as a separate system from resources.** Keep RFC-0006's discrete-object model wholly distinct from fungible quantities. Rejected because stateless items *are* conserved quantity-1 resources; unifying them removes a whole parallel ownership/persistence system. (Stateful/animate items remain a future actor-layer concern either way.)
+
+**Non-conserving faucet/sink economy.** Allow any mechanic to mint or burn conserved resources freely. More flexible, but loses the conservation invariant that makes scarcity meaningful and verification trivial. Rejected for conserved resources; the monotonic class is the sanctioned, explicit exception for accumulating-only quantities.
+
+**External ledger service (payments API, blockchain).** Operationally heavy for a single-session, in-process need. Rejected for AIEWF 2026.
