@@ -126,11 +126,11 @@ Recurring movements — the exam's token drain, periodic upkeep — are **schedu
 
 ### 7. Ghost MCP Surface
 
-Ghosts read their own holdings and inspect others where policy allows via the `ledger.balance` MCP tool:
+Ghosts read their own holdings and inspect others where policy allows via the `inventory` MCP tool. The name is deliberate: `inventory` is actor-facing and implicitly scoped to the calling actor — it returns *what this actor holds*, not a view of the ledger as a whole. (`inventory` would suggest access to the entire session ledger, which is not what a ghost should have.)
 
 ```
-ledger.balance                              → { ok: true, holdings: [ { resource, qty } ] }
-ledger.balance { actorId: "ghost-42" }      → subject to read policy
+inventory                              → { ok: true, holdings: [ { resource, qty } ] }
+inventory { actorId: "ghost-42" }      → subject to read policy
 ```
 
 Ghosts **cannot author transactions directly** for arbitrary resources — minting, charging, and jackpots are server-side, authored by game mechanics with authority. Ghost-initiated movements (trades, paying a cost) flow through the **consent protocol** (§5): a two-party trade is a single transaction carrying both actors' acceptance; a costed action carries the acting ghost's acceptance.
@@ -154,7 +154,7 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 | `server/world-api/src/LedgerService.ts` | Append-only log, hash chaining, single-writer guard, transaction validation (conservation + floors), bag materialization & validation |
 | `server/world-api/src/movement.ts` | Cost evaluation on `:GO` rules; quote/accept/receipt integration into the `go` path |
 | `server/world-api/src/world-api-errors.ts` | New `Data.TaggedError` types: `InsufficientFunds`, `ConservationViolation`, `ConsentRequired`, `UnknownResource`. Any that surface through `/mcp` must be added to the `HttpMappingError` union in `server/src/errors.ts` and handled in `errorToResponse()` via the `_tag` switch + `assertNever` pattern. |
-| `server/world-api/src/mcp-server.ts` | New `ledger.balance` MCP tool; consent fields on costed actions |
+| `server/world-api/src/mcp-server.ts` | New `inventory` MCP tool (actor-scoped view of the calling actor's bag); consent fields on costed actions |
 | `shared/types/` | `Movement`, `Transaction`, `ResourceType`, `BagResult` types |
 | `server/colyseus/` | Subscribes to transaction events; broadcasts bag changes for spectator-visible resources |
 | `maps/<scene>/` | Map definition seeds the world bag; ruleset `.gram` carries `:GO` costs |
@@ -165,9 +165,9 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 
 With a sandbox map seeding `gold: 100` into the world bag and a ruleset `:GO` rule charging 5 gold across one edge, and a ghost adopted:
 
-1. Call `ledger.balance` → observe empty holdings.
-2. A server mechanic credits the ghost 20 gold (a `world → ghost` reward transaction). `ledger.balance` → `{ gold: 20 }`; the world bag now holds `gold: 80`. **(Conservation: 20 + 80 = 100.)**
-3. `go` across the costed edge. The response carries a **quote** (5 gold). On accept, the move commits and the **receipt** reports `-5 gold`. `ledger.balance` → `{ gold: 15 }`; world bag → `gold: 85`.
+1. Call `inventory` → observe empty holdings.
+2. A server mechanic credits the ghost 20 gold (a `world → ghost` reward transaction). `inventory` → `{ gold: 20 }`; the world bag now holds `gold: 80`. **(Conservation: 20 + 80 = 100.)**
+3. `go` across the costed edge. The response carries a **quote** (5 gold). On accept, the move commits and the **receipt** reports `-5 gold`. `inventory` → `{ gold: 15 }`; world bag → `gold: 85`.
 4. Drain the ghost to `gold: 0`, then attempt the costed move → denied with `INSUFFICIENT_FUNDS` (the rule matches; the cost movement breaches the floor).
 5. Re-submit a transaction with an already-seen `id` → rejected as a duplicate (idempotency).
 6. Validate the ghost's bag against the log → matches. Tamper with any historical log entry and re-walk the chain → tampering detected.
