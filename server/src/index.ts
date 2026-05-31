@@ -18,6 +18,11 @@ import {
   getRequestTraceId,
   handleGhostMcpEffect,
   loadMovementRulesFromEnv,
+  rulesetFromParsedMap,
+  LedgerService,
+  LedgerServiceInMemoryLayer,
+  ProposalService,
+  ProposalServiceLayer,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
   makeLocalLiveSessionLayer,
@@ -49,6 +54,7 @@ import {
   type RegistryStoreService,
   type WorldBridgeService,
 } from "@aie-matrix/server-world-api";
+import { parseMapGram } from "@aie-matrix/map-gram";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
 import {
@@ -369,8 +375,25 @@ async function main(): Promise<void> {
   const redisGhostStoreLayer = await makeRedisGhostStoreLayerFromEnv(process.env);
 
   let movementRules;
+  let parsedMapForLedger: Awaited<ReturnType<typeof parseMapGram>> | undefined;
   try {
     movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
+    // Merge rule costs from the map file when one is loaded (costs are declared in the map's
+    // [rules:Rules] block and are not carried by standalone .gram rules files).
+    if (mapPath) {
+      try {
+        const mapText = await readFile(mapPath, "utf8");
+        const parsedMap = await parseMapGram(mapText);
+        parsedMapForLedger = parsedMap;
+        const withCosts = rulesetFromParsedMap(parsedMap);
+        if (withCosts.ruleCosts.size > 0) {
+          movementRules = { ...movementRules, ruleCosts: withCosts.ruleCosts };
+          console.info(`[aie-matrix] Loaded ${withCosts.ruleCosts.size} rule cost(s) from map`);
+        }
+      } catch (e) {
+        console.warn("[aie-matrix] Could not extract rule costs from map file:", e);
+      }
+    }
   } catch (e) {
     console.error("[aie-matrix] Failed to load movement rules (Gram / env):", e);
     process.exit(1);
@@ -457,7 +480,9 @@ async function main(): Promise<void> {
     | RedisGhostStoreService
     | MapManagementService
     | LiveSessionService
-    | WorldCalendarService;
+    | WorldCalendarService
+    | LedgerService
+    | ProposalService;
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -474,9 +499,22 @@ async function main(): Promise<void> {
     mapMgmtLayer,
     liveSessionLayer,
     calendarLayer,
+    LedgerServiceInMemoryLayer,
+    ProposalServiceLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
+
+  // Seed ledger with resource types from the map (MVP: in-memory only; Neo4j wiring requires session-scoped layer, tracked in ADR-0011 follow-up)
+  if (parsedMapForLedger && parsedMapForLedger.resourceTypes.length > 0) {
+    const resourceTypes = parsedMapForLedger.resourceTypes;
+    const initEffect = LedgerService.pipe(
+      Effect.flatMap(svc => svc.init(resourceTypes)),
+      Effect.provide(runtimeLayer as any),
+    ) as unknown as Effect.Effect<void, unknown, never>;
+    await Effect.runPromise(initEffect)
+      .catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  }
 
   // GitOps startup map sync (staging/production only).
   // Auto-publishes every .map.gram baked into the Docker image to GCS+Neo4j if not already present.

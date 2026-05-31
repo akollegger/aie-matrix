@@ -82,7 +82,10 @@ export type DropResult =
 
 export interface InventoryResult {
   ok: true;
+  /** Carried physical items (from ItemService). */
   objects: Array<{ itemRef: string; name: string }>;
+  /** Resource balances from the ledger (gold, XP, etc.). Empty when ledger not initialised. */
+  holdings: Array<{ resource: string; qty: number; label: string }>;
 }
 
 export interface ExitInfo {

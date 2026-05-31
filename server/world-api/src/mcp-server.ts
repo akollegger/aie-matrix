@@ -1,7 +1,9 @@
+import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CellId } from "@aie-matrix/server-colyseus";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+import type { AuthInfo } from "@modelcontextprotocol/sdk/server/auth/types.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { ServerNotification, ServerRequest } from "@modelcontextprotocol/sdk/types.js";
@@ -46,7 +48,9 @@ import { evaluateGo, evaluateTraverse } from "./movement.js";
 import { ItemService, type ItemServiceOps } from "./ItemService.js";
 import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
-import type { WorldCalendarService } from "./calendar/WorldCalendarService.js";
+import { WorldCalendarService } from "./calendar/WorldCalendarService.js";
+import { LedgerService } from "./LedgerService.js";
+import { ProposalService } from "./ProposalService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -63,7 +67,9 @@ type ToolServices =
   | ConversationService
   | ItemService
   | RedisGhostStoreService
-  | WorldCalendarService;
+  | WorldCalendarService
+  | LedgerService
+  | ProposalService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -650,9 +656,12 @@ function goEffect(
     }
     const rules = yield* MovementRulesService;
     const itemService = yield* ItemService;
+    const ledger = yield* LedgerService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
-    const destId = map.cells.get(hereId)?.neighbors[toward];
+    const hereCell = map.cells.get(hereId);
+    const destId = hereCell?.neighbors[toward];
+    const destCell = destId ? map.cells.get(destId) : undefined;
     const destGhostCount = destId ? bridge.listOccupantsOnCell(destId).length : undefined;
     const result = evaluateGo(map, hereId, toward, rules, { ghostLabels: new Set() }, {
       destGhostCount,
@@ -661,11 +670,51 @@ function goEffect(
     if (!result.ok) {
       return yield* Effect.fail(goFailureToWorldApi(hereId, result));
     }
+
+    // Cost enforcement: check for a declared rule cost on this tile-class edge.
+    const costKey = hereCell && destCell
+      ? `${hereCell.tileClass}:${destCell.tileClass}`
+      : undefined;
+    const ruleCost = costKey ? rules.ruleCosts.get(costKey) : undefined;
+    if (ruleCost) {
+      const costs = [{ resource: ruleCost.resource, qty: ruleCost.qty, payee: ruleCost.payee }];
+      // Quote (disclose cost to ghost — auto-accept for MVP; checkpoint logic added post-MVP)
+      const quote = yield* ledger.quote(ghostId, costs).pipe(
+        Effect.mapError((_) =>
+          new WorldApiMovementBlocked({
+            message: `Cannot afford movement cost: ${ruleCost.qty} ${ruleCost.resource}`,
+            code: "INSUFFICIENT_FUNDS",
+          })
+        )
+      );
+      // Commit cost transaction
+      yield* ledger.commit({
+        id: quote.transactionId,
+        transfers: costs.map((c) => ({ resource: c.resource, qty: c.qty, from: ghostId, to: c.payee })),
+        cause: "go",
+        actors: [ghostId],
+        ts: Date.now(),
+      }).pipe(
+        Effect.mapError((err) =>
+          new WorldApiMovementBlocked({
+            message: err._tag === "LedgerError.InsufficientFunds"
+              ? `Cannot afford movement cost: ${ruleCost.qty} ${ruleCost.resource}`
+              : `Movement cost payment failed: ${err._tag}`,
+            code: err._tag === "LedgerError.InsufficientFunds" ? "INSUFFICIENT_FUNDS" : "MOVEMENT_BLOCKED",
+          })
+        )
+      );
+    }
+
     bridge.setGhostCell(ghostId, result.tileId);
     yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: result.tileId, reason: "go" });
     // Persist position to Redis so cross-pod GET /registry/ghosts/:ghostId stays current.
     const redisStore = yield* RedisGhostStoreService;
     yield* redisStore.patch(ghostId, { h3Index: result.tileId }).pipe(Effect.ignore);
+
+    if (ruleCost) {
+      return { ...result, cost: { resource: ruleCost.resource, qty: ruleCost.qty, receipt: "paid" } };
+    }
     return result;
   });
 }
@@ -933,13 +982,19 @@ function inventoryEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const itemService = yield* ItemService;
+    const ledgerService = yield* LedgerService;
     const sidecar = itemService.getSidecar();
+    const bagResult = yield* Effect.orElse(
+      ledgerService.bag(ghostId),
+      () => Effect.succeed({ actorId: ghostId, holdings: [] as InventoryResult["holdings"] })
+    );
     return {
       ok: true,
       objects: itemService.getGhostInventory(ghostId).map((itemRef) => ({
         itemRef,
         name: sidecar.get(itemRef)?.name ?? itemRef,
       })),
+      holdings: bagResult.holdings,
     };
   });
 }
@@ -948,6 +1003,115 @@ function timecheckEffect(
   _extra: McpToolExtra,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
   return Effect.sync(() => ({ now: worldNow(), timezone: WORLD_TIMEZONE }));
+}
+
+// ---------------------------------------------------------------------------
+// Trade tools: offer, request, agree, decline
+// ---------------------------------------------------------------------------
+
+function offerEffect(
+  input: { to: string; give_resource: string; give_qty: number; for_resource: string; for_qty: number },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const bridge = yield* WorldBridgeService;
+    const either = yield* Effect.either(proposals.propose({
+      initiatorId: ghostId,
+      counterpartyId: input.to,
+      give: { resource: input.give_resource, qty: input.give_qty },
+      want: { resource: input.for_resource, qty: input.for_qty },
+    }, (id) => bridge.getGhostCell(id)));
+    if (either._tag === "Left") {
+      const e = either.left;
+      return { ok: false, code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
+        message: e._tag === "LedgerError.CounterpartyNotNearby" ? "Both ghosts must be on the same tile to trade" : `${(e as any).resource ?? "resource"} cannot be traded` };
+    }
+    const result = either.right;
+    return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
+  });
+}
+
+function requestEffect(
+  input: { from: string; want_resource: string; want_qty: number; offering_resource: string; offering_qty: number },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const bridge = yield* WorldBridgeService;
+    const either = yield* Effect.either(proposals.propose({
+      initiatorId: ghostId,
+      counterpartyId: input.from,
+      give: { resource: input.offering_resource, qty: input.offering_qty },
+      want: { resource: input.want_resource, qty: input.want_qty },
+    }, (id) => bridge.getGhostCell(id)));
+    if (either._tag === "Left") {
+      const e = either.left;
+      return { ok: false, code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
+        message: e._tag === "LedgerError.CounterpartyNotNearby" ? "Both ghosts must be on the same tile to trade" : `${(e as any).resource ?? "resource"} cannot be traded` };
+    }
+    const result = either.right;
+    return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
+  });
+}
+
+function agreeEffect(
+  input: { proposalId: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const either = yield* Effect.either(proposals.agree(input.proposalId, ghostId));
+    if (either._tag === "Left") {
+      const e = either.left;
+      const message = e._tag === "LedgerError.SelfAgreeDenied" ? "Only the counterparty can agree to a proposal"
+        : e._tag === "LedgerError.ProposalExpired" ? "This proposal has expired"
+        : e._tag === "LedgerError.ProposalNotFound" ? "Proposal not found"
+        : e._tag === "LedgerError.InsufficientFunds" ? "Insufficient funds for trade"
+        : e._tag;
+      return { ok: false, code: e._tag.replace("LedgerError.", ""), message };
+    }
+    const result = either.right;
+    return { ok: true, proposalId: result.proposalId, status: result.status };
+  });
+}
+
+function declineEffect(
+  input: { proposalId: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId: _ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const proposals = yield* ProposalService;
+    const result = yield* proposals.decline(input.proposalId, _ghostId).pipe(
+      Effect.mapError(e => new WorldApiMovementBlocked({ message: e._tag, code: "RULESET_DENY" }))
+    );
+    return { ok: true, proposalId: result.proposalId, status: result.status };
+  });
+}
+
+function ledgerVerifyEffect(
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    if (!extra.authInfo?.scopes?.includes("admin")) {
+      yield* Effect.fail(new AuthMissingCredentials({ message: "ledger_verify requires admin authentication" }));
+    }
+    const ledger = yield* LedgerService;
+    const result = yield* Effect.either(ledger.verify());
+    if (result._tag === "Right") {
+      return { ok: true, entries: result.right.entries };
+    }
+    const err = result.left;
+    return { ok: false, code: "CHAIN_TAMPERED", atId: err.atId, expectedHash: err.expectedHash, actualHash: err.actualHash };
+  });
 }
 
 function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServer {
@@ -1235,6 +1399,73 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     async (extra) => runTool("timecheck", {}, timecheckEffect(extra), extra),
   );
 
+  server.registerTool(
+    "ledger_verify",
+    {
+      description:
+        "Admin-only. Re-walk the ledger hash chain from genesis and verify every entry. Returns the number of entries on a clean chain, or details of the first tampered entry. Grant list: admin token only.",
+    },
+    async (extra) => runTool("ledger_verify", {}, ledgerVerifyEffect(extra), extra),
+  );
+
+  server.registerTool(
+    "offer",
+    {
+      description: "Propose a resource trade to another ghost. You offer to give one resource in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded. Both ghosts must be on the same tile.",
+      inputSchema: {
+        to: z.string().describe("The ghost ID of the counterparty."),
+        give_resource: z.string().describe("The resource you are offering to give."),
+        give_qty: z.number().int().positive().describe("The quantity you are offering to give."),
+        for_resource: z.string().describe("The resource you want in return."),
+        for_qty: z.number().int().positive().describe("The quantity you want in return."),
+      },
+    },
+    async ({ to, give_resource, give_qty, for_resource, for_qty }, extra) =>
+      runTool("offer", { to, give_resource, give_qty, for_resource, for_qty },
+        offerEffect({ to, give_resource, give_qty, for_resource, for_qty }, extra), extra),
+  );
+
+  server.registerTool(
+    "request",
+    {
+      description: "Request a resource from another ghost, offering something in return. Same as `offer` but framed from the receiver's perspective. Both ghosts must be on the same tile.",
+      inputSchema: {
+        from: z.string().describe("The ghost ID to request the resource from."),
+        want_resource: z.string().describe("The resource you want to receive."),
+        want_qty: z.number().int().positive().describe("The quantity you want to receive."),
+        offering_resource: z.string().describe("The resource you are offering in exchange."),
+        offering_qty: z.number().int().positive().describe("The quantity you are offering in exchange."),
+      },
+    },
+    async ({ from, want_resource, want_qty, offering_resource, offering_qty }, extra) =>
+      runTool("request", { from, want_resource, want_qty, offering_resource, offering_qty },
+        requestEffect({ from, want_resource, want_qty, offering_resource, offering_qty }, extra), extra),
+  );
+
+  server.registerTool(
+    "agree",
+    {
+      description: "Accept a pending trade proposal. You must be the counterparty — the initiator cannot agree to their own offer. Commits both transfers atomically.",
+      inputSchema: {
+        proposalId: z.string().describe("The proposal ID returned by `offer` or `request`."),
+      },
+    },
+    async ({ proposalId }, extra) =>
+      runTool("agree", { proposalId }, agreeEffect({ proposalId }, extra), extra),
+  );
+
+  server.registerTool(
+    "decline",
+    {
+      description: "Cancel or reject a pending trade proposal. Either the initiator or counterparty may call this. No ledger changes occur.",
+      inputSchema: {
+        proposalId: z.string().describe("The proposal ID to cancel."),
+      },
+    },
+    async ({ proposalId }, extra) =>
+      runTool("decline", { proposalId }, declineEffect({ proposalId }, extra), extra),
+  );
+
   return server;
 }
 
@@ -1242,6 +1473,19 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
  * Stateless Streamable HTTP MCP handler (one `McpServer` instance per request), per SDK guidance.
  * Requires `WorldBridgeService`, `RegistryStoreService`, `MovementRulesService`, and `Neo4jGraphService` in the Effect context (combined server `ManagedRuntime`).
  */
+/** Attempt to authenticate as an admin using ADMIN_TOKEN. Returns admin-scoped authInfo. */
+function tryAdminAuth(req: IncomingMessage): AuthInfo | undefined {
+  const raw = req.headers.authorization;
+  if (!raw?.startsWith("Bearer ")) return undefined;
+  const token = raw.slice("Bearer ".length).trim();
+  const adminToken = process.env.ADMIN_TOKEN;
+  if (!adminToken || !token) return undefined;
+  const supplied = Buffer.from(token);
+  const expected = Buffer.from(adminToken);
+  if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) return undefined;
+  return { token, clientId: "admin", scopes: ["admin"], extra: { ghostId: "admin", caretakerId: undefined, agentHostId: undefined } };
+}
+
 export function handleGhostMcpEffect(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1256,7 +1500,9 @@ export function handleGhostMcpEffect(
       method: req.method ?? null,
       path: "/mcp",
     });
-    const auth = yield* authenticateGhostRequestEffect(req);
+    // Accept ghost JWT auth OR admin token auth (for privileged admin-only tools).
+    const adminAuth = tryAdminAuth(req);
+    const auth = adminAuth ?? (yield* authenticateGhostRequestEffect(req));
     req.auth = auth;
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
@@ -1265,6 +1511,9 @@ export function handleGhostMcpEffect(
     const conversation = yield* ConversationService;
     const itemService = yield* ItemService;
     const redisGhostStore = yield* RedisGhostStoreService;
+    const ledger = yield* LedgerService;
+    const calendarSvc = yield* WorldCalendarService;
+    const proposalSvc = yield* ProposalService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -1273,6 +1522,9 @@ export function handleGhostMcpEffect(
       Layer.succeed(ConversationService, conversation),
       Layer.succeed(ItemService, itemService),
       Layer.succeed(RedisGhostStoreService, redisGhostStore),
+      Layer.succeed(LedgerService, ledger),
+      Layer.succeed(WorldCalendarService, calendarSvc),
+      Layer.succeed(ProposalService, proposalSvc),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {

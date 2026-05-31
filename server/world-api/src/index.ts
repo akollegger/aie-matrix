@@ -14,6 +14,7 @@ export {
   makeMovementRulesLayer,
   permissiveRuleset,
   authoredRuleset,
+  rulesetFromParsedMap,
   type ParsedRuleset,
   type RulesMode,
 } from "./rules/movement-rules-service.js";
@@ -75,6 +76,36 @@ export {
   GhostInLimboError,
   type WorldApiError,
 } from "./world-api-errors.js";
+export {
+  LedgerService,
+} from "./LedgerService.js";
+export {
+  ProposalService,
+  ProposalServiceLayer,
+  makeProposalService,
+  makeProposalServiceLayer,
+  PROPOSAL_TTL_MS,
+} from "./ProposalService.js";
+export {
+  LedgerServiceInMemoryLayer,
+  makeLedgerServiceInMemory,
+} from "./LedgerServiceInMemory.js";
+export {
+  LedgerInsufficientFunds,
+  LedgerConservationViolation,
+  LedgerDuplicateTransaction,
+  LedgerUnknownResource,
+  LedgerUnknownActor,
+  LedgerChainTamperedError,
+  LedgerPersistenceError,
+  LedgerConsentRequired,
+  LedgerProposalNotFound,
+  LedgerSelfAgreeDenied,
+  LedgerProposalExpired,
+  LedgerMonotonicTradeRejected,
+  LedgerCounterpartyNotNearby,
+  type LedgerError,
+} from "./ledger-errors.js";
 export {
   GramParseError,
   MapFileReadError,

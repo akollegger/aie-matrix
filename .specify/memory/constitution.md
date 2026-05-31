@@ -61,7 +61,15 @@ artifacts include tool schemas, API specs, message formats, data model docs, and
 TCK expectations. Contract changes MUST identify downstream consumers and update
 their documentation, fixtures, or compatibility checks in the same change.
 
-### V. Contribution Hygiene
+### V. MCP/A2A-First Interfaces
+All domain operations exposed to agents (ghosts, operators, external systems) MUST
+be expressed as MCP tools or A2A message exchanges. Bespoke HTTP endpoints for
+domain operations are prohibited. Infrastructure-only endpoints (health checks,
+map file serving, static assets) are exempt. Privileged operations MUST use
+scoped authentication through the same credential system as all other callers —
+no parallel auth paths (e.g., bare shared-secret headers) for production code.
+
+### VI. Contribution Hygiene
 All work MUST happen on branches, flow through pull requests, and use imperative,
 scoped commit messages with DCO sign-off (`git commit -s`). Repository additions
 MUST stay minimal: new top-level directories require proposal justification, new
@@ -143,4 +151,4 @@ Compliance is checked during proposal review, planning, task generation, and pul
 request review. `AGENTS.md`, `README.md`, and the files under `.specify/templates/`
 are the operational guidance that MUST stay aligned with this constitution.
 
-**Version**: 1.1.0 | **Ratified**: 2026-04-12 | **Last Amended**: 2026-05-24
+**Version**: 1.2.0 | **Ratified**: 2026-04-12 | **Last Amended**: 2026-05-31
