@@ -405,6 +405,9 @@ importers:
 
   server:
     dependencies:
+      '@aie-matrix/map-gram':
+        specifier: workspace:*
+        version: link:../shared/map-gram
       '@aie-matrix/root-env':
         specifier: workspace:*
         version: link:../shared/root-env
