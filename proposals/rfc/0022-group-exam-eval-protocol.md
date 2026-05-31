@@ -162,7 +162,7 @@ After that branch, all Inquisitor logic is **uniform over non-Inquisitor members
 | **Group state** | `(:ExamGroup)` nodes with `HAS_MEMBER` edges; status per edge (`active`, `dormant`, `ejected`). `(:ExamSession)` nodes track per-session state (current question, round, score). Group membership itself is owned by RFC-TBD: Group Formation. |
 | **Evaluator Chat** | A group chat (RFC-TBD) whose membership is restricted to `inquisitor` + `evaluator` role holders. Created when the first Evaluator role is assigned. Messages logged to JSONL for audit. |
 | **Group Exam Chat** | The group's existing group chat (RFC-TBD). The Inquisitor is added as a participant when the first group member enters the Inquisitor Room; removed when the session closes. No new channel is created. |
-| **Leaderboard** | Group scores require a leaderboard subsystem not yet implemented. The exam defines a new `examGroup` scoring dimension; the leaderboard backend — event capture, ranking, and jackpot-trigger logic — is an open dependency (see `docs/architecture.md` § Eval, listed as a contribution area). |
+| **Leaderboard** | Leaderboard ranking is a **read model** derived from exam-score ledger entries — a query over the log, not a separate write system. The exam engine records outcomes (scores, jackpots, dormancy) as ledger transactions; ranking is computed from those entries. A leaderboard UI is a future display concern and is not required for the exam to run. |
 | **Spectator visibility** | Session open/close, questions posed, answer verdicts, score updates, ejection votes, and jackpot awards are Colyseus-broadcast events consumable by Intermedium overlay panels. |
 
 ### 8. Question Bank Seeding
