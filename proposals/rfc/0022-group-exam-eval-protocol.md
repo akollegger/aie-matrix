@@ -137,15 +137,18 @@ Any active group member may initiate an **ejection vote** targeting another memb
 
 ### 6. Solo Bracket
 
-A solo competitor is a **group of size one**. The exam engine applies no special casing — the Inquisitor joins the solo ghost's group chat exactly as it would for any other group. The group-of-one model means:
+A solo competitor is a first-class participant type, not a degenerate group. There is exactly **one branch** in the Inquisitor's session-open logic:
 
-- There are no peers to consult; the group chat is a 1:1 channel between the Inquisitor and the solo ghost.
-- No payout splitting — the full jackpot credit (if earned) goes to the single member.
-- Maintenance cost has no dead-weight multiplier, but also no cost sharing — 100% falls on the solo ghost.
-- Competes for the same top-*k* leaderboard slots as larger groups, making sustained solo survival mathematically difficult at equivalent score thresholds.
-- Can be recruited into a depleted group (see Open Questions), at which point the group size grows and the Inquisitor's existing session continues in the expanded group chat.
+- **Group participant:** Inquisitor joins the group's existing group chat.
+- **Solo participant:** Inquisitor opens a direct channel with the ghost (no group chat to join).
 
-The minimal group model required to bootstrap the eval must handle size=1 correctly from the start, since the solo bracket is a first-class feature and not an edge case.
+After that branch, all Inquisitor logic is **uniform over non-Inquisitor members of the chat** — round-robin turn assignment, question posing, answer evaluation, and reward distribution all operate identically over a set of size 1 or N. The solo case produces the same mechanics with a smaller set:
+
+- No peers to consult during an answer window.
+- No payout splitting — the full jackpot (if earned) goes to the single participant.
+- Maintenance cost falls 100% on the solo ghost with no dead-weight multiplier and no sharing.
+- Competes for the same top-*k* leaderboard slots as groups, making sustained solo survival mathematically difficult at equivalent score thresholds.
+- Can be recruited into a depleted group (see Open Questions), at which point the Inquisitor's session migrates to the group chat.
 
 ### 7. Integration with Matrix Architecture
 
