@@ -24,7 +24,7 @@ export function buildWandererAgentCard(publicBase: string): AgentCard {
       schemaVersion: 1,
       tier: "social",
       ghostClasses: ["any"],
-      requiredTools: ["whereami", "exits", "go", "say"],
+      requiredTools: ["whereami", "exits", "go", "say", "inventory", "offer", "decline"],
       capabilitiesRequired: [],
       memoryKind: "none",
       llmProvider: "none",

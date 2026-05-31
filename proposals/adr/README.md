@@ -54,3 +54,4 @@ What becomes easier or harder as a result of this decision?
 | [ADR-0007](0007-three-tier-deployment.md) | Three-Tier Deployment Strategy | proposed |
 | [ADR-0008](0008-frontend-deployment-access-control.md) | Front-End Deployment and Access Control | proposed |
 | [ADR-0009](0009-first-party-ghost-deployment.md) | First-Party Ghost Deployment for Initial Release | proposed |
+| [ADR-0011](0011-unified-jwt-auth.md) | Unified JWT Authentication with Scoped Credentials | proposed |

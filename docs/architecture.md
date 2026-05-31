@@ -127,7 +127,7 @@ Which models power ghost reasoning, speaker agents, and vendor NPCs? Multiple pr
 **Status: Implemented (ADR-0002, branch 002-effect-ts-transition).** The server uses request-scoped trace IDs propagated via `AsyncLocalStorage` and `FiberRef`, with structured JSON log lines tagged by `kind`, `op`, `traceId`, and entity IDs. Tool choice for downstream analytics, APM, and the eval layer remains open.
 
 ### Time-Series / Event Log Backend
-The Matrix generates continuous streams: ghost movements, card exchanges, checkpoint events, quest completions, session attendance. These need to be captured for leaderboards, eval, and post-conference analysis. Options include ClickHouse, TimescaleDB, structured logs to S3 + query layer, or similar. Open.
+**Resolved by [RFC-0023](../proposals/rfc/0023-in-world-resource-ledger.md) and implemented in [spec 022](../specs/022-in-world-resource-ledger/).** Resource transactions are persisted as an append-only, hash-chained `(:LedgerEntry)` chain in Neo4j, scoped to the active session. Each committed `Transaction` is an event record with timestamp, cause, actor list, and transfer details. The ledger is the primary event log for resource-bearing actions. For high-frequency non-resource events (positions, proximity) the open question of a dedicated append store (ClickHouse, TimescaleDB, S3) remains for future evaluation.
 
 ### Authentication and Identity
 **Operator use case resolved** ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)): operators authenticate to the Admin client via Google Identity-Aware Proxy (IAP) at the load-balancer layer. No application code required; access is managed via IAM bindings.

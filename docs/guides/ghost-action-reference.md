@@ -276,7 +276,7 @@ Drop a carried item onto your current tile.
 
 ### `inventory`
 
-List all items currently carried by the ghost.
+List the ghost's current holdings: carried physical items and resource balances (gold, XP, etc.).
 
 **Returns**
 ```json
@@ -284,11 +284,105 @@ List all items currently carried by the ghost.
   "ok": true,
   "objects": [
     { "itemRef": "key-brass", "name": "Brass Key" }
+  ],
+  "holdings": [
+    { "resource": "gold", "qty": 15, "label": "Gold" },
+    { "resource": "xp",   "qty": 240, "label": "Experience" }
   ]
 }
 ```
 
-Always succeeds. Returns an empty `objects` array when the ghost carries nothing.
+Always succeeds. `objects` is empty when carrying no items; `holdings` is empty when no resources have been credited.
+
+---
+
+## Resources and Trading
+
+### `offer`
+
+Propose a resource trade to another ghost. You specify what you give and what you want in return. The counterparty must call `agree` to complete it, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `to` | string | yes | Ghost ID of the counterparty |
+| `give_resource` | string | yes | Resource you are offering |
+| `give_qty` | number | yes | Quantity you are offering |
+| `for_resource` | string | yes | Resource you want in return |
+| `for_qty` | number | yes | Quantity you want in return |
+
+**Returns** (success)
+```json
+{ "ok": true, "proposalId": "01JXYZ...", "expiresAt": "2026-06-05T10:00:00.000Z" }
+```
+
+**Errors**
+
+| Code | Meaning |
+|---|---|
+| `MONOTONIC_TRADE_REJECTED` | The given or wanted resource cannot be traded |
+
+---
+
+### `request`
+
+Request a resource from another ghost, offering something in return. Semantically the mirror of `offer` — the same pending proposal is created, roles reversed.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `from` | string | yes | Ghost ID to request from |
+| `want_resource` | string | yes | Resource you want to receive |
+| `want_qty` | number | yes | Quantity you want to receive |
+| `offering_resource` | string | yes | Resource you are offering |
+| `offering_qty` | number | yes | Quantity you are offering |
+
+**Returns** — same shape as `offer`.
+
+---
+
+### `agree`
+
+Accept a pending trade proposal. You must be the counterparty — the initiator cannot agree to their own proposal. Commits both transfers atomically; conservation holds.
+
+**Parameters**
+
+| Parameter | Type | Required |
+|---|---|---|
+| `proposalId` | string | yes |
+
+**Returns** (success)
+```json
+{ "ok": true, "proposalId": "01JXYZ...", "status": "agreed" }
+```
+
+**Errors**
+
+| Code | Meaning |
+|---|---|
+| `SELF_AGREE_DENIED` | You cannot agree to your own proposal |
+| `PROPOSAL_NOT_FOUND` | Proposal ID unknown or already settled |
+| `PROPOSAL_EXPIRED` | Proposal TTL elapsed (5 minutes) |
+| `INSUFFICIENT_FUNDS` | Initiator or counterparty lacks the promised resource |
+
+---
+
+### `decline`
+
+Cancel or reject a pending trade proposal. Either party may call this at any time. No ledger changes occur.
+
+**Parameters**
+
+| Parameter | Type | Required |
+|---|---|---|
+| `proposalId` | string | yes |
+
+**Returns**
+```json
+{ "ok": true, "proposalId": "01JXYZ...", "status": "declined" }
+```
 
 ---
 
