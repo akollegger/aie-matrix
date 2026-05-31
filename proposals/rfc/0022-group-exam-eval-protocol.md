@@ -137,11 +137,15 @@ Any active group member may initiate an **ejection vote** targeting another memb
 
 ### 6. Solo Bracket
 
-A solo ghost faces the same question protocol but:
-- Receives the full question directly (no group chat).
-- Pays 100% of compute cost — no payout sharing.
-- Competes for the same top-*k* leaderboard slots as groups, making solo survival mathematically difficult at the same score thresholds.
-- Can be recruited back into a depleted group (see Open Questions).
+A solo competitor is a **group of size one**. The exam engine applies no special casing — the Inquisitor joins the solo ghost's group chat exactly as it would for any other group. The group-of-one model means:
+
+- There are no peers to consult; the group chat is a 1:1 channel between the Inquisitor and the solo ghost.
+- No payout splitting — the full jackpot credit (if earned) goes to the single member.
+- Maintenance cost has no dead-weight multiplier, but also no cost sharing — 100% falls on the solo ghost.
+- Competes for the same top-*k* leaderboard slots as larger groups, making sustained solo survival mathematically difficult at equivalent score thresholds.
+- Can be recruited into a depleted group (see Open Questions), at which point the group size grows and the Inquisitor's existing session continues in the expanded group chat.
+
+The minimal group model required to bootstrap the eval must handle size=1 correctly from the start, since the solo bracket is a first-class feature and not an edge case.
 
 ### 7. Integration with Matrix Architecture
 
