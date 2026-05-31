@@ -40,7 +40,11 @@ function hashTransaction(tx: HashableFields, prevHash: string): string {
 // Live (Neo4j-backed) implementation
 // ---------------------------------------------------------------------------
 
-export function makeLedgerServiceLive(driver: Driver, sessionId: string): LedgerService["Type"] {
+export function makeLedgerServiceLive(
+  driver: Driver,
+  sessionId: string,
+  publish?: (channel: string, event: unknown) => void,
+): LedgerService["Type"] {
   const resourceTypes = new Map<ResourceId, ResourceType>();
   const bags = new Map<ActorId, Map<ResourceId, number>>();
   const seenIds = new Set<string>();
@@ -269,6 +273,34 @@ export function makeLedgerServiceLive(driver: Driver, sessionId: string): Ledger
 
       seenIds.add(full.id);
       tipHash = full.hash;
+
+      // Emit ledger:transaction:committed for Colyseus broadcast (fire-and-forget)
+      if (publish) {
+        const changes = tx.transfers.map(t => ({
+          actorId: t.to,
+          resource: t.resource,
+          newBalance: balance(t.to, t.resource),
+          delta: t.qty,
+        })).concat(
+          tx.transfers.map(t => ({
+            actorId: t.from,
+            resource: t.resource,
+            newBalance: balance(t.from, t.resource),
+            delta: -t.qty,
+          }))
+        );
+        try {
+          publish("ledger:transaction:committed", {
+            type: "ledger:transaction:committed",
+            sessionId,
+            transactionId: full.id,
+            cause: full.cause,
+            ts: full.ts,
+            changes,
+          });
+        } catch { /* publish errors must never break the commit */ }
+      }
+
       return full;
     });
 

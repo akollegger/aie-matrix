@@ -126,13 +126,13 @@
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T023 [P] Update `docs/architecture.md` — mark the *Time-Series / Event Log Backend* open question as resolved: Neo4j `(:LedgerEntry)` chain per RFC-0023 §2
-- [ ] T024 [P] Add `ledger:transaction:committed` Redis pub/sub emit in `server/world-api/src/LedgerServiceLive.ts` after each successful `commit()` — emit event shape per `specs/022-in-world-resource-ledger/contracts/ic-ledger-events.md` (changes array with `actorId`, `resource`, `newBalance`, `delta`); use existing `RedisPublishService`
-- [ ] T025 [P] Add `ledger:transaction:committed` subscriber in `server/colyseus/` — on each event, broadcast `newBalance` for `public`-policy resources to connected spectators via Colyseus state update
-- [ ] T026 [P] Update `docs/guides/ghost-action-reference.md` — extend `inventory` entry to show unified `holdings` + `items` response shape; add entries for `offer`, `request`, `agree`, `decline` (parameters, returns, error codes); per SC-011
-- [ ] T026b [P] Update `server/world-api/README.md` (or package docs) — document `LedgerService`, `ProposalService`, costed GO edges, and local dev quickstart reference
-- [ ] T027 Run full verification checklist from `specs/022-in-world-resource-ledger/quickstart.md` — confirm all items pass; record results
-- [ ] T028 Add commit-latency benchmark to `server/world-api/test/LedgerService.bench.ts` — using Vitest bench, measure `LedgerService.commit()` (in-memory impl) over 1000 sequential commits; assert p95 < 10ms; documents SC-008 baseline (Neo4j-backed p95 tracked separately via integration test timing)
+- [x] T023 [P] Update `docs/architecture.md` — mark the *Time-Series / Event Log Backend* open question as resolved: Neo4j `(:LedgerEntry)` chain per RFC-0023 §2
+- [x] T024 [P] Add `ledger:transaction:committed` Redis pub/sub emit in `server/world-api/src/LedgerServiceLive.ts` after each successful `commit()` — emit event shape per `specs/022-in-world-resource-ledger/contracts/ic-ledger-events.md` (changes array with `actorId`, `resource`, `newBalance`, `delta`); use existing `RedisPublishService`
+- [x] T025 [P] Add `ledger:transaction:committed` subscriber in `server/colyseus/` — on each event, broadcast `newBalance` for `public`-policy resources to connected spectators via Colyseus state update
+- [x] T026 [P] Update `docs/guides/ghost-action-reference.md` — extend `inventory` entry to show unified `holdings` + `items` response shape; add entries for `offer`, `request`, `agree`, `decline` (parameters, returns, error codes); per SC-011
+- [x] T026b [P] Update `server/world-api/README.md` (or package docs) — document `LedgerService`, `ProposalService`, costed GO edges, and local dev quickstart reference
+- [x] T027 Run full verification checklist from `specs/022-in-world-resource-ledger/quickstart.md` — confirm all items pass; record results
+- [x] T028 Add commit-latency benchmark to `server/world-api/test/LedgerService.bench.ts` — using Vitest bench, measure `LedgerService.commit()` (in-memory impl) over 1000 sequential commits; assert p95 < 10ms; documents SC-008 baseline (Neo4j-backed p95 tracked separately via integration test timing)
 
 ---
 
