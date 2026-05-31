@@ -14,6 +14,7 @@ import type {
 } from "@aie-matrix/shared-types";
 import {
   LedgerChainTamperedError,
+  LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
   LedgerMonotonicTradeRejected,
@@ -29,11 +30,21 @@ import { LedgerService } from "./LedgerService.js";
 type HashableFields = Pick<Transaction, "id" | "transfers" | "cause" | "actors" | "ts">;
 
 function hashTransaction(tx: HashableFields, prevHash: string): string {
-  const body = JSON.stringify(
-    { id: tx.id, transfers: tx.transfers, cause: tx.cause, actors: tx.actors, ts: tx.ts, prevHash },
-    ["actors", "cause", "id", "prevHash", "transfers", "ts"]
-  );
-  return createHash("sha256").update(body).digest("hex");
+  const canonical = {
+    actors: [...tx.actors].sort(),
+    cause: tx.cause,
+    id: tx.id,
+    prevHash,
+    transfers: tx.transfers.map(t => ({
+      from: t.from,
+      location: (t as any).location ?? null,
+      qty: t.qty,
+      resource: t.resource,
+      to: t.to,
+    })),
+    ts: tx.ts,
+  };
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -90,14 +101,12 @@ export function makeLedgerServiceLive(
         try {
           const result = await readSession.run(
             `MATCH (s:LiveSession { id: $sessionId })-[:LEDGER_HEAD]->(head:LedgerEntry)
-             MATCH path = (head)-[:NEXT_ENTRY*0..]->(entry:LedgerEntry)
-             WHERE NOT (entry)-[:NEXT_ENTRY]->()
-             WITH head, collect(entry) AS chain
-             UNWIND chain AS e
+             MATCH p = (head)-[:NEXT_ENTRY*0..]->(e:LedgerEntry)
+             WITH e, length(p) AS depth
              RETURN e.id AS id, e.cause AS cause, e.actors AS actors,
                     e.ts AS ts, e.prevHash AS prevHash, e.hash AS hash,
                     e.transfers AS transfersJson
-             ORDER BY e.ts ASC`,
+             ORDER BY depth ASC`,
             { sessionId }
           );
           entries = result.records.map((rec) => ({
@@ -152,41 +161,48 @@ export function makeLedgerServiceLive(
   async function writeEntry(tx: Transaction, prevEntryId: string | null): Promise<void> {
     const writeSession = driver.session({ defaultAccessMode: neo4j.session.WRITE });
     try {
+      // Step 1: Create the new LedgerEntry node
       await writeSession.run(
-        `MATCH (s:LiveSession { id: $sessionId })
-         CREATE (e:LedgerEntry {
+        `CREATE (e:LedgerEntry {
            id: $id, cause: $cause, actors: $actors,
            ts: $ts, prevHash: $prevHash, hash: $hash,
            transfers: $transfersJson
-         })
-         MERGE (s)-[:LEDGER_HEAD]->(e)
-         ON MATCH SET e = e  // no-op if head already exists; real head set below
-         WITH s, e
-         // Set LEDGER_HEAD only if none exists yet
+         })`,
+        {
+          id: tx.id, cause: tx.cause, actors: tx.actors,
+          ts: neo4j.int(tx.ts), prevHash: tx.prevHash, hash: tx.hash,
+          transfersJson: JSON.stringify(tx.transfers),
+        }
+      );
+
+      // Step 2: Wire into the session chain
+      const result2 = await writeSession.run(
+        `MATCH (s:LiveSession { id: $sessionId })
+         MATCH (e:LedgerEntry { id: $entryId })
+         // Set LEDGER_HEAD only if none exists
          FOREACH (_ IN CASE WHEN NOT (s)-[:LEDGER_HEAD]->() THEN [1] ELSE [] END |
            CREATE (s)-[:LEDGER_HEAD]->(e)
          )
          // Move LEDGER_TIP
+         WITH s, e
          OPTIONAL MATCH (s)-[oldTip:LEDGER_TIP]->()
          DELETE oldTip
-         CREATE (s)-[:LEDGER_TIP]->(e)
-         // Chain from previous entry
-         FOREACH (_ IN CASE WHEN $prevId IS NOT NULL THEN [1] ELSE [] END |
-           MATCH (prev:LedgerEntry { id: $prevId })
-           CREATE (prev)-[:NEXT_ENTRY]->(e)
-         )`,
-        {
-          sessionId,
-          id: tx.id,
-          cause: tx.cause,
-          actors: tx.actors,
-          ts: neo4j.int(tx.ts),
-          prevHash: tx.prevHash,
-          hash: tx.hash,
-          transfersJson: JSON.stringify(tx.transfers),
-          prevId: prevEntryId,
-        }
+         CREATE (s)-[:LEDGER_TIP]->(e)`,
+        { sessionId, entryId: tx.id }
       );
+      if (result2.summary.counters.updates().relationshipsCreated === 0) {
+        throw new Error(`LiveSession ${sessionId} not found in Neo4j`);
+      }
+
+      // Step 3: Create NEXT_ENTRY from previous entry (if any)
+      if (prevEntryId !== null) {
+        await writeSession.run(
+          `MATCH (prev:LedgerEntry { id: $prevId })
+           MATCH (e:LedgerEntry { id: $entryId })
+           CREATE (prev)-[:NEXT_ENTRY]->(e)`,
+          { prevId: prevEntryId, entryId: tx.id }
+        );
+      }
     } finally {
       await writeSession.close();
     }
@@ -233,6 +249,17 @@ export function makeLedgerServiceLive(
 
   const commit = (tx: Omit<Transaction, "prevHash" | "hash">) =>
     Effect.gen(function* () {
+      // Validate all transfer quantities are positive
+      for (const t of tx.transfers) {
+        if (!Number.isInteger(t.qty) || t.qty <= 0) {
+          yield* Effect.fail(new LedgerConservationViolation({
+            resource: t.resource,
+            expected: 1,
+            actual: t.qty,
+          }));
+        }
+      }
+
       if (seenIds.has(tx.id))
         yield* Effect.fail(new LedgerDuplicateTransaction({ id: tx.id }));
 

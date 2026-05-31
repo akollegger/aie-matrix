@@ -503,6 +503,14 @@ async function main(): Promise<void> {
 
   const runtime = ManagedRuntime.make(runtimeLayer);
 
+  // Seed ledger with resource types from the map (MVP: in-memory only; Neo4j wiring requires session-scoped layer, tracked in ADR-0011 follow-up)
+  if (parsedMap && parsedMap.resourceTypes.length > 0) {
+    await Effect.runPromise(
+      Effect.flatMap(LedgerService, svc => svc.init(parsedMap.resourceTypes))
+        .pipe(Effect.provide(runtimeLayer))
+    ).catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  }
+
   // GitOps startup map sync (staging/production only).
   // Auto-publishes every .map.gram baked into the Docker image to GCS+Neo4j if not already present.
   // - New map (no Neo4j record) → publish

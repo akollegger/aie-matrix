@@ -13,6 +13,7 @@ import type {
 } from "@aie-matrix/shared-types";
 import {
   LedgerChainTamperedError,
+  LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
   LedgerMonotonicTradeRejected,
@@ -27,11 +28,21 @@ import { LedgerService } from "./LedgerService.js";
 type HashableFields = Pick<Transaction, "id" | "transfers" | "cause" | "actors" | "ts">;
 
 function hashTransaction(tx: HashableFields, prevHash: string): string {
-  const body = JSON.stringify(
-    { id: tx.id, transfers: tx.transfers, cause: tx.cause, actors: tx.actors, ts: tx.ts, prevHash },
-    ["actors", "cause", "id", "prevHash", "transfers", "ts"]
-  );
-  return createHash("sha256").update(body).digest("hex");
+  const canonical = {
+    actors: [...tx.actors].sort(),
+    cause: tx.cause,
+    id: tx.id,
+    prevHash,
+    transfers: tx.transfers.map(t => ({
+      from: t.from,
+      location: (t as any).location ?? null,
+      qty: t.qty,
+      resource: t.resource,
+      to: t.to,
+    })),
+    ts: tx.ts,
+  };
+  return createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
 }
 
 // ---------------------------------------------------------------------------
@@ -80,13 +91,23 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
   // ---------------------------------------------------------------------------
 
   const init = (seed: ResourceType[]) =>
-    Effect.sync(() => {
+    Effect.gen(function* () {
       for (const rt of seed) {
         resourceTypes.set(rt.id, rt);
-        if (rt.class === "conserved" && rt.qty > 0) {
-          setBalance("world", rt.id, rt.qty);
-        }
       }
+
+      const conservedSeed = seed.filter(rt => rt.class === "conserved" && rt.qty > 0);
+      if (conservedSeed.length === 0) return;
+
+      // Append genesis seed transaction so verify() counts it and the chain is valid
+      const genesisTx = {
+        id: ulid(),
+        transfers: conservedSeed.map(rt => ({ resource: rt.id, qty: rt.qty, from: "world.genesis", to: "world" })),
+        cause: "seed",
+        actors: [] as string[],
+        ts: Date.now(),
+      };
+      yield* commit(genesisTx);
     });
 
   // ---------------------------------------------------------------------------
@@ -142,6 +163,17 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
 
   const commit = (tx: Omit<Transaction, "prevHash" | "hash">) =>
     Effect.gen(function* () {
+      // Validate all transfer quantities are positive
+      for (const t of tx.transfers) {
+        if (!Number.isInteger(t.qty) || t.qty <= 0) {
+          yield* Effect.fail(new LedgerConservationViolation({
+            resource: t.resource,
+            expected: 1,
+            actual: t.qty,
+          }));
+        }
+      }
+
       // Idempotency
       if (seenIds.has(tx.id)) {
         yield* Effect.fail(new LedgerDuplicateTransaction({ id: tx.id }));
@@ -166,6 +198,7 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
       for (const t of tx.transfers) {
         const rt = resourceTypes.get(t.resource)!;
         if (rt.class === "monotonic") continue; // issuers are not balance-checked
+        if (t.from.startsWith("world")) continue; // world-authority actors may mint freely
         const current = balance(t.from, t.resource);
         const floor = rt.floor;
         if (current - t.qty < floor) {
@@ -249,6 +282,8 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
     commit,
     verify,
     resourceTypes: resourceTypesOp,
+    // Test-only escape hatch for tamper detection tests
+    _getLog: () => log,
   };
 }
 

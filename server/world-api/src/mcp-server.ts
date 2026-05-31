@@ -697,8 +697,10 @@ function goEffect(
       }).pipe(
         Effect.mapError((err) =>
           new WorldApiMovementBlocked({
-            message: `Movement cost payment failed: ${err._tag}`,
-            code: "INSUFFICIENT_FUNDS",
+            message: err._tag === "LedgerError.InsufficientFunds"
+              ? `Cannot afford movement cost: ${ruleCost.qty} ${ruleCost.resource}`
+              : `Movement cost payment failed: ${err._tag}`,
+            code: err._tag === "LedgerError.InsufficientFunds" ? "INSUFFICIENT_FUNDS" : "MOVEMENT_BLOCKED",
           })
         )
       );
@@ -1022,15 +1024,15 @@ function offerEffect(
       give: { resource: input.give_resource, qty: input.give_qty },
       want: { resource: input.for_resource, qty: input.for_qty },
     }, (id) => bridge.getGhostCell(id)).pipe(
-      Effect.mapError(e =>
-        new WorldApiMovementBlocked({
-          message: e._tag === "LedgerError.CounterpartyNotNearby"
-            ? "Counterparty is not on the same tile"
-            : (e as any).resource + " cannot be traded (monotonic)",
-          code: e._tag === "LedgerError.CounterpartyNotNearby" ? "RULESET_DENY" : "INSUFFICIENT_FUNDS",
-        })
-      )
+      Effect.orElseSucceed((e) => ({
+        ok: false as const,
+        code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
+        message: e._tag === "LedgerError.CounterpartyNotNearby"
+          ? "Both ghosts must be on the same tile to trade"
+          : `${(e as any).resource ?? "resource"} cannot be traded`,
+      }))
     );
+    if (!("proposalId" in result)) return result;
     return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
   });
 }
@@ -1050,15 +1052,15 @@ function requestEffect(
       give: { resource: input.offering_resource, qty: input.offering_qty },
       want: { resource: input.want_resource, qty: input.want_qty },
     }, (id) => bridge.getGhostCell(id)).pipe(
-      Effect.mapError(e =>
-        new WorldApiMovementBlocked({
-          message: e._tag === "LedgerError.CounterpartyNotNearby"
-            ? "Counterparty is not on the same tile"
-            : (e as any).resource + " cannot be traded (monotonic)",
-          code: e._tag === "LedgerError.CounterpartyNotNearby" ? "RULESET_DENY" : "INSUFFICIENT_FUNDS",
-        })
-      )
+      Effect.orElseSucceed((e) => ({
+        ok: false as const,
+        code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
+        message: e._tag === "LedgerError.CounterpartyNotNearby"
+          ? "Both ghosts must be on the same tile to trade"
+          : `${(e as any).resource ?? "resource"} cannot be traded`,
+      }))
     );
+    if (!("proposalId" in result)) return result;
     return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
   });
 }
@@ -1072,8 +1074,19 @@ function agreeEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const proposals = yield* ProposalService;
     const result = yield* proposals.agree(input.proposalId, ghostId).pipe(
-      Effect.mapError(e => new WorldApiMovementBlocked({ message: e._tag, code: "RULESET_DENY" }))
+      Effect.orElseSucceed((e) => ({
+        ok: false as const,
+        code: e._tag.replace("LedgerError.", ""),
+        message: e._tag === "LedgerError.SelfAgreeDenied"
+          ? "Only the counterparty can agree to a proposal"
+          : e._tag === "LedgerError.ProposalExpired"
+          ? "This proposal has expired"
+          : e._tag === "LedgerError.ProposalNotFound"
+          ? "Proposal not found"
+          : e._tag,
+      }))
     );
+    if (!("proposalId" in result)) return result;
     return { ok: true, proposalId: result.proposalId, status: result.status };
   });
 }

@@ -21,7 +21,7 @@ Add a cost to an existing `GO` rule edge:
 
 ```gram
 [rules:Rules |
-  (red)-[:GO { cost: [{ qty: 5, resource: "gold", payee: "world" }] }]->(blue),
+  (red)-[:GO { costResource: "gold", costQty: 5 }]->(blue),
 ]
 ```
 

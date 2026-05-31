@@ -127,25 +127,19 @@ test("verify() passes on untampered chain", () => {
 // ---------------------------------------------------------------------------
 
 test("verify() ChainTamperedError: detected when entry hash mutated", () => {
-  // Access log via a white-box approach: get the internal service and mutate
   const svc = makeLedger([GOLD]) as any;
-
-  // Commit two transactions so the chain has entries to tamper
   Effect.runSync(svc.commit(tx([transfer("world", "ghost-001", "gold", 10)])));
-  Effect.runSync(svc.commit(tx([transfer("world", "ghost-002", "gold", 5)])));
 
-  // Tamper: directly mutate the hash of the first entry in the log
-  const log: any[] = (svc as any)._log ?? [];
-  // Use Effect.runSync(svc.verify()) first to confirm it passes
-  const clean = Effect.runSync(svc.verify());
-  assert.ok(clean.entries >= 2);
+  const log: any[] = svc._getLog();
+  assert.ok(log.length >= 1, "should have at least one entry");
 
-  // We can't directly access the private log from the closure, so test via
-  // a tampered re-implementation — instead, test that a fresh ledger with
-  // a different hash sequence fails to verify by committing entries then
-  // using a second svc that has a corrupted entry injected through commit()
-  // This is an observable behaviour test: we verify the hash function is called.
-  assert.ok(true, "verify() passed on untampered chain — tamper detection confirmed via clean run");
+  // Tamper: change the hash of the last committed entry
+  const lastIdx = log.length - 1;
+  log[lastIdx] = { ...log[lastIdx], hash: "tampered-hash-000" };
+
+  const err = Effect.runSync(Effect.flip(svc.verify()));
+  assert.equal(err._tag, "LedgerError.ChainTampered");
+  assert.ok((err as any).atId, "should report which entry was tampered");
 });
 
 // ---------------------------------------------------------------------------

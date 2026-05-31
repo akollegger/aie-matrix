@@ -153,7 +153,7 @@ export function makeProposalService(
         yield* Effect.fail(new LedgerProposalNotFound({ proposalId }));
         return undefined as never;
       }
-      if (callerId === p.initiatorId) {
+      if (callerId !== p.counterpartyId) {
         yield* Effect.fail(new LedgerSelfAgreeDenied({ proposalId, actorId: callerId }));
         return undefined as never;
       }
@@ -175,10 +175,14 @@ export function makeProposalService(
       return agreed;
     });
 
-  const decline = (proposalId: string, _callerId: ActorId) =>
+  const decline = (proposalId: string, callerId: ActorId) =>
     Effect.gen(function* () {
       const p = proposals.get(proposalId);
       if (!p) {
+        yield* Effect.fail(new LedgerProposalNotFound({ proposalId }));
+        return undefined as never;
+      }
+      if (callerId !== p.initiatorId && callerId !== p.counterpartyId) {
         yield* Effect.fail(new LedgerProposalNotFound({ proposalId }));
         return undefined as never;
       }
