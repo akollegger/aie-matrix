@@ -19,7 +19,8 @@ const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pkgPath = path.join(repoRoot, "package.json");
 
 function run(cmd, { silent = false } = {}) {
-  return execSync(cmd, { cwd: repoRoot, encoding: "utf8", stdio: silent ? "pipe" : "inherit" }).trim();
+  const out = execSync(cmd, { cwd: repoRoot, encoding: "utf8", stdio: silent ? "pipe" : "inherit" });
+  return out ? out.trim() : "";
 }
 
 function ask(question, options) {
