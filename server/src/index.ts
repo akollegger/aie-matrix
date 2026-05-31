@@ -375,6 +375,7 @@ async function main(): Promise<void> {
   const redisGhostStoreLayer = await makeRedisGhostStoreLayerFromEnv(process.env);
 
   let movementRules;
+  let parsedMapForLedger: Awaited<ReturnType<typeof parseMapGram>> | undefined;
   try {
     movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
     // Merge rule costs from the map file when one is loaded (costs are declared in the map's
@@ -383,6 +384,7 @@ async function main(): Promise<void> {
       try {
         const mapText = await readFile(mapPath, "utf8");
         const parsedMap = await parseMapGram(mapText);
+        parsedMapForLedger = parsedMap;
         const withCosts = rulesetFromParsedMap(parsedMap);
         if (withCosts.ruleCosts.size > 0) {
           movementRules = { ...movementRules, ruleCosts: withCosts.ruleCosts };
@@ -504,11 +506,14 @@ async function main(): Promise<void> {
   const runtime = ManagedRuntime.make(runtimeLayer);
 
   // Seed ledger with resource types from the map (MVP: in-memory only; Neo4j wiring requires session-scoped layer, tracked in ADR-0011 follow-up)
-  if (parsedMap && parsedMap.resourceTypes.length > 0) {
-    await Effect.runPromise(
-      Effect.flatMap(LedgerService, svc => svc.init(parsedMap.resourceTypes))
-        .pipe(Effect.provide(runtimeLayer))
-    ).catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  if (parsedMapForLedger && parsedMapForLedger.resourceTypes.length > 0) {
+    const resourceTypes = parsedMapForLedger.resourceTypes;
+    const initEffect = LedgerService.pipe(
+      Effect.flatMap(svc => svc.init(resourceTypes)),
+      Effect.provide(runtimeLayer as any),
+    ) as unknown as Effect.Effect<void, unknown, never>;
+    await Effect.runPromise(initEffect)
+      .catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
   }
 
   // GitOps startup map sync (staging/production only).
