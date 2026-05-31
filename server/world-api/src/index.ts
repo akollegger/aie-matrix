@@ -14,6 +14,7 @@ export {
   makeMovementRulesLayer,
   permissiveRuleset,
   authoredRuleset,
+  rulesetFromParsedMap,
   type ParsedRuleset,
   type RulesMode,
 } from "./rules/movement-rules-service.js";

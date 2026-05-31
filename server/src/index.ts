@@ -18,6 +18,7 @@ import {
   getRequestTraceId,
   handleGhostMcpEffect,
   loadMovementRulesFromEnv,
+  rulesetFromParsedMap,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
   makeLocalLiveSessionLayer,
@@ -49,6 +50,7 @@ import {
   type RegistryStoreService,
   type WorldBridgeService,
 } from "@aie-matrix/server-world-api";
+import { parseMapGram } from "@aie-matrix/map-gram";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
 import {
@@ -371,6 +373,21 @@ async function main(): Promise<void> {
   let movementRules;
   try {
     movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
+    // Merge rule costs from the map file when one is loaded (costs are declared in the map's
+    // [rules:Rules] block and are not carried by standalone .gram rules files).
+    if (mapPath) {
+      try {
+        const mapText = await readFile(mapPath, "utf8");
+        const parsedMap = await parseMapGram(mapText);
+        const withCosts = rulesetFromParsedMap(parsedMap);
+        if (withCosts.ruleCosts.size > 0) {
+          movementRules = { ...movementRules, ruleCosts: withCosts.ruleCosts };
+          console.info(`[aie-matrix] Loaded ${withCosts.ruleCosts.size} rule cost(s) from map`);
+        }
+      } catch (e) {
+        console.warn("[aie-matrix] Could not extract rule costs from map file:", e);
+      }
+    }
   } catch (e) {
     console.error("[aie-matrix] Failed to load movement rules (Gram / env):", e);
     process.exit(1);

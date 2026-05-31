@@ -9,6 +9,8 @@ export type {
   ParsedItemPlacement,
   ParsedPortal,
   ParsedRule,
+  ParsedRuleCost,
+  ParsedResourceType,
   TileTypeDef,
   ItemTypeDef,
 } from "./types.js";

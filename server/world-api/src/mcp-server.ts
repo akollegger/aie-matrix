@@ -652,9 +652,12 @@ function goEffect(
     }
     const rules = yield* MovementRulesService;
     const itemService = yield* ItemService;
+    const ledger = yield* LedgerService;
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
-    const destId = map.cells.get(hereId)?.neighbors[toward];
+    const hereCell = map.cells.get(hereId);
+    const destId = hereCell?.neighbors[toward];
+    const destCell = destId ? map.cells.get(destId) : undefined;
     const destGhostCount = destId ? bridge.listOccupantsOnCell(destId).length : undefined;
     const result = evaluateGo(map, hereId, toward, rules, { ghostLabels: new Set() }, {
       destGhostCount,
@@ -663,11 +666,49 @@ function goEffect(
     if (!result.ok) {
       return yield* Effect.fail(goFailureToWorldApi(hereId, result));
     }
+
+    // Cost enforcement: check for a declared rule cost on this tile-class edge.
+    const costKey = hereCell && destCell
+      ? `${hereCell.tileClass}:${destCell.tileClass}`
+      : undefined;
+    const ruleCost = costKey ? rules.ruleCosts.get(costKey) : undefined;
+    if (ruleCost) {
+      const costs = [{ resource: ruleCost.resource, qty: ruleCost.qty, payee: ruleCost.payee }];
+      // Quote (disclose cost to ghost — auto-accept for MVP; checkpoint logic added post-MVP)
+      const quote = yield* ledger.quote(ghostId, costs).pipe(
+        Effect.mapError((_) =>
+          new WorldApiMovementBlocked({
+            message: `Cannot afford movement cost: ${ruleCost.qty} ${ruleCost.resource}`,
+            code: "INSUFFICIENT_FUNDS",
+          })
+        )
+      );
+      // Commit cost transaction
+      yield* ledger.commit({
+        id: quote.transactionId,
+        transfers: costs.map((c) => ({ resource: c.resource, qty: c.qty, from: ghostId, to: c.payee })),
+        cause: "go",
+        actors: [ghostId],
+        ts: Date.now(),
+      }).pipe(
+        Effect.mapError((err) =>
+          new WorldApiMovementBlocked({
+            message: `Movement cost payment failed: ${err._tag}`,
+            code: "INSUFFICIENT_FUNDS",
+          })
+        )
+      );
+    }
+
     bridge.setGhostCell(ghostId, result.tileId);
     yield* logMcpBridgeOp("setGhostCell", { ghostId, cellId: result.tileId, reason: "go" });
     // Persist position to Redis so cross-pod GET /registry/ghosts/:ghostId stays current.
     const redisStore = yield* RedisGhostStoreService;
     yield* redisStore.patch(ghostId, { h3Index: result.tileId }).pipe(Effect.ignore);
+
+    if (ruleCost) {
+      return { ...result, cost: { resource: ruleCost.resource, qty: ruleCost.qty, receipt: "paid" } };
+    }
     return result;
   });
 }
