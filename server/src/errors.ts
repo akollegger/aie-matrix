@@ -70,6 +70,7 @@ export {
   LedgerSelfAgreeDenied,
   LedgerProposalExpired,
   LedgerMonotonicTradeRejected,
+  LedgerCounterpartyNotNearby,
   type LedgerError,
 } from "@aie-matrix/server-world-api";
 
@@ -381,6 +382,11 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
       return {
         status: 422,
         body: JSON.stringify({ ok: false, code: "MONOTONIC_TRADE_REJECTED", resource: error.resource }),
+      };
+    case "LedgerError.CounterpartyNotNearby":
+      return {
+        status: 422,
+        body: JSON.stringify({ ok: false, code: "COUNTERPARTY_NOT_NEARBY", initiatorId: error.initiatorId, counterpartyId: error.counterpartyId }),
       };
     default: {
       // `HttpMappingError` spans multiple workspace packages; `switch (error._tag)` can leave the

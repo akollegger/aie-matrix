@@ -10,6 +10,7 @@ import { Context, Effect, Layer } from "effect";
 import { ulid } from "ulid";
 import type { ActorId, Proposal, ResourceId } from "@aie-matrix/shared-types";
 import {
+  LedgerCounterpartyNotNearby,
   LedgerInsufficientFunds,
   LedgerMonotonicTradeRejected,
   LedgerProposalExpired,
@@ -27,9 +28,13 @@ export interface ProposeParams {
   want: { resource: ResourceId; qty: number };
 }
 
+/** Lookup function for ghost cell — injected to avoid a hard WorldBridgeService dependency. */
+export type GhostCellLookup = (ghostId: ActorId) => string | undefined;
+
 export interface ProposalServiceOps {
-  /** Create a pending proposal. Returns the proposal ID and expiry timestamp. */
-  propose(params: ProposeParams): Effect.Effect<{ proposalId: string; expiresAt: number }, LedgerMonotonicTradeRejected>;
+  /** Create a pending proposal. Returns the proposal ID and expiry timestamp.
+   *  Pass `getGhostCell` to enforce same-tile proximity; omit to skip the check. */
+  propose(params: ProposeParams, getGhostCell?: GhostCellLookup): Effect.Effect<{ proposalId: string; expiresAt: number }, LedgerMonotonicTradeRejected | LedgerCounterpartyNotNearby>;
 
   /**
    * Accept a pending proposal. Atomically commits the ledger transaction carrying
@@ -64,7 +69,10 @@ export class ProposalService extends Context.Tag("world-api/ProposalService")<
 // In-memory implementation
 // ---------------------------------------------------------------------------
 
-export function makeProposalService(ledger: LedgerService["Type"]): ProposalServiceOps {
+export function makeProposalService(
+  ledger: LedgerService["Type"],
+  defaultCellLookup?: GhostCellLookup,
+): ProposalServiceOps {
   const proposals = new Map<string, Proposal>();
 
   function getActive(proposalId: string): Proposal | undefined {
@@ -78,8 +86,21 @@ export function makeProposalService(ledger: LedgerService["Type"]): ProposalServ
     return p;
   }
 
-  const propose = (params: ProposeParams) =>
+  const propose = (params: ProposeParams, cellLookup?: GhostCellLookup) =>
     Effect.gen(function* () {
+      // Proximity check: both ghosts must be on the same tile.
+      const lookup = cellLookup ?? defaultCellLookup;
+      if (lookup) {
+        const initiatorCell = lookup(params.initiatorId);
+        const counterpartyCell = lookup(params.counterpartyId);
+        if (!initiatorCell || !counterpartyCell || initiatorCell !== counterpartyCell) {
+          yield* Effect.fail(new LedgerCounterpartyNotNearby({
+            initiatorId: params.initiatorId,
+            counterpartyId: params.counterpartyId,
+          }));
+        }
+      }
+
       // Validate: neither resource can be monotonic (checked by trying a quote — any transfer of
       // monotonic from a non-world actor would fail in commit; we pre-validate here for UX)
       const types = yield* ledger.resourceTypes();
@@ -183,6 +204,8 @@ export const makeProposalServiceLayer = (
 ): Layer.Layer<ProposalService> =>
   Layer.succeed(ProposalService, makeProposalService(ledger));
 
-/** Effect Layer that depends on LedgerService — use in the main runtime. */
+/** Effect Layer that depends on LedgerService — use in the main runtime.
+ *  Proximity enforcement is injected later via `makeProposalServiceLayer` once
+ *  the WorldBridgeService instance is available (at MCP request time via offerEffect/requestEffect). */
 export const ProposalServiceLayer: Layer.Layer<ProposalService, never, LedgerService> =
-  Layer.effect(ProposalService, Effect.map(LedgerService, makeProposalService));
+  Layer.effect(ProposalService, Effect.map(LedgerService, (ledger) => makeProposalService(ledger)));

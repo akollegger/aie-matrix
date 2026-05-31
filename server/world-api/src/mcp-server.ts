@@ -1014,12 +1014,22 @@ function offerEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const proposals = yield* ProposalService;
+    const bridge = yield* WorldBridgeService;
     const result = yield* proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.to,
       give: { resource: input.give_resource, qty: input.give_qty },
       want: { resource: input.for_resource, qty: input.for_qty },
-    }).pipe(Effect.mapError(e => new WorldApiMovementBlocked({ message: e.resource + " cannot be traded (monotonic)", code: "INSUFFICIENT_FUNDS" })));
+    }, (id) => bridge.getGhostCell(id)).pipe(
+      Effect.mapError(e =>
+        new WorldApiMovementBlocked({
+          message: e._tag === "LedgerError.CounterpartyNotNearby"
+            ? "Counterparty is not on the same tile"
+            : (e as any).resource + " cannot be traded (monotonic)",
+          code: e._tag === "LedgerError.CounterpartyNotNearby" ? "RULESET_DENY" : "INSUFFICIENT_FUNDS",
+        })
+      )
+    );
     return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
   });
 }
@@ -1032,12 +1042,22 @@ function requestEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const proposals = yield* ProposalService;
+    const bridge = yield* WorldBridgeService;
     const result = yield* proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.from,
       give: { resource: input.offering_resource, qty: input.offering_qty },
       want: { resource: input.want_resource, qty: input.want_qty },
-    }).pipe(Effect.mapError(e => new WorldApiMovementBlocked({ message: e.resource + " cannot be traded (monotonic)", code: "INSUFFICIENT_FUNDS" })));
+    }, (id) => bridge.getGhostCell(id)).pipe(
+      Effect.mapError(e =>
+        new WorldApiMovementBlocked({
+          message: e._tag === "LedgerError.CounterpartyNotNearby"
+            ? "Counterparty is not on the same tile"
+            : (e as any).resource + " cannot be traded (monotonic)",
+          code: e._tag === "LedgerError.CounterpartyNotNearby" ? "RULESET_DENY" : "INSUFFICIENT_FUNDS",
+        })
+      )
+    );
     return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
   });
 }

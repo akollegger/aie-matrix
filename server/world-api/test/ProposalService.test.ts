@@ -62,6 +62,28 @@ test("propose() rejects monotonic give resource", () => {
   assert.equal((err as any).resource, "xp");
 });
 
+test("propose() rejects when counterparty is on a different tile", () => {
+  const ledger = makeLedger();
+  const cellMap = new Map([["ghost-a", "cell-1"], ["ghost-b", "cell-2"]]);
+  const svc = makeProposalService(ledger);
+  const err = Effect.runSync(Effect.flip(svc.propose({
+    initiatorId: "ghost-a", counterpartyId: "ghost-b",
+    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+  }, (id) => cellMap.get(id))));
+  assert.equal(err._tag, "LedgerError.CounterpartyNotNearby");
+});
+
+test("propose() succeeds when both ghosts are on the same tile", () => {
+  const ledger = makeLedger();
+  const cellMap = new Map([["ghost-a", "cell-1"], ["ghost-b", "cell-1"]]);
+  const svc = makeProposalService(ledger);
+  const result = Effect.runSync(svc.propose({
+    initiatorId: "ghost-a", counterpartyId: "ghost-b",
+    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+  }, (id) => cellMap.get(id)));
+  assert.ok(result.proposalId);
+});
+
 test("propose() rejects monotonic want resource", () => {
   const ledger = makeLedger([GOLD, XP]);
   const svc = makeProposalService(ledger);

@@ -103,6 +103,7 @@ export {
   LedgerSelfAgreeDenied,
   LedgerProposalExpired,
   LedgerMonotonicTradeRejected,
+  LedgerCounterpartyNotNearby,
   type LedgerError,
 } from "./ledger-errors.js";
 export {
