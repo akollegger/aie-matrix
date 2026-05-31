@@ -9,6 +9,7 @@ import type {
 } from "@aie-matrix/shared-types";
 import type {
   LedgerChainTamperedError,
+  LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
   LedgerMonotonicTradeRejected,
@@ -48,6 +49,7 @@ export interface LedgerServiceOps {
   ): Effect.Effect<
     Transaction,
     | LedgerInsufficientFunds
+    | LedgerConservationViolation
     | LedgerDuplicateTransaction
     | LedgerUnknownResource
     | LedgerMonotonicTradeRejected

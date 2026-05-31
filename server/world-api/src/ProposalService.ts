@@ -10,6 +10,7 @@ import { Context, Effect, Layer } from "effect";
 import { ulid } from "ulid";
 import type { ActorId, Proposal, ResourceId } from "@aie-matrix/shared-types";
 import {
+  LedgerConservationViolation,
   LedgerCounterpartyNotNearby,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
@@ -55,6 +56,7 @@ export interface ProposalServiceOps {
     | LedgerSelfAgreeDenied
     | LedgerInsufficientFunds
     | LedgerMonotonicTradeRejected
+    | LedgerConservationViolation
     | LedgerDuplicateTransaction
     | LedgerUnknownResource
     | LedgerPersistenceError

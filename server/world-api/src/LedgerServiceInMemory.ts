@@ -107,7 +107,8 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
         actors: [] as string[],
         ts: Date.now(),
       };
-      yield* commit(genesisTx);
+      // Genesis commit must never fail — if it does, it's a programming error
+      yield* commit(genesisTx).pipe(Effect.orDie);
     });
 
   // ---------------------------------------------------------------------------
@@ -275,7 +276,7 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
 
   const resourceTypesOp = () => Effect.sync(() => Array.from(resourceTypes.values()));
 
-  return {
+  const ops: LedgerService["Type"] & { _getLog: () => typeof log } = {
     init,
     bag,
     quote,
@@ -285,6 +286,7 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
     // Test-only escape hatch for tamper detection tests
     _getLog: () => log,
   };
+  return ops;
 }
 
 export const LedgerServiceInMemoryLayer: Layer.Layer<LedgerService> = Layer.succeed(

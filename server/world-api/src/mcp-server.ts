@@ -1018,21 +1018,18 @@ function offerEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const proposals = yield* ProposalService;
     const bridge = yield* WorldBridgeService;
-    const result = yield* proposals.propose({
+    const either = yield* Effect.either(proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.to,
       give: { resource: input.give_resource, qty: input.give_qty },
       want: { resource: input.for_resource, qty: input.for_qty },
-    }, (id) => bridge.getGhostCell(id)).pipe(
-      Effect.orElseSucceed((e) => ({
-        ok: false as const,
-        code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
-        message: e._tag === "LedgerError.CounterpartyNotNearby"
-          ? "Both ghosts must be on the same tile to trade"
-          : `${(e as any).resource ?? "resource"} cannot be traded`,
-      }))
-    );
-    if (!("proposalId" in result)) return result;
+    }, (id) => bridge.getGhostCell(id)));
+    if (either._tag === "Left") {
+      const e = either.left;
+      return { ok: false, code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
+        message: e._tag === "LedgerError.CounterpartyNotNearby" ? "Both ghosts must be on the same tile to trade" : `${(e as any).resource ?? "resource"} cannot be traded` };
+    }
+    const result = either.right;
     return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
   });
 }
@@ -1046,21 +1043,18 @@ function requestEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const proposals = yield* ProposalService;
     const bridge = yield* WorldBridgeService;
-    const result = yield* proposals.propose({
+    const either = yield* Effect.either(proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.from,
       give: { resource: input.offering_resource, qty: input.offering_qty },
       want: { resource: input.want_resource, qty: input.want_qty },
-    }, (id) => bridge.getGhostCell(id)).pipe(
-      Effect.orElseSucceed((e) => ({
-        ok: false as const,
-        code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
-        message: e._tag === "LedgerError.CounterpartyNotNearby"
-          ? "Both ghosts must be on the same tile to trade"
-          : `${(e as any).resource ?? "resource"} cannot be traded`,
-      }))
-    );
-    if (!("proposalId" in result)) return result;
+    }, (id) => bridge.getGhostCell(id)));
+    if (either._tag === "Left") {
+      const e = either.left;
+      return { ok: false, code: e._tag === "LedgerError.CounterpartyNotNearby" ? "COUNTERPARTY_NOT_NEARBY" : "MONOTONIC_TRADE_REJECTED",
+        message: e._tag === "LedgerError.CounterpartyNotNearby" ? "Both ghosts must be on the same tile to trade" : `${(e as any).resource ?? "resource"} cannot be traded` };
+    }
+    const result = either.right;
     return { ok: true, proposalId: result.proposalId, expiresAt: new Date(result.expiresAt).toISOString() };
   });
 }
@@ -1073,20 +1067,17 @@ function agreeEffect(
     yield* requireAuthExtra(extra);
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const proposals = yield* ProposalService;
-    const result = yield* proposals.agree(input.proposalId, ghostId).pipe(
-      Effect.orElseSucceed((e) => ({
-        ok: false as const,
-        code: e._tag.replace("LedgerError.", ""),
-        message: e._tag === "LedgerError.SelfAgreeDenied"
-          ? "Only the counterparty can agree to a proposal"
-          : e._tag === "LedgerError.ProposalExpired"
-          ? "This proposal has expired"
-          : e._tag === "LedgerError.ProposalNotFound"
-          ? "Proposal not found"
-          : e._tag,
-      }))
-    );
-    if (!("proposalId" in result)) return result;
+    const either = yield* Effect.either(proposals.agree(input.proposalId, ghostId));
+    if (either._tag === "Left") {
+      const e = either.left;
+      const message = e._tag === "LedgerError.SelfAgreeDenied" ? "Only the counterparty can agree to a proposal"
+        : e._tag === "LedgerError.ProposalExpired" ? "This proposal has expired"
+        : e._tag === "LedgerError.ProposalNotFound" ? "Proposal not found"
+        : e._tag === "LedgerError.InsufficientFunds" ? "Insufficient funds for trade"
+        : e._tag;
+      return { ok: false, code: e._tag.replace("LedgerError.", ""), message };
+    }
+    const result = either.right;
     return { ok: true, proposalId: result.proposalId, status: result.status };
   });
 }
