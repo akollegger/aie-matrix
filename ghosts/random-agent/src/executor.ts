@@ -99,17 +99,17 @@ async function startMovementFromSpawn(
 
     // 10% chance: check inventory
     if (roll < 0.10) {
-      await mcp.callTool(“inventory”, {}).catch(() => {});
+      await mcp.callTool("inventory", {}).catch(() => {});
       return;
     }
 
     // 10% chance: offer a trade to a co-occupant if any
     if (roll < 0.20 && occupants.length > 0) {
       const target = occupants[Math.floor(Math.random() * occupants.length)]!;
-      const result = await mcp.callTool(“offer”, {
+      const result = await mcp.callTool("offer", {
         to: target,
-        give_resource: “gold”, give_qty: 1,
-        for_resource: “gold”,  for_qty: 1,
+        give_resource: "gold", give_qty: 1,
+        for_resource: "gold",  for_qty: 1,
       }).catch(() => null) as { proposalId?: string } | null;
       if (result?.proposalId) pendingProposals.push(result.proposalId);
       return;
@@ -118,7 +118,7 @@ async function startMovementFromSpawn(
     // 5% chance: decline a pending proposal
     if (roll < 0.25 && pendingProposals.length > 0) {
       const proposalId = pendingProposals.splice(Math.floor(Math.random() * pendingProposals.length), 1)[0]!;
-      await mcp.callTool(“decline”, { proposalId }).catch(() => {});
+      await mcp.callTool("decline", { proposalId }).catch(() => {});
       return;
     }
 
@@ -126,30 +126,30 @@ async function startMovementFromSpawn(
     if (exits.length === 0) return;
     const pick = exits[Math.floor(Math.random() * exits.length)]!;
     const toward = pick.toward;
-    if (typeof toward === “string” && toward.length > 0) {
-      const r = await mcp.callTool(“go”, { toward }).catch((e: unknown) => {
+    if (typeof toward === "string" && toward.length > 0) {
+      const r = await mcp.callTool("go", { toward }).catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
         console.info(JSON.stringify({
-          kind: “random-agent.movement.go-rejected”, ghostId, toward,
-          message: msg.length > 200 ? `${msg.slice(0, 197)}…` : msg,
+          kind: "random-agent.movement.go-rejected", ghostId, toward,
+          message: msg.length > 200 ? `${msg.slice(0, 197)}...` : msg,
         }));
         return null;
       }) as { ok?: boolean; tileId?: string } | null;
-      if (r?.ok === true && typeof r.tileId === “string”) {
-        assertH3Res15(r.tileId, “go”, ghostId);
+      if (r?.ok === true && typeof r.tileId === "string") {
+        assertH3Res15(r.tileId, "go", ghostId);
       }
     }
   }
 
   try {
     while (go) {
-      const w = (await mcp.callTool(“whereami”, {})) as { h3Index?: string; tileId?: string; occupants?: string[] };
+      const w = (await mcp.callTool("whereami", {})) as { h3Index?: string; tileId?: string; occupants?: string[] };
       const cell = w.h3Index && w.h3Index.length > 0 ? w.h3Index : w.tileId;
-      if (typeof cell === “string”) {
-        assertH3Res15(cell, “whereami”, ghostId);
+      if (typeof cell === "string") {
+        assertH3Res15(cell, "whereami", ghostId);
       }
       const occupants = (w.occupants ?? []).filter((id: string) => id !== ghostId);
-      const ex = (await mcp.callTool(“exits”, {})) as { exits?: ReadonlyArray<{ toward?: string }> };
+      const ex = (await mcp.callTool("exits", {})) as { exits?: ReadonlyArray<{ toward?: string }> };
       const exits = ex.exits ?? [];
       if (exits.length === 0 && occupants.length === 0) {
         await new Promise((r) => setTimeout(r, moveMs));
