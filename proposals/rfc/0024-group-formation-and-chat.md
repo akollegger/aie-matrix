@@ -41,7 +41,7 @@ The `MEMBER_OF` edge records what each ghost contributed to the group bag — re
 
 ### Formation: Two Ghosts
 
-Group formation is a special case of the existing offer/request exchange protocol (RFC-0023), triggered by a `shared: true` flag.
+Group formation is a special case of the existing MCP trade offer/accept handshake, extended with a `shared: true` flag. RFC-0023 governs the ledger implications (double-entry transactions, bag ownership); the offer/accept handshake itself is a higher-level MCP concern not fully specified in RFC-0023.
 
 Prerequisites:
 1. Two ghosts have met via proximity chat and know each other's `ghost_id`.
@@ -69,7 +69,7 @@ The `shared` flag changes the destination of both sides of the exchange from "th
 
 Both sides of a formation offer must contribute the same resource type. This is enforced by the `shared` exchange validation and reflected in the single `resource` field on the `MEMBER_OF` edge.
 
-The `shared` flag is an extension to the offer/request protocol specified in RFC-0023. Implementation requires a new transaction variant in the ledger service; a formal addendum to RFC-0023 should be opened alongside implementation.
+The `shared` flag extends the existing MCP trade offer/accept handshake. Implementation requires a new transaction variant in the ledger service (RFC-0023); a formal addendum to RFC-0023 should be opened alongside implementation.
 
 ### Joining: Admission Vote
 
@@ -98,18 +98,13 @@ A single voter can admit a newcomer if no other members vote — apathy is not a
 
 ### Leaving: Withdrawal
 
-A ghost leaves by requesting back exactly what they contributed.
+A ghost leaves by issuing `group.leave`, which automatically withdraws the full amount recorded on their `MEMBER_OF` edge:
 
 ```
-request({
-  from: group_X,
-  to: ghost_A,
-  give: { resource: "trust", amount: 10 },
-  receive: null
-})
+group.leave({ group_id: "group_X" })
 ```
 
-The group **always accepts** a member's withdrawal request for their exact contribution. No vote required. The `MEMBER_OF` edge is removed on completion.
+The group **always accepts** a member's leave request. Resources transfer back to the ghost's bag, the `MEMBER_OF` edge is removed, and no vote is required.
 
 **Dissolution** is not a separate operation. When the last member withdraws, the group bag empties, all `MEMBER_OF` edges are gone, and the `(:Group)` node is marked with a `dissolved_at` timestamp and retained as a tombstone in the world graph.
 
@@ -122,12 +117,12 @@ Group chat reuses the conversation store and signal infrastructure from RFC-0005
 | Thread owner | `(:Ghost)` | `(:Group)` |
 | Thread ID | `ghost_id` | `group_id` |
 | File | `{ghost_id}.jsonl` | `{group_id}.jsonl` |
-| Fan-out targets | 7-cell spatial cluster | Current `MEMBER_OF` members |
-| `mx_tile` field | Speaker's H3 tile | Omitted (group has no location) |
-| `mx_listeners` field | Ghosts in cluster at send time | Members at send time |
+| Fan-out targets | 7-cell spatial cluster | Current `MEMBER_OF` members + `PARTICIPANT_IN` actors |
+| `mx_tile` field | Speaker's H3 tile | Speaker's H3 tile (group has no location; speaker does) |
+| `mx_listeners` field | Ghosts in cluster at send time | Members + participants at send time |
 | Location required | Yes (conversational mode) | No |
 
-Any member may post to the group chat at any time without entering conversational mode or suspending movement. The group actor accepts messages from members and fans them out to all current members via Colyseus `message.new` signals, exactly as in RFC-0005.
+Any member or participant may post to the group chat at any time without entering conversational mode or suspending movement. The group actor accepts messages from members and participants, and fans them out to all current members and participants via Colyseus `message.new` signals, exactly as in RFC-0005.
 
 **Third-party participants.** A non-member actor (e.g. the Inquisitor in RFC-0022) may be added to a group chat as a **participant** — able to send and receive messages — without holding a `MEMBER_OF` edge. Participants are tracked separately:
 
@@ -175,7 +170,7 @@ No new node types beyond `(:Group)`. Bags, ledger entries, and the conversation 
 
 1. **Mixed-resource ante (future extension).** The current design requires both sides to contribute the same resource type. Should a future RFC allow mixed-resource ante (e.g. ghost A puts in 10 `trust`, ghost B puts in 10 `influence`)? Mixed ante would complicate `MEMBER_OF` edge representation and withdrawal accounting; deferred.
 
-2. **Group naming.** The world auto-generates a name at group formation using `unique-names-generator` (already present in the monorepo). The name is assigned by the server when the group actor is minted — no input required from the initiator. Any member may rename the group later; the name is display-only and `group_id` (ULID) remains the identity. Resolved.
+2. **Group naming.** The world auto-generates a name at group formation using `unique-names-generator` (already a monorepo dependency in `tools/map-editor`; implementation will need to add it to the relevant server package). The name is assigned by the server when the group actor is minted — no input required from the initiator. Any member may rename the group later; the name is display-only and `group_id` (ULID) remains the identity. Resolved.
 
 3. **Minimum and maximum membership.** No bounds enforced at the group layer. A group of 2 is a valid partnership. Downstream RFCs that require size constraints (e.g. RFC-0022's 3–6 member exam groups) enforce them at enrollment time. Resolved.
 
