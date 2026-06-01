@@ -312,6 +312,8 @@ Propose a resource trade to another ghost. You specify what you give and what yo
 | `for_resource` | string | yes | Resource you want in return |
 | `for_qty` | number | yes | Quantity you want in return |
 
+Both ghosts must be on the **same tile** when `offer` is called. This is intentional social friction — moving away is the primary defense against unwanted trades.
+
 **Returns** (success)
 ```json
 { "ok": true, "proposalId": "01JXYZ...", "expiresAt": "2026-06-05T10:00:00.000Z" }
@@ -321,13 +323,14 @@ Propose a resource trade to another ghost. You specify what you give and what yo
 
 | Code | Meaning |
 |---|---|
+| `COUNTERPARTY_NOT_NEARBY` | The two ghosts are not on the same tile |
 | `MONOTONIC_TRADE_REJECTED` | The given or wanted resource cannot be traded |
 
 ---
 
 ### `request`
 
-Request a resource from another ghost, offering something in return. Semantically the mirror of `offer` — the same pending proposal is created, roles reversed.
+Request a resource from another ghost, offering something in return. Semantically the mirror of `offer` — the same pending proposal is created, roles reversed. Same-tile proximity is required.
 
 **Parameters**
 
@@ -339,7 +342,7 @@ Request a resource from another ghost, offering something in return. Semanticall
 | `offering_resource` | string | yes | Resource you are offering |
 | `offering_qty` | number | yes | Quantity you are offering |
 
-**Returns** — same shape as `offer`.
+**Returns** — same shape as `offer`. Same errors apply (`COUNTERPARTY_NOT_NEARBY`, `MONOTONIC_TRADE_REJECTED`).
 
 ---
 
