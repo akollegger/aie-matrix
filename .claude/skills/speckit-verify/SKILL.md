@@ -115,16 +115,32 @@ Credentials to use: `NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASS
 
 #### 5e. Run integration tests
 
-For each package that has `*.integration.test.ts` files, run:
+Find packages that have a `test:integration` script and `*.integration.test.ts` files:
+
+```bash
+find . -name "package.json" -not -path "*/node_modules/*" -not -path "*/dist/*" -not -path "*/.claude/*" \
+  | xargs grep -l '"test:integration"' 2>/dev/null
+```
+
+For each such package, run its integration tests separately:
 
 ```bash
 NEO4J_URI=bolt://localhost:7687 \
 NEO4J_USER=neo4j \
 NEO4J_PASSWORD=devpassword \
-pnpm --filter <package-name> test:integration
+pnpm --filter <package-name> exec \
+  node --import tsx --test "test/LedgerService.integration.test.ts"
+
+NEO4J_URI=bolt://localhost:7687 \
+NEO4J_USER=neo4j \
+NEO4J_PASSWORD=devpassword \
+pnpm --filter <package-name> exec \
+  node --import tsx --test "test/GroupService.integration.test.ts"
 ```
 
-Run packages sequentially (Node test runner can produce garbled output when multiple packages pipe to the same terminal in parallel).
+**Important**: run each test file individually, not via the `test:integration` glob script.
+Node's test runner runs multiple files as parallel workers; when combined with background output
+capture this causes some results to be lost. Running files one-at-a-time avoids this.
 
 - **PASS**: all packages exit 0
 - **FAIL**: any non-zero exit
