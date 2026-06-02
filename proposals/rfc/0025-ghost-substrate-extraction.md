@@ -1,4 +1,8 @@
-# RFC-0021: Ghost cognitive substrate extraction — PeppersGhost as the default ghost
+# RFC-0025: Ghost cognitive substrate extraction — PeppersGhost as the default ghost
+
+> **Renumbered note (2026-06-02):** originally drafted as RFC-0021, renumbered
+> after main shipped its own RFC-0021 (World Calendar). No content changes
+> beyond this note and the renumbered cross-references.
 
 | Status | draft — decision needed |
 |--------|-------------------------|

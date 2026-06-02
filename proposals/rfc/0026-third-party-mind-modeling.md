@@ -1,10 +1,14 @@
-# RFC-0022: Third-party-mind modeling — predictive peer models in the cascade
+# RFC-0026: Third-party-mind modeling — predictive peer models in the cascade
+
+> **Renumbered note (2026-06-02):** originally drafted as RFC-0022, renumbered
+> after main shipped its own RFC-0022 (Group Exam Eval Protocol). No content
+> changes beyond this note and the renumbered cross-reference to RFC-0025.
 
 | Status | draft |
 |--------|-------|
 | Date   | 2026-05-28 |
 | Authors | @henrardo |
-| Related | [RFC-0011](0011-ghost-personality-substructure.md) (slider model), [RFC-0021](0021-ghost-substrate-extraction.md) (the substrate this lands inside), [RFC-0005](0005-ghost-conversation-model.md) (utterance / cluster mechanics — the perceptual input to a peer model) |
+| Related | [RFC-0011](0011-ghost-personality-substructure.md) (slider model), [RFC-0025](0025-ghost-substrate-extraction.md) (the substrate this lands inside), [RFC-0005](0005-ghost-conversation-model.md) (utterance / cluster mechanics — the perceptual input to a peer model) |
 
 ## Summary
 
@@ -31,11 +35,11 @@ The current architecture treats peers as stimulus producers. To get social behav
 
 ### Why this is a substrate primitive, not a peppers-agent feature
 
-Per [RFC-0021](0021-ghost-substrate-extraction.md) the cognitive layer is being lifted out of `peppers-agent` into the shared substrate. Peer modelling belongs there for the same reasons needs, commitments, and the Id pipeline do: every house's ghosts need it, and shipping it in one house first locks the parallel-implementation pattern that 0021 is trying to undo. The RDC poker ghost wants to read "Hellmuth seems to be on tilt" off of a peer model; the Matrix-house Morpheus ghost wants to read "this peer seems convinced their reality is real" off of a peer model; both should pull from the same substrate field.
+Per [RFC-0025](0025-ghost-substrate-extraction.md) the cognitive layer is being lifted out of `peppers-agent` into the shared substrate. Peer modelling belongs there for the same reasons needs, commitments, and the Id pipeline do: every house's ghosts need it, and shipping it in one house first locks the parallel-implementation pattern that 0021 is trying to undo. The RDC poker ghost wants to read "Hellmuth seems to be on tilt" off of a peer model; the Matrix-house Morpheus ghost wants to read "this peer seems convinced their reality is real" off of a peer model; both should pull from the same substrate field.
 
 ### Why now
 
-Adding peer models *after* RFC-0021 lands is cheaper than retrofitting them later. The substrate's `runHouse` is gaining `PeppersGhostState` fields for personality, needs, and commitments anyway; one more field is a marginal addition. Delaying past the substrate extraction means every house's brain wrapper has to add peer-state plumbing of its own, which is exactly the duplication 0021 exists to prevent.
+Adding peer models *after* RFC-0025 lands is cheaper than retrofitting them later. The substrate's `runHouse` is gaining `PeppersGhostState` fields for personality, needs, and commitments anyway; one more field is a marginal addition. Delaying past the substrate extraction means every house's brain wrapper has to add peer-state plumbing of its own, which is exactly the duplication 0021 exists to prevent.
 
 This RFC is also the first cognitive primitive that takes another ghost's *interior* as an input — earlier work was self-contained (sliders, needs, drives are all about *this* ghost). Getting the contract right early matters because every downstream social mechanic — trust, alliance, betrayal, conversion in the Matrix house — depends on it.
 
@@ -160,6 +164,6 @@ Two visibility additions:
 
 4. **Model only the immediate cluster, no persistence.** Peer models exist for the duration of a co-presence; on `cluster-left`, drop the model. Simpler. Loses: trust, grudge, reputation across multiple encounters. The Matrix-house mechanic (Morpheus convincing peers over multiple visits) becomes impossible. Rejected as foreclosing too much.
 
-5. **Per-pair models — `(self, peer) → PeerModel` symmetric storage.** Doubles writes (every cascade updates both directions) but lets us later add "what I think Y thinks of me." Out of scope for v1 — single-direction is enough to unlock the v1 behaviours; per-pair becomes interesting only when meta-cognition matters (Matrix house, RFC-0021 §future-vision).
+5. **Per-pair models — `(self, peer) → PeerModel` symmetric storage.** Doubles writes (every cascade updates both directions) but lets us later add "what I think Y thinks of me." Out of scope for v1 — single-direction is enough to unlock the v1 behaviours; per-pair becomes interesting only when meta-cognition matters (Matrix house, RFC-0025 §future-vision).
 
 6. **Model only via deep-LLM dialogue context, no structured fields.** Pass the full recent dialogue to the LLM on every cascade and let it form whatever peer model it likes implicitly. Maximally LLM-trusting; loses observability (no field to capture, no overlay card, no post-hoc query), couples behaviour tightly to context-window size, and provides no structured input for non-LLM-driven mechanics like reputation or trust accumulation. Rejected — the substrate's value is *making cognition observable and tunable*; an opaque-LLM-mind has neither.
