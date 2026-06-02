@@ -82,7 +82,8 @@ async function startMovementFromSpawn(
   mcpByGhostId.set(ghostId, mcp);
   const moveMs = Math.max(200, parseInt(getMoveIntervalMs() ?? "2000", 10) || 2000);
   let go = true;
-  const handle: MoveLoop = { cancel: () => { go = false; } };
+  let wakeUp: (() => void) | null = null;
+  const handle: MoveLoop = { cancel: () => { go = false; wakeUp?.(); } };
   loopsByGhostId.set(ghostId, handle);
   console.info(
     JSON.stringify({
@@ -184,8 +185,8 @@ async function startMovementFromSpawn(
     }
   }
 
-  // Initial group membership load (T048)
-  await refreshGroupMemberships().catch(() => {});
+  // Initial group membership load — fire-and-forget so startup isn't delayed (T048)
+  void refreshGroupMemberships().catch(() => {});
 
   try {
     while (go) {
@@ -226,12 +227,17 @@ async function startMovementFromSpawn(
         }
       }
 
+      const sleep = () => new Promise<void>((r) => {
+        const t = setTimeout(r, moveMs);
+        wakeUp = () => { clearTimeout(t); r(); };
+      });
+
       if (exits.length === 0 && occupants.length === 0) {
-        await new Promise((r) => setTimeout(r, moveMs));
+        await sleep();
         continue;
       }
       await tryAction(exits, occupants);
-      await new Promise((r) => setTimeout(r, moveMs));
+      await sleep();
     }
   } finally {
     if (loopsByGhostId.get(ghostId) === handle) {
