@@ -26,15 +26,21 @@ test.skip(!NEO4J_URI, "NEO4J_URI not set — skipping integration tests");
 if (NEO4J_URI) {
   const driver = neo4j.driver(NEO4J_URI, neo4j.auth.basic(NEO4J_USER, NEO4J_PASSWORD));
 
-  async function cleanSession(sessionId: string): Promise<void> {
+  async function setupSession(sessionId: string): Promise<void> {
     const s = driver.session({ defaultAccessMode: neo4j.session.WRITE });
     try {
+      // Remove any stale ledger entries from a previous run
       await s.run(
         `MATCH (n:LedgerEntry) WHERE n.id STARTS WITH $prefix DETACH DELETE n`,
         { prefix: sessionId }
       );
       await s.run(
         `MATCH (s:LiveSession { id: $id })-[r:LEDGER_HEAD|LEDGER_TIP]->() DELETE r`,
+        { id: sessionId }
+      );
+      // Ensure the LiveSession node exists — LedgerServiceLive requires it
+      await s.run(
+        `MERGE (s:LiveSession { id: $id })`,
         { id: sessionId }
       );
     } finally {
@@ -44,7 +50,7 @@ if (NEO4J_URI) {
 
   test("genesis seed written to Neo4j on init", async () => {
     const sessionId = `test-${ulid()}`;
-    await cleanSession(sessionId);
+    await setupSession(sessionId);
     const svc = makeLedgerServiceLive(driver, sessionId);
     await Effect.runPromise(svc.init([GOLD]));
 
@@ -61,7 +67,7 @@ if (NEO4J_URI) {
 
   test("balances survive restart: replay from genesis", async () => {
     const sessionId = `test-${ulid()}`;
-    await cleanSession(sessionId);
+    await setupSession(sessionId);
 
     // First instance — init and commit a reward
     const svc1 = makeLedgerServiceLive(driver, sessionId);
@@ -83,7 +89,7 @@ if (NEO4J_URI) {
 
   test("LEDGER_HEAD and LEDGER_TIP relationships correct after N appends", async () => {
     const sessionId = `test-${ulid()}`;
-    await cleanSession(sessionId);
+    await setupSession(sessionId);
     const svc = makeLedgerServiceLive(driver, sessionId);
     await Effect.runPromise(svc.init([GOLD]));
 
@@ -111,7 +117,7 @@ if (NEO4J_URI) {
 
   test("verify() passes on persisted chain", async () => {
     const sessionId = `test-${ulid()}`;
-    await cleanSession(sessionId);
+    await setupSession(sessionId);
     const svc = makeLedgerServiceLive(driver, sessionId);
     await Effect.runPromise(svc.init([GOLD]));
     await Effect.runPromise(svc.commit({ id: ulid(), transfers: [{ from: "world", to: "ghost-x", resource: "gold", qty: 10 }], cause: "test", actors: [], ts: Date.now() }));
