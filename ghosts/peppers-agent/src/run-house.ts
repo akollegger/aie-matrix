@@ -33,7 +33,7 @@ import {
 import { captureRecord } from "./debug-capture.js";
 import type { OverlayServer } from "./overlay-server.js";
 import { ID_SYSTEM_PROMPT } from "./reason-id.js";
-import { runOneStimulus } from "./run-loop.js";
+import { METABOLIC_STRAIN_DEATH_THRESHOLD, runOneStimulus } from "./run-loop.js";
 import {
   prefetchDisplayName,
   primeDisplayName,
@@ -116,6 +116,16 @@ export interface RunHouseOptions {
   readonly onPrimalStreaksUpdate?: (
     streaks: import("@aie-matrix/ghost-peppers-inner").PrimalPersonalityStreaks,
   ) => void;
+  /**
+   * Starting metabolic strain. Default 0. Threaded so pause/resume
+   * preserves accumulated chronic-overeating damage.
+   */
+  readonly initialMetabolicStrain?: number;
+  /**
+   * Callback fired after every cascade with the post-update strain.
+   * Same pattern as the other update hooks; persists per-ghost.
+   */
+  readonly onMetabolicStrainUpdate?: (strain: number) => void;
   /**
    * Item refs the ghost is BLIND to. Items matching any ref here are
    * filtered out of `worldContext.takeableItemRefs` and never trigger
@@ -424,6 +434,11 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   // (all zero) at birth; survive pause/resume via initialPrimalStreaks.
   let primalStreaks: import("@aie-matrix/ghost-peppers-inner").PrimalPersonalityStreaks =
     opts.initialPrimalStreaks ?? {};
+  // Metabolic strain — state-based counter that accrues while Fuel
+  // sits above the binge threshold and decays slowly when below. Drives
+  // the "metabolic-collapse" decommission path, distinct from acute
+  // Fuel=0 starvation.
+  let metabolicStrain: number = opts.initialMetabolicStrain ?? 0;
   const startedAt = new Date().toISOString();
 
   // Rebind the externally-owned overlay's init payload to this run's
@@ -526,6 +541,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
           cascadeIndex,
           needs,
           primalStreaks,
+          metabolicStrain,
           ...(selfDisplayName ? { selfDisplayName } : {}),
           ...(recentSuperObjectives.length > 0
             ? { recentSuperObjectives }
@@ -534,6 +550,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         commitmentLedger = record.nextLedger;
         needs = record.nextNeeds;
         primalStreaks = record.nextPrimalStreaks;
+        metabolicStrain = record.nextMetabolicStrain;
         // Persist back to the caller so pause/resume can resume at the
         // same need / ledger level and with accumulated drift. The
         // callbacks are expected to do synchronous assignments (e.g.
@@ -542,6 +559,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         opts.onNeedsUpdate?.(needs);
         opts.onCommitmentsUpdate?.(commitmentLedger);
         opts.onPrimalStreaksUpdate?.(primalStreaks);
+        opts.onMetabolicStrainUpdate?.(metabolicStrain);
         cascadeIndex += 1;
 
         // Full structured capture of this cascade — every prompt the
@@ -590,6 +608,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
             axis: f.edge.targetAxis,
             logitDelta: f.logitDelta,
           })),
+          metabolicStrain: record.nextMetabolicStrain,
           // Post-cascade personality (includes both facet drift AND
           // primal-driven drift, in that order). Display values for
           // each facet's internal + external sliders. Lets us trace
@@ -661,6 +680,39 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
             cascadeIndex,
             cause: "fuel-critical",
             fuelDisplay,
+            metabolicStrain,
+          });
+          stopRequested = true;
+        } else if (metabolicStrain >= METABOLIC_STRAIN_DEATH_THRESHOLD) {
+          // Chronic-overeating mortality. Strain accumulated past the
+          // tolerance threshold while Fuel sat above the binge zone for
+          // too many cascades. Distinct death cause from acute
+          // starvation — `metabolic-collapse` not `fuel-critical`.
+          log("");
+          log("╔════════════════════════════════════════════════════════════╗");
+          log(`║ 🥩 METABOLIC COLLAPSE: ${selfDisplayName ?? adopted.ghostId.slice(0, 8)}`);
+          log(`║    strain ${metabolicStrain.toFixed(1)} (threshold ${METABOLIC_STRAIN_DEATH_THRESHOLD})`);
+          log(`║    Cascade ${cascadeIndex}, no further actions will be emitted`);
+          log("╚════════════════════════════════════════════════════════════╝");
+          log("");
+          if (overlay !== null) {
+            overlay.broadcast("decommissioned", {
+              ghostId: adopted.ghostId,
+              displayName: selfDisplayName ?? null,
+              cascadeIndex,
+              cause: "metabolic-collapse",
+              fuelDisplay,
+              metabolicStrain,
+              atIso: new Date().toISOString(),
+            });
+          }
+          captureRecord("decommissioned", {
+            ghostId: adopted.ghostId,
+            displayName: selfDisplayName ?? null,
+            cascadeIndex,
+            cause: "metabolic-collapse",
+            fuelDisplay,
+            metabolicStrain,
           });
           stopRequested = true;
         }
@@ -953,12 +1005,21 @@ async function snapshotWorldContext(
 
   try {
     const inv = (await mcp.callTool("inventory", {})) as {
-      objects?: ReadonlyArray<{ itemRef?: string }>;
+      objects?: ReadonlyArray<{ itemRef?: string; tokens?: number }>;
     };
-    const refs = (inv.objects ?? [])
-      .map((o) => o.itemRef)
-      .filter((r): r is string => typeof r === "string");
-    if (refs.length > 0) next.inventoryItemRefs = refs;
+    const items = (inv.objects ?? []).filter(
+      (o): o is { itemRef: string; tokens?: number } => typeof o.itemRef === "string",
+    );
+    if (items.length > 0) {
+      next.inventoryItemRefs = items.map((o) => o.itemRef);
+      const consumables = items.filter((o) => typeof o.tokens === "number" && o.tokens > 0);
+      if (consumables.length > 0) {
+        next.inventoryConsumables = consumables.map((o) => ({
+          itemRef: o.itemRef,
+          tokens: o.tokens!,
+        }));
+      }
+    }
   } catch {
     /* leave undefined */
   }

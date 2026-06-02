@@ -198,8 +198,20 @@ export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
  * a critical ghost can still emit a fragment.
  */
 function fuelToSynthesisMaxTokens(needs: NeedProfile): number {
+  // Linear up to display 7 (the binge threshold), then linear down at
+  // double the slope above. A satiated ghost (5) gets 400; a healthy
+  // ghost at the satiety peak (7) gets 520; a binging ghost at 10 gets
+  // 280 — bloated, sluggish thinking, less to say per cascade. Floor
+  // at 100 so even a critical ghost can emit a fragment.
   const fuelDisplay = needs.Fuel.display;
-  return Math.max(100, Math.round(100 + fuelDisplay * 60));
+  const BINGE_THRESHOLD = 7;
+  const UP_SLOPE = 60;
+  const DOWN_SLOPE = 80;
+  const peak = 100 + BINGE_THRESHOLD * UP_SLOPE; // 520
+  const tokens = fuelDisplay <= BINGE_THRESHOLD
+    ? 100 + fuelDisplay * UP_SLOPE
+    : peak - (fuelDisplay - BINGE_THRESHOLD) * DOWN_SLOPE;
+  return Math.max(100, Math.round(tokens));
 }
 
 /**

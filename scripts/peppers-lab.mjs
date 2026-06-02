@@ -208,7 +208,7 @@ if (cfg.clean) {
     "bash",
     [
       "-c",
-      `ps aux | grep -E 'aie-matrix|peppers-agent|tsx src/agent|node dist/index\\.js|scripts/demo\\.mjs' | grep -v grep | grep -v Cursor | awk '{print $2}' | grep -v -w ${selfPid} | grep -v -w ${parentPid} | xargs -r kill -9 2>/dev/null`,
+      `ps aux | grep -E 'aie-matrix|peppers-agent|tsx src/(agent|main)|node dist/index\\.js|scripts/demo\\.mjs' | grep -v grep | grep -v Cursor | awk '{print $2}' | grep -v -w ${selfPid} | grep -v -w ${parentPid} | xargs -r kill -9 2>/dev/null`,
     ],
     { stdio: "ignore" },
   );

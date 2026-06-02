@@ -120,6 +120,15 @@ export interface RunRecord {
    *  cascade by the primal wiring. Empty when nothing fired (e.g.
    *  zero flux, zero streak). Captured for inspection. */
   readonly primalForces: ReadonlyArray<PrimalForce>;
+  /** Accumulated metabolic strain AFTER this cascade. State-based,
+   *  not dynamic — ticks up while Fuel.display sits above the binge
+   *  threshold (7) and decays slowly while below. When strain crosses
+   *  `METABOLIC_STRAIN_DEATH_THRESHOLD` the caller decommissions the
+   *  ghost with cause `metabolic-collapse` (separately from acute
+   *  Fuel=0 starvation). Distinct from `nextPrimalStreaks` — strain
+   *  measures the *state* of chronic harm, streaks measure the
+   *  *dynamics* of changing fortune. Both can fire independently. */
+  readonly nextMetabolicStrain: number;
 }
 
 /** Inputs to one interaction step. */
@@ -178,7 +187,35 @@ export interface RunOneStimulusRequest {
   /** Edges driving the primal→personality wiring. Defaults to
    *  `DEFAULT_PRIMAL_PERSONALITY_EDGES` (Fuel → 4 traits). */
   readonly primalEdges?: ReadonlyArray<PrimalPersonalityEdge>;
+  /** Metabolic strain at the START of this cascade. Default: 0 (a
+   *  fresh ghost). Threaded forward to persist across cascades and
+   *  pause/resume. */
+  readonly metabolicStrain?: number;
 }
+
+/**
+ * Chronic-overeating wiring. Strain accumulates per cascade based on
+ * how far Fuel.display is above the binge threshold (7), and decays
+ * slowly per cascade below it. When strain crosses
+ * `METABOLIC_STRAIN_DEATH_THRESHOLD`, the ghost decommissions with
+ * cause "metabolic-collapse" — distinct from the acute "fuel-critical"
+ * death at Fuel=0.
+ *
+ * This is a STATE-based mechanic, intentionally parallel to the
+ * dynamics-based streak system. A ghost SITTING at Fuel=10 produces
+ * flux=0 once the streak has saturated, but their *state* is still
+ * binge — so strain accumulates regardless of whether the streak
+ * compounds further.
+ */
+export const METABOLIC_BINGE_THRESHOLD = 7;
+export const METABOLIC_STRAIN_PER_DISPLAY_PER_CASCADE = 1.0;
+export const METABOLIC_STRAIN_RECOVERY_PER_CASCADE = 0.5;
+// Tuned to fire within an observable window. Strain rate is 1.0 ×
+// (Fuel.display − 7), so a ghost pegged at Fuel 10 gets 3/cascade and
+// dies in ~10 cascades; at Fuel 8 they get 1/cascade and survive ~30.
+// Bump higher (50–100) for slower, more chronic dynamics once the
+// behaviour is confirmed.
+export const METABOLIC_STRAIN_DEATH_THRESHOLD = 30;
 
 /**
  * Apply each facet's optional delta to its own slider. Replacement for
@@ -283,6 +320,7 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
   //    actual tools the world exposes. The primal drive (if any) is
   //    computed by the Id pipeline and threaded through so the Surface
   //    can let a screaming need override the surface objective.
+  const strainAtCascadeStart = req.metabolicStrain ?? 0;
   const surface = await invokeSurface({
     monologue: id.monologue,
     stimulus,
@@ -291,6 +329,7 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
     tools: req.tools,
     commitments: ledgerIn,
     primalDrive: id.primalDrive,
+    metabolicStrain: strainAtCascadeStart,
     ...(req.selfDisplayName ? { selfDisplayName: req.selfDisplayName } : {}),
   });
 
@@ -428,8 +467,23 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
   // ghost at any Fuel level produces flux=0 and gets no push, which is
   // the cultural-bias resolution: position alone never triggers, only
   // motion does.
+  //
+  // CRITICAL: flux is computed from the BEHAVIOUR (consumed −
+  // depletion), NOT from the slider delta. The slider clamps at 10, so
+  // a ghost binging at the ceiling shows slider-delta = 0 even though
+  // they're still actively choosing to eat each cascade. That breaks
+  // the wiring at the ceiling. The behaviour-based flux stays correct:
+  // a ghost eating 1 token in a cascade with depletion 0.2 has flux
+  // +0.8 regardless of where the slider sits.
   const primalEdges = req.primalEdges ?? DEFAULT_PRIMAL_PERSONALITY_EDGES;
-  const fuelFlux = nextNeeds.Fuel.display - needsIn.Fuel.display;
+  const fuelDepletedThisCascade = depletionRates.Fuel;
+  const fuelConsumedThisCascade =
+    surface.action.kind === "consume" && outcome.ok === true
+      ? (typeof (outcome as unknown as { consumed?: unknown }).consumed === "number"
+          ? ((outcome as unknown as { consumed: number }).consumed)
+          : 0)
+      : 0;
+  const fuelFlux = fuelConsumedThisCascade - fuelDepletedThisCascade;
   const primalFlux = { Fuel: fuelFlux };
   const streaksIn = req.primalStreaks ?? emptyPrimalStreaks(primalEdges);
   const nextPrimalStreaks = updateStreaks(streaksIn, primalFlux, primalEdges);
@@ -449,6 +503,23 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
     };
   }
 
+  // Metabolic strain — state-based chronic-binge mortality.
+  // While Fuel.display sits above the binge threshold (7), strain
+  // accumulates per cascade by `(Fuel.display - 7) × strain_rate`,
+  // so the deeper into binge, the faster the strain. While Fuel is at
+  // or below the binge threshold, strain decays slowly. The
+  // accumulation runs independently of streak — a ghost pegged at
+  // Fuel=10 with no further flux movement still accrues strain.
+  const strainIn = req.metabolicStrain ?? 0;
+  const fuelDisplayAfter = nextNeeds.Fuel.display;
+  let nextMetabolicStrain: number;
+  if (fuelDisplayAfter > METABOLIC_BINGE_THRESHOLD) {
+    const above = fuelDisplayAfter - METABOLIC_BINGE_THRESHOLD;
+    nextMetabolicStrain = strainIn + above * METABOLIC_STRAIN_PER_DISPLAY_PER_CASCADE;
+  } else {
+    nextMetabolicStrain = Math.max(0, strainIn - METABOLIC_STRAIN_RECOVERY_PER_CASCADE);
+  }
+
   return {
     ghostId,
     stimulus,
@@ -465,6 +536,7 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
     nextPrimalStreaks,
     primalFlux,
     primalForces,
+    nextMetabolicStrain,
   };
 }
 

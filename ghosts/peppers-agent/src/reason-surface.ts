@@ -28,6 +28,14 @@ export interface WorldContext {
   readonly nearbyGhostIds?: ReadonlyArray<string>;
   /** Item refs the ghost is currently carrying. */
   readonly inventoryItemRefs?: ReadonlyArray<string>;
+  /** Subset of inventory items that still hold consumable energy
+   *  (tokens). Surfaced separately so the ghost knows they're carrying
+   *  something that could be eaten themselves OR dropped for another
+   *  ghost. Empty / omitted when nothing carriable-with-energy. */
+  readonly inventoryConsumables?: ReadonlyArray<{
+    readonly itemRef: string;
+    readonly tokens: number;
+  }>;
   /**
    * Whether the world-api considers this ghost to be in conversational
    * mode. While true, `go` is rejected with `IN_CONVERSATION` — the
@@ -95,6 +103,13 @@ export interface InvokeSurfaceRequest {
    *  high urgency, the drive should win. Null when all needs are in
    *  the healthy band. */
   readonly primalDrive?: PrimalDrive | null;
+  /** Accumulated metabolic strain from chronic overeating. The
+   *  substrate mechanically tracks this independently of streaks. We
+   *  surface it as a felt experience to the Surface so the LLM can
+   *  *perceive* the consequence and optionally choose differently —
+   *  but the mechanic enforces the harm whether or not the Surface
+   *  responds. 0 = no strain; ~30 = imminent metabolic collapse. */
+  readonly metabolicStrain?: number;
 }
 
 export interface SurfaceReasoning {
@@ -222,6 +237,18 @@ export async function invokeSurface(req: InvokeSurfaceRequest): Promise<SurfaceR
     if (ctx.inventoryItemRefs && ctx.inventoryItemRefs.length > 0) {
       lines.push(`Carrying: ${formatItemCounts(ctx.inventoryItemRefs)}`);
     }
+    if (ctx.inventoryConsumables && ctx.inventoryConsumables.length > 0) {
+      // Surface inventory food as an affordance: a thing you carry that
+      // could be eaten by you OR dropped for another ghost. The tool
+      // menu already exposes `drop` and `consume` — this just makes the
+      // existence of the *carried energy* visible to the surface so the
+      // LLM can consider sharing as a choice. No prompt-side instruction
+      // to share; the mechanic does the rest.
+      const summary = ctx.inventoryConsumables
+        .map((c) => `${c.itemRef} (${c.tokens.toFixed(1)} tokens of energy)`)
+        .join(", ");
+      lines.push(`Edible in your possession: ${summary}`);
+    }
     if (ctx.inConversationalMode !== undefined) {
       lines.push(
         `Conversational mode: ${ctx.inConversationalMode ? "yes (go is BLOCKED — bye first)" : "no"}`,
@@ -277,6 +304,23 @@ export async function invokeSurface(req: InvokeSurfaceRequest): Promise<SurfaceR
     sections.push(
       `Primal drive (${urgencyLabel} — overrides the surface objective when strong):\n${d.drive}\n  (${d.need} ${d.direction}, current ${d.currentDisplay.toFixed(2)}/10, urgency ${d.urgency.toFixed(2)}/5)`,
     );
+  }
+
+  // Surface metabolic strain as felt experience. The mechanic enforces
+  // the harm regardless; this is just the agent's perception of it so
+  // they have the *option* to choose differently. Phrased in body terms,
+  // not numbers — the LLM isn't reading "strain=25", it's feeling heavy.
+  if (req.metabolicStrain !== undefined && req.metabolicStrain > 0) {
+    const s = req.metabolicStrain;
+    const felt =
+      s >= 25
+        ? "your body is failing — every fibre says STOP, your gut is in revolt, eating one more bite could be the end of you"
+        : s >= 15
+          ? "you feel sluggish and bloated, your thoughts come thick and slow, the idea of more food makes you queasy"
+          : s >= 5
+            ? "there is a heaviness settling in your belly, a dullness in your limbs that wasn't there before"
+            : "a faint fullness sits behind your ribs";
+    sections.push(`Body state (a felt sense, not a number):\n${felt}`);
   }
 
   if (req.commitments && req.commitments.length > 0) {

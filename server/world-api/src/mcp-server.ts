@@ -993,10 +993,15 @@ function inventoryEffect(
     const sidecar = itemService.getSidecar();
     return {
       ok: true,
-      objects: itemService.getGhostInventory(ghostId).map((itemRef) => ({
-        itemRef,
-        name: sidecar.get(itemRef)?.name ?? itemRef,
-      })),
+      objects: itemService.getGhostInventory(ghostId).map((itemRef) => {
+        const tokens = itemService.getInventoryTokens(ghostId, itemRef);
+        const out: { itemRef: string; name: string; tokens?: number } = {
+          itemRef,
+          name: sidecar.get(itemRef)?.name ?? itemRef,
+        };
+        if (tokens !== undefined) out.tokens = tokens;
+        return out;
+      }),
     };
   });
 }

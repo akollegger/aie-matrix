@@ -117,7 +117,15 @@ export type ConsumeResult =
 
 export interface InventoryResult {
   ok: true;
-  objects: Array<{ itemRef: string; name: string }>;
+  objects: Array<{
+    itemRef: string;
+    name: string;
+    /** Remaining consumable energy on this inventory instance, in
+     *  tokens. Present only for items the carrier picked up that had
+     *  tokens to begin with (e.g. food). Lets the agent see whether
+     *  what they're carrying is still worth sharing or eating. */
+    tokens?: number;
+  }>;
 }
 
 export interface ExitInfo {

@@ -68,6 +68,10 @@ export interface ItemServiceOps {
    *  undefined when the item is not consumable / not present. Used by
    *  `look` to expose the affordance to the LLM without a tool call. */
   getInstanceTokens(h3Index: string, itemRef: string): number | undefined;
+  /** Remaining tokens for an inventory item carried by this ghost, or
+   *  undefined when the item is not consumable / not in inventory.
+   *  Lets `inventory` show what a ghost is carrying-with-energy. */
+  getInventoryTokens(ghostId: string, itemRef: string): number | undefined;
   /** Out-of-band item creation — place an item on a tile and seed its
    *  instance tokens from the type's definition. Used by the food-rain
    *  test mechanism to keep ghosts fed during long-running observations.
@@ -96,6 +100,17 @@ export class ItemServiceImpl implements ItemServiceOps {
    * or take.
    */
   private readonly tileTokens: Map<string, number> = new Map();
+  /**
+   * Mutable per-inventory-instance state: remaining tokens for each
+   * (ghostId, itemRef) pair. Mirrors `tileTokens` but keyed by ghost
+   * inventory instead of tile. Lets food retain its energy through a
+   * take → carry → drop cycle, which is the mechanical foundation for
+   * sharing food between ghosts: A takes food (tokens move to A's
+   * inventory state), walks to B's tile, drops the food (tokens move
+   * back to that tile), B consumes (mechanically the same as any
+   * tile-consume).
+   */
+  private readonly inventoryTokens: Map<string, number> = new Map();
   private bridge: ColyseusWorldBridge | null = null;
 
   constructor(loadedMap: LoadedMap) {
@@ -196,11 +211,16 @@ export class ItemServiceImpl implements ItemServiceOps {
       } else {
         this.tileItems.set(h3Index, newTile);
       }
-      // Taking discards the instance's remaining token state — for now,
-      // inventory items are not eat-from-inventory targets (eating
-      // works on tile only). When/if eat-from-inventory ships, this
-      // line moves the tokens to a ghost-keyed structure instead.
-      this.tileTokens.delete(tokenKey(h3Index, itemRef));
+      // Preserve the instance's tokens through the take. When the
+      // ghost later drops the item, the tokens come back on the tile;
+      // when a peer consumes it, the energy is real. This is what
+      // makes mechanical sharing possible.
+      const tileKey = tokenKey(h3Index, itemRef);
+      const tokens = this.tileTokens.get(tileKey);
+      this.tileTokens.delete(tileKey);
+      if (tokens !== undefined) {
+        this.inventoryTokens.set(inventoryKey(ghostId, itemRef), tokens);
+      }
       const inv = this.ghostInventory.get(ghostId) ?? [];
       const newInv = [...inv, itemRef];
       this.ghostInventory.set(ghostId, newInv);
@@ -275,6 +295,14 @@ export class ItemServiceImpl implements ItemServiceOps {
     return this.tileTokens.get(tokenKey(h3Index, itemRef)) ?? def.tokens;
   }
 
+  getInventoryTokens(ghostId: string, itemRef: string): number | undefined {
+    const def = this.sidecar.get(itemRef);
+    if (def?.tokens === undefined) return undefined;
+    const inv = this.ghostInventory.get(ghostId) ?? [];
+    if (!inv.includes(itemRef)) return undefined;
+    return this.inventoryTokens.get(inventoryKey(ghostId, itemRef));
+  }
+
   spawnItem(h3Index: string, itemRef: string): boolean {
     const def = this.sidecar.get(itemRef);
     if (!def) return false;
@@ -327,6 +355,20 @@ export class ItemServiceImpl implements ItemServiceOps {
       const onTile = this.tileItems.get(h3Index) ?? [];
       const newTile = [...onTile, itemRef];
       this.tileItems.set(h3Index, newTile);
+      // Restore tokens on the dropped tile from whatever the carrier
+      // had left in inventory. If the tile already has tokens for the
+      // same itemRef (rare — would only happen via a food-rain race),
+      // we keep the higher value rather than stacking, since multiple
+      // instances of the same type at the same tile is otherwise
+      // forbidden by spawnItem.
+      const invKey = inventoryKey(ghostId, itemRef);
+      const carriedTokens = this.inventoryTokens.get(invKey);
+      this.inventoryTokens.delete(invKey);
+      if (carriedTokens !== undefined && carriedTokens > 0) {
+        const tileKey = tokenKey(h3Index, itemRef);
+        const existing = this.tileTokens.get(tileKey);
+        this.tileTokens.set(tileKey, Math.max(existing ?? 0, carriedTokens));
+      }
       this.bridge?.setGhostInventory(ghostId, newInv);
       this.bridge?.setTileItems(h3Index, newTile);
     });
@@ -335,6 +377,10 @@ export class ItemServiceImpl implements ItemServiceOps {
 
 function tokenKey(h3: string, itemRef: string): string {
   return `${h3}|${itemRef}`;
+}
+
+function inventoryKey(ghostId: string, itemRef: string): string {
+  return `${ghostId}|${itemRef}`;
 }
 
 export const makeItemServiceLayer = (impl: ItemServiceImpl): Layer.Layer<ItemService> =>

@@ -208,6 +208,10 @@ interface PeppersGhostState {
    *  wiring. Survives pause/resume so a ghost's accumulated stress
    *  (or windfall) doesn't reset mid-life. */
   primalStreaks: import("@aie-matrix/ghost-peppers-inner").PrimalPersonalityStreaks;
+  /** Accumulated metabolic strain from chronic overeating. Decommissions
+   *  the ghost with cause "metabolic-collapse" when it crosses the
+   *  threshold — distinct from acute Fuel=0 death. Survives pause/resume. */
+  metabolicStrain: number;
   /** The set of platform-tile classes this ghost variant engages with.
    *  Empty for default peppers — they are blind to mini-games of any
    *  kind. House-flavoured variants populate this (e.g. an RDC-peppers
@@ -394,6 +398,11 @@ function startSocialLoop(
       onPrimalStreaksUpdate: (s) => {
         ghost.primalStreaks = s;
       },
+      // Persist chronic metabolic strain across pause/resume.
+      initialMetabolicStrain: ghost.metabolicStrain,
+      onMetabolicStrainUpdate: (s) => {
+        ghost.metabolicStrain = s;
+      },
       // Substrate blindness: items in this set are never surfaced as
       // stimuli or world-context entries. House variants would
       // populate this with the platform classes their world contains
@@ -555,6 +564,7 @@ export class PeppersAgentExecutor implements AgentExecutor {
       needs: midpointNeeds(),
       commitmentLedger: [],
       primalStreaks: {},
+      metabolicStrain: 0,
       // Default peppers is blind to every platform class. Variants
       // (RDC-peppers, HP-peppers, etc.) override this via spawn-time
       // config when they exist.

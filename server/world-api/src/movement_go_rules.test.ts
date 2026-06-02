@@ -78,6 +78,7 @@ describe("evaluateGo with authored rules", () => {
       dropItem: () => Effect.die("not used"),
       consumeItem: () => Effect.die("not used"),
       getInstanceTokens: () => undefined,
+      getInventoryTokens: () => undefined,
       spawnItem: () => false,
       getSidecar: () => new Map([["statue", { name: "Statue", itemClass: "Obstacle", carriable: false, capacityCost: 1 }]]),
     };
