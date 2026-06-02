@@ -33,6 +33,7 @@
     "ioredis": "^5.4.2",
     "neo4j-driver": "^5.28.3",
     "ulid": "^2.3.0",
+    "unique-names-generator": "^4.7.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {

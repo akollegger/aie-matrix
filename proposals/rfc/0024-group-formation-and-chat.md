@@ -1,6 +1,6 @@
 # RFC-0024: Group Formation and Group Chat
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-06-01  
 **Authors:** @akollegger  
 **Related:** [RFC-0005](0005-ghost-conversation-model.md) (Ghost Conversation Model), [RFC-0022](0022-group-exam-eval-protocol.md) (Group Exam Eval Protocol), [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger), [ADR-0003](../adr/0003-conversation-server.md) (Conversation Server)

@@ -89,6 +89,8 @@ export interface Proposal {
   /** Unix ms expiry timestamp. */
   expiresAt: number;
   status: "pending" | "agreed" | "declined" | "expired";
+  /** When true, both contributions go to a newly created group bag (group formation). */
+  shared?: boolean;
 }
 
 /** Per-actor balance change emitted in ledger:transaction:committed event. */

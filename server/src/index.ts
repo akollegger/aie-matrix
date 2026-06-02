@@ -22,7 +22,9 @@ import {
   LedgerService,
   LedgerServiceInMemoryLayer,
   ProposalService,
-  ProposalServiceLayer,
+  ProposalServiceWithGroupLayer,
+  GroupService,
+  GroupServiceInMemoryLayer,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
   makeLocalLiveSessionLayer,
@@ -482,7 +484,8 @@ async function main(): Promise<void> {
     | LiveSessionService
     | WorldCalendarService
     | LedgerService
-    | ProposalService;
+    | ProposalService
+    | GroupService;
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -500,7 +503,8 @@ async function main(): Promise<void> {
     liveSessionLayer,
     calendarLayer,
     LedgerServiceInMemoryLayer,
-    ProposalServiceLayer,
+    GroupServiceInMemoryLayer,
+    ProposalServiceWithGroupLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);

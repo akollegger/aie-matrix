@@ -8,4 +8,5 @@ export * from "./barnacle.js";
 export * from "./time.js";
 export * from "./scheduler-context.js";
 export * from "./ledger.js";
+export * from "./group.js";
 

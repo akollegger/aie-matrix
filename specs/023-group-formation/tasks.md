@@ -18,12 +18,12 @@
 
 **Purpose**: New types, error types, and Neo4j schema initialization — prerequisites for all stories.
 
-- [ ] T001 Add `group.ts` to `shared/types/src/` with GroupId, AdmissionOffer, AdmissionVote, VoteWindow, GroupSummary, GroupMessage types per `specs/023-group-formation/data-model.md`
-- [ ] T002 Re-export group types from `shared/types/src/index.ts`
-- [ ] T003 Create `server/world-api/src/group-errors.ts` with all Data.TaggedError types: GroupNotFound, GroupDissolved, GroupNotMember, GroupNotParticipant, GroupNotMemberOrParticipant, GroupAntesMismatch, GroupOfferNotFound, GroupOfferExpired, GroupPersistenceError, GroupChatStoreError
-- [ ] T004 Add `unique-names-generator` dependency to `server/world-api/package.json`
-- [ ] T005 Add `(:Group)` uniqueness constraint to `server/world-api/src/neo4j-graph-init.ts` (`CREATE CONSTRAINT group_id_unique IF NOT EXISTS FOR (g:Group) REQUIRE g.group_id IS UNIQUE`)
-- [ ] T006 Link this work to RFC-0024 in `proposals/rfc/0024-group-formation-and-chat.md` — update status from `draft` to `accepted`
+- [x] T001 Add `group.ts` to `shared/types/src/` with GroupId, AdmissionOffer, AdmissionVote, VoteWindow, GroupSummary, GroupMessage types per `specs/023-group-formation/data-model.md`
+- [x] T002 Re-export group types from `shared/types/src/index.ts`
+- [x] T003 Create `server/world-api/src/group-errors.ts` with all Data.TaggedError types: GroupNotFound, GroupDissolved, GroupNotMember, GroupNotParticipant, GroupNotMemberOrParticipant, GroupAntesMismatch, GroupOfferNotFound, GroupOfferExpired, GroupPersistenceError, GroupChatStoreError
+- [x] T004 Add `unique-names-generator` dependency to `server/world-api/package.json`
+- [x] T005 Add `(:Group)` uniqueness constraint to `server/world-api/src/neo4j-graph-init.ts` (`CREATE CONSTRAINT group_id_unique IF NOT EXISTS FOR (g:Group) REQUIRE g.group_id IS UNIQUE`)
+- [x] T006 Link this work to RFC-0024 in `proposals/rfc/0024-group-formation-and-chat.md` — update status from `draft` to `accepted`
 
 **Checkpoint**: Types compile, errors compile, Neo4j constraint wired — story implementation can begin.
 
@@ -35,9 +35,9 @@
 
 **⚠️ CRITICAL**: No user story phase can be completed until this phase is done.
 
-- [ ] T007 Create `server/world-api/src/GroupService.ts` — define `GroupServiceOps` interface and `GroupService` Context.Tag per `specs/023-group-formation/contracts/ic-group-service.md`
-- [ ] T008 Create `server/world-api/src/GroupServiceInMemory.ts` — in-memory Layer implementation of all `GroupServiceOps` methods; handles `GroupRecord` and `VoteWindow` in-memory state; no Neo4j dependency
-- [ ] T009 Create `server/world-api/test/GroupService.test.ts` — unit tests against `GroupServiceInMemory` covering:
+- [x] T007 Create `server/world-api/src/GroupService.ts` — define `GroupServiceOps` interface and `GroupService` Context.Tag per `specs/023-group-formation/contracts/ic-group-service.md`
+- [x] T008 Create `server/world-api/src/GroupServiceInMemory.ts` — in-memory Layer implementation of all `GroupServiceOps` methods; handles `GroupRecord` and `VoteWindow` in-memory state; no Neo4j dependency
+- [x] T009 Create `server/world-api/test/GroupService.test.ts` — unit tests against `GroupServiceInMemory` covering:
   - `createGroup` — happy path; both MEMBER_OF edges created; group bag ActorId assigned
   - `proposeJoin` — vote window opened; system message queued
   - `proposeJoin` — duplicate offer rejected (FR-013)
@@ -49,8 +49,8 @@
   - `groupSay` — message stored; mx_listeners = members + participants
   - `addParticipant` / `removeParticipant`
   - `listMemberships` — correct summary returned
-- [ ] T010 Export `GroupService` and group errors from `server/world-api/src/index.ts`
-- [ ] T011 Add group errors to `HttpMappingError` union in `server/src/errors.ts` with appropriate HTTP status codes (404 for GroupNotFound/GroupDissolved, 403 for GroupNotMember/GroupNotMemberOrParticipant, 409 for GroupOfferExpired/GroupAntesMismatch)
+- [x] T010 Export `GroupService` and group errors from `server/world-api/src/index.ts`
+- [x] T011 Add group errors to `HttpMappingError` union in `server/src/errors.ts` with appropriate HTTP status codes (404 for GroupNotFound/GroupDissolved, 403 for GroupNotMember/GroupNotMemberOrParticipant, 409 for GroupOfferExpired/GroupAntesMismatch)
 
 **Checkpoint**: `pnpm test` in `server/world-api` passes all GroupService unit tests.
 
@@ -62,14 +62,14 @@
 
 **Independent Test**: `ghost_A` and `ghost_B` on same tile; `ghost_A` issues `group.offer to=ghost_B resource=trust amount=10`; `ghost_B` accepts; verify (:Group) node exists in Neo4j, both MEMBER_OF edges present, `{group_id}.jsonl` exists, `group.list` returns the group for both ghosts.
 
-- [ ] T012 [US1] Extend `ProposeParams` in `server/world-api/src/ProposalService.ts` with optional `shared: true` flag; add `GroupFormationTarget` type (ghost or existing group)
-- [ ] T013 [US1] Implement the `shared` formation path in `ProposalService.agree()`: when `shared=true`, after ledger commit, call `GroupService.createGroup()` to mint the (:Group) node, MEMBER_OF edges, group bag (ActorId = `"group:{group_id}"`), and initialize the JSONL thread via `JsonlStore`. **FR-011**: validate that `give.resource === receive.resource` when `shared=true` in `ProposalService.propose()` and return `LedgerMonotonicTradeRejected` (or a new `GroupResourceMismatch` error) if they differ.
-- [ ] T014 [US1] Add the `group.offer` MCP tool handler in `server/world-api/src/mcp-server.ts` per `specs/023-group-formation/contracts/ic-mcp-group-tools.md` — routes to `ProposalService.propose({ shared: true })` for ghost-to-ghost formation; enforces proximity via existing `getGhostCell` check; returns a clear error message if resource types do not match (`"Both sides must offer the same resource type to form a group"`)
-- [ ] T015 [US1] Add the `group.list` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.listMemberships(ghostId)`
-- [ ] T016 [US1] Implement `GroupServiceLive.createGroup()` in `server/world-api/src/GroupServiceLive.ts` (new file) — Neo4j-backed: write (:Group) node, MEMBER_OF edges, (:Group)-[:OWNS]->(:Bag); load into in-memory GroupRecord; initialize JSONL thread file
-- [ ] T017 [US1] Implement `GroupServiceLive.listMemberships()` — query MEMBER_OF edges for ghostId from Neo4j; return GroupSummary[]
-- [ ] T018 [P] [US1] Create `server/world-api/test/GroupService.integration.test.ts` — integration tests for `GroupServiceLive.createGroup` and `listMemberships`; skipped when `NEO4J_URI` unset
-- [ ] T019 [US1] Smoke-test the formation flow per `specs/023-group-formation/quickstart.md` §"Smoke Test: Form a Group"; confirm `group.list` output and JSONL file creation
+- [x] T012 [US1] Extend `ProposeParams` in `server/world-api/src/ProposalService.ts` with optional `shared: true` flag; add `GroupFormationTarget` type (ghost or existing group)
+- [x] T013 [US1] Implement the `shared` formation path in `ProposalService.agree()`: when `shared=true`, after ledger commit, call `GroupService.createGroup()` to mint the (:Group) node, MEMBER_OF edges, group bag (ActorId = `"group:{group_id}"`), and initialize the JSONL thread via `JsonlStore`. **FR-011**: validate that `give.resource === receive.resource` when `shared=true` in `ProposalService.propose()` and return `LedgerMonotonicTradeRejected` (or a new `GroupResourceMismatch` error) if they differ.
+- [x] T014 [US1] Add the `group.offer` MCP tool handler in `server/world-api/src/mcp-server.ts` per `specs/023-group-formation/contracts/ic-mcp-group-tools.md` — routes to `ProposalService.propose({ shared: true })` for ghost-to-ghost formation; enforces proximity via existing `getGhostCell` check; returns a clear error message if resource types do not match (`"Both sides must offer the same resource type to form a group"`)
+- [x] T015 [US1] Add the `group.list` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.listMemberships(ghostId)`
+- [x] T016 [US1] Implement `GroupServiceLive.createGroup()` in `server/world-api/src/GroupServiceLive.ts` (new file) — Neo4j-backed: write (:Group) node, MEMBER_OF edges, (:Group)-[:OWNS]->(:Bag); load into in-memory GroupRecord; initialize JSONL thread file
+- [x] T017 [US1] Implement `GroupServiceLive.listMemberships()` — query MEMBER_OF edges for ghostId from Neo4j; return GroupSummary[]
+- [x] T018 [P] [US1] Create `server/world-api/test/GroupService.integration.test.ts` — integration tests for `GroupServiceLive.createGroup` and `listMemberships`; skipped when `NEO4J_URI` unset
+- [x] T019 [US1] Smoke-test the formation flow per `specs/023-group-formation/quickstart.md` §"Smoke Test: Form a Group"; confirm `group.list` output and JSONL file creation
 
 **Checkpoint**: Two ghosts can form a group end-to-end. `group.list` returns the group. JSONL thread file exists. Unit tests pass. Proceed to US2/US3 in parallel or sequentially.
 

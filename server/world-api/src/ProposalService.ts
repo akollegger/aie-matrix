@@ -21,7 +21,9 @@ import {
   LedgerSelfAgreeDenied,
   LedgerUnknownResource,
 } from "./ledger-errors.js";
+import { GroupResourceMismatch } from "./group-errors.js";
 import { LedgerService } from "./LedgerService.js";
+import { GroupService } from "./GroupService.js";
 
 export const PROPOSAL_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
@@ -30,15 +32,35 @@ export interface ProposeParams {
   counterpartyId: ActorId;
   give: { resource: ResourceId; qty: number };
   want: { resource: ResourceId; qty: number };
+  /**
+   * When true, both sides contribute equal amounts of the same resource to a
+   * newly created group bag (group formation) rather than exchanging with each
+   * other. FR-011: give.resource must equal want.resource when shared is true.
+   */
+  shared?: boolean;
 }
 
 /** Lookup function for ghost cell — injected to avoid a hard WorldBridgeService dependency. */
 export type GhostCellLookup = (ghostId: ActorId) => string | undefined;
 
+/**
+ * Callback invoked by ProposalService.agree() when a shared (group formation)
+ * proposal is accepted. Injected to avoid a circular dependency on GroupService.
+ * Returns the new groupId.
+ */
+export type GroupFormationCallback = (params: {
+  ghostA: ActorId;
+  ghostB: ActorId;
+  resource: string;
+  amount: number;
+  formationTxId: string;
+}) => Promise<{ groupId: string; name: string }>;
+
 export interface ProposalServiceOps {
   /** Create a pending proposal. Returns the proposal ID and expiry timestamp.
-   *  Pass `getGhostCell` to enforce same-tile proximity; omit to skip the check. */
-  propose(params: ProposeParams, getGhostCell?: GhostCellLookup): Effect.Effect<{ proposalId: string; expiresAt: number }, LedgerMonotonicTradeRejected | LedgerCounterpartyNotNearby>;
+   *  Pass `getGhostCell` to enforce same-tile proximity; omit to skip the check.
+   *  When `params.shared` is true, both sides must use the same resource (FR-011). */
+  propose(params: ProposeParams, getGhostCell?: GhostCellLookup): Effect.Effect<{ proposalId: string; expiresAt: number }, LedgerMonotonicTradeRejected | LedgerCounterpartyNotNearby | GroupResourceMismatch>;
 
   /**
    * Accept a pending proposal. Atomically commits the ledger transaction carrying
@@ -84,6 +106,7 @@ export class ProposalService extends Context.Tag("world-api/ProposalService")<
 export function makeProposalService(
   ledger: LedgerService["Type"],
   defaultCellLookup?: GhostCellLookup,
+  onGroupFormation?: GroupFormationCallback,
 ): ProposalServiceOps {
   const proposals = new Map<string, Proposal>();
 
@@ -100,6 +123,14 @@ export function makeProposalService(
 
   const propose = (params: ProposeParams, cellLookup?: GhostCellLookup) =>
     Effect.gen(function* () {
+      // FR-011: shared formation requires same resource on both sides
+      if (params.shared === true && params.give.resource !== params.want.resource) {
+        yield* Effect.fail(new GroupResourceMismatch({
+          giveResource: params.give.resource,
+          receiveResource: params.want.resource,
+        }));
+      }
+
       // Proximity check: both ghosts must be on the same tile.
       const lookup = cellLookup ?? defaultCellLookup;
       if (lookup) {
@@ -135,6 +166,7 @@ export function makeProposalService(
         want: params.want,
         expiresAt,
         status: "pending",
+        ...(params.shared === true ? { shared: true } : {}),
       };
       proposals.set(proposalId, proposal);
       return { proposalId, expiresAt };
@@ -160,17 +192,49 @@ export function makeProposalService(
         return undefined as never;
       }
 
-      // Atomic commit: initiator gives, counterparty gives in return
-      yield* ledger.commit({
-        id: ulid(),
-        transfers: [
-          { resource: p.give.resource, qty: p.give.qty, from: p.initiatorId, to: p.counterpartyId },
-          { resource: p.want.resource, qty: p.want.qty, from: p.counterpartyId, to: p.initiatorId },
-        ],
-        cause: "trade",
-        actors: [p.initiatorId, p.counterpartyId],
-        ts: Date.now(),
-      });
+      const txId = ulid();
+
+      if (p.shared === true) {
+        // Shared (group formation): both contributions go to a new group bag.
+        // The group bag ActorId is resolved after the group is created; we use
+        // a placeholder bag id derived from the proposal so the commit is
+        // idempotent. GroupService.createGroup is called after the ledger commit.
+        const tempGroupBagId = `group-bag:${txId}`;
+        yield* ledger.commit({
+          id: txId,
+          transfers: [
+            { resource: p.give.resource, qty: p.give.qty, from: p.initiatorId, to: tempGroupBagId },
+            { resource: p.want.resource, qty: p.want.qty, from: p.counterpartyId, to: tempGroupBagId },
+          ],
+          cause: "group.form",
+          actors: [p.initiatorId, p.counterpartyId],
+          ts: Date.now(),
+        });
+
+        if (onGroupFormation) {
+          yield* Effect.promise(() =>
+            onGroupFormation({
+              ghostA: p.initiatorId,
+              ghostB: p.counterpartyId,
+              resource: p.give.resource,
+              amount: p.give.qty,
+              formationTxId: txId,
+            }),
+          );
+        }
+      } else {
+        // Standard trade: initiator gives, counterparty gives in return
+        yield* ledger.commit({
+          id: txId,
+          transfers: [
+            { resource: p.give.resource, qty: p.give.qty, from: p.initiatorId, to: p.counterpartyId },
+            { resource: p.want.resource, qty: p.want.qty, from: p.counterpartyId, to: p.initiatorId },
+          ],
+          cause: "trade",
+          actors: [p.initiatorId, p.counterpartyId],
+          ts: Date.now(),
+        });
+      }
 
       const agreed: Proposal = { ...p, status: "agreed" };
       proposals.set(proposalId, agreed);
@@ -224,3 +288,19 @@ export const makeProposalServiceLayer = (
  *  the WorldBridgeService instance is available (at MCP request time via offerEffect/requestEffect). */
 export const ProposalServiceLayer: Layer.Layer<ProposalService, never, LedgerService> =
   Layer.effect(ProposalService, Effect.map(LedgerService, (ledger) => makeProposalService(ledger)));
+
+/**
+ * ProposalService layer wired with GroupService formation callback.
+ * Use this instead of ProposalServiceLayer in runtimes that have GroupService available.
+ */
+export const ProposalServiceWithGroupLayer: Layer.Layer<ProposalService, never, LedgerService | GroupService> =
+  Layer.effect(
+    ProposalService,
+    Effect.gen(function* () {
+      const ledger = yield* LedgerService;
+      const groups = yield* GroupService;
+      const callback: GroupFormationCallback = (params) =>
+        Effect.runPromise(groups.createGroup(params));
+      return makeProposalService(ledger, undefined, callback);
+    }),
+  );
