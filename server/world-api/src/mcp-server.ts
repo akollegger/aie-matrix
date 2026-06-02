@@ -1149,6 +1149,7 @@ function groupOfferEffect(
             give: { resource: input.resource, qty: input.amount },
             want: { resource: input.resource, qty: input.amount },
             shared: true,
+            expiresAtMs: Date.now() + expiresIn * 1000,
           },
           (id) => bridge.getGhostCell(id),
         ),
@@ -1255,22 +1256,25 @@ function groupLeaveEffect(
 
     const { resource, amount } = membership.myContribution;
     const groupBagId = `group:${groupId}`;
-
-    // Commit ledger leave transaction
     const txId = ulid();
-    const txEither = yield* Effect.either(
-      ledger.commit({
-        id: txId,
-        transfers: [{ resource, qty: amount, from: groupBagId, to: ghostId }],
-        cause: "group.leave",
-        actors: [ghostId],
-        ts: Date.now(),
-      }),
-    );
-    if (txEither._tag === "Left") {
-      const e = txEither.left as any;
-      const tag: string = e._tag ?? "LEDGER_ERROR";
-      return { ok: false, code: tag.replace("LedgerError.", ""), message: `Leave failed: ${tag}` };
+
+    // Only commit a ledger transfer when the contribution is non-zero;
+    // communication-only bonds (amount=0) have no resources to return.
+    if (amount > 0) {
+      const txEither = yield* Effect.either(
+        ledger.commit({
+          id: txId,
+          transfers: [{ resource, qty: amount, from: groupBagId, to: ghostId }],
+          cause: "group.leave",
+          actors: [ghostId],
+          ts: Date.now(),
+        }),
+      );
+      if (txEither._tag === "Left") {
+        const e = txEither.left as any;
+        const tag: string = e._tag ?? "LEDGER_ERROR";
+        return { ok: false, code: tag.replace("LedgerError.", ""), message: `Leave failed: ${tag}` };
+      }
     }
 
     const either = yield* Effect.either(groups.leave({ groupId, ghostId, leaveTxId: txId }));

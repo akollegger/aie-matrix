@@ -43,6 +43,7 @@ test(`${label}GroupServiceLive.createGroup — creates Group node and MEMBER_OF 
         Effect.gen(function* () {
           const groups = yield* GroupService;
           const r = yield* groups.createGroup({
+            groupId: ulid(),
             ghostA: `gA-${ulid()}`,
             ghostB: `gB-${ulid()}`,
             resource: "trust",
@@ -87,7 +88,7 @@ test(`${label}GroupServiceLive.listMemberships — returns groups after createGr
       Effect.provide(
         Effect.gen(function* () {
           const groups = yield* GroupService;
-          const created = yield* groups.createGroup({ ghostA, ghostB, resource: "trust", amount: 5, formationTxId: ulid() });
+          const created = yield* groups.createGroup({ groupId: ulid(), ghostA, ghostB, resource: "trust", amount: 5, formationTxId: ulid() });
           const memberships = yield* groups.listMemberships(ghostA);
           return { created, memberships };
         }),

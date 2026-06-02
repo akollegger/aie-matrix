@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect } from "effect";
+import { ulid } from "ulid";
 import { makeGroupServiceInMemory } from "../src/GroupServiceInMemory.js";
 import {
   GroupAntesMismatch,
@@ -39,6 +40,7 @@ async function runFail<A, E>(effect: Effect.Effect<A, E, never>): Promise<E> {
 test("createGroup — creates group with both MEMBER_OF records", async () => {
   const { svc } = makeSvc();
   const result = await run(svc.createGroup({
+    groupId: ulid(),
     ghostA: "gA",
     ghostB: "gB",
     resource: "trust",
@@ -59,6 +61,7 @@ test("createGroup — creates group with both MEMBER_OF records", async () => {
 test("createGroup — amount 0 (communication-only bond) is valid", async () => {
   const { svc } = makeSvc();
   const result = await run(svc.createGroup({
+    groupId: ulid(),
     ghostA: "gA",
     ghostB: "gB",
     resource: "trust",
@@ -76,7 +79,7 @@ test("createGroup — amount 0 (communication-only bond) is valid", async () => 
 
 test("proposeJoin — opens vote window and posts system message", async () => {
   const { svc, messages } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const result = await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
   assert.ok(result.offerId.length > 0);
   assert.ok(messages.some((m: any) => m.content.includes("gC") && m.content.includes("offered to join")));
@@ -90,14 +93,14 @@ test("proposeJoin — fails if group not found", async () => {
 
 test("proposeJoin — fails on ante mismatch (wrong amount)", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const err = await runFail(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 5, expiresAt: Date.now() + 60_000 }));
   assert.ok(err instanceof GroupAntesMismatch);
 });
 
 test("proposeJoin — rejects duplicate pending offer (FR-013)", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
   const err = await runFail(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
   assert.ok(err instanceof GroupDuplicateOffer);
@@ -109,7 +112,7 @@ test("proposeJoin — rejects duplicate pending offer (FR-013)", async () => {
 
 test("vote — single accept from sole voter admits the prospect (majority of voters)", async () => {
   const { svc, messages } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const { offerId } = await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
 
   const result = await run(svc.vote({ offerId, voterId: "gA", decision: "accept" }));
@@ -126,7 +129,7 @@ test("vote — single accept from sole voter admits the prospect (majority of vo
 
 test("vote — majority reject does not admit", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const { offerId } = await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
 
   await run(svc.vote({ offerId, voterId: "gA", decision: "reject" }));
@@ -139,7 +142,7 @@ test("vote — majority reject does not admit", async () => {
 
 test("vote — single voter admit works when no other members vote (apathy is not a veto)", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const { offerId } = await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
 
   // gA votes, gB abstains; gA is majority of voters cast
@@ -159,7 +162,7 @@ test("vote — fails if offerId not found", async () => {
 
 test("vote — fails if voter is not a member", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const { offerId } = await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
   const err = await runFail(svc.vote({ offerId, voterId: "gX", decision: "accept" }));
   assert.ok(err instanceof GroupNotMember);
@@ -171,7 +174,7 @@ test("vote — fails if voter is not a member", async () => {
 
 test("resolveExpiredOffers — expired offer with no votes is cancelled", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() - 1 }));
 
   await run(svc.resolveExpiredOffers());
@@ -180,22 +183,25 @@ test("resolveExpiredOffers — expired offer with no votes is cancelled", async 
   assert.equal(memberships.length, 0, "prospect not admitted after expired offer with no votes");
 });
 
-test("resolveExpiredOffers — expired offer with majority accept is admitted", async () => {
+test("resolveExpiredOffers — expired window with no votes is cancelled (prospect not admitted)", async () => {
+  // This test verifies the already-tested behavior more precisely:
+  // an offer that expires with zero votes cast does NOT admit the prospect.
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
-  const { offerId } = await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() + 60_000 }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  await run(svc.proposeJoin({ groupId, prospectId: "gC", resource: "trust", amount: 10, expiresAt: Date.now() - 1 }));
+  await run(svc.resolveExpiredOffers());
+  const memberships = await run(svc.listMemberships("gC"));
+  assert.equal(memberships.length, 0);
+});
 
-  // Cast one accept vote, then manually expire the window
-  const window = (svc as any).voteWindows?.get(offerId); // internal — just manipulate via the test shim
-  // Since we can't easily poke internals, use vote then expire via a trick:
-  // Create a second svc with already-expired window
-  const { svc: svc2 } = makeSvc();
-  const { groupId: g2 } = await run(svc2.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-2" }));
+test("vote() on an already-expired offer returns GroupOfferExpired", async () => {
+  // Separately test that calling vote() on an expired window surfaces the error correctly.
+  const { svc } = makeSvc();
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-2" }));
   const past = Date.now() - 1;
-  const { offerId: oid2 } = await run(svc2.proposeJoin({ groupId: g2, prospectId: "gD", resource: "trust", amount: 10, expiresAt: past }));
-  // vote cast before expiry via vote() — but window is already expired, so vote() returns error
-  const voteErr = await runFail(svc2.vote({ offerId: oid2, voterId: "gA", decision: "accept" }));
-  assert.ok(voteErr instanceof GroupOfferExpired);
+  const { offerId } = await run(svc.proposeJoin({ groupId, prospectId: "gD", resource: "trust", amount: 10, expiresAt: past }));
+  const err = await runFail(svc.vote({ offerId, voterId: "gA", decision: "accept" }));
+  assert.ok(err instanceof GroupOfferExpired);
 });
 
 // ---------------------------------------------------------------------------
@@ -204,7 +210,7 @@ test("resolveExpiredOffers — expired offer with majority accept is admitted", 
 
 test("leave — returns contributed resources and removes membership", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
 
   const result = await run(svc.leave({ groupId, ghostId: "gA", leaveTxId: "tx-leave-1" }));
   assert.equal(result.returned.resource, "trust");
@@ -217,7 +223,7 @@ test("leave — returns contributed resources and removes membership", async () 
 
 test("leave — last member triggers dissolution", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
 
   await run(svc.leave({ groupId, ghostId: "gA", leaveTxId: "tx-l1" }));
   const result = await run(svc.leave({ groupId, ghostId: "gB", leaveTxId: "tx-l2" }));
@@ -230,7 +236,7 @@ test("leave — last member triggers dissolution", async () => {
 
 test("leave — fails if not a member", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const err = await runFail(svc.leave({ groupId, ghostId: "gX", leaveTxId: "tx-l" }));
   assert.ok(err instanceof GroupNotMember);
 });
@@ -247,7 +253,7 @@ test("leave — fails if group not found", async () => {
 
 test("addParticipant — member can add a participant", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   await run(svc.addParticipant({ groupId, actorId: "inquisitor-1", role: "inquisitor", requesterId: "gA" }));
   // Verify participant can post via groupSay
   await run(svc.groupSay({ groupId, senderId: "inquisitor-1", senderName: "Inquisitor", content: "hello", senderTile: "" }));
@@ -255,14 +261,14 @@ test("addParticipant — member can add a participant", async () => {
 
 test("addParticipant — non-member cannot add participant", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const err = await runFail(svc.addParticipant({ groupId, actorId: "obs", role: "observer", requesterId: "gX" }));
   assert.ok(err instanceof GroupNotMember);
 });
 
 test("removeParticipant — member can remove a participant", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   await run(svc.addParticipant({ groupId, actorId: "obs", role: "observer", requesterId: "gA" }));
   await run(svc.removeParticipant({ groupId, actorId: "obs", requesterId: "gA" }));
   // Participant removed: groupSay now fails
@@ -272,7 +278,7 @@ test("removeParticipant — member can remove a participant", async () => {
 
 test("removeParticipant — fails if actor is not a participant", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const err = await runFail(svc.removeParticipant({ groupId, actorId: "nonexistent", requesterId: "gA" }));
   assert.ok(err instanceof GroupNotParticipant);
 });
@@ -283,7 +289,7 @@ test("removeParticipant — fails if actor is not a participant", async () => {
 
 test("groupSay — member message is stored and listeners include all members", async () => {
   const { svc, messages } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
 
   const result = await run(svc.groupSay({ groupId, senderId: "gA", senderName: "Ghost A", content: "hello group", senderTile: "8a1234567ffffff" }));
   assert.ok(result.messageId.length > 0);
@@ -294,14 +300,14 @@ test("groupSay — member message is stored and listeners include all members", 
 
 test("groupSay — non-member/non-participant is rejected", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   const err = await runFail(svc.groupSay({ groupId, senderId: "gX", senderName: "Intruder", content: "hi", senderTile: "" }));
   assert.ok(err instanceof GroupNotMemberOrParticipant);
 });
 
 test("groupSay — fails if group dissolved", async () => {
   const { svc } = makeSvc();
-  const { groupId } = await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
+  const { groupId } = await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 10, formationTxId: "tx-1" }));
   await run(svc.leave({ groupId, ghostId: "gA", leaveTxId: "tx-l1" }));
   await run(svc.leave({ groupId, ghostId: "gB", leaveTxId: "tx-l2" }));
   // Now dissolved — participant path
@@ -322,8 +328,8 @@ test("listMemberships — returns empty for ghost with no groups", async () => {
 
 test("listMemberships — returns correct summary for member of multiple groups", async () => {
   const { svc } = makeSvc();
-  await run(svc.createGroup({ ghostA: "gA", ghostB: "gB", resource: "trust", amount: 5, formationTxId: "tx-1" }));
-  await run(svc.createGroup({ ghostA: "gA", ghostB: "gC", resource: "gold", amount: 10, formationTxId: "tx-2" }));
+  await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gB", resource: "trust", amount: 5, formationTxId: "tx-1" }));
+  await run(svc.createGroup({ groupId: ulid(), ghostA: "gA", ghostB: "gC", resource: "gold", amount: 10, formationTxId: "tx-2" }));
 
   const result = await run(svc.listMemberships("gA"));
   assert.equal(result.length, 2);

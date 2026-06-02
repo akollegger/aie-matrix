@@ -20,6 +20,7 @@ import {
 } from "./group-errors.js";
 import { GroupService, type GroupServiceOps } from "./GroupService.js";
 import { WorldBridgeService } from "./WorldBridgeService.js";
+import { LedgerService } from "./LedgerService.js";
 import type { VoteWindow } from "@aie-matrix/shared-types";
 
 function generateGroupName(): string {
@@ -45,6 +46,7 @@ function groupBagActorId(groupId: GroupId): string {
 function makeGroupServiceLive(
   driver: Driver,
   bridge: WorldBridgeService["Type"],
+  ledger: LedgerService["Type"],
   conversationDataDir: string,
 ): GroupServiceOps {
   // In-memory cache of active groups (loaded from Neo4j on first use or on session startup)
@@ -95,7 +97,7 @@ function makeGroupServiceLive(
     fanoutGroupMessage(listeners, groupId, messageId);
   }
 
-  function resolveVoteWindowAsync(offerId: string): Promise<void> {
+  async function resolveVoteWindowAsync(offerId: string): Promise<void> {
     const window = voteWindows.get(offerId);
     if (!window) return Promise.resolve();
     const { offer, votes } = window;
@@ -111,6 +113,23 @@ function makeGroupServiceLive(
     voteWindows.delete(offerId);
 
     if (!admitted) return Promise.resolve();
+
+    // Commit the join ledger transaction before updating the graph
+    if (offer.amount > 0) {
+      try {
+        const groupBagId = groupBagActorId(offer.groupId);
+        await Effect.runPromise(ledger.commit({
+          id: ulid(),
+          transfers: [{ resource: offer.resource, qty: offer.amount, from: offer.prospectId, to: groupBagId }],
+          cause: "group.join",
+          actors: [offer.prospectId, offer.groupId],
+          ts: Date.now(),
+        }));
+      } catch (e) {
+        console.error(JSON.stringify({ kind: "group.admit.ledger-error", offerId, error: String(e) }));
+        return; // do not admit if ledger commit fails
+      }
+    }
 
     const session = driver.session();
     return session
@@ -133,11 +152,10 @@ function makeGroupServiceLive(
       .finally(() => session.close());
   }
 
-  return {
-    createGroup({ ghostA, ghostB, resource, amount, formationTxId }) {
+  const svc: GroupServiceOps & { __loadGroup?: (rec: { groupId: GroupId; name: string; members: Map<string, { resource: string; contributed: number }> }) => void } = {
+    createGroup({ groupId, ghostA, ghostB, resource, amount, formationTxId }) {
       return Effect.tryPromise({
         try: async () => {
-          const groupId = ulid();
           const name = generateGroupName();
           const bagActorId = groupBagActorId(groupId);
 
@@ -246,13 +264,24 @@ function makeGroupServiceLive(
 
         const expiry = new Date(expiresAt).toISOString();
         const memberList = [...group.members.keys()];
-        yield* Effect.promise(() =>
-          postSystemMessageAsync(
-            groupId,
-            `${prospectId} has offered to join. Vote before ${expiry}. Use group.vote to respond.`,
-            memberList,
-          ),
-        );
+        // Post system message with message_id === offerId so inbox notification.message_id
+        // can be used directly as the offer_id argument to group.vote.
+        yield* Effect.promise(async () => {
+          const dir = conversationDataDir;
+          await mkdir(dir, { recursive: true });
+          const record = {
+            thread_id: groupId,
+            message_id: offerId,
+            timestamp: new Date().toISOString(),
+            role: "system",
+            name: "system",
+            content: `${prospectId} has offered to join. Offer ID: ${offerId}. Vote before ${expiry}. Use group.vote to respond.`,
+            mx_tile: "",
+            mx_listeners: memberList,
+          };
+          await appendGroupThread(groupId, record);
+          fanoutGroupMessage(memberList, groupId, offerId);
+        });
 
         return { offerId, expiresAt };
       });
@@ -451,20 +480,68 @@ function makeGroupServiceLive(
       });
     },
   };
+
+  // Internal hook for pre-populating the cache from Neo4j on startup.
+  svc.__loadGroup = (rec) => {
+    if (!groups.has(rec.groupId)) {
+      groups.set(rec.groupId, { groupId: rec.groupId, name: rec.name, members: rec.members, participants: new Map(), dissolvedAt: null });
+    }
+  };
+
+  return svc;
 }
 
 export const makeGroupServiceLiveLayer = (
   driver: Driver,
   conversationDataDir: string,
-): Layer.Layer<GroupService, never, WorldBridgeService> =>
-  Layer.effect(
+): Layer.Layer<GroupService, never, WorldBridgeService | LedgerService> =>
+  Layer.scoped(
     GroupService,
     Effect.gen(function* () {
       const bridge = yield* WorldBridgeService;
-      const svc = makeGroupServiceLive(driver, bridge, conversationDataDir);
+      const ledgerSvc = yield* LedgerService;
+      const svc = makeGroupServiceLive(driver, bridge, ledgerSvc, conversationDataDir);
 
-      // Background fiber: resolve expired vote windows every 30 seconds
-      yield* Effect.forkDaemon(
+      // Pre-populate in-memory cache from Neo4j so existing groups survive server restarts.
+      // Errors are non-fatal: cache starts empty and fills as groups are accessed.
+      yield* Effect.promise(() =>
+        (async () => {
+          const session = driver.session();
+          try {
+            const result = await session.executeRead((tx) =>
+              tx.run(
+                `MATCH (g:Group) WHERE g.dissolved_at IS NULL
+                 OPTIONAL MATCH (m)-[:MEMBER_OF]->(g)
+                 RETURN g.group_id AS groupId, g.name AS name,
+                        collect({ghostId: m.ghost_id, resource: head([(m)-[r:MEMBER_OF]->(g) | r.resource]), contributed: head([(m)-[r:MEMBER_OF]->(g) | r.contributed])}) AS members`,
+              ),
+            );
+            for (const rec of result.records) {
+              const groupId = rec.get("groupId") as string;
+              const name = rec.get("name") as string;
+              const memberRows = rec.get("members") as Array<{ ghostId: string; resource: string; contributed: number | { toNumber(): number } }>;
+              const members = new Map<string, { resource: string; contributed: number }>();
+              for (const m of memberRows) {
+                if (m.ghostId) {
+                  members.set(m.ghostId, {
+                    resource: m.resource,
+                    contributed: typeof m.contributed === "object" ? m.contributed.toNumber() : Number(m.contributed),
+                  });
+                }
+              }
+              (svc as any).__loadGroup?.({ groupId, name, members });
+            }
+          } catch {
+            // non-fatal: cache starts empty
+          } finally {
+            await session.close();
+          }
+        })()
+      ).pipe(Effect.orElse(() => Effect.void));
+
+      // Background fiber bound to this scope: resolves expired vote windows every 30 seconds.
+      // Effect.forkScoped ensures the fiber is cancelled when the layer scope closes.
+      yield* Effect.forkScoped(
         Effect.repeat(
           svc.resolveExpiredOffers(),
           Schedule.fixed("30 seconds"),

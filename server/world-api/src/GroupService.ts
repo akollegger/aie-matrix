@@ -21,6 +21,7 @@ export interface GroupServiceOps {
    * Called after the ledger transaction is committed.
    */
   createGroup(params: {
+    groupId: GroupId;
     ghostA: ActorId;
     ghostB: ActorId;
     resource: string;

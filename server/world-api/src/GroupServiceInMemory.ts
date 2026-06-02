@@ -92,9 +92,8 @@ export function makeGroupServiceInMemory(
   }
 
   return {
-    createGroup({ ghostA, ghostB, resource, amount, formationTxId: _ }) {
+    createGroup({ groupId, ghostA, ghostB, resource, amount, formationTxId: _ }) {
       return Effect.sync(() => {
-        const groupId = ulid();
         const name = generateGroupName();
         const members = new Map<ActorId, { resource: string; contributed: number }>();
         members.set(ghostA, { resource, contributed: amount });
@@ -147,11 +146,21 @@ export function makeGroupServiceInMemory(
 
         const expiry = new Date(expiresAt).toISOString();
         const memberList = [...group.members.keys()];
-        postSystemMessage(
-          groupId,
-          `${prospectId} has offered to join. Vote before ${expiry}. Use group.vote to respond.`,
-          memberList,
-        );
+        // Use offerId as message_id so inbox notification.message_id === offerId,
+        // allowing members to call group.vote with the offer_id directly from inbox.
+        const msg: ChatMessage = {
+          thread_id: groupId,
+          message_id: offerId,
+          timestamp: new Date().toISOString(),
+          role: "system",
+          name: "system",
+          content: `${prospectId} has offered to join. Offer ID: ${offerId}. Vote before ${expiry}. Use group.vote to respond.`,
+          mx_tile: "",
+          mx_listeners: memberList,
+        };
+        if (!chatLog.has(groupId)) chatLog.set(groupId, []);
+        chatLog.get(groupId)!.push(msg);
+        onMessage?.(msg);
 
         return { offerId, expiresAt };
       });
