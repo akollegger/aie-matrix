@@ -72,19 +72,6 @@ export {
   LedgerMonotonicTradeRejected,
   LedgerCounterpartyNotNearby,
   type LedgerError,
-  GroupNotFound,
-  GroupDissolved,
-  GroupNotMember,
-  GroupNotParticipant,
-  GroupNotMemberOrParticipant,
-  GroupAntesMismatch,
-  GroupResourceMismatch,
-  GroupOfferNotFound,
-  GroupOfferExpired,
-  GroupDuplicateOffer,
-  GroupPersistenceError,
-  GroupChatStoreError,
-  type GroupError,
 } from "@aie-matrix/server-world-api";
 
 type RegistryErrorUnion = RegistryUnknownCaretaker | RegistryUnknownAgentHost | RegistryCaretakerAlreadyHasGhost;
@@ -108,8 +95,7 @@ export type HttpMappingError =
   | LiveSessionNotFoundError
   | LiveSessionMapNotPublishedError
   | LiveSessionAlreadyEndedError
-  | LedgerError
-  | GroupError;
+  | LedgerError;
 
 function authErrorBody(error: AuthError): string {
   const variant = error._tag.slice("AuthError.".length);
@@ -402,30 +388,6 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
         status: 422,
         body: JSON.stringify({ ok: false, code: "COUNTERPARTY_NOT_NEARBY", initiatorId: error.initiatorId, counterpartyId: error.counterpartyId }),
       };
-    case "GroupError.NotFound":
-      return { status: 404, body: JSON.stringify({ ok: false, code: "GROUP_NOT_FOUND", groupId: error.groupId }) };
-    case "GroupError.Dissolved":
-      return { status: 410, body: JSON.stringify({ ok: false, code: "GROUP_DISSOLVED", groupId: error.groupId }) };
-    case "GroupError.NotMember":
-      return { status: 403, body: JSON.stringify({ ok: false, code: "GROUP_NOT_MEMBER", groupId: error.groupId, actorId: error.actorId }) };
-    case "GroupError.NotParticipant":
-      return { status: 403, body: JSON.stringify({ ok: false, code: "GROUP_NOT_PARTICIPANT", groupId: error.groupId, actorId: error.actorId }) };
-    case "GroupError.NotMemberOrParticipant":
-      return { status: 403, body: JSON.stringify({ ok: false, code: "GROUP_NOT_MEMBER_OR_PARTICIPANT", groupId: error.groupId, actorId: error.actorId }) };
-    case "GroupError.AntesMismatch":
-      return { status: 422, body: JSON.stringify({ ok: false, code: "GROUP_ANTES_MISMATCH", expected: error.expected, got: error.got, resource: error.resource }) };
-    case "GroupError.ResourceMismatch":
-      return { status: 422, body: JSON.stringify({ ok: false, code: "GROUP_RESOURCE_MISMATCH", giveResource: error.giveResource, receiveResource: error.receiveResource }) };
-    case "GroupError.OfferNotFound":
-      return { status: 404, body: JSON.stringify({ ok: false, code: "GROUP_OFFER_NOT_FOUND", offerId: error.offerId }) };
-    case "GroupError.OfferExpired":
-      return { status: 410, body: JSON.stringify({ ok: false, code: "GROUP_OFFER_EXPIRED", offerId: error.offerId }) };
-    case "GroupError.DuplicateOffer":
-      return { status: 409, body: JSON.stringify({ ok: false, code: "GROUP_DUPLICATE_OFFER", groupId: error.groupId, prospectId: error.prospectId }) };
-    case "GroupError.Persistence":
-      return { status: 503, body: JSON.stringify({ error: "GROUP_PERSISTENCE_ERROR", message: error.message }) };
-    case "GroupError.ChatStore":
-      return { status: 503, body: JSON.stringify({ error: "GROUP_CHAT_STORE_ERROR", message: error.message }) };
     default: {
       // `HttpMappingError` spans multiple workspace packages; `switch (error._tag)` can leave the
       // default branch typed as `any` in composite builds, which breaks `assertNever` inference.
