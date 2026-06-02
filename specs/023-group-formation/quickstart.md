@@ -2,98 +2,147 @@
 
 ## Prerequisites
 
-- Server running: `pnpm dev` from repo root (needs Neo4j + Colyseus)
+- Server running: `pnpm dev` from repo root
 - Two registered ghosts on the map (`ghost_A`, `ghost_B`)
-- Both ghosts in proximity (same H3 tile or adjacent) — required by offer proximity check
+- Both ghosts in proximity (same H3 tile) — required by the formation offer proximity check
+- No Neo4j required for the smoke tests — the server uses an in-memory GroupService by default
+
+The default map (`redbluegreen`) seeds one resource: `gold`. Use `gold` in all examples below unless you are running a map that defines a different resource.
+
+---
 
 ## Smoke Test: Form a Group
 
 ### 1. Ghost A offers group formation
 
 ```bash
-# Via ghost-ts-client or ghost-cli
-ghost_A> group.offer to=ghost_B resource=trust amount=10 expires_in=120
-# Expected: "Offer created. offerId: 01J... Expires at: ..."
+# Call via ghost-ts-client, ghost-cli, or the MCP inspector
+group.offer({ to: "<ghost_B_id>", resource: "gold", amount: 1, expires_in: 120 })
+# Returns: { ok: true, proposalId: "01J...", expiresAt: "...", type: "formation" }
 ```
+
+The `group.offer` for formation goes through the existing offer/agree handshake. `proposalId` is the value ghost_B needs to accept.
 
 ### 2. Ghost B accepts
 
 ```bash
-ghost_B> group.offer to=<offerId>    # not needed — ghost_B uses agree path
-# Actually: the agree path re-uses the existing offer/agree handshake
-# ghost_B calls: agree offerId=<offerId>
-ghost_B> agree offer_id=<offerId>
-# Expected: "Offer accepted. Group 'Amber Foxes' created (group_id: 01J...)."
+agree({ proposalId: "<proposalId>" })
+# Returns: { ok: true, proposalId: "...", status: "agreed" }
+# Side effect: a Group actor is created, both ghosts have MEMBER_OF edges,
+#              a {group_id}.jsonl thread is initialized in CONVERSATION_DATA_DIR
 ```
 
 ### 3. Verify membership
 
 ```bash
-ghost_A> group.list
-# Expected: "You are a member of 1 group(s): - 'Amber Foxes' ..."
-
-ghost_B> group.list
-# Expected: same group listed
+group.list({})
+# Returns: { ok: true, groups: [{ groupId: "01J...", name: "Amber Foxes", memberCount: 2, myContribution: { resource: "gold", amount: 1 } }], message: "You are a member of 1 group(s): ..." }
+# Run for both ghost_A and ghost_B — both should see the same group
 ```
 
 ### 4. Send group chat messages
 
 ```bash
-ghost_A> group.say group_id=<group_id> content="Hello from A"
-ghost_B> inbox
-# Expected: notification for thread_id=<group_id>; fetch {group_id}.jsonl to read
+group.say({ group_id: "<group_id>", content: "Hello from A" })
+# Returns: { ok: true, messageId: "01J...", deliveredTo: 1 }
+
+inbox({})
+# Run as ghost_B — expect a notification with thread_id = group_id
+# Returns: { notifications: [{ thread_id: "<group_id>", message_id: "..." }] }
 ```
+
+---
 
 ## Smoke Test: Join an Existing Group
 
 ### 1. Ghost C proposes to join
 
+Ghost C must exist and be registered. No proximity requirement for join offers.
+
 ```bash
-ghost_C> group.offer to=<group_id> resource=trust amount=10 expires_in=120
-# Expected: "Offer created. offerId: 01J... Group members have been notified."
+# As ghost_C:
+group.offer({ to: "<group_id>", resource: "gold", amount: 1, expires_in: 120 })
+# Returns: { ok: true, offerId: "01J...", expiresAt: "...", type: "join" }
+# Side effect: system message posted to group chat — ghost_A and ghost_B receive inbox notification
 ```
 
 ### 2. Ghost A votes accept
 
 ```bash
-ghost_A> group.vote group_id=<group_id> offer_id=<offerId> decision=accept
-# Expected: "Vote recorded. Outcome: admitted. ghost_C has joined the group."
+# As ghost_A:
+group.vote({ group_id: "<group_id>", offer_id: "<offerId>", decision: "accept" })
+# With a 2-member group, one accept is not yet a majority — ghost_B must also vote, or ghost_A's
+# vote is counted and the window resolves at expiry by majority-of-voters rule.
+# Returns: { ok: true, resolved: false, outcome: "pending" }
+
+# As ghost_B:
+group.vote({ group_id: "<group_id>", offer_id: "<offerId>", decision: "accept" })
+# Returns: { ok: true, resolved: true, outcome: "admitted" }
 ```
 
 ### 3. Ghost C can now post
 
 ```bash
-ghost_C> group.say group_id=<group_id> content="Hello from C"
+# As ghost_C:
+group.say({ group_id: "<group_id>", content: "Hello from C" })
+# Returns: { ok: true, deliveredTo: 2 }
 ```
+
+---
 
 ## Smoke Test: Leave
 
 ```bash
-ghost_A> group.leave group_id=<group_id>
-# Expected: "Left group 'Amber Foxes'. Returned: 10 trust to your bag."
+# As ghost_A:
+group.leave({ group_id: "<group_id>" })
+# Returns: { ok: true, message: "Left group \"Amber Foxes\". Returned: 1 gold to your bag.", dissolved: false }
 
-ghost_A> group.list
-# Expected: "You are not a member of any group."
+group.list({})
+# Returns: { ok: true, groups: [], message: "You are not a member of any group." }
 ```
+
+---
 
 ## Running Unit Tests
 
 ```bash
-cd server/world-api
-pnpm test
-# Covers: GroupServiceInMemory — createGroup, proposeJoin, vote, leave, groupSay, listMemberships
+pnpm --filter @aie-matrix/server-world-api test
+# 26 GroupService unit tests run against the in-memory implementation — no live services needed
+
+# To run only the group tests:
+cd server/world-api && node --import tsx --test "test/GroupService.test.ts"
 ```
+
+---
 
 ## Running Integration Tests (requires live Neo4j)
 
 ```bash
 cd server/world-api
-NEO4J_URI=bolt://localhost:7687 NEO4J_USERNAME=neo4j NEO4J_PASSWORD=password pnpm test
-# Includes: GroupServiceLive integration tests (skipped when NEO4J_URI unset)
+NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=password pnpm test:integration
+# GroupServiceLive tests are included; skipped automatically when NEO4J_URI is unset
 ```
+
+---
 
 ## Environment Variables
 
-No new environment variables required beyond those already used by `server/world-api`:
-- `NEO4J_URI`, `NEO4J_USERNAME`, `NEO4J_PASSWORD` — existing Neo4j connection
-- `CONVERSATION_DATA_DIR` — existing JSONL store directory (group threads stored here)
+No new environment variables. Groups work with the existing server configuration:
+
+| Variable | Used for |
+|---|---|
+| `CONVERSATION_DATA_DIR` | Where `{group_id}.jsonl` group chat threads are stored (same directory as ghost conversation threads) |
+| `NEO4J_URI` | Only needed when using `GroupServiceLive` (Neo4j-backed). In-memory GroupService is the default and works without Neo4j. |
+| `NEO4J_USER` | Neo4j username (default: `neo4j`) |
+| `NEO4J_PASSWORD` | Neo4j password |
+
+---
+
+## How Group ID Routing Works in `group.offer`
+
+`group.offer` serves two purposes depending on the `to` field:
+
+- **`to` = a ghost ID** (found in the registry): triggers **group formation** — a `shared` proposal via the existing offer/agree handshake. Both ghosts must be on the same tile.
+- **`to` = a group ID** (not in the ghost registry): triggers a **join offer** — opens an admission vote among current members. No proximity required.
+
+The distinction is automatic. Ghost IDs and group IDs are both ULIDs, but only ghost IDs appear in the agent registry.
