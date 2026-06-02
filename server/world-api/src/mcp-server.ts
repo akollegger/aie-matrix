@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import { ulid } from "ulid";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CellId } from "@aie-matrix/server-colyseus";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -51,6 +52,7 @@ import { getRequestTraceId } from "./request-trace.js";
 import { WorldCalendarService } from "./calendar/WorldCalendarService.js";
 import { LedgerService } from "./LedgerService.js";
 import { ProposalService } from "./ProposalService.js";
+import { GroupService } from "./GroupService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -69,7 +71,8 @@ type ToolServices =
   | RedisGhostStoreService
   | WorldCalendarService
   | LedgerService
-  | ProposalService;
+  | ProposalService
+  | GroupService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -1114,6 +1117,236 @@ function ledgerVerifyEffect(
   });
 }
 
+// ---------------------------------------------------------------------------
+// Group tools: group.offer, group.vote, group.leave, group.say, group.list
+// ---------------------------------------------------------------------------
+
+function groupOfferEffect(
+  input: { to: string; resource: string; amount: number; expires_in?: number },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const bridge = yield* WorldBridgeService;
+    const store = yield* RegistryStoreService;
+    const proposals = yield* ProposalService;
+    const groups = yield* GroupService;
+
+    const expiresIn = Math.min(Math.max(input.expires_in ?? 300, 30), 3600);
+
+    // Determine if `to` is a known ghost (formation) or a group (join).
+    // Ghost IDs are registered in the registry; group IDs are not.
+    const isKnownGhost = store.ghosts.has(input.to);
+
+    if (isKnownGhost) {
+      // Group formation: shared offer ghost→ghost (proximity enforced)
+      const either = yield* Effect.either(
+        proposals.propose(
+          {
+            initiatorId: ghostId,
+            counterpartyId: input.to,
+            give: { resource: input.resource, qty: input.amount },
+            want: { resource: input.resource, qty: input.amount },
+            shared: true,
+            expiresAtMs: Date.now() + expiresIn * 1000,
+          },
+          (id) => bridge.getGhostCell(id),
+        ),
+      );
+      if (either._tag === "Left") {
+        const e = either.left as any;
+        const tag: string = e._tag ?? "UNKNOWN";
+        const message =
+          tag === "LedgerError.CounterpartyNotNearby"
+            ? "Both ghosts must be on the same tile to form a group"
+            : tag === "GroupError.ResourceMismatch"
+            ? "Both sides must offer the same resource type to form a group"
+            : tag === "LedgerError.MonotonicTradeRejected"
+            ? `${e.resource ?? "resource"} cannot be used for group formation`
+            : tag;
+        return { ok: false, code: tag.replace(/\w+\./, ""), message };
+      }
+      const result = either.right;
+      return {
+        ok: true,
+        proposalId: result.proposalId,
+        expiresAt: new Date(result.expiresAt).toISOString(),
+        type: "formation",
+        note: `Offer sent to ${store.ghosts.get(input.to)?.displayName ?? input.to}. They must call agree to form the group.`,
+      };
+    } else {
+      // Group join: ghost→group
+      const expiresAt = Date.now() + expiresIn * 1000;
+      const either = yield* Effect.either(
+        groups.proposeJoin({
+          groupId: input.to,
+          prospectId: ghostId,
+          resource: input.resource,
+          amount: input.amount,
+          expiresAt,
+        }),
+      );
+      if (either._tag === "Left") {
+        const e = either.left as any;
+        const tag: string = e._tag ?? "UNKNOWN";
+        const message =
+          tag === "GroupError.NotFound" ? `Group ${input.to} not found`
+          : tag === "GroupError.Dissolved" ? `Group ${input.to} has been dissolved`
+          : tag === "GroupError.AntesMismatch" ? `Ante mismatch: expected ${e.expected} ${e.resource}`
+          : tag === "GroupError.DuplicateOffer" ? "You already have a pending offer to join this group"
+          : tag;
+        return { ok: false, code: tag.replace("GroupError.", ""), message };
+      }
+      const result = either.right;
+      return {
+        ok: true,
+        offerId: result.offerId,
+        expiresAt: new Date(result.expiresAt).toISOString(),
+        type: "join",
+        note: "Join offer posted. Group members have been notified.",
+      };
+    }
+  });
+}
+
+function groupVoteEffect(
+  input: { group_id: string; offer_id: string; decision: "accept" | "reject" },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const either = yield* Effect.either(
+      groups.vote({ offerId: input.offer_id, voterId: ghostId, decision: input.decision }),
+    );
+    if (either._tag === "Left") {
+      const e = either.left as any;
+      const tag: string = e._tag ?? "UNKNOWN";
+      const message =
+        tag === "GroupError.OfferNotFound" ? "Offer not found or already resolved"
+        : tag === "GroupError.OfferExpired" ? "Offer has expired"
+        : tag === "GroupError.NotMember" ? `Not a member of group ${input.group_id}`
+        : tag;
+      return { ok: false, code: tag.replace("GroupError.", ""), message };
+    }
+    const result = either.right;
+    return { ok: true, resolved: result.resolved, outcome: result.outcome };
+  });
+}
+
+function groupLeaveEffect(
+  input: { group_id: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const ledger = yield* LedgerService;
+    const groupId = input.group_id;
+
+    // Fetch membership to know the contribution before leaving
+    const memberships = yield* groups.listMemberships(ghostId);
+    const membership = memberships.find(m => m.groupId === groupId);
+    if (!membership) {
+      return { ok: false, code: "NOT_MEMBER", message: `Not a member of group ${groupId}` };
+    }
+
+    const { resource, amount } = membership.myContribution;
+    const groupBagId = `group:${groupId}`;
+    const txId = ulid();
+
+    // Only commit a ledger transfer when the contribution is non-zero;
+    // communication-only bonds (amount=0) have no resources to return.
+    if (amount > 0) {
+      const txEither = yield* Effect.either(
+        ledger.commit({
+          id: txId,
+          transfers: [{ resource, qty: amount, from: groupBagId, to: ghostId }],
+          cause: "group.leave",
+          actors: [ghostId],
+          ts: Date.now(),
+        }),
+      );
+      if (txEither._tag === "Left") {
+        const e = txEither.left as any;
+        const tag: string = e._tag ?? "LEDGER_ERROR";
+        return { ok: false, code: tag.replace("LedgerError.", ""), message: `Leave failed: ${tag}` };
+      }
+    }
+
+    const either = yield* Effect.either(groups.leave({ groupId, ghostId, leaveTxId: txId }));
+    if (either._tag === "Left") {
+      const e = either.left;
+      return { ok: false, code: e._tag.replace("GroupError.", ""), message: e._tag };
+    }
+    const result = either.right;
+    const groupName = membership.name;
+    const base = `Left group "${groupName}". Returned: ${amount} ${resource} to your bag.`;
+    return {
+      ok: true,
+      message: result.dissolved ? `${base} Group dissolved.` : base,
+      dissolved: result.dissolved,
+      returned: result.returned,
+    };
+  });
+}
+
+function groupSayEffect(
+  input: { group_id: string; content: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const bridge = yield* WorldBridgeService;
+    const store = yield* RegistryStoreService;
+    const senderName = store.ghosts.get(ghostId)?.displayName ?? ghostId;
+    const senderTile = bridge.getGhostCell(ghostId) ?? "";
+
+    const either = yield* Effect.either(
+      groups.groupSay({ groupId: input.group_id, senderId: ghostId, senderName, content: input.content, senderTile }),
+    );
+    if (either._tag === "Left") {
+      const e = either.left;
+      const message =
+        e._tag === "GroupError.NotFound" || e._tag === "GroupError.Dissolved"
+          ? `Group ${input.group_id} not found or dissolved`
+          : e._tag === "GroupError.NotMemberOrParticipant"
+          ? `Not a member or participant of group ${input.group_id}`
+          : e._tag;
+      return { ok: false, code: e._tag.replace("GroupError.", ""), message };
+    }
+    const result = either.right;
+    return { ok: true, messageId: result.messageId, deliveredTo: result.mx_listeners.length };
+  });
+}
+
+function groupListEffect(
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const memberships = yield* groups.listMemberships(ghostId);
+    if (memberships.length === 0) {
+      return { ok: true, groups: [], message: "You are not a member of any group." };
+    }
+    const lines = memberships.map(
+      m => `- "${m.name}" (group_id: ${m.groupId}) — ${m.memberCount} members, contributed: ${m.myContribution.amount} ${m.myContribution.resource}`,
+    );
+    return {
+      ok: true,
+      groups: memberships,
+      message: `You are a member of ${memberships.length} group(s):\n${lines.join("\n")}`,
+    };
+  });
+}
+
 function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServer {
   const runTool = <A>(
     toolName: string,
@@ -1464,6 +1697,138 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     },
     async ({ proposalId }, extra) =>
       runTool("decline", { proposalId }, declineEffect({ proposalId }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.offer",
+    {
+      description:
+        "Initiate a shared resource offer for group formation (to a ghost — both must be on the same tile) or to join an existing group (to a group_id). Both sides contribute the same resource and amount. The offer expires after `expires_in` seconds (default 300). For formation: the counterparty must call `agree` to complete. For joining: existing members vote via `group.vote`.",
+      inputSchema: {
+        to: z.string().describe("Ghost ID (for formation) or group ID (for joining an existing group)."),
+        resource: z.string().describe("Resource type to contribute (e.g. 'gold', 'trust')."),
+        amount: z.number().int().min(0).describe("Amount to contribute. Use 0 for a communication-only bond."),
+        expires_in: z.number().int().min(30).max(3600).optional().describe("Seconds until offer expires (default 300)."),
+      },
+    },
+    async ({ to, resource, amount, expires_in }, extra) =>
+      runTool("group.offer", { to, resource, amount, expires_in }, groupOfferEffect({ to, resource, amount, expires_in }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.vote",
+    {
+      description:
+        "Cast your vote on a pending group admission offer. You must be a current member of the group. A majority of members who vote before expiry determines the outcome. Abstentions do not count as rejections.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID the offer is for."),
+        offer_id: z.string().describe("The offer ID returned when the prospect called group.offer."),
+        decision: z.enum(["accept", "reject"]).describe("Your vote."),
+      },
+    },
+    async ({ group_id, offer_id, decision }, extra) =>
+      runTool("group.vote", { group_id, offer_id, decision }, groupVoteEffect({ group_id, offer_id, decision }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.leave",
+    {
+      description:
+        "Leave a group and recover the full amount you contributed. No vote is required. If you are the last member, the group is dissolved.",
+      inputSchema: {
+        group_id: z.string().describe("The ID of the group to leave."),
+      },
+    },
+    async ({ group_id }, extra) =>
+      runTool("group.leave", { group_id }, groupLeaveEffect({ group_id }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.say",
+    {
+      description:
+        "Post a message to a group chat thread. All members and participants receive it regardless of their location. Does not require conversational mode and does not interrupt movement.",
+      inputSchema: {
+        group_id: z.string().describe("The ID of the group to post to."),
+        content: z.string().describe("The message content."),
+      },
+    },
+    async ({ group_id, content }, extra) =>
+      runTool("group.say", { group_id, content }, groupSayEffect({ group_id, content }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.add_participant",
+    {
+      description:
+        "Add a non-member actor to the group chat as a participant. Participants can send and receive group messages but cannot vote on admissions and contribute no resources. Any group member may call this.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID to add the participant to."),
+        actor_id: z.string().describe("The actor ID to add as a participant."),
+        role: z.string().describe("A role label for the participant (e.g. 'observer', 'inquisitor')."),
+      },
+    },
+    async ({ group_id, actor_id, role }, extra) =>
+      runTool(
+        "group.add_participant",
+        { group_id, actor_id, role },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const groups = yield* GroupService;
+          const either = yield* Effect.either(
+            groups.addParticipant({ groupId: group_id, actorId: actor_id, role, requesterId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            const tag: string = e._tag ?? "UNKNOWN";
+            return { ok: false, code: tag.replace("GroupError.", ""), message: tag };
+          }
+          return { ok: true, message: `Actor ${actor_id} added as participant with role "${role}".` };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "group.remove_participant",
+    {
+      description:
+        "Remove a participant from the group chat. The participant loses access to the group thread immediately. Any group member may call this.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID to remove the participant from."),
+        actor_id: z.string().describe("The actor ID of the participant to remove."),
+      },
+    },
+    async ({ group_id, actor_id }, extra) =>
+      runTool(
+        "group.remove_participant",
+        { group_id, actor_id },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const groups = yield* GroupService;
+          const either = yield* Effect.either(
+            groups.removeParticipant({ groupId: group_id, actorId: actor_id, requesterId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            const tag: string = e._tag ?? "UNKNOWN";
+            return { ok: false, code: tag.replace("GroupError.", ""), message: tag };
+          }
+          return { ok: true, message: `Actor ${actor_id} removed from group.` };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "group.list",
+    {
+      description: "List all groups you are currently a member of, with your contribution and member count for each.",
+    },
+    async (extra) =>
+      runTool("group.list", {}, groupListEffect(extra), extra),
   );
 
   return server;

@@ -82,6 +82,7 @@ export {
 export {
   ProposalService,
   ProposalServiceLayer,
+  ProposalServiceWithGroupLayer,
   makeProposalService,
   makeProposalServiceLayer,
   PROPOSAL_TTL_MS,
@@ -155,6 +156,24 @@ export {
   ensureMapManagementConstraints,
 } from "./neo4j-graph-init.js";
 export { seedNeo4jGraphArtifacts } from "./neo4j-graph-seed.js";
+export { GroupService, type GroupServiceOps } from "./GroupService.js";
+export { makeGroupServiceInMemory, GroupServiceInMemoryLayer } from "./GroupServiceInMemory.js";
+export { makeGroupServiceLiveLayer } from "./GroupServiceLive.js";
+export {
+  GroupNotFound,
+  GroupDissolved,
+  GroupNotMember,
+  GroupNotParticipant,
+  GroupNotMemberOrParticipant,
+  GroupAntesMismatch,
+  GroupResourceMismatch,
+  GroupOfferNotFound,
+  GroupOfferExpired,
+  GroupDuplicateOffer,
+  GroupPersistenceError,
+  GroupChatStoreError,
+  type GroupError,
+} from "./group-errors.js";
 export {
   Neo4jGraphService,
   makeLiveNeo4jGraphLayer,

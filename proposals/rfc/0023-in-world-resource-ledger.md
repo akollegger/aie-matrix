@@ -214,3 +214,20 @@ With a sandbox map seeding `gold: 100` into the world bag and a ruleset `:GO` ru
 **Non-conserving faucet/sink economy.** Allow any mechanic to mint or burn conserved resources freely. More flexible, but loses the conservation invariant that makes scarcity meaningful and verification trivial. Rejected for conserved resources; the monotonic class is the sanctioned, explicit exception for accumulating-only quantities.
 
 **External ledger service (payments API, blockchain).** Operationally heavy for a single-session, in-process need. Rejected for AIEWF 2026.
+
+
+---
+
+## Addendum: Group Formation Transaction Variants (RFC-0024 / spec-023)
+
+Three new `cause` values are introduced by the group formation feature:
+
+| `cause` | Description | `actors[]` | Transfer direction |
+|---|---|---|---|
+| `"group.form"` | Shared formation offer accepted; both contributions go to new group bag | `[ghostA, ghostB]` | `ghostA → group:{groupId}`, `ghostB → group:{groupId}` |
+| `"group.join"` | Admission offer accepted after member vote; prospect's contribution joins group bag | `[ghostC, groupId]` | `ghostC → group:{groupId}` |
+| `"group.leave"` | Member voluntarily withdraws; contribution returns from group bag | `[ghostId]` | `group:{groupId} → ghostId` |
+
+The group bag is identified by `ActorId = "group:{groupId}"` in the existing `BagCache`. No new ledger primitives are required — these transactions use the same `Transaction` / `Transfer` shape as all other ledger commits.
+
+The `shared: true` flag on `ProposeParams` in `ProposalService` triggers the formation path. Same-resource validation (`give.resource === want.resource`) is enforced at propose time (FR-011 in spec-023).

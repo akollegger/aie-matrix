@@ -146,3 +146,10 @@ hooks:
     prompt: Commit after syncing issues?
     description: Auto-commit after tasks-to-issues conversion
     condition: null
+  before_pr:
+  - extension: verify
+    command: speckit-verify
+    enabled: true
+    optional: false
+    prompt: Run pre-PR verification (build, tests, spec coverage, doc impact)?
+    description: Run /speckit-verify and confirm GO verdict before opening PR

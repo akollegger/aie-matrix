@@ -41,7 +41,7 @@ describe("supervisor crash (integration)", () => {
         catalog,
         a2a: {
           createClient: vi.fn().mockReturnValue(Effect.succeed({})),
-          sendSpawnContext: vi
+          sendSpawnContextNonBlocking: vi
             .fn()
             .mockReturnValueOnce(Effect.succeed({ taskId: "1", contextId: "1" }))
             .mockReturnValue(Effect.fail(new Error("nope"))),
@@ -69,7 +69,7 @@ describe("supervisor crash (integration)", () => {
         catalog,
         a2a: {
           createClient: vi.fn().mockReturnValue(Effect.succeed({})),
-          sendSpawnContext: vi.fn().mockReturnValue(Effect.succeed({ taskId: "a", contextId: "b" })),
+          sendSpawnContextNonBlocking: vi.fn().mockReturnValue(Effect.succeed({ taskId: "a", contextId: "b" })),
           cancelTask: vi.fn().mockReturnValue(Effect.void),
           pingAgent: vi.fn().mockReturnValue(Effect.void),
         } as any,

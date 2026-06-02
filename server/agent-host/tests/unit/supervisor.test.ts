@@ -74,6 +74,7 @@ describe("AgentSupervisor (T030)", () => {
       a2a: {
         createClient,
         sendSpawnContext,
+        sendSpawnContextNonBlocking: sendSpawnContext,
         cancelTask,
         pingAgent: ping,
       } as any,
