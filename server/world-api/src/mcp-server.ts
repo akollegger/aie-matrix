@@ -1754,6 +1754,71 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   );
 
   server.registerTool(
+    "group.add_participant",
+    {
+      description:
+        "Add a non-member actor to the group chat as a participant. Participants can send and receive group messages but cannot vote on admissions and contribute no resources. Any group member may call this.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID to add the participant to."),
+        actor_id: z.string().describe("The actor ID to add as a participant."),
+        role: z.string().describe("A role label for the participant (e.g. 'observer', 'inquisitor')."),
+      },
+    },
+    async ({ group_id, actor_id, role }, extra) =>
+      runTool(
+        "group.add_participant",
+        { group_id, actor_id, role },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const groups = yield* GroupService;
+          const either = yield* Effect.either(
+            groups.addParticipant({ groupId: group_id, actorId: actor_id, role, requesterId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            const tag: string = e._tag ?? "UNKNOWN";
+            return { ok: false, code: tag.replace("GroupError.", ""), message: tag };
+          }
+          return { ok: true, message: `Actor ${actor_id} added as participant with role "${role}".` };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "group.remove_participant",
+    {
+      description:
+        "Remove a participant from the group chat. The participant loses access to the group thread immediately. Any group member may call this.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID to remove the participant from."),
+        actor_id: z.string().describe("The actor ID of the participant to remove."),
+      },
+    },
+    async ({ group_id, actor_id }, extra) =>
+      runTool(
+        "group.remove_participant",
+        { group_id, actor_id },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const groups = yield* GroupService;
+          const either = yield* Effect.either(
+            groups.removeParticipant({ groupId: group_id, actorId: actor_id, requesterId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            const tag: string = e._tag ?? "UNKNOWN";
+            return { ok: false, code: tag.replace("GroupError.", ""), message: tag };
+          }
+          return { ok: true, message: `Actor ${actor_id} removed from group.` };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
     "group.list",
     {
       description: "List all groups you are currently a member of, with your contribution and member count for each.",

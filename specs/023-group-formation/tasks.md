@@ -81,14 +81,14 @@
 
 **Independent Test**: Two-member group exists; `ghost_C` issues `group.offer to=<group_id>`; `ghost_A` votes accept; verify ghost_C has MEMBER_OF edge and can post to group chat.
 
-- [ ] T020 [US2] Implement `GroupService.proposeJoin()` in `GroupServiceInMemory` (already required by T008) — also implement in `GroupServiceLive`: write VoteWindow to memory, post system message to group JSONL thread, fan-out system notification via WorldBridgeService
-- [ ] T021 [US2] Implement `GroupService.vote()` in `GroupServiceLive` — record vote, check majority, call `admitMember()` or `rejectOffer()` when threshold reached
-- [ ] T022 [US2] Implement `GroupService.resolveExpiredOffers()` in `GroupServiceLive` — resolves vote windows past expiry by majority-of-voters rule
-- [ ] T022b [US2] Wire `GroupService.resolveExpiredOffers()` into a background fiber in `GroupServiceLive` layer initialization in `server/world-api/src/GroupServiceLive.ts` using `Effect.repeat(Schedule.fixed(Duration.seconds(30)))` inside a `Layer.scopedDiscard` so the fiber is cancelled when the layer scope closes
-- [ ] T023 [US2] Extend `group.offer` MCP tool to handle `to = group_id` (join path) — validate amount matches per-member ante (FR-011 via GroupAntesMismatch), call `GroupService.proposeJoin()`
-- [ ] T024 [US2] Add `group.vote` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.vote()`; returns resolved/pending/rejected outcome text per IC-003
-- [ ] T025 [P] [US2] Add integration tests for `proposeJoin`, `vote`, and `resolveExpiredOffers` to `server/world-api/test/GroupService.integration.test.ts`
-- [ ] T026 [US2] Smoke-test the join flow per `specs/023-group-formation/quickstart.md` §"Smoke Test: Join an Existing Group"
+- [x] T020 [US2] Implement `GroupService.proposeJoin()` in `GroupServiceInMemory` (already required by T008) — also implement in `GroupServiceLive`: write VoteWindow to memory, post system message to group JSONL thread, fan-out system notification via WorldBridgeService
+- [x] T021 [US2] Implement `GroupService.vote()` in `GroupServiceLive` — record vote, check majority, call `admitMember()` or `rejectOffer()` when threshold reached
+- [x] T022 [US2] Implement `GroupService.resolveExpiredOffers()` in `GroupServiceLive` — resolves vote windows past expiry by majority-of-voters rule
+- [x] T022b [US2] Wire `GroupService.resolveExpiredOffers()` into a background fiber in `GroupServiceLive` layer initialization in `server/world-api/src/GroupServiceLive.ts` using `Effect.repeat(Schedule.fixed(Duration.seconds(30)))` inside a `Layer.scopedDiscard` so the fiber is cancelled when the layer scope closes
+- [x] T023 [US2] Extend `group.offer` MCP tool to handle `to = group_id` (join path) — validate amount matches per-member ante (FR-011 via GroupAntesMismatch), call `GroupService.proposeJoin()`
+- [x] T024 [US2] Add `group.vote` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.vote()`; returns resolved/pending/rejected outcome text per IC-003
+- [x] T025 [P] [US2] Add integration tests for `proposeJoin`, `vote`, and `resolveExpiredOffers` to `server/world-api/test/GroupService.integration.test.ts`
+- [x] T026 [US2] Smoke-test the join flow per `specs/023-group-formation/quickstart.md` §"Smoke Test: Join an Existing Group"
 
 **Checkpoint**: Full admission vote lifecycle works. Duplicate offer rejection (FR-013) covered by T009.
 
@@ -100,11 +100,11 @@
 
 **Independent Test**: Member issues `group.leave`; verify resources returned to bag, MEMBER_OF edge removed. Last-member leave marks (:Group) with `dissolved_at`.
 
-- [ ] T027 [US3] Implement `GroupServiceLive.leave()` — commit leave ledger transaction (`cause: "group.leave"`, transfers contribution from group bag back to ghost bag); remove MEMBER_OF edge in Neo4j; update in-memory GroupRecord; if last member, call `dissolveGroup()`
-- [ ] T028 [US3] Implement `GroupServiceLive.dissolveGroup()` — set `dissolved_at` on (:Group) node; retain node as tombstone (do not delete)
-- [ ] T029 [US3] Add `group.leave` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.leave()`; returns resource return amount and dissolution status per IC-003
-- [ ] T030 [P] [US3] Add integration tests for `leave` and dissolution to `server/world-api/test/GroupService.integration.test.ts`
-- [ ] T031 [US3] Smoke-test leave flow per `specs/023-group-formation/quickstart.md` §"Smoke Test: Leave"
+- [x] T027 [US3] Implement `GroupServiceLive.leave()` — commit leave ledger transaction (`cause: "group.leave"`, transfers contribution from group bag back to ghost bag); remove MEMBER_OF edge in Neo4j; update in-memory GroupRecord; if last member, call `dissolveGroup()`
+- [x] T028 [US3] Implement `GroupServiceLive.dissolveGroup()` — set `dissolved_at` on (:Group) node; retain node as tombstone (do not delete)
+- [x] T029 [US3] Add `group.leave` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.leave()`; returns resource return amount and dissolution status per IC-003
+- [x] T030 [P] [US3] Add integration tests for `leave` and dissolution to `server/world-api/test/GroupService.integration.test.ts`
+- [x] T031 [US3] Smoke-test leave flow per `specs/023-group-formation/quickstart.md` §"Smoke Test: Leave"
 
 **Checkpoint**: Leave + dissolution works end-to-end. Tombstone retained in graph.
 
@@ -116,15 +116,15 @@
 
 **Independent Test**: Two members on different tiles both issue `group.say`; each receives the other's message via inbox notification with `thread_id = group_id`. Add a non-member participant; verify they receive messages and can post.
 
-- [ ] T032 [US4] Implement `GroupServiceLive.groupSay()` — append GroupMessageRecord to `{group_id}.jsonl` via `JsonlStore`; fan-out `message.new` Colyseus signal to all current members + participants via `WorldBridgeService.notifyGhost()` per IC-002; no location check, no conversational mode change
-- [ ] T033 [US4] Add `group.say` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.groupSay()`; uses `WorldBridgeService.getGhostCell()` for sender tile (best-effort, empty string if unavailable)
-- [ ] T034 [P] [US4] Implement `GroupServiceLive.addParticipant()` and `removeParticipant()` — write/remove PARTICIPANT_IN edges in Neo4j; update in-memory GroupRecord.participants
-- [ ] T035 [P] [US4] Add `group.add_participant` and `group.remove_participant` MCP tool handlers in `server/world-api/src/mcp-server.ts` per IC-003 schemas (see below); tool names are canonical — document in `specs/023-group-formation/contracts/ic-mcp-group-tools.md` before implementing:
+- [x] T032 [US4] Implement `GroupServiceLive.groupSay()` — append GroupMessageRecord to `{group_id}.jsonl` via `JsonlStore`; fan-out `message.new` Colyseus signal to all current members + participants via `WorldBridgeService.notifyGhost()` per IC-002; no location check, no conversational mode change
+- [x] T033 [US4] Add `group.say` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.groupSay()`; uses `WorldBridgeService.getGhostCell()` for sender tile (best-effort, empty string if unavailable)
+- [x] T034 [P] [US4] Implement `GroupServiceLive.addParticipant()` and `removeParticipant()` — write/remove PARTICIPANT_IN edges in Neo4j; update in-memory GroupRecord.participants
+- [x] T035 [P] [US4] Add `group.add_participant` and `group.remove_participant` MCP tool handlers in `server/world-api/src/mcp-server.ts` per IC-003 schemas (see below); tool names are canonical — document in `specs/023-group-formation/contracts/ic-mcp-group-tools.md` before implementing:
   - `group.add_participant { group_id, actor_id, role }` — caller must be a member
   - `group.remove_participant { group_id, actor_id }` — caller must be a member
-- [ ] T036 [US4] Confirm that the `inbox` MCP tool in `server/world-api/src/mcp-server.ts` returns group-thread `{ thread_id, message_id }` entries without changes — verify by running the group.say smoke test and checking that inbox output contains entries with `thread_id = group_id`; if the inbox handler filters by ghost-owned threads, patch it to pass through any thread_id opaquely
-- [ ] T037 [P] [US4] Add integration tests for `groupSay`, `addParticipant`, `removeParticipant` to `server/world-api/test/GroupService.integration.test.ts`
-- [ ] T038 [US4] Smoke-test group chat per `specs/023-group-formation/quickstart.md` §step 4
+- [x] T036 [US4] Confirm that the `inbox` MCP tool in `server/world-api/src/mcp-server.ts` returns group-thread `{ thread_id, message_id }` entries without changes — verify by running the group.say smoke test and checking that inbox output contains entries with `thread_id = group_id`; if the inbox handler filters by ghost-owned threads, patch it to pass through any thread_id opaquely
+- [x] T037 [P] [US4] Add integration tests for `groupSay`, `addParticipant`, `removeParticipant` to `server/world-api/test/GroupService.integration.test.ts`
+- [x] T038 [US4] Smoke-test group chat per `specs/023-group-formation/quickstart.md` §step 4
 
 **Checkpoint**: Group chat works across distance. Participant add/remove works. Inbox delivers group-thread notifications.
 
@@ -138,11 +138,11 @@
 
 **Depends on**: Phase 3 (US1) complete — group.offer, group.list must be implemented and deployed.
 
-- [ ] T047 [P] Add in-memory group state tracking to `ghosts/random-agent/src/executor.ts`: a `knownGroupIds: Set<string>` per ghost (alongside `pendingProposals`) to track groups the ghost belongs to; populate by calling `group.list` on startup and after any group event
-- [ ] T048 [US1] Add `group.list` call branch to `tryAction()` in `ghosts/random-agent/src/executor.ts` — 5% probability when `knownGroupIds` is empty or stale (check at most once per 10 ticks); cache returned group IDs in `knownGroupIds`
-- [ ] T049 [US1] Add `group.offer` branch to `tryAction()` — 5% probability when an occupant is present and `knownGroupIds.size === 0` (ghost not yet in a group); call `group.offer { to: occupant, resource: "gold", amount: 1, expires_in: 120 }` and store returned `offerId` in `pendingProposals` (reuse existing array); log `random-agent.group.offer`
-- [ ] T050 [US2] Add inbox-polling + `group.vote` branch — when `world.message.new` arrives with a group-thread `thread_id`, call `group.vote { group_id, offer_id, decision: "accept" }` with 80% probability (20% reject); extract `offer_id` from the system message content using a simple regex; log `random-agent.group.vote`
-- [ ] T051 [US3] Add `group.leave` branch to `tryAction()` — 1% probability per tick when `knownGroupIds.size > 0`; pick a random group ID and call `group.leave { group_id }`; remove from `knownGroupIds` on success; log `random-agent.group.leave`
+- [x] T047 [P] Add in-memory group state tracking to `ghosts/random-agent/src/executor.ts`: a `knownGroupIds: Set<string>` per ghost (alongside `pendingProposals`) to track groups the ghost belongs to; populate by calling `group.list` on startup and after any group event
+- [x] T048 [US1] Add `group.list` call branch to `tryAction()` in `ghosts/random-agent/src/executor.ts` — 5% probability when `knownGroupIds` is empty or stale (check at most once per 10 ticks); cache returned group IDs in `knownGroupIds`
+- [x] T049 [US1] Add `group.offer` branch to `tryAction()` — 5% probability when an occupant is present and `knownGroupIds.size === 0` (ghost not yet in a group); call `group.offer { to: occupant, resource: "gold", amount: 1, expires_in: 120 }` and store returned `offerId` in `pendingProposals` (reuse existing array); log `random-agent.group.offer`
+- [x] T050 [US2] Add inbox-polling + `group.vote` branch — when `world.message.new` arrives with a group-thread `thread_id`, call `group.vote { group_id, offer_id, decision: "accept" }` with 80% probability (20% reject); extract `offer_id` from the system message content using a simple regex; log `random-agent.group.vote`
+- [x] T051 [US3] Add `group.leave` branch to `tryAction()` — 1% probability per tick when `knownGroupIds.size > 0`; pick a random group ID and call `group.leave { group_id }`; remove from `knownGroupIds` on success; log `random-agent.group.leave`
 
 **Note on `group.say`**: Random agent intentionally omits `group.say` — it has nothing meaningful to say. Adding noisy automated group messages would pollute the chat log for human observers. Add only if explicitly needed for demo purposes.
 
@@ -152,14 +152,14 @@
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T039 [P] Update `docs/architecture.md` — document Group as a new disembodied world actor type; document group chat as a second fan-out target model alongside proximity chat
-- [ ] T040 [P] Add formal addendum note to `proposals/rfc/0023-in-world-resource-ledger.md` documenting the `shared` transaction variant (causes `"group.form"`, `"group.join"`, `"group.leave"`) per IC-001
-- [ ] T041 [P] Update `server/world-api/README.md` — document `GroupService`, new MCP tools, environment requirements
-- [ ] T042 [P] Add group tool schemas to any ghost MCP tool reference documentation (ghost-ts-client README or equivalent)
-- [ ] T043 Extend ghost TCK (`ghosts/tck/`) with group contract tests per IC-003: formation, admission, leave, group.say delivery, group.list — these are the acceptance tests for the full feature
-- [ ] T044 Run `pnpm typecheck` across all affected packages; fix any type errors
-- [ ] T045 Run `pnpm test` in `server/world-api` and confirm all GroupService unit tests pass
-- [ ] T046 Verify `specs/023-group-formation/quickstart.md` end-to-end scenario against the running server (all 3 smoke tests pass)
+- [x] T039 [P] Update `docs/architecture.md` — document Group as a new disembodied world actor type; document group chat as a second fan-out target model alongside proximity chat
+- [x] T040 [P] Add formal addendum note to `proposals/rfc/0023-in-world-resource-ledger.md` documenting the `shared` transaction variant (causes `"group.form"`, `"group.join"`, `"group.leave"`) per IC-001
+- [x] T041 [P] Update `server/world-api/README.md` — document `GroupService`, new MCP tools, environment requirements
+- [x] T042 [P] Add group tool schemas to any ghost MCP tool reference documentation (ghost-ts-client README or equivalent)
+- [x] T043 Extend ghost TCK (`ghosts/tck/`) with group contract tests per IC-003: formation, admission, leave, group.say delivery, group.list — these are the acceptance tests for the full feature
+- [x] T044 Run `pnpm typecheck` across all affected packages; fix any type errors
+- [x] T045 Run `pnpm test` in `server/world-api` and confirm all GroupService unit tests pass
+- [x] T046 Verify `specs/023-group-formation/quickstart.md` end-to-end scenario against the running server (all 3 smoke tests pass)
 
 ---
 

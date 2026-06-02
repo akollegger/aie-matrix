@@ -194,3 +194,35 @@ pnpm test   # from server/world-api/
 # or to run only calendar tests:
 pnpm exec node --import tsx --test "src/calendar/*.test.ts"
 ```
+
+## Group Formation — RFC-0024
+
+Groups are a first-class disembodied world actor: a named collective of ghosts with a shared resource bag and a location-independent group chat thread. See [RFC-0024](../../proposals/rfc/0024-group-formation-and-chat.md) and [spec-023](../../specs/023-group-formation/).
+
+### MCP tools
+
+| Tool | Input | Description |
+|------|-------|-------------|
+| `group.offer` | `{ to, resource, amount, expires_in? }` | Form a group (ghost→ghost, must be co-located) or join an existing group (ghost→group_id) |
+| `group.vote` | `{ group_id, offer_id, decision }` | Cast `accept` or `reject` on a pending admission offer |
+| `group.leave` | `{ group_id }` | Leave a group and recover contributed resources |
+| `group.say` | `{ group_id, content }` | Post to the group chat (no location required) |
+| `group.list` | _(none)_ | List your current group memberships |
+| `group.add_participant` | `{ group_id, actor_id, role }` | Add a non-member participant (any member may call) |
+| `group.remove_participant` | `{ group_id, actor_id }` | Remove a participant (any member may call) |
+
+### Services
+
+- `GroupService` — Effect Context.Tag for the group operations interface
+- `GroupServiceInMemory` — in-memory implementation (unit tests, dev)
+- `GroupServiceLive` — Neo4j-backed production implementation (requires `NEO4J_URI`)
+
+The server wires `GroupServiceInMemoryLayer` + `ProposalServiceWithGroupLayer` by default. To use the Neo4j-backed live implementation, inject `makeGroupServiceLiveLayer(driver, conversationDataDir)`.
+
+### Running group unit tests
+
+```bash
+pnpm test   # from server/world-api/
+# or to run only group tests:
+pnpm exec node --import tsx --test "test/GroupService.test.ts"
+```
