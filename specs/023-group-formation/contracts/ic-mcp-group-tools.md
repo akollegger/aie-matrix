@@ -137,6 +137,54 @@ You are not a member of any group.
 
 ---
 
+## `group.add_participant`
+
+Add a non-member actor as a participant in the group chat (creates `PARTICIPANT_IN` edge). Any member may call this.
+
+**Input schema**:
+```json
+{
+  "group_id": "string",
+  "actor_id": "string",
+  "role":     "string"   // e.g. "observer", "inquisitor"
+}
+```
+
+**Success output** (text):
+```
+Actor {actor_id} added as participant with role "{role}" in group {name}.
+```
+
+**Error cases**:
+- Caller is not a member → `"Not a member of group {group_id}"`
+- Group not found or dissolved → `"Group not found or dissolved"`
+
+---
+
+## `group.remove_participant`
+
+Remove a participant from the group chat. Any member may call this.
+
+**Input schema**:
+```json
+{
+  "group_id": "string",
+  "actor_id": "string"
+}
+```
+
+**Success output** (text):
+```
+Actor {actor_id} removed from group {name}.
+```
+
+**Error cases**:
+- Caller is not a member → `"Not a member of group {group_id}"`
+- Actor is not a participant → `"Actor is not a participant of group {group_id}"`
+- Group not found or dissolved → `"Group not found or dissolved"`
+
+---
+
 ## TCK Contract Expectations
 
 The ghost TCK (`ghosts/tck/`) must be extended with tests covering:

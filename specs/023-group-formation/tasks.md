@@ -63,8 +63,8 @@
 **Independent Test**: `ghost_A` and `ghost_B` on same tile; `ghost_A` issues `group.offer to=ghost_B resource=trust amount=10`; `ghost_B` accepts; verify (:Group) node exists in Neo4j, both MEMBER_OF edges present, `{group_id}.jsonl` exists, `group.list` returns the group for both ghosts.
 
 - [ ] T012 [US1] Extend `ProposeParams` in `server/world-api/src/ProposalService.ts` with optional `shared: true` flag; add `GroupFormationTarget` type (ghost or existing group)
-- [ ] T013 [US1] Implement the `shared` formation path in `ProposalService.agree()`: when `shared=true`, after ledger commit, call `GroupService.createGroup()` to mint the (:Group) node, MEMBER_OF edges, group bag (ActorId = `"group:{group_id}"`), and initialize the JSONL thread via `JsonlStore`
-- [ ] T014 [US1] Add the `group.offer` MCP tool handler in `server/world-api/src/mcp-server.ts` per `specs/023-group-formation/contracts/ic-mcp-group-tools.md` — routes to `ProposalService.propose({ shared: true })` for ghost-to-ghost formation; enforces proximity via existing `getGhostCell` check
+- [ ] T013 [US1] Implement the `shared` formation path in `ProposalService.agree()`: when `shared=true`, after ledger commit, call `GroupService.createGroup()` to mint the (:Group) node, MEMBER_OF edges, group bag (ActorId = `"group:{group_id}"`), and initialize the JSONL thread via `JsonlStore`. **FR-011**: validate that `give.resource === receive.resource` when `shared=true` in `ProposalService.propose()` and return `LedgerMonotonicTradeRejected` (or a new `GroupResourceMismatch` error) if they differ.
+- [ ] T014 [US1] Add the `group.offer` MCP tool handler in `server/world-api/src/mcp-server.ts` per `specs/023-group-formation/contracts/ic-mcp-group-tools.md` — routes to `ProposalService.propose({ shared: true })` for ghost-to-ghost formation; enforces proximity via existing `getGhostCell` check; returns a clear error message if resource types do not match (`"Both sides must offer the same resource type to form a group"`)
 - [ ] T015 [US1] Add the `group.list` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.listMemberships(ghostId)`
 - [ ] T016 [US1] Implement `GroupServiceLive.createGroup()` in `server/world-api/src/GroupServiceLive.ts` (new file) — Neo4j-backed: write (:Group) node, MEMBER_OF edges, (:Group)-[:OWNS]->(:Bag); load into in-memory GroupRecord; initialize JSONL thread file
 - [ ] T017 [US1] Implement `GroupServiceLive.listMemberships()` — query MEMBER_OF edges for ghostId from Neo4j; return GroupSummary[]
@@ -83,7 +83,8 @@
 
 - [ ] T020 [US2] Implement `GroupService.proposeJoin()` in `GroupServiceInMemory` (already required by T008) — also implement in `GroupServiceLive`: write VoteWindow to memory, post system message to group JSONL thread, fan-out system notification via WorldBridgeService
 - [ ] T021 [US2] Implement `GroupService.vote()` in `GroupServiceLive` — record vote, check majority, call `admitMember()` or `rejectOffer()` when threshold reached
-- [ ] T022 [US2] Implement `GroupService.resolveExpiredOffers()` in `GroupServiceLive` — called by a background timer (use existing Effect.Schedule fiber pattern); resolves windows past expiry by majority-of-voters rule
+- [ ] T022 [US2] Implement `GroupService.resolveExpiredOffers()` in `GroupServiceLive` — resolves vote windows past expiry by majority-of-voters rule
+- [ ] T022b [US2] Wire `GroupService.resolveExpiredOffers()` into a background fiber in `GroupServiceLive` layer initialization in `server/world-api/src/GroupServiceLive.ts` using `Effect.repeat(Schedule.fixed(Duration.seconds(30)))` inside a `Layer.scopedDiscard` so the fiber is cancelled when the layer scope closes
 - [ ] T023 [US2] Extend `group.offer` MCP tool to handle `to = group_id` (join path) — validate amount matches per-member ante (FR-011 via GroupAntesMismatch), call `GroupService.proposeJoin()`
 - [ ] T024 [US2] Add `group.vote` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.vote()`; returns resolved/pending/rejected outcome text per IC-003
 - [ ] T025 [P] [US2] Add integration tests for `proposeJoin`, `vote`, and `resolveExpiredOffers` to `server/world-api/test/GroupService.integration.test.ts`
@@ -118,8 +119,10 @@
 - [ ] T032 [US4] Implement `GroupServiceLive.groupSay()` — append GroupMessageRecord to `{group_id}.jsonl` via `JsonlStore`; fan-out `message.new` Colyseus signal to all current members + participants via `WorldBridgeService.notifyGhost()` per IC-002; no location check, no conversational mode change
 - [ ] T033 [US4] Add `group.say` MCP tool handler in `server/world-api/src/mcp-server.ts` — calls `GroupService.groupSay()`; uses `WorldBridgeService.getGhostCell()` for sender tile (best-effort, empty string if unavailable)
 - [ ] T034 [P] [US4] Implement `GroupServiceLive.addParticipant()` and `removeParticipant()` — write/remove PARTICIPANT_IN edges in Neo4j; update in-memory GroupRecord.participants
-- [ ] T035 [P] [US4] Add `group.add_participant` and `group.remove_participant` MCP tool handlers in `server/world-api/src/mcp-server.ts` (or fold into `group.say` preamble per RFC-0024 design — see IC-003 note)
-- [ ] T036 [US4] Extend ghost `inbox` MCP tool (or verify existing handler) to deliver group-thread `{ thread_id, message_id }` notifications alongside ghost-thread notifications — `thread_id` is already opaque; confirm no changes needed
+- [ ] T035 [P] [US4] Add `group.add_participant` and `group.remove_participant` MCP tool handlers in `server/world-api/src/mcp-server.ts` per IC-003 schemas (see below); tool names are canonical — document in `specs/023-group-formation/contracts/ic-mcp-group-tools.md` before implementing:
+  - `group.add_participant { group_id, actor_id, role }` — caller must be a member
+  - `group.remove_participant { group_id, actor_id }` — caller must be a member
+- [ ] T036 [US4] Confirm that the `inbox` MCP tool in `server/world-api/src/mcp-server.ts` returns group-thread `{ thread_id, message_id }` entries without changes — verify by running the group.say smoke test and checking that inbox output contains entries with `thread_id = group_id`; if the inbox handler filters by ghost-owned threads, patch it to pass through any thread_id opaquely
 - [ ] T037 [P] [US4] Add integration tests for `groupSay`, `addParticipant`, `removeParticipant` to `server/world-api/test/GroupService.integration.test.ts`
 - [ ] T038 [US4] Smoke-test group chat per `specs/023-group-formation/quickstart.md` §step 4
 
@@ -127,7 +130,27 @@
 
 ---
 
-## Phase 7: Polish & Cross-Cutting Concerns
+## Phase 7: Random-Agent Group Participation
+
+**Goal**: Upgrade `@aie-matrix/random-agent` to randomly exercise all five group MCP tools so that group mechanics are exercised in every multi-ghost deployment without manual intervention.
+
+**Independent Test**: Deploy two random-agent instances; wait 2–3 minutes; verify at least one (:Group) node appears in Neo4j and at least one `{group_id}.jsonl` file exists. Check random-agent logs for `random-agent.group.*` events.
+
+**Depends on**: Phase 3 (US1) complete — group.offer, group.list must be implemented and deployed.
+
+- [ ] T047 [P] Add in-memory group state tracking to `ghosts/random-agent/src/executor.ts`: a `knownGroupIds: Set<string>` per ghost (alongside `pendingProposals`) to track groups the ghost belongs to; populate by calling `group.list` on startup and after any group event
+- [ ] T048 [US1] Add `group.list` call branch to `tryAction()` in `ghosts/random-agent/src/executor.ts` — 5% probability when `knownGroupIds` is empty or stale (check at most once per 10 ticks); cache returned group IDs in `knownGroupIds`
+- [ ] T049 [US1] Add `group.offer` branch to `tryAction()` — 5% probability when an occupant is present and `knownGroupIds.size === 0` (ghost not yet in a group); call `group.offer { to: occupant, resource: "gold", amount: 1, expires_in: 120 }` and store returned `offerId` in `pendingProposals` (reuse existing array); log `random-agent.group.offer`
+- [ ] T050 [US2] Add inbox-polling + `group.vote` branch — when `world.message.new` arrives with a group-thread `thread_id`, call `group.vote { group_id, offer_id, decision: "accept" }` with 80% probability (20% reject); extract `offer_id` from the system message content using a simple regex; log `random-agent.group.vote`
+- [ ] T051 [US3] Add `group.leave` branch to `tryAction()` — 1% probability per tick when `knownGroupIds.size > 0`; pick a random group ID and call `group.leave { group_id }`; remove from `knownGroupIds` on success; log `random-agent.group.leave`
+
+**Note on `group.say`**: Random agent intentionally omits `group.say` — it has nothing meaningful to say. Adding noisy automated group messages would pollute the chat log for human observers. Add only if explicitly needed for demo purposes.
+
+**Checkpoint**: Two random-agent instances eventually form a group, the first vote-invited member accepts, and at least one voluntary leave occurs over a 5-minute run. All events logged with `random-agent.group.*` kind.
+
+---
+
+## Phase 8: Polish & Cross-Cutting Concerns
 
 - [ ] T039 [P] Update `docs/architecture.md` — document Group as a new disembodied world actor type; document group chat as a second fan-out target model alongside proximity chat
 - [ ] T040 [P] Add formal addendum note to `proposals/rfc/0023-in-world-resource-ledger.md` documenting the `shared` transaction variant (causes `"group.form"`, `"group.join"`, `"group.leave"`) per IC-001
@@ -147,7 +170,8 @@
 - **Phase 1 (Setup)**: No dependencies — start immediately; tasks T001–T006 are all independent [P]
 - **Phase 2 (Foundational)**: Depends on Phase 1 — BLOCKS all story phases
 - **Phase 3–6 (Stories)**: All depend on Phase 2. US1 (Phase 3) must be complete before US2/US3/US4 — the group actor must exist before join, leave, or chat can work
-- **Phase 7 (Polish)**: Depends on all desired stories being complete
+- **Phase 7 (Random-Agent)**: Depends on Phase 3 (US1) — group.offer and group.list must be implemented
+- **Phase 8 (Polish)**: Depends on all desired stories and Phase 7 being complete
 
 ### User Story Dependencies
 
