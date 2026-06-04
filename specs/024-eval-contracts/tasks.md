@@ -19,10 +19,10 @@
 
 **Purpose**: Types and error classes that every subsequent phase depends on.
 
-- [ ] T001 [P] Add `shared/types/src/eval-contract.ts` with `EvalContractId`, `EvalContractState` union, and `EvalContract` interface per data-model.md
-- [ ] T002 [P] Export new eval-contract types from `shared/types/src/index.ts`
-- [ ] T003 Add `server/world-api/src/eval-contract-errors.ts` with all six `Data.TaggedError` classes and `EvalContractError` union type per plan.md Phase 2
-- [ ] T004 Mark RFC-0022 status as `accepted` in `proposals/rfc/0022-eval-contract-protocol.md`; update `specs/024-eval-contracts/spec.md` status field from `Draft` to `accepted`
+- [x] T001 [P] Add `shared/types/src/eval-contract.ts` with `EvalContractId`, `EvalContractState` union, and `EvalContract` interface per data-model.md
+- [x] T002 [P] Export new eval-contract types from `shared/types/src/index.ts`
+- [x] T003 Add `server/world-api/src/eval-contract-errors.ts` with all six `Data.TaggedError` classes and `EvalContractError` union type per plan.md Phase 2
+- [x] T004 Mark RFC-0022 status as `accepted` in `proposals/rfc/0022-eval-contract-protocol.md`; update `specs/024-eval-contracts/spec.md` status field from `Draft` to `accepted`
 
 **Checkpoint**: `pnpm typecheck` passes; error types importable from `server/world-api/src/eval-contract-errors.ts`
 
@@ -32,11 +32,11 @@
 
 **Purpose**: GroupService extension + service interface and skeleton implementations wired into the server. No story logic yet — just the Effect service scaffolding.
 
-- [ ] T005 Add `getGroupMembers(groupId: GroupId): Effect.Effect<ActorId[], GroupNotFound>` to `server/world-api/src/GroupService.ts` interface, `GroupServiceInMemory.ts`, and `GroupServiceLive.ts` — required by T022 to freeze beneficiaries at contract acceptance
-- [ ] T006 Create `server/world-api/src/EvalContractService.ts` — `EvalContractServiceOps` interface with all seven method signatures and `EvalContractService` Context.Tag, per plan.md Phase 3
-- [ ] T007 Create `server/world-api/src/EvalContractServiceInMemory.ts` — stub Layer backed by `Map<EvalContractId, EvalContract>` with all methods returning `Effect.fail(new EvalContractNotFound(...))` placeholder; includes `LedgerServiceInMemory` and `GroupServiceInMemory` as peer dependencies
-- [ ] T008 Create `server/world-api/src/EvalContractServiceLive.ts` — stub Neo4j Layer with same method signatures; real logic filled in during Polish phase
-- [ ] T009 Add `EvalContractService` to the `ToolServices` union type in `server/world-api/src/mcp-server.ts` and wire `EvalContractServiceLive` into the `Layer.mergeAll(...)` composition in `server/world-api/src/live/`
+- [x] T005 Add `getGroupMembers(groupId: GroupId): Effect.Effect<ActorId[], GroupNotFound>` to `server/world-api/src/GroupService.ts` interface, `GroupServiceInMemory.ts`, and `GroupServiceLive.ts` — required by T022 to freeze beneficiaries at contract acceptance
+- [x] T006 Create `server/world-api/src/EvalContractService.ts` — `EvalContractServiceOps` interface with all seven method signatures and `EvalContractService` Context.Tag, per plan.md Phase 3
+- [x] T007 Create `server/world-api/src/EvalContractServiceInMemory.ts` — stub Layer backed by `Map<EvalContractId, EvalContract>` with all methods returning `Effect.fail(new EvalContractNotFound(...))` placeholder; includes `LedgerServiceInMemory` and `GroupServiceInMemory` as peer dependencies
+- [x] T008 Create `server/world-api/src/EvalContractServiceLive.ts` — stub Neo4j Layer with same method signatures; real logic filled in during Polish phase
+- [x] T009 Add `EvalContractService` to the `ToolServices` union type in `server/world-api/src/mcp-server.ts` and wire `EvalContractServiceLive` into the `Layer.mergeAll(...)` composition in `server/world-api/src/live/`
 
 **Checkpoint**: `pnpm run build` passes from repo root with no new errors
 
@@ -50,11 +50,11 @@
 
 ### Implementation for User Story 1
 
-- [ ] T010 [US1] Implement `openContract` in `EvalContractServiceInMemory.ts`: validate evaluator ≠ contractor, register synthetic escrow actor (`"escrow:<id>"`), commit ledger movement `clientBag → escrow`, store contract record in `Open` state
-- [ ] T011 [US1] Implement `getContract` in `EvalContractServiceInMemory.ts`: return the stored record; reject with `EvalContractNotAuthorized` if caller is not client, contractor, or evaluator
-- [ ] T012 [US1] Implement `listContracts` in `EvalContractServiceInMemory.ts`: filter by caller role (client/contractor/evaluator) and optional state parameter
-- [ ] T013 [P] [US1] Add unit tests for US1 in `server/world-api/src/EvalContractService.test.ts`: happy-path open, insufficient-funds rejection, evaluator=contractor rejection, request-payload immutability rejection (FR-009), get by party, get by non-party rejection, list filters
-- [ ] T014 [P] [US1] Register `eval_contract_open`, `eval_contract_get`, and `eval_contract_list` MCP tools in `server/world-api/src/mcp-server.ts` per `contracts/mcp-tools.md`
+- [x] T010 [US1] Implement `openContract` in `EvalContractServiceInMemory.ts`: validate evaluator ≠ contractor, register synthetic escrow actor (`"escrow:<id>"`), commit ledger movement `clientBag → escrow`, store contract record in `Open` state
+- [x] T011 [US1] Implement `getContract` in `EvalContractServiceInMemory.ts`: return the stored record; reject with `EvalContractNotAuthorized` if caller is not client, contractor, or evaluator
+- [x] T012 [US1] Implement `listContracts` in `EvalContractServiceInMemory.ts`: filter by caller role (client/contractor/evaluator) and optional state parameter
+- [x] T013 [P] [US1] Add unit tests for US1 in `server/world-api/src/EvalContractService.test.ts`: happy-path open, insufficient-funds rejection, evaluator=contractor rejection, request-payload immutability rejection (FR-009), get by party, get by non-party rejection, list filters
+- [x] T014 [P] [US1] Register `eval_contract_open`, `eval_contract_get`, and `eval_contract_list` MCP tools in `server/world-api/src/mcp-server.ts` per `contracts/mcp-tools.md`
 
 **Checkpoint**: `pnpm test` passes; smoke-test `eval_contract_open` + `eval_contract_get` via MCP as described in quickstart.md
 
@@ -68,12 +68,12 @@
 
 ### Implementation for User Story 2
 
-- [ ] T015 [US2] Implement `acceptContract` in `EvalContractServiceInMemory.ts`: verify caller is contractor, verify state is `Open`, transition to `Accepted`, freeze beneficiary list (empty array for ghost contractors)
-- [ ] T016 [US2] Implement `declineContract` in `EvalContractServiceInMemory.ts`: verify caller is contractor, verify state is `Open`, commit ledger movement `escrow → clientBag`, transition to `Declined`
-- [ ] T017 [US2] Implement `submitContract` in `EvalContractServiceInMemory.ts`: verify caller is contractor, verify state is `Accepted`, lazy-check deadline (if expired: commit `escrow → clientBag`, transition to `Expired`, return error `EvalContractDeadlineExpired`), record immutable submission, transition to `Submitted`
-- [ ] T018 [US2] Extract lazy expiry check helper from T017 and apply it in `acceptContract`, `getContract`, and `listContracts`: if state is `Accepted` and `Date.now() > deadline`, commit `escrow → clientBag` and transition to `Expired` before returning
-- [ ] T019 [P] [US2] Add unit tests for US2 in `EvalContractService.test.ts`: accept happy path, decline happy path, submit happy path, submit-after-deadline triggers `Expired` state (not `Settled` directly), attempt to re-submit rejected, attempt to modify submission rejected, NotAuthorized for wrong caller
-- [ ] T020 [P] [US2] Register `eval_contract_accept`, `eval_contract_decline`, and `eval_contract_submit` MCP tools in `server/world-api/src/mcp-server.ts`
+- [x] T015 [US2] Implement `acceptContract` in `EvalContractServiceInMemory.ts`: verify caller is contractor, verify state is `Open`, transition to `Accepted`, freeze beneficiary list (empty array for ghost contractors)
+- [x] T016 [US2] Implement `declineContract` in `EvalContractServiceInMemory.ts`: verify caller is contractor, verify state is `Open`, commit ledger movement `escrow → clientBag`, transition to `Declined`
+- [x] T017 [US2] Implement `submitContract` in `EvalContractServiceInMemory.ts`: verify caller is contractor, verify state is `Accepted`, lazy-check deadline (if expired: commit `escrow → clientBag`, transition to `Expired`, return error `EvalContractDeadlineExpired`), record immutable submission, transition to `Submitted`
+- [x] T018 [US2] Extract lazy expiry check helper from T017 and apply it in `acceptContract`, `getContract`, and `listContracts`: if state is `Accepted` and `Date.now() > deadline`, commit `escrow → clientBag` and transition to `Expired` before returning
+- [x] T019 [P] [US2] Add unit tests for US2 in `EvalContractService.test.ts`: accept happy path, decline happy path, submit happy path, submit-after-deadline triggers `Expired` state (not `Settled` directly), attempt to re-submit rejected, attempt to modify submission rejected, NotAuthorized for wrong caller
+- [x] T020 [P] [US2] Register `eval_contract_accept`, `eval_contract_decline`, and `eval_contract_submit` MCP tools in `server/world-api/src/mcp-server.ts`
 
 **Checkpoint**: `pnpm test` passes; smoke-test accept→submit via MCP
 
@@ -87,9 +87,9 @@
 
 ### Implementation for User Story 3
 
-- [ ] T021 [US3] Implement `evaluateContract` in `EvalContractServiceInMemory.ts`: verify caller is evaluator, verify caller is not contractor or beneficiary, verify state is `Submitted`, record verdict, execute ghost-contractor settlement (two ledger movements: `escrow → contractorBag`, `escrow → clientBag`) using floor arithmetic, transition to `Settled`
-- [ ] T022 [P] [US3] Add unit tests for US3 in `EvalContractService.test.ts`: verdict 1.0 (full payment), verdict 0.0 (full refund), verdict 0.75 (proportional), evaluator=contractor rejected, evaluator=beneficiary rejected, wrong-state rejected, settlement invariant (`contractor + client === stake`) for all integer stakes and verdicts
-- [ ] T023 [P] [US3] Register `eval_contract_evaluate` MCP tool in `server/world-api/src/mcp-server.ts`
+- [x] T021 [US3] Implement `evaluateContract` in `EvalContractServiceInMemory.ts`: verify caller is evaluator, verify caller is not contractor or beneficiary, verify state is `Submitted`, record verdict, execute ghost-contractor settlement (two ledger movements: `escrow → contractorBag`, `escrow → clientBag`) using floor arithmetic, transition to `Settled`
+- [x] T022 [P] [US3] Add unit tests for US3 in `EvalContractService.test.ts`: verdict 1.0 (full payment), verdict 0.0 (full refund), verdict 0.75 (proportional), evaluator=contractor rejected, evaluator=beneficiary rejected, wrong-state rejected, settlement invariant (`contractor + client === stake`) for all integer stakes and verdicts
+- [x] T023 [P] [US3] Register `eval_contract_evaluate` MCP tool in `server/world-api/src/mcp-server.ts`
 
 **Checkpoint**: `pnpm test` passes; full lifecycle smoke-test from quickstart.md runs end-to-end via MCP
 
@@ -103,10 +103,10 @@
 
 ### Implementation for User Story 4
 
-- [ ] T024 [US4] Update `acceptContract` in `EvalContractServiceInMemory.ts`: if `contractorId` is a `GroupId`, call `GroupService.getGroupMembers(contractorId)` (added in T005) to fetch current members and freeze them as the `beneficiaries` array on the contract record
-- [ ] T025 [US4] Update `evaluateContract` in `EvalContractServiceInMemory.ts`: if `beneficiaries.length > 0`, use N+1 movement group settlement path — `per_share = floor(stake × v / N)`, one ledger movement per beneficiary, remainder to client
-- [ ] T026 [P] [US4] Add unit tests for US4 in `EvalContractService.test.ts`: beneficiaries frozen at accept (not at open), post-accept membership change not reflected, settlement with N=2 produces correct per-share and remainder, N=1 edge case, evaluator-is-beneficiary rejection
-- [ ] T027 [P] [US4] Update `eval_contract_accept` MCP tool response to include `beneficiaries` array in `server/world-api/src/mcp-server.ts`
+- [x] T024 [US4] Update `acceptContract` in `EvalContractServiceInMemory.ts`: if `contractorId` is a `GroupId`, call `GroupService.getGroupMembers(contractorId)` (added in T005) to fetch current members and freeze them as the `beneficiaries` array on the contract record
+- [x] T025 [US4] Update `evaluateContract` in `EvalContractServiceInMemory.ts`: if `beneficiaries.length > 0`, use N+1 movement group settlement path — `per_share = floor(stake × v / N)`, one ledger movement per beneficiary, remainder to client
+- [x] T026 [P] [US4] Add unit tests for US4 in `EvalContractService.test.ts`: beneficiaries frozen at accept (not at open), post-accept membership change not reflected, settlement with N=2 produces correct per-share and remainder, N=1 edge case, evaluator-is-beneficiary rejection
+- [x] T027 [P] [US4] Update `eval_contract_accept` MCP tool response to include `beneficiaries` array in `server/world-api/src/mcp-server.ts`
 
 **Checkpoint**: `pnpm test` passes; group-contractor lifecycle verifiable via MCP with a test group
 

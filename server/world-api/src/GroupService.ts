@@ -101,6 +101,12 @@ export interface GroupServiceOps {
   listMemberships(ghostId: ActorId): Effect.Effect<GroupSummary[], never>;
 
   /**
+   * Return the current member list for a group.
+   * Used by EvalContractService to freeze beneficiaries at acceptance.
+   */
+  getGroupMembers(groupId: GroupId): Effect.Effect<ActorId[], GroupNotFound>;
+
+  /**
    * Post a message to the group chat thread.
    * Fan-out to all current members + participants.
    * Does not require conversational mode or location.

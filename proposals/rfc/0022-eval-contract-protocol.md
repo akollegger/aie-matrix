@@ -1,6 +1,6 @@
 # RFC-0022: Eval Contract Protocol
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-06-04  
 **Authors:** @akollegger  
 **Depends on:** [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger)  

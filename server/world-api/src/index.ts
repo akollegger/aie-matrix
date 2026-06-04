@@ -232,3 +232,15 @@ export type { ScheduleEvent, ScheduledEvent, ScheduleEventKind } from "./calenda
 export { toScheduledEvent } from "./calendar/CalendarEvent.js";
 export { CalendarParseError, parseCalendarGramFile, parseCalendarGramText } from "./calendar/parse-calendar-gram.js";
 export { WorldCalendarService, makeWorldCalendarLayer, makeWorldCalendarService } from "./calendar/WorldCalendarService.js";
+export { EvalContractService, type EvalContractServiceOps } from "./EvalContractService.js";
+export { makeEvalContractServiceInMemory, EvalContractServiceInMemoryLayer } from "./EvalContractServiceInMemory.js";
+export { makeEvalContractServiceLiveLayer } from "./EvalContractServiceLive.js";
+export {
+  EvalContractNotFound,
+  EvalContractWrongState,
+  EvalContractNotAuthorized,
+  EvalContractInvalidEvaluator,
+  EvalContractDeadlineExpired,
+  EvalContractPersistenceError,
+  type EvalContractError,
+} from "./eval-contract-errors.js";

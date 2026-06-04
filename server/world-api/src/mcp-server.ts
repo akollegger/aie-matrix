@@ -53,6 +53,7 @@ import { WorldCalendarService } from "./calendar/WorldCalendarService.js";
 import { LedgerService } from "./LedgerService.js";
 import { ProposalService } from "./ProposalService.js";
 import { GroupService } from "./GroupService.js";
+import { EvalContractService } from "./EvalContractService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
@@ -72,7 +73,8 @@ type ToolServices =
   | WorldCalendarService
   | LedgerService
   | ProposalService
-  | GroupService;
+  | GroupService
+  | EvalContractService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -1831,6 +1833,248 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       runTool("group.list", {}, groupListEffect(extra), extra),
   );
 
+  // ---------------------------------------------------------------------------
+  // Eval contract tools
+  // ---------------------------------------------------------------------------
+
+  server.registerTool(
+    "eval_contract_open",
+    {
+      description:
+        "Open a new eval contract. You become the client; the staked amount is immediately debited from your resource bag into escrow.",
+      inputSchema: {
+        contractorId: z.string().describe("Ghost ID or Group ID of the contractor"),
+        evaluatorId: z.string().describe("Ghost ID of the evaluator"),
+        request: z.string().describe("Opaque request payload (e.g. JSON question spec)"),
+        stakeResource: z.string().describe("Resource type to stake (must match a registered resource)"),
+        stakeAmount: z.number().int().positive().describe("Amount to stake from your bag"),
+        deadlineMs: z.number().int().positive().describe("Absolute deadline as Unix milliseconds"),
+      },
+    },
+    async ({ contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs }, extra) =>
+      runTool(
+        "eval_contract_open",
+        { contractorId, evaluatorId, stakeResource, stakeAmount, deadlineMs },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.openContract({
+              clientId: ghostId,
+              contractorId,
+              evaluatorId,
+              request,
+              stakeResource,
+              stakeAmount,
+              deadline: deadlineMs,
+            }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          const c = either.right;
+          return { contractId: c.id, state: c.state, escrowActorId: c.escrowActorId, openedAt: c.openedAt };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_accept",
+    {
+      description:
+        "Accept an open eval contract. You must be the named contractor (or a member of the named group). Freezes beneficiary list for group contractors.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract to accept"),
+      },
+    },
+    async ({ contractId }, extra) =>
+      runTool(
+        "eval_contract_accept",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.acceptContract({ contractId, callerId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          const c = either.right;
+          return { contractId: c.id, state: c.state, beneficiaries: c.beneficiaries };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_decline",
+    {
+      description:
+        "Decline an open eval contract. You must be the named contractor. The client's stake is returned from escrow.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract to decline"),
+      },
+    },
+    async ({ contractId }, extra) =>
+      runTool(
+        "eval_contract_decline",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.declineContract({ contractId, callerId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          return { contractId, state: either.right.state };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_submit",
+    {
+      description:
+        "Submit a response to an accepted eval contract. You must be the named contractor. Submission is immutable once recorded.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract"),
+        submission: z.string().describe("Opaque submission payload"),
+      },
+    },
+    async ({ contractId, submission }, extra) =>
+      runTool(
+        "eval_contract_submit",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.submitContract({ contractId, callerId: ghostId, submission }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          return { contractId, state: either.right.state };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_evaluate",
+    {
+      description:
+        "Issue a verdict on a submitted eval contract. You must be the named evaluator. Settlement executes atomically immediately after.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract"),
+        verdict: z.number().min(0).max(1).describe("Score in [0,1]; 0=fail, 1=full payment"),
+      },
+    },
+    async ({ contractId, verdict }, extra) =>
+      runTool(
+        "eval_contract_evaluate",
+        { contractId, verdict },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.evaluateContract({ contractId, callerId: ghostId, verdict }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          const r = either.right;
+          return {
+            contractId: r.id,
+            state: r.state,
+            verdict: r.verdict,
+            contractorPayment: r.contractorPayment,
+            clientRefund: r.clientRefund,
+            movements: r.movements,
+          };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_get",
+    {
+      description:
+        "Read the current state of an eval contract. You must be the named client, contractor, or evaluator.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract"),
+      },
+    },
+    async ({ contractId }, extra) =>
+      runTool(
+        "eval_contract_get",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.getContract({ contractId, callerId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          return either.right;
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_list",
+    {
+      description:
+        "List eval contracts visible to you (where you are the client, contractor, or evaluator). Optionally filter by state.",
+      inputSchema: {
+        state: z
+          .enum(["Open", "Accepted", "Submitted", "Evaluated", "Settled", "Declined", "Expired"])
+          .optional()
+          .describe("Filter by contract state"),
+      },
+    },
+    async ({ state }, extra) =>
+      runTool(
+        "eval_contract_list",
+        { state },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.listContracts({ callerId: ghostId, state }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          return { contracts: either.right };
+        }),
+        extra,
+      ),
+  );
+
   return server;
 }
 
@@ -1879,6 +2123,8 @@ export function handleGhostMcpEffect(
     const ledger = yield* LedgerService;
     const calendarSvc = yield* WorldCalendarService;
     const proposalSvc = yield* ProposalService;
+    const groupSvc = yield* GroupService;
+    const evalContractSvc = yield* EvalContractService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -1890,6 +2136,8 @@ export function handleGhostMcpEffect(
       Layer.succeed(LedgerService, ledger),
       Layer.succeed(WorldCalendarService, calendarSvc),
       Layer.succeed(ProposalService, proposalSvc),
+      Layer.succeed(GroupService, groupSvc),
+      Layer.succeed(EvalContractService, evalContractSvc),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
