@@ -72,9 +72,17 @@ Draft ──► Open ──► Accepted ──► Submitted ──► Evaluated 
 
 Settlement is a pair of ledger transactions:
 
+**Ghost contractor:**
 ```
 escrow → contractor bag:  floor(stake × v)
 escrow → client bag:      stake − floor(stake × v)
+```
+
+**Group contractor** (N beneficiaries recorded at acceptance):
+```
+per_share = floor(stake × v / N)
+escrow → each beneficiary bag:  per_share          (N transactions)
+escrow → client bag:            stake − (per_share × N)
 ```
 
 For a binary verdict (v ∈ {0, 1}): the contractor receives the full stake on success, nothing on failure, and the client is made whole on failure. For a scored verdict (v ∈ (0,1)): the contractor receives proportional payment; the client recovers the remainder. Integer flooring means a zero-stake contract or a near-zero score may yield zero tokens to the contractor — this is by design.
@@ -83,7 +91,7 @@ The settlement function is not configurable per contract. All eval contracts use
 
 ### Groups as Contractors
 
-When the contractor is a group, the group is treated as a single entity. The contract pays into the group's bag; distribution among group members is a group-internal concern outside this protocol's scope. This means group formation (RFC-TBD) must ensure that groups have a ledger bag.
+When the contractor is a group, the contract records the group's current members as **beneficiaries** at the time the contract is accepted. Settlement pays each beneficiary's personal bag directly — equal shares, split N ways — rather than routing through a group bag. This removes any dependency on a spendable group resource pool. Members who join or leave the group after acceptance are not affected: the beneficiary list is frozen at acceptance time.
 
 ---
 
@@ -96,7 +104,8 @@ This protocol authors ledger transactions; it owns no storage of its own for res
 | Contract opens | Debit `client bag → contract escrow bag` |
 | Contract declines or cancels | Debit `contract escrow bag → client bag` |
 | Contract expires (v=0) | Debit `contract escrow bag → client bag` |
-| Contract settles | Two debits: escrow → contractor, escrow → client (remainder) |
+| Contract settles (ghost) | Two debits: `escrow → contractor bag`, `escrow → client bag` (remainder) |
+| Contract settles (group) | N+1 debits: `escrow → each beneficiary bag` (equal share), `escrow → client bag` (remainder) |
 
 Contract state (lifecycle phase, submission, verdict) is stored as a `(:EvalContract)` node in Neo4j with edges to client, contractor, and evaluator. This is separate from the ledger, which only records resource movements.
 
