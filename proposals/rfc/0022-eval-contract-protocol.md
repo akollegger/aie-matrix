@@ -108,7 +108,19 @@ This protocol authors ledger transactions; it owns no storage of its own for res
 | Contract settles (ghost) | Two debits: `escrow → contractor bag`, `escrow → client bag` (remainder) |
 | Contract settles (group) | N+1 debits: `escrow → each beneficiary bag` (equal share), `escrow → client bag` (remainder) |
 
-Contract state (lifecycle phase, `request`, `submission`, verdict) is stored as a `(:EvalContract)` node in Neo4j with edges to client, contractor, and evaluator. This is separate from the ledger, which only records resource movements.
+Contract state (lifecycle phase, `request`, `submission`, verdict) is persisted by the world-api with references to client, contractor, and evaluator. This is separate from the ledger, which only records resource movements.
+
+---
+
+## Acceptance Criteria
+
+An implementation is complete when all of the following are observable:
+
+- A client ghost with sufficient balance can open a contract; the staked amount is debited from its bag immediately and held in escrow.
+- A contractor ghost can accept an open contract and submit a response before the deadline; the submission is immutable once recorded.
+- An evaluator ghost can issue a verdict; ledger settlement executes atomically — contractor bag(s) and client bag each receive the correct amounts with no residual in escrow.
+- A contract that expires without submission settles at v=0; the client's full stake is returned from escrow.
+- A group contractor at acceptance produces a beneficiary list; settlement issues one payment per beneficiary directly to their personal bag, with any integer remainder returned to the client.
 
 ---
 
@@ -139,3 +151,17 @@ This RFC specifies the contract primitive only. The following are explicitly out
 4. **Client cancellation.** Can the client cancel an accepted contract (work window open) before the deadline? If yes, does the contractor receive a partial stake for the disruption?
 
 5. **Duplicate offers.** Can the same client open multiple contracts with the same contractor and work payload simultaneously? If not, what uniqueness constraint governs this?
+
+6. **Verdict issuance interface.** Via what interface does an evaluator issue a verdict — a dedicated MCP tool, an HTTP endpoint on world-api, or an operator-only admin call? The choice affects whether evaluation can be automated or requires a human-in-the-loop step.
+
+---
+
+## Alternatives
+
+**Symmetric stakes (wager model).** Both client and contractor deposit resources; the winner takes both pools. Rejected because it couples willingness-to-participate to resource holdings — a contractor with an empty bag cannot accept any contract, regardless of capability. The asymmetric job-offer model keeps participation accessible and lets survival pressure come from higher-level mechanics (drain rates, jackpots) rather than the contract primitive itself.
+
+**Client as evaluator.** Simpler — no third party required, and the client already holds the answer key. Rejected because the client has a direct financial interest in the verdict: a dishonest client could deny correct submissions to recover their stake. An impartial evaluator is the minimal structural protection against this.
+
+**Binary verdict only (pass/fail).** Removes the scoring formula and simplifies settlement to a single conditional transfer. Rejected because higher-level mechanics (difficulty weighting, partial-credit exam scoring) need a continuous signal to build on. Binary is a special case of [0,1]; supporting it costs nothing.
+
+**Configurable settlement function per contract.** Each contract specifies its own payout formula. Rejected because configurable settlement introduces ambiguity about what constitutes a valid formula, creates a new attack surface (e.g., a formula that always pays the client), and is not needed — clients can encode richer payout logic by choosing the stake amount before opening.
