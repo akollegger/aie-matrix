@@ -10,7 +10,7 @@
 
 ## Summary
 
-An **eval contract** is a 1:1 service agreement between a **client** (who poses work and stakes resources) and a **contractor** (who performs the work), verified by an impartial **evaluator** who scores the submission on a [0,1] scale. Settlement is a ledger transaction: the contractor receives `stake × score`; the remainder returns to the client. The contractor is a single named entity — a ghost or a group — making group evaluation a natural consequence of group formation rather than a special case. No new storage, resource type, or mechanic is introduced beyond what RFC-0023 already provides.
+An **eval contract** is a 1:1 service agreement between a **client** (who poses a request and stakes resources) and a **contractor** (who fulfills it), verified by an impartial **evaluator** who scores the submission on a [0,1] scale. Settlement is a ledger transaction: the contractor receives `stake × score`; the remainder returns to the client. The contractor is a single named entity — a ghost or a group — making group evaluation a natural consequence of group formation rather than a special case. No new storage, resource type, or mechanic is introduced beyond what RFC-0023 already provides.
 
 ---
 
@@ -26,9 +26,9 @@ Several planned features need a scored commitment primitive: question/answer cha
 
 | Role | Description | Constraints |
 |---|---|---|
-| **Client** | Creates the contract; defines the work; stakes resources from their bag | Must hold sufficient stake at time of opening |
-| **Contractor** | Performs the work; delivers a submission within the deadline | A ghost or a group (treated as a single named entity) |
-| **Evaluator** | Reviews the submission; issues a verdict in [0,1] | Must be neither client nor contractor for the same contract |
+| **Client** | Creates the contract; authors the request; stakes resources from their bag | Must hold sufficient stake at time of opening |
+| **Contractor** | Fulfills the request; delivers a submission within the deadline | A ghost or a group (treated as a single named entity) |
+| **Evaluator** | Reviews the request and submission; issues a verdict in [0,1] | Must be neither client nor contractor for the same contract |
 
 Any ghost may fill any role subject to the constraints above. The protocol does not prescribe which ghosts fill these roles — that is an operational concern and a ghost implementation concern.
 
@@ -40,14 +40,15 @@ EvalContract {
   client:       GhostId
   contractor:   GhostId | GroupId
   evaluator:    GhostId
-  work:         opaque payload        // the challenge; interpreted by evaluator
+  request:      opaque payload        // authored by client; the challenge or task specification
+  submission:   opaque payload | null // authored by contractor; null until Submitted
   stake:        { resource: ResourceId, amount: integer }
   deadline:     Timestamp             // absolute; set by client
   opened_at:    Timestamp
 }
 ```
 
-The `work` payload is opaque to the protocol. It may be a question, a task specification, a proof request, or any other challenge format that the evaluator understands. The protocol does not constrain its shape.
+`request` and `submission` are both opaque to the protocol — a question and an answer, a task spec and a deliverable, a proof challenge and a proof. Their structure is defined by the client and evaluator; the protocol only tracks their presence and authorship. `request` is fixed at `Open`; `submission` is recorded exactly once at `Submitted` and is immutable thereafter. Draft management is the contractor's own concern and happens outside the contract.
 
 ### Lifecycle
 
@@ -63,7 +64,7 @@ Draft ──► Open ──► Accepted ──► Submitted ──► Evaluated 
 | `Draft → Open` | Client opens the contract | Client's stake is debited to an escrow bag owned by the contract |
 | `Open → Accepted` | Contractor explicitly accepts | Work window begins |
 | `Open → Declined` | Contractor refuses | Escrow returns to client; contract closes |
-| `Accepted → Submitted` | Contractor delivers submission before deadline | Submission recorded against the contract |
+| `Accepted → Submitted` | Contractor delivers submission before deadline | `submission` field recorded; immutable from this point |
 | `Accepted → Expired` | Deadline passes without submission | Contract moves directly to Settled with verdict 0 |
 | `Submitted → Evaluated` | Evaluator issues verdict `v ∈ [0,1]` | Verdict recorded |
 | `Evaluated → Settled` | Ledger executes settlement | (see below) |
@@ -107,7 +108,7 @@ This protocol authors ledger transactions; it owns no storage of its own for res
 | Contract settles (ghost) | Two debits: `escrow → contractor bag`, `escrow → client bag` (remainder) |
 | Contract settles (group) | N+1 debits: `escrow → each beneficiary bag` (equal share), `escrow → client bag` (remainder) |
 
-Contract state (lifecycle phase, submission, verdict) is stored as a `(:EvalContract)` node in Neo4j with edges to client, contractor, and evaluator. This is separate from the ledger, which only records resource movements.
+Contract state (lifecycle phase, `request`, `submission`, verdict) is stored as a `(:EvalContract)` node in Neo4j with edges to client, contractor, and evaluator. This is separate from the ledger, which only records resource movements.
 
 ---
 
@@ -115,7 +116,8 @@ Contract state (lifecycle phase, submission, verdict) is stored as a `(:EvalCont
 
 This RFC specifies the contract primitive only. The following are explicitly out of scope:
 
-- **How the client generates work payloads** — question banks, task catalogs, domain weighting, difficulty tiers; those are client-ghost implementation concerns.
+- **How the client generates requests** — question banks, task catalogs, domain weighting, difficulty tiers; those are client-ghost implementation concerns.
+- **Evaluator criteria and anonymity** — the evaluator's rubric, answer key, and identity relative to the contractor are implementation concerns; the protocol only requires that the evaluator not be the client or contractor.
 - **How evaluators are selected or qualified** — any ghost can be named as evaluator; credential systems are future work.
 - **Evaluator incentives** — the evaluator does not receive a fee from this protocol; if one is desired it is a separate contract between client and evaluator.
 - **Survival pressure mechanics** — token drain, leaderboard brackets, jackpot distributions; those are ledger-level scheduled transfers and are not coupled to this contract shape.
