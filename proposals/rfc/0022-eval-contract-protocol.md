@@ -4,7 +4,7 @@
 **Date:** 2026-06-04  
 **Authors:** @akollegger  
 **Depends on:** [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger)  
-**Related:** RFC-TBD (Group Formation), RFC-0015 (RDC Duels), RFC-0021 (World Calendar)
+**Related:** [RFC-0024](0024-group-formation-and-chat.md) (Group Formation & Group Chat), RFC-0015 (RDC Duels), RFC-0021 (World Calendar)
 
 ---
 
@@ -28,7 +28,7 @@ Several planned features need a scored commitment primitive: question/answer cha
 |---|---|---|
 | **Client** | Creates the contract; authors the request; stakes resources from their bag | Must hold sufficient stake at time of opening |
 | **Contractor** | Fulfills the request; delivers a submission within the deadline | A ghost or a group (treated as a single named entity) |
-| **Evaluator** | Reviews the request and submission; issues a verdict in [0,1] | Must be neither client nor contractor for the same contract |
+| **Evaluator** | Reviews the request and submission; issues a verdict in [0,1] | Must be neither client nor contractor for the same contract, nor a beneficiary of a group contractor |
 
 Any ghost may fill any role subject to the constraints above. The protocol does not prescribe which ghosts fill these roles — that is an operational concern and a ghost implementation concern.
 
@@ -54,14 +54,14 @@ EvalContract {
 
 ```
 Draft ──► Open ──► Accepted ──► Submitted ──► Evaluated ──► Settled
-                │                          │
-                └──► Declined              └──► Expired
-                     (client refunded)          (deadline passed; v=0)
+                │           │                                  ▲
+                └──► Declined└──► Expired ─────────────────────┘
+                     (refunded)   (deadline; v=0)
 ```
 
 | Transition | Trigger | Effect |
 |---|---|---|
-| `Draft → Open` | Client opens the contract | Client's stake is debited to an escrow bag owned by the contract |
+| `Draft → Open` | Client opens the contract | Client's stake is moved to escrow (see Open Question 1 for escrow identity) |
 | `Open → Accepted` | Contractor explicitly accepts | Work window begins |
 | `Open → Declined` | Contractor refuses | Escrow returns to client; contract closes |
 | `Accepted → Submitted` | Contractor delivers submission before deadline | `submission` field recorded; immutable from this point |
@@ -71,18 +71,18 @@ Draft ──► Open ──► Accepted ──► Submitted ──► Evaluated 
 
 ### Settlement
 
-Settlement is a pair of ledger transactions:
+Settlement is a single atomic ledger transaction. Each line below is one movement within that transaction:
 
-**Ghost contractor:**
+**Ghost contractor** (2 movements):
 ```
 escrow → contractor bag:  floor(stake × v)
 escrow → client bag:      stake − floor(stake × v)
 ```
 
-**Group contractor** (N beneficiaries recorded at acceptance):
+**Group contractor** (N+1 movements; N beneficiaries recorded at acceptance):
 ```
 per_share = floor(stake × v / N)
-escrow → each beneficiary bag:  per_share          (N transactions)
+escrow → each beneficiary bag:  per_share          (one movement per beneficiary)
 escrow → client bag:            stake − (per_share × N)
 ```
 
@@ -102,11 +102,11 @@ This protocol authors ledger transactions; it owns no storage of its own for res
 
 | Event | Ledger operation |
 |---|---|
-| Contract opens | Debit `client bag → contract escrow bag` |
-| Contract declines or cancels | Debit `contract escrow bag → client bag` |
-| Contract expires (v=0) | Debit `contract escrow bag → client bag` |
-| Contract settles (ghost) | Two debits: `escrow → contractor bag`, `escrow → client bag` (remainder) |
-| Contract settles (group) | N+1 debits: `escrow → each beneficiary bag` (equal share), `escrow → client bag` (remainder) |
+| Contract opens | Append transaction: 1 movement `client bag → escrow` |
+| Contract declines or cancels | Append transaction: 1 movement `escrow → client bag` |
+| Contract expires (v=0) | Append transaction: 1 movement `escrow → client bag` |
+| Contract settles (ghost) | Append transaction: 2 movements (`escrow → contractor bag`, `escrow → client bag`) |
+| Contract settles (group) | Append transaction: N+1 movements (`escrow → each beneficiary bag`, `escrow → client bag`) |
 
 Contract state (lifecycle phase, `request`, `submission`, verdict) is persisted by the world-api with references to client, contractor, and evaluator. This is separate from the ledger, which only records resource movements.
 
@@ -133,7 +133,7 @@ This RFC specifies the contract primitive only. The following are explicitly out
 - **How evaluators are selected or qualified** — any ghost can be named as evaluator; credential systems are future work.
 - **Evaluator incentives** — the evaluator does not receive a fee from this protocol; if one is desired it is a separate contract between client and evaluator.
 - **Survival pressure mechanics** — token drain, leaderboard brackets, jackpot distributions; those are ledger-level scheduled transfers and are not coupled to this contract shape.
-- **Group formation** — groups are an assumed primitive; this RFC does not specify how they are created, how members join, or how a group's bag is distributed internally.
+- **Group formation** — groups are an assumed primitive (RFC-0024); this RFC does not specify how they are created, how members join, or how a group's bag is distributed internally.
 - **Conversation or chat mechanics** — how contractor and client communicate during the work window is not specified here.
 - **Leaderboard computation** — a read model over settled contracts; not a write concern of this protocol.
 - **Any specific ghost implementation** — a ghost whose role is to act as a client in exam-shaped contracts (e.g., an Inquisitor) is a separate implementation concern.
