@@ -28,7 +28,7 @@ Several planned features need a scored commitment primitive: question/answer cha
 |---|---|---|
 | **Client** | Creates the contract; authors the request; stakes resources from their bag | Must hold sufficient stake at time of opening |
 | **Contractor** | Fulfills the request; delivers a submission within the deadline | A ghost or a group (treated as a single named entity) |
-| **Evaluator** | Reviews the request and submission; issues a verdict in [0,1] | Must be neither client nor contractor for the same contract, nor a beneficiary of a group contractor |
+| **Evaluator** | Reviews the request and submission; issues a verdict in [0,1] | Must be neither the contractor nor a beneficiary of a group contractor; may be the client |
 
 Any ghost may fill any role subject to the constraints above. The protocol does not prescribe which ghosts fill these roles — that is an operational concern and a ghost implementation concern.
 
@@ -129,7 +129,7 @@ An implementation is complete when all of the following are observable:
 This RFC specifies the contract primitive only. The following are explicitly out of scope:
 
 - **How the client generates requests** — question banks, task catalogs, domain weighting, difficulty tiers; those are client-ghost implementation concerns.
-- **Evaluator criteria and anonymity** — the evaluator's rubric, answer key, and identity relative to the contractor are implementation concerns; the protocol only requires that the evaluator not be the client or contractor.
+- **Evaluator criteria and anonymity** — the evaluator's rubric, answer key, and identity relative to the contractor are implementation concerns; the protocol only requires that the evaluator not be the contractor or a beneficiary of a group contractor.
 - **How evaluators are selected or qualified** — any ghost can be named as evaluator; credential systems are future work.
 - **Evaluator incentives** — the evaluator does not receive a fee from this protocol; if one is desired it is a separate contract between client and evaluator.
 - **Survival pressure mechanics** — token drain, leaderboard brackets, jackpot distributions; those are ledger-level scheduled transfers and are not coupled to this contract shape.
@@ -160,7 +160,7 @@ This RFC specifies the contract primitive only. The following are explicitly out
 
 **Symmetric stakes (wager model).** Both client and contractor deposit resources; the winner takes both pools. Rejected because it couples willingness-to-participate to resource holdings — a contractor with an empty bag cannot accept any contract, regardless of capability. The asymmetric job-offer model keeps participation accessible and lets survival pressure come from higher-level mechanics (drain rates, jackpots) rather than the contract primitive itself.
 
-**Client as evaluator.** Simpler — no third party required, and the client already holds the answer key. Rejected because the client has a direct financial interest in the verdict: a dishonest client could deny correct submissions to recover their stake. An impartial evaluator is the minimal structural protection against this.
+**Client as evaluator (always).** Mandating that the client must be the evaluator — no third-party role at all. Not adopted because it eliminates the flexibility to use an independent evaluator, which is required for any scenario where the client should not know the answer in advance. The protocol permits the client to serve as evaluator (common for simple question/answer contracts where the client holds the answer key), but does not require it.
 
 **Binary verdict only (pass/fail).** Removes the scoring formula and simplifies settlement to a single conditional transfer. Rejected because higher-level mechanics (difficulty weighting, partial-credit exam scoring) need a continuous signal to build on. Binary is a special case of [0,1]; supporting it costs nothing.
 
