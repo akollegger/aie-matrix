@@ -6,18 +6,47 @@
 
 Implement a `funder-agent` ghost that exercises the eval contract primitive end-to-end. The funder holds a small supply of a custom resource (`funder-credits`), advertises a simple open-ended question via conversation, opens a contract for any ghost that replies "accept", and auto-evaluates any submission at full score (`v = 1.0`).
 
-This requires two tracks of work:
+This requires three tracks of work:
 
-1. **Resource grant infrastructure** — extend `CatalogEntry` with `resourceGrants`, teach the world-api to register declared resource types at session init, and seed the agent's ghost bag on first connect.
-2. **`funder-agent` ghost** — new package in `ghosts/funder-agent/` implementing the conversation tree and contract lifecycle.
+1. **Resource grant infrastructure** — extend `CatalogEntry` with `resourceGrants`, add `LedgerService.ensureResourceType`, seed the agent's ghost bag on first connect.
+2. **Contract submission event** — add `world.contract.submitted` to `WorldEventKind` and dispatch it from `submitContract` to the evaluator ghost via A2A.
+3. **`funder-agent` ghost** — new package in `ghosts/funder-agent/` implementing the conversation tree and contract lifecycle.
+
+## Resolved Design Decisions
+
+| Question | Decision |
+|---|---|
+| `resourceGrants` scope | Built-in agents only — sourced from `catalog.json`; ignored on external `/register` payloads |
+| `LedgerService` extension | Add `ensureResourceType(rt: ResourceType)` — idempotent, no-ops if already registered |
+| Question content | Baked-in list of 10 questions, one picked randomly per contract (see below) |
+| Submission detection | A2A push — `world.contract.submitted` event dispatched to evaluator when contractor submits |
+
+## Question Bank
+
+```typescript
+const QUESTIONS = [
+  "What's one thing you wish AI systems were better at?",
+  "If you could add one feature to this world, what would it be?",
+  "What's the most surprising thing about being a ghost in a digital world?",
+  "Describe your ideal collaboration between a human and an AI.",
+  "What question would you ask an AI that no one has thought to ask yet?",
+  "What's worth preserving as AI gets more capable?",
+  "If this world had a newspaper, what would today's headline be?",
+  "What's the difference between being helpful and being useful?",
+  "What would you do with more time?",
+  "What does it mean to know something?",
+];
+```
+
+One question is chosen at random when a contract is opened (not at advertisement time — so the ghost hears the question only after committing to answer).
 
 ## Technical Context
 
 **Language/Version**: TypeScript 5.7 / Node.js 24 (ESM)  
-**Dependencies (grants infrastructure)**: existing `effect` v3+, `neo4j-driver` v5, `ulid` — all in `server/world-api`  
+**Dependencies (grants + event)**: existing `effect` v3+, `neo4j-driver` v5, `ulid` — all in `server/world-api`; `@a2a-js/sdk/client` for A2A push dispatch  
 **Dependencies (funder-agent)**: `express`, `@a2a-js/sdk`, `@aie-matrix/ghost-ts-client`, `@aie-matrix/root-env` — same as `random-agent`  
 **New runtime dependency**: none  
-**Storage**: no new storage; eval contracts persist via `EvalContractService`; resource grant state inferred from ledger balance check
+**Storage**: no new storage; eval contracts persist via `EvalContractService`; resource grant state inferred from ledger balance
 
 ---
 
@@ -31,160 +60,184 @@ Add optional `resourceGrants` field to the `"agent"` variant of `CatalogEntry`:
 
 ```typescript
 resourceGrants?: ReadonlyArray<{
-  resourceId: string;    // e.g. "funder-credits"
-  label: string;         // e.g. "Funder Credits"
+  resourceId: string;   // e.g. "funder-credits"
+  label: string;        // e.g. "Funder Credits"
   class: "conserved" | "monotonic";
-  qty: number;           // amount seeded into the ghost's bag on first connect
+  qty: number;          // amount seeded into the ghost's bag on first connect
 }>
 ```
 
----
-
-### T1-2 — Session-init resource type registration
-
-**File**: `server/world-api/src/live/` (wherever `LedgerService.init` is called at session start)
-
-After reading all registered agents from the agent catalog (already done for ghost routing), collect any unique `resourceId` values from their `resourceGrants` arrays. For each new resource type not already in the ledger, call `LedgerService.init()` with an augmented seed list (or add a `registerResourceType(rt: ResourceType)` method to the ledger if init is already sealed by this point).
-
-The world bag receives `0` qty for agent-granted resources — the supply enters the world only when ghost bags are seeded, keeping conservation intact.
+`resourceGrants` is **not** accepted from external `/register` payloads — only entries already in `catalog.json` (built-in agents) are acted upon.
 
 ---
 
-### T1-3 — First-connect seeding in MCP handler
+### T1-2 — Add `ensureResourceType` to `LedgerService`
+
+**Files**: `server/world-api/src/LedgerService.ts`, `LedgerServiceInMemory.ts`, `LedgerServiceLive.ts`
+
+```typescript
+ensureResourceType(rt: ResourceType): Effect.Effect<void, LedgerPersistenceError>
+```
+
+Registers the resource type if not already present; no-ops otherwise. Called during session init (after `init()`) and potentially on agent first-connect. The world bag receives `qty: 0` for agent-granted conserved resources — supply enters only via ghost seed grants.
+
+---
+
+### T1-3 — Session-init resource type registration
+
+**File**: `server/world-api/src/live/` (wherever session init runs)
+
+After `LedgerService.init()`, iterate all `catalog.json` entries with `resourceGrants`, call `ensureResourceType` for each unique `resourceId`.
+
+---
+
+### T1-4 — First-connect seeding in MCP handler
 
 **File**: `server/world-api/src/mcp-server.ts`
 
-In the authentication/setup path that runs before any tool call (after `authenticateGhostRequestEffect`), check whether the calling ghost's `agentId` has declared resource grants and whether their bag already holds the declared resource:
+In the per-request authentication path, after the ghost identity is established, check if the ghost's `agentId` maps to a catalog entry with `resourceGrants`. For each grant where `ledger.bag(ghostId)[grant.resourceId] === 0`, commit a seed transaction:
 
-```
-for each grant in agentEntry.resourceGrants:
-  if ledger.bag(ghostId)[grant.resourceId] === 0:
-    commit deterministic seed tx: world → ghostBag  qty=grant.qty
-    (tx id = ulid-from(sessionId + agentId + resourceId))
-```
-
-The deterministic ULID prevents double-seeding if the ghost reconnects mid-session; the ledger's duplicate-transaction check rejects the second attempt cleanly.
+- `from: "world"`, `to: ghostId`, `qty: grant.qty`, `cause: "agent.resource-grant"`
+- Transaction ID: deterministic ULID derived from `sha256(sessionId + agentId + resourceId)` — ledger's duplicate-tx check prevents double-seeding on reconnect.
 
 ---
 
-### T1-4 — Unit tests for grant infrastructure
+### T1-5 — Unit tests
 
 **File**: `server/world-api/src/agent-resource-grants.test.ts` (new)
 
-- Resource type declared in `resourceGrants` is registered with the ledger after session init.
-- Ghost with a matching `agentId` receives the declared qty on first MCP call.
-- Second MCP call does not re-seed (duplicate tx rejected; balance unchanged).
-- Ghost without a matching agent catalog entry is unaffected.
+- `ensureResourceType` registers a new type; calling again is a no-op.
+- Ghost with matching `agentId` receives declared qty on first MCP call.
+- Second call (same session) does not re-seed — balance unchanged.
+- Ghost without a catalog entry is unaffected.
 
 ---
 
-## Track 2: Funder Agent
+## Track 2: Contract Submission Event
 
-### T2-1 — Package scaffold
+### T2-1 — Add `world.contract.submitted` event kind
+
+**File**: `shared/types/src/channels.ts` (or wherever `WorldEventKind` is defined)
+
+```typescript
+export type WorldEventKind =
+  | "world.message.new"
+  | "world.proximity.enter"
+  | "world.proximity.exit"
+  | "world.quest.trigger"
+  | "world.session.start"
+  | "world.session.end"
+  | "world.contract.submitted";  // ← new
+```
+
+Payload shape: `{ contractId: string; contractorId: string }`.
+
+---
+
+### T2-2 — Dispatch event from `submitContract`
+
+**File**: `server/world-api/src/EvalContractServiceLive.ts` (or the MCP tool handler for `eval_contract_submit`)
+
+After a successful `Submitted` state transition, look up the evaluator's `agentId` from the agent-host registry and push a `world.contract.submitted` event to their A2A endpoint via the existing world-event dispatch mechanism (same path as `world.message.new`).
+
+If the evaluator is not a registered agent (human ghost or no A2A endpoint), skip the dispatch silently — the evaluator can still issue a verdict manually.
+
+---
+
+### T2-3 — Unit test for event dispatch
+
+**File**: `server/world-api/src/EvalContractService.test.ts` (extend existing)
+
+- Verify `world.contract.submitted` event is dispatched to evaluator after `submitContract`.
+- Verify no dispatch occurs if evaluator has no A2A endpoint.
+
+---
+
+## Track 3: Funder Agent
+
+### T3-1 — Package scaffold
 
 **Directory**: `ghosts/funder-agent/`
 
-Copy structure from `ghosts/random-agent/`:
-- `package.json` — `@aie-matrix/funder-agent`, same deps as random-agent
+Mirror `ghosts/random-agent/` structure:
+- `package.json` — `@aie-matrix/funder-agent`; same deps as `random-agent`
 - `tsconfig.json`
-- `src/agent.ts` — express server, registration loop (identical pattern to random-agent)
-- `src/spawn-types.ts` — copy from random-agent (same `SpawnContext` shape)
-- `src/world-event.ts` — copy from random-agent
+- `src/spawn-types.ts` — shared `SpawnContext` shape (copy)
+- `src/world-event.ts` — `WorldEvent` + `WorldEventKind` (copy, update to include `world.contract.submitted`)
 
 ---
 
-### T2-2 — Agent card with resource grants
+### T3-2 — Agent card
 
 **File**: `ghosts/funder-agent/src/buildAgentCard.ts`
 
 ```typescript
-export function buildFunderAgentCard(publicBase: string): AgentCard {
-  return {
-    name: "funder-agent",
-    description: "Offers funder-credits in exchange for answering a simple question.",
-    // ...standard fields...
-    matrix: {
-      requiredTools: ["say", "inbox",
-                      "eval_contract_open", "eval_contract_evaluate",
-                      "eval_contract_get"],
-      // ...
-    },
-    resourceGrants: [{
-      resourceId: "funder-credits",
-      label: "Funder Credits",
-      class: "conserved",
-      qty: 50,   // 50 credits per session; each contract stakes 1
-    }],
-  };
+matrix: {
+  requiredTools: ["say", "inbox",
+                  "eval_contract_open", "eval_contract_evaluate"],
+  // eval_contract_get not needed — funder reacts to push, not poll
 }
 ```
 
-> Note: `resourceGrants` is not part of the A2A `AgentCard` spec — it lives in `CatalogEntry`. The agent card builder includes it and the registration endpoint stores it in `catalog.json` as part of the entry.
+`resourceGrants` lives in `catalog.json`, not the agent card.
 
 ---
 
-### T2-3 — Executor: conversation tree + contract lifecycle
+### T3-3 — Executor: conversation tree + event-driven evaluation
 
 **File**: `ghosts/funder-agent/src/executor.ts`
 
-State per ghost (keyed by `ghostId`):
+**State per ghost** (keyed by `ghostId`):
 
 ```
-idle        → (any message)      → advertise, stay in idle
-idle        → ("accept")         → open contract, move to awaiting_submission
-awaiting_submission → (contract reaches Submitted) → evaluate v=1.0, move to idle
+idle
+  → any message            → reply with advertisement; stay idle
+  → "accept" (case-insensitive, trimmed) → pick random question, open contract,
+                                            reply with contract ID + instructions;
+                                            move to awaiting_submission
+  → at capacity (≥5 open)  → reply "I'm fully booked right now, try again soon."
+  → insufficient balance   → reply "Out of credits for this session."
+
+awaiting_submission
+  → world.contract.submitted event → call eval_contract_evaluate v=1.0,
+                                      reply "Answer received — full payment sent!",
+                                      move to idle
 ```
 
-Key implementation notes:
+**Advertisement message**:
+> "I'll pay 1 funder-credit if you answer a question for me. Reply **accept** to hear the question and begin."
 
-- **Advertisement** (`idle` state): reply with a fixed message:
-  > "I'll pay 1 funder-credit if you answer this: *[question]*. Reply **accept** to begin."
-  The question is a configurable constant in the agent (e.g. `"What is the most interesting thing you've learned today?"`).
+**Post-accept message** (after contract opened):
+> "Contract #\<id\> is open. Your question: *\<question\>*\n\nCall `eval_contract_accept` then `eval_contract_submit` with your answer."
 
-- **"accept" handling**: call `eval_contract_open` via `GhostMcpClient.callTool`, naming the sender as `contractorId` and the funder's own `ghostId` as `evaluatorId`. Reply with the contract ID and instructions:
-  > "Contract opened (#\<id\>). Call `eval_contract_accept` then `eval_contract_submit` with your answer."
+**Post-evaluation message** (sent to contractor ghost via `say`):
+> "Answer received — 1 funder-credit sent. Thanks for playing!"
 
-- **Polling for submission**: after opening, poll `eval_contract_get` every 5 seconds. When state is `Submitted`, call `eval_contract_evaluate` with `verdict: 1.0`. Reply to the contractor:
-  > "Answer received — full payment sent. Thanks!"
-
-- **Concurrent contracts**: the funder can hold at most N open contracts (default: 5). If at capacity, reply to "accept" with a polite decline. This prevents runaway escrow drain.
-
-- **Insufficient balance**: if `eval_contract_open` fails with `LedgerInsufficientFunds`, reply: "Out of credits for this session."
+**Concurrent contract cap**: max 5 open contracts per funder ghost. Checked before calling `eval_contract_open`.
 
 ---
 
-### T2-4 — Catalog registration
+### T3-4 — Agent server
+
+**File**: `ghosts/funder-agent/src/agent.ts`
+
+Standard express server + registration loop, identical to `random-agent`. Port default: `4002` (`AGENT_PORT` env override).
+
+---
+
+### T3-5 — Catalog registration
 
 **File**: `server/agent-host/catalog.json`
 
-```json
-{
-  "agents": {
-    "funder-agent": {
-      "kind": "agent",
-      "agentId": "funder-agent",
-      "baseUrl": "http://funder-agent:4002",
-      "resourceGrants": [{
-        "resourceId": "funder-credits",
-        "label": "Funder Credits",
-        "class": "conserved",
-        "qty": 50
-      }],
-      "builtIn": true,
-      "registeredAt": "2026-06-04T00:00:00.000Z",
-      "agentCard": { "...": "populated at registration time" }
-    }
-  }
-}
-```
+Add `funder-agent` entry with `resourceGrants`, `builtIn: true`, `baseUrl: http://funder-agent:4002`.
 
 ---
 
-### T2-5 — Docker Compose service entry
+### T3-6 — Docker Compose service
 
-**File**: `docker-compose.yml` (or the staging compose file)
+**File**: `docker-compose.yml`
 
-Add a `funder-agent` service mirroring the `random-agent` service, with `AGENT_PORT=4002`.
+Add `funder-agent` service mirroring `random-agent` with `AGENT_PORT=4002`.
 
 ---
 
@@ -192,38 +245,31 @@ Add a `funder-agent` service mirroring the `random-agent` service, with `AGENT_P
 
 ### Phase 1: Grant Infrastructure
 
-- [ ] I-T001 Add `resourceGrants` field to `CatalogEntry` "agent" variant in `server/agent-host/src/types.ts`
-- [ ] I-T002 Update `server/world-api` session-init path to collect and register resource types from all agent catalog entries that declare `resourceGrants`
-- [ ] I-T003 Add `LedgerService.registerResourceType(rt)` method (or extend `init`) to support post-init resource type additions — needed if agents register after session start
-- [ ] I-T004 Add first-connect seeding logic in `server/world-api/src/mcp-server.ts`: on authenticated call, check `agentId` grants and seed if balance is zero
-- [ ] I-T005 [P] Write unit tests in `server/world-api/src/agent-resource-grants.test.ts` covering happy path, idempotency, and no-op for ungrantd agents
+- [ ] I-T001 Add `resourceGrants` to `CatalogEntry` "agent" variant in `server/agent-host/src/types.ts`
+- [ ] I-T002 Add `ensureResourceType(rt)` to `LedgerService.ts`, `LedgerServiceInMemory.ts`, `LedgerServiceLive.ts`
+- [ ] I-T003 Call `ensureResourceType` for all agent `resourceGrants` during session init in `server/world-api/src/live/`
+- [ ] I-T004 Add first-connect seeding logic in `server/world-api/src/mcp-server.ts`
+- [ ] I-T005 [P] Write unit tests in `server/world-api/src/agent-resource-grants.test.ts`
 
-### Phase 2: Funder Agent Package
+### Phase 2: Contract Submission Event
 
-- [ ] F-T001 Scaffold `ghosts/funder-agent/` with `package.json`, `tsconfig.json`, and copied boilerplate from `random-agent`
-- [ ] F-T002 Write `src/buildAgentCard.ts` — funder card with `resourceGrants` and `requiredTools` list
-- [ ] F-T003 Write `src/executor.ts` — conversation state machine + contract lifecycle (advertise → accept → open → poll → evaluate)
-- [ ] F-T004 Write `src/agent.ts` — express server, registration loop, health endpoint
-- [ ] F-T005 Register funder-agent in `server/agent-host/catalog.json` with `resourceGrants`
-- [ ] F-T006 [P] Add `funder-agent` service to Docker Compose
+- [ ] E-T001 Add `"world.contract.submitted"` to `WorldEventKind` in `shared/types/src/channels.ts`
+- [ ] E-T002 Dispatch `world.contract.submitted` from `eval_contract_submit` MCP handler to evaluator's A2A endpoint
+- [ ] E-T003 [P] Extend `EvalContractService.test.ts` with dispatch assertion
 
-### Phase 3: Integration Smoke Test
+### Phase 3: Funder Agent Package
 
-- [ ] S-T001 Start world-api + funder-agent locally; verify funder ghost bag receives 50 funder-credits on first MCP call
-- [ ] S-T002 Send any message to funder ghost via MCP `say`; verify advertisement reply
-- [ ] S-T003 Reply "accept"; verify contract opens, funder bag decreases by 1
-- [ ] S-T004 Call `eval_contract_accept` and `eval_contract_submit` as contractor; verify funder evaluates at v=1.0 within ~10 seconds
+- [ ] F-T001 Scaffold `ghosts/funder-agent/` — `package.json`, `tsconfig.json`, boilerplate
+- [ ] F-T002 Write `src/buildAgentCard.ts` with `requiredTools`
+- [ ] F-T003 Write `src/executor.ts` — conversation state machine, question bank, event-driven evaluation
+- [ ] F-T004 Write `src/agent.ts` — express server + registration loop
+- [ ] F-T005 Add funder-agent entry to `server/agent-host/catalog.json`
+- [ ] F-T006 [P] Add `funder-agent` service to `docker-compose.yml`
+
+### Phase 4: Integration Smoke Test
+
+- [ ] S-T001 Start world-api + funder-agent; verify funder bag receives 50 funder-credits on first MCP call
+- [ ] S-T002 Send any message to funder ghost; verify advertisement reply
+- [ ] S-T003 Reply "accept"; verify contract opens, funder bag decreases by 1, funder replies with question
+- [ ] S-T004 Call `eval_contract_accept` + `eval_contract_submit` as contractor; verify funder receives `world.contract.submitted` and evaluates at v=1.0
 - [ ] S-T005 Verify contractor bag increases by 1 funder-credit; funder bag net = 49
-
----
-
-## Open Questions
-
-1. **Registration endpoint for `resourceGrants`**: does the agent-host's `/agents/register` endpoint need to store `resourceGrants` from the posted payload, or are grants only sourced from `catalog.json` (built-in agents only for now)?  
-   → For built-in agents, `catalog.json` is sufficient. External agent registration can ignore `resourceGrants` until a future RFC.
-
-2. **`LedgerService.registerResourceType` vs re-running `init`**: the current `init` is expected to run once at session start. A lightweight `ensureResourceType` method that no-ops if the type is already registered is cleaner than re-running init.
-
-3. **Question content**: should the funder's question be static (hardcoded), configurable via env var, or driven by a list? Static is fine for the prototype.
-
-4. **Poll interval for submission detection**: 5 seconds is reasonable for a demo. A push/event mechanism (ledger event or Colyseus state) would be better long-term but is out of scope here.
