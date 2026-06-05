@@ -2,7 +2,7 @@ import { loadRootEnv } from "@aie-matrix/root-env";
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
-import express, { type Request, type RequestHandler, type Response } from "express";
+import express, { type RequestHandler } from "express";
 import { buildFunderAgentCard } from "./buildAgentCard.js";
 import { FunderExecutor } from "./executor.js";
 
@@ -39,7 +39,7 @@ const requestHandler = new DefaultRequestHandler(
   new FunderExecutor(),
 );
 
-const requireToken: RequestHandler = (req: Request, res: Response, next) => {
+const requireToken: RequestHandler = (req, res, next) => {
   if (token.length === 0) {
     return res.status(500).json({ error: "AGENT_HOST_TOKEN is not set" });
   }

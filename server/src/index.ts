@@ -561,7 +561,7 @@ async function main(): Promise<void> {
                 qty: 0,
                 floor: 0,
               }),
-              { concurrency: "sequential" }
+              { concurrency: 1 }
             )
           ),
           Effect.provide(runtimeLayer as any),
