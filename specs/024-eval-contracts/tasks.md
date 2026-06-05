@@ -116,12 +116,12 @@
 
 **Purpose**: Neo4j live implementation, integration tests, and documentation finalization.
 
-- [ ] T028 Implement all methods in `EvalContractServiceLive.ts` using Neo4j Cypher: `MERGE/CREATE (:EvalContract {...})` on open; `MATCH (:EvalContract {id}) SET state=...` on transitions; `MATCH WHERE clientId=... OR contractorId=... OR evaluatorId=...` for list
-- [ ] T029 [P] Add integration tests (skipped when `NEO4J_URI` absent) covering the same happy-path and error cases as unit tests, using the live layer against a real Neo4j instance
-- [ ] T030 [P] Update `docs/architecture.md` to add eval contract service to the world subsystem section
-- [ ] T031 [P] Update `server/world-api/README.md` to note the new `eval_contract_*` MCP tools
+- [x] T028 Implement all methods in `EvalContractServiceLive.ts` using Neo4j Cypher: `MERGE/CREATE (:EvalContract {...})` on open; `MATCH (:EvalContract {id}) SET state=...` on transitions; `MATCH WHERE clientId=... OR contractorId=... OR evaluatorId=...` for list
+- [x] T029 [P] Add integration tests (skipped when `NEO4J_URI` absent) covering the same happy-path and error cases as unit tests, using the live layer against a real Neo4j instance
+- [x] T030 [P] Update `docs/architecture.md` to add eval contract service to the world subsystem section
+- [x] T031 [P] Update `server/world-api/README.md` to note the new `eval_contract_*` MCP tools
 - [ ] T032 Run the full quickstart.md smoke-test sequence against the dev server and confirm all steps succeed
-- [ ] T033 Run `pnpm run build` from repo root and confirm clean build (required gate before PR)
+- [x] T033 Run `pnpm run build` from repo root and confirm clean build (required gate before PR)
 
 ---
 

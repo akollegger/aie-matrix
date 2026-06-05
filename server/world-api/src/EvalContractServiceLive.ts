@@ -1,19 +1,146 @@
 import { Effect, Layer } from "effect";
-import type { EvalContract } from "@aie-matrix/shared-types";
-import type { Driver } from "neo4j-driver";
-import { EvalContractPersistenceError } from "./eval-contract-errors.js";
+import { ulid } from "ulid";
+import type { EvalContract, EvalContractId, EvalContractState } from "@aie-matrix/shared-types";
+import type { Driver, Record as Neo4jRecord } from "neo4j-driver";
+import {
+  EvalContractDeadlineExpired,
+  EvalContractInvalidEvaluator,
+  EvalContractNotAuthorized,
+  EvalContractNotFound,
+  EvalContractPersistenceError,
+  EvalContractWrongState,
+} from "./eval-contract-errors.js";
 import { EvalContractService, type EvalContractServiceOps } from "./EvalContractService.js";
 import { LedgerService } from "./LedgerService.js";
 import { GroupService } from "./GroupService.js";
 import { Neo4jGraphService } from "./Neo4jGraphService.js";
-import { makeEvalContractServiceInMemory } from "./EvalContractServiceInMemory.js";
+
+// ---------------------------------------------------------------------------
+// Row mapper
+// ---------------------------------------------------------------------------
+
+function toNumber(v: unknown): number {
+  if (typeof v === "number") return v;
+  if (v !== null && typeof v === "object" && typeof (v as { toNumber?(): number }).toNumber === "function") {
+    return (v as { toNumber(): number }).toNumber();
+  }
+  return Number(v);
+}
+
+function rowToContract(r: Neo4jRecord): EvalContract {
+  return {
+    id: r.get("id") as EvalContractId,
+    clientId: r.get("clientId") as string,
+    contractorId: r.get("contractorId") as string,
+    evaluatorId: r.get("evaluatorId") as string,
+    request: r.get("request") as string,
+    submission: (r.get("submission") as string | null) ?? null,
+    stakeResource: r.get("stakeResource") as string,
+    stakeAmount: toNumber(r.get("stakeAmount")),
+    deadline: toNumber(r.get("deadline")),
+    state: r.get("state") as EvalContractState,
+    verdict: r.get("verdict") == null ? null : toNumber(r.get("verdict")),
+    beneficiaries: (r.get("beneficiaries") as string[] | null) ?? [],
+    openedAt: toNumber(r.get("openedAt")),
+    escrowActorId: r.get("escrowActorId") as string,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Cypher constants
+// ---------------------------------------------------------------------------
+
+const UPSERT_CYPHER = `
+MERGE (c:EvalContract {id: $id})
+SET c.clientId = $clientId,
+    c.contractorId = $contractorId,
+    c.evaluatorId = $evaluatorId,
+    c.request = $request,
+    c.submission = $submission,
+    c.stakeResource = $stakeResource,
+    c.stakeAmount = $stakeAmount,
+    c.deadline = $deadline,
+    c.state = $state,
+    c.verdict = $verdict,
+    c.beneficiaries = $beneficiaries,
+    c.openedAt = $openedAt,
+    c.escrowActorId = $escrowActorId
+`;
+
+const SELECT_BY_ID_CYPHER = `
+MATCH (c:EvalContract {id: $id})
+RETURN c.id AS id, c.clientId AS clientId, c.contractorId AS contractorId,
+       c.evaluatorId AS evaluatorId, c.request AS request,
+       c.submission AS submission, c.stakeResource AS stakeResource,
+       c.stakeAmount AS stakeAmount, c.deadline AS deadline,
+       c.state AS state, c.verdict AS verdict, c.beneficiaries AS beneficiaries,
+       c.openedAt AS openedAt, c.escrowActorId AS escrowActorId
+`;
+
+function contractParams(c: EvalContract) {
+  return {
+    id: c.id,
+    clientId: c.clientId,
+    contractorId: c.contractorId,
+    evaluatorId: c.evaluatorId,
+    request: c.request,
+    submission: c.submission ?? null,
+    stakeResource: c.stakeResource,
+    stakeAmount: c.stakeAmount,
+    deadline: c.deadline,
+    state: c.state,
+    verdict: c.verdict ?? null,
+    beneficiaries: c.beneficiaries,
+    openedAt: c.openedAt,
+    escrowActorId: c.escrowActorId,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Lazy expiry helper
+// ---------------------------------------------------------------------------
+
+async function checkAndApplyExpiry(
+  contract: EvalContract,
+  driver: Driver,
+  ledger: LedgerService["Type"],
+): Promise<EvalContract> {
+  if (contract.state !== "Accepted") return contract;
+  if (Date.now() <= contract.deadline) return contract;
+
+  try {
+    await Effect.runPromise(
+      ledger.commit({
+        id: ulid(),
+        transfers: [
+          {
+            resource: contract.stakeResource,
+            qty: contract.stakeAmount,
+            from: contract.escrowActorId,
+            to: contract.clientId,
+          },
+        ],
+        cause: "eval-contract.expired",
+        actors: [contract.clientId, contract.contractorId],
+        ts: Date.now(),
+      }),
+    );
+  } catch {
+    // If ledger commit fails (e.g. already refunded), still mark as expired
+  }
+
+  const expired: EvalContract = { ...contract, state: "Expired" };
+  const session = driver.session();
+  try {
+    await session.executeWrite((tx) => tx.run(UPSERT_CYPHER, contractParams(expired)));
+  } finally {
+    await session.close();
+  }
+  return expired;
+}
 
 // ---------------------------------------------------------------------------
 // Live Neo4j-backed implementation
-// ---------------------------------------------------------------------------
-// Phase 7 note: This implementation currently delegates to the in-memory
-// service for business logic while persisting to Neo4j for durability.
-// Full Cypher-native persistence is tracked in T028 (Polish phase).
 // ---------------------------------------------------------------------------
 
 function makeEvalContractServiceLive(
@@ -21,113 +148,353 @@ function makeEvalContractServiceLive(
   ledger: LedgerService["Type"],
   groups: GroupService["Type"],
 ): EvalContractServiceOps {
-  // Delegate business logic to the in-memory implementation
-  const inMemory = makeEvalContractServiceInMemory(ledger, groups);
-
-  async function persistContract(contract: EvalContract): Promise<void> {
+  async function persist(contract: EvalContract): Promise<void> {
     const session = driver.session();
     try {
-      await session.executeWrite((tx) =>
-        tx.run(
-          `MERGE (c:EvalContract {id: $id})
-           SET c.clientId = $clientId,
-               c.contractorId = $contractorId,
-               c.evaluatorId = $evaluatorId,
-               c.request = $request,
-               c.submission = $submission,
-               c.stakeResource = $stakeResource,
-               c.stakeAmount = $stakeAmount,
-               c.deadline = $deadline,
-               c.state = $state,
-               c.verdict = $verdict,
-               c.beneficiaries = $beneficiaries,
-               c.openedAt = $openedAt,
-               c.escrowActorId = $escrowActorId`,
-          {
-            id: contract.id,
-            clientId: contract.clientId,
-            contractorId: contract.contractorId,
-            evaluatorId: contract.evaluatorId,
-            request: contract.request,
-            submission: contract.submission ?? null,
-            stakeResource: contract.stakeResource,
-            stakeAmount: contract.stakeAmount,
-            deadline: contract.deadline,
-            state: contract.state,
-            verdict: contract.verdict ?? null,
-            beneficiaries: contract.beneficiaries,
-            openedAt: contract.openedAt,
-            escrowActorId: contract.escrowActorId,
-          },
-        ),
-      );
+      await session.executeWrite((tx) => tx.run(UPSERT_CYPHER, contractParams(contract)));
     } finally {
       await session.close();
     }
   }
 
+  async function load(contractId: EvalContractId): Promise<EvalContract | null> {
+    const session = driver.session();
+    try {
+      const result = await session.executeRead((tx) =>
+        tx.run(SELECT_BY_ID_CYPHER, { id: contractId }),
+      );
+      if (result.records.length === 0) return null;
+      return rowToContract(result.records[0]!);
+    } finally {
+      await session.close();
+    }
+  }
+
+  const persistEff = (contract: EvalContract) =>
+    Effect.tryPromise({
+      try: () => persist(contract),
+      catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
+    });
+
+  const loadEff = (contractId: EvalContractId) =>
+    Effect.tryPromise({
+      try: () => load(contractId),
+      catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
+    });
+
+  const expiryEff = (contract: EvalContract) =>
+    Effect.tryPromise({
+      try: () => checkAndApplyExpiry(contract, driver, ledger),
+      catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
+    });
+
   return {
-    openContract(params) {
+    openContract({ clientId, contractorId, evaluatorId, request, stakeResource, stakeAmount, deadline }) {
       return Effect.gen(function* () {
-        const contract = yield* inMemory.openContract(params);
-        yield* Effect.tryPromise({
-          try: () => persistContract(contract),
-          catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
+        if (evaluatorId === contractorId) {
+          return yield* Effect.fail(
+            new EvalContractInvalidEvaluator({
+              evaluatorId,
+              reason: "Evaluator cannot be the same as the contractor",
+            }),
+          );
+        }
+
+        const id: EvalContractId = ulid();
+        const escrowActorId = `escrow:${id}`;
+        const openedAt = Date.now();
+
+        yield* ledger.commit({
+          id: ulid(),
+          transfers: [
+            { resource: stakeResource, qty: stakeAmount, from: clientId, to: escrowActorId },
+          ],
+          cause: "eval-contract.open",
+          actors: [clientId],
+          ts: openedAt,
         });
+
+        const contract: EvalContract = {
+          id,
+          clientId,
+          contractorId,
+          evaluatorId,
+          request,
+          submission: null,
+          stakeResource,
+          stakeAmount,
+          deadline,
+          state: "Open",
+          verdict: null,
+          beneficiaries: [],
+          openedAt,
+          escrowActorId,
+        };
+
+        yield* persistEff(contract);
         return contract;
       });
     },
 
-    acceptContract(params) {
+    acceptContract({ contractId, callerId }) {
       return Effect.gen(function* () {
-        const contract = yield* inMemory.acceptContract(params);
-        yield* Effect.tryPromise({
-          try: () => persistContract(contract),
-          catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
+        const raw = yield* loadEff(contractId);
+        if (!raw) return yield* Effect.fail(new EvalContractNotFound({ contractId }));
+
+        if (raw.state !== "Open") {
+          return yield* Effect.fail(
+            new EvalContractWrongState({ contractId, expected: "Open", actual: raw.state }),
+          );
+        }
+
+        if (callerId !== raw.contractorId) {
+          return yield* Effect.fail(
+            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can accept" }),
+          );
+        }
+
+        let beneficiaries: string[] = [];
+        const groupMembers = yield* Effect.either(groups.getGroupMembers(raw.contractorId));
+        if (groupMembers._tag === "Right") {
+          beneficiaries = groupMembers.right;
+        }
+
+        const updated: EvalContract = { ...raw, state: "Accepted", beneficiaries };
+        yield* persistEff(updated);
+        return updated;
+      });
+    },
+
+    declineContract({ contractId, callerId }) {
+      return Effect.gen(function* () {
+        const raw = yield* loadEff(contractId);
+        if (!raw) return yield* Effect.fail(new EvalContractNotFound({ contractId }));
+
+        if (raw.state !== "Open") {
+          return yield* Effect.fail(
+            new EvalContractWrongState({ contractId, expected: "Open", actual: raw.state }),
+          );
+        }
+
+        if (callerId !== raw.contractorId) {
+          return yield* Effect.fail(
+            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can decline" }),
+          );
+        }
+
+        yield* ledger.commit({
+          id: ulid(),
+          transfers: [
+            {
+              resource: raw.stakeResource,
+              qty: raw.stakeAmount,
+              from: raw.escrowActorId,
+              to: raw.clientId,
+            },
+          ],
+          cause: "eval-contract.declined",
+          actors: [raw.clientId, raw.contractorId],
+          ts: Date.now(),
         });
+
+        const updated: EvalContract = { ...raw, state: "Declined" };
+        yield* persistEff(updated);
+        return updated;
+      });
+    },
+
+    submitContract({ contractId, callerId, submission }) {
+      return Effect.gen(function* () {
+        const raw = yield* loadEff(contractId);
+        if (!raw) return yield* Effect.fail(new EvalContractNotFound({ contractId }));
+
+        const contract = yield* expiryEff(raw);
+
+        if (contract.state === "Expired") {
+          return yield* Effect.fail(
+            new EvalContractDeadlineExpired({ contractId, deadline: contract.deadline }),
+          );
+        }
+
+        if (contract.state !== "Accepted") {
+          return yield* Effect.fail(
+            new EvalContractWrongState({ contractId, expected: "Accepted", actual: contract.state }),
+          );
+        }
+
+        if (callerId !== contract.contractorId) {
+          return yield* Effect.fail(
+            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can submit" }),
+          );
+        }
+
+        const updated: EvalContract = { ...contract, state: "Submitted", submission };
+        yield* persistEff(updated);
+        return updated;
+      });
+    },
+
+    evaluateContract({ contractId, callerId, verdict }) {
+      return Effect.gen(function* () {
+        const raw = yield* loadEff(contractId);
+        if (!raw) return yield* Effect.fail(new EvalContractNotFound({ contractId }));
+
+        if (raw.state !== "Submitted") {
+          return yield* Effect.fail(
+            new EvalContractWrongState({ contractId, expected: "Submitted", actual: raw.state }),
+          );
+        }
+
+        if (callerId !== raw.evaluatorId) {
+          return yield* Effect.fail(
+            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the evaluator can evaluate" }),
+          );
+        }
+
+        if (callerId === raw.contractorId) {
+          return yield* Effect.fail(
+            new EvalContractInvalidEvaluator({ evaluatorId: callerId, reason: "Evaluator cannot be the contractor" }),
+          );
+        }
+
+        if (raw.beneficiaries.includes(callerId)) {
+          return yield* Effect.fail(
+            new EvalContractInvalidEvaluator({ evaluatorId: callerId, reason: "Evaluator cannot be a beneficiary" }),
+          );
+        }
+
+        const stake = raw.stakeAmount;
+        const movements: Array<{ from: string; to: string; amount: number }> = [];
+
+        let contractorPayment: number;
+        let clientRefund: number;
+
+        if (raw.beneficiaries.length > 0) {
+          const n = raw.beneficiaries.length;
+          const perShare = Math.floor((stake * verdict) / n);
+          const totalPaid = perShare * n;
+          clientRefund = stake - totalPaid;
+
+          for (const beneficiary of raw.beneficiaries) {
+            if (perShare > 0) {
+              yield* ledger.commit({
+                id: ulid(),
+                transfers: [
+                  { resource: raw.stakeResource, qty: perShare, from: raw.escrowActorId, to: beneficiary },
+                ],
+                cause: "eval-contract.settle.beneficiary",
+                actors: [raw.evaluatorId, beneficiary],
+                ts: Date.now(),
+              });
+              movements.push({ from: raw.escrowActorId, to: beneficiary, amount: perShare });
+            }
+          }
+
+          contractorPayment = totalPaid;
+        } else {
+          contractorPayment = Math.floor(stake * verdict);
+          clientRefund = stake - contractorPayment;
+
+          if (contractorPayment > 0) {
+            yield* ledger.commit({
+              id: ulid(),
+              transfers: [
+                {
+                  resource: raw.stakeResource,
+                  qty: contractorPayment,
+                  from: raw.escrowActorId,
+                  to: raw.contractorId,
+                },
+              ],
+              cause: "eval-contract.settle.contractor",
+              actors: [raw.evaluatorId, raw.contractorId],
+              ts: Date.now(),
+            });
+            movements.push({ from: raw.escrowActorId, to: raw.contractorId, amount: contractorPayment });
+          }
+        }
+
+        if (clientRefund > 0) {
+          yield* ledger.commit({
+            id: ulid(),
+            transfers: [
+              {
+                resource: raw.stakeResource,
+                qty: clientRefund,
+                from: raw.escrowActorId,
+                to: raw.clientId,
+              },
+            ],
+            cause: "eval-contract.settle.refund",
+            actors: [raw.evaluatorId, raw.clientId],
+            ts: Date.now(),
+          });
+          movements.push({ from: raw.escrowActorId, to: raw.clientId, amount: clientRefund });
+        }
+
+        const settled: EvalContract = { ...raw, state: "Settled", verdict };
+        yield* persistEff(settled);
+
+        return { ...settled, contractorPayment, clientRefund, movements };
+      });
+    },
+
+    getContract({ contractId, callerId }) {
+      return Effect.gen(function* () {
+        const raw = yield* loadEff(contractId);
+        if (!raw) return yield* Effect.fail(new EvalContractNotFound({ contractId }));
+
+        const contract = yield* expiryEff(raw);
+
+        if (
+          callerId !== contract.clientId &&
+          callerId !== contract.contractorId &&
+          callerId !== contract.evaluatorId
+        ) {
+          return yield* Effect.fail(
+            new EvalContractNotAuthorized({ contractId, callerId, reason: "Not a party to this contract" }),
+          );
+        }
+
         return contract;
       });
     },
 
-    declineContract(params) {
+    listContracts({ callerId, state }) {
       return Effect.gen(function* () {
-        const contract = yield* inMemory.declineContract(params);
-        yield* Effect.tryPromise({
-          try: () => persistContract(contract),
+        const contracts = yield* Effect.tryPromise({
+          try: async () => {
+            const session = driver.session();
+            try {
+              const result = await session.executeRead((tx) =>
+                tx.run(
+                  `MATCH (c:EvalContract)
+                   WHERE c.clientId = $callerId OR c.contractorId = $callerId OR c.evaluatorId = $callerId
+                   RETURN c.id AS id, c.clientId AS clientId, c.contractorId AS contractorId,
+                          c.evaluatorId AS evaluatorId, c.request AS request,
+                          c.submission AS submission, c.stakeResource AS stakeResource,
+                          c.stakeAmount AS stakeAmount, c.deadline AS deadline,
+                          c.state AS state, c.verdict AS verdict, c.beneficiaries AS beneficiaries,
+                          c.openedAt AS openedAt, c.escrowActorId AS escrowActorId`,
+                  { callerId },
+                ),
+              );
+              return result.records.map(rowToContract);
+            } finally {
+              await session.close();
+            }
+          },
           catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
         });
-        return contract;
-      });
-    },
 
-    submitContract(params) {
-      return Effect.gen(function* () {
-        const contract = yield* inMemory.submitContract(params);
-        yield* Effect.tryPromise({
-          try: () => persistContract(contract),
-          catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
-        });
-        return contract;
-      });
-    },
-
-    evaluateContract(params) {
-      return Effect.gen(function* () {
-        const result = yield* inMemory.evaluateContract(params);
-        yield* Effect.tryPromise({
-          try: () => persistContract(result),
-          catch: (e) => new EvalContractPersistenceError({ cause: String(e) }),
-        });
+        const result: EvalContract[] = [];
+        for (const raw of contracts) {
+          const contract = yield* expiryEff(raw);
+          if (state !== undefined && contract.state !== state) continue;
+          result.push(contract);
+        }
         return result;
       });
-    },
-
-    getContract(params) {
-      return inMemory.getContract(params);
-    },
-
-    listContracts(params) {
-      return inMemory.listContracts(params);
     },
   };
 }

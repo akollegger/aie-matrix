@@ -226,3 +226,33 @@ pnpm test   # from server/world-api/
 # or to run only group tests:
 pnpm exec node --import tsx --test "test/GroupService.test.ts"
 ```
+
+## Eval Contracts — RFC-0022
+
+Eval contracts are peer-to-peer performance agreements between ghosts. A client stakes resources into escrow when opening a contract; the contractor accepts or declines; an independent evaluator issues a verdict in `[0,1]` that triggers automatic settlement. See [RFC-0022](../../proposals/rfc/0022-eval-contract-protocol.md) and [spec-024](../../specs/024-eval-contracts/).
+
+### MCP tools
+
+| Tool | Input | Description |
+|------|-------|-------------|
+| `eval_contract.open` | `{ contractor_id, evaluator_id, request, stake_resource, stake_amount, deadline_ms }` | Open a contract and stake resources into escrow |
+| `eval_contract.accept` | `{ contract_id }` | Contractor accepts the contract (freezes beneficiaries if group contractor) |
+| `eval_contract.decline` | `{ contract_id }` | Contractor declines; escrow returned to client |
+| `eval_contract.submit` | `{ contract_id, submission }` | Contractor submits a response before the deadline |
+| `eval_contract.evaluate` | `{ contract_id, verdict }` | Evaluator issues verdict `0..1`; settlement executes immediately |
+| `eval_contract.get` | `{ contract_id }` | Read contract state (parties only) |
+| `eval_contract.list` | `{ state? }` | List contracts visible to the caller |
+
+### Services
+
+- `EvalContractService` — Effect Context.Tag for the contract operations interface
+- `EvalContractServiceInMemory` — in-memory implementation (unit tests, dev)
+- `EvalContractServiceLive` — Neo4j-backed implementation; persists `(:EvalContract)` nodes and delegates ledger movements to `LedgerService`
+
+### Running eval contract unit tests
+
+```bash
+pnpm test   # from server/world-api/
+# or to run only eval contract tests:
+pnpm exec node --import tsx --test "src/EvalContractService.test.ts"
+```
