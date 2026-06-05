@@ -39,26 +39,28 @@ async function checkAndApplyExpiry(
   if (contract.state !== "Accepted") return contract;
   if (Date.now() <= contract.deadline) return contract;
 
-  // Transition to Expired: return escrow to client
-  try {
-    await Effect.runPromise(
-      ledger.commit({
-        id: ulid(),
-        transfers: [
-          {
-            resource: contract.stakeResource,
-            qty: contract.stakeAmount,
-            from: contract.escrowActorId,
-            to: contract.clientId,
-          },
-        ],
-        cause: "eval-contract.expired",
-        actors: [contract.clientId, contract.contractorId],
-        ts: Date.now(),
-      }),
-    );
-  } catch {
-    // If ledger commit fails (e.g. already refunded), still mark as expired
+  // Transition to Expired: return escrow to client (skip if zero-stake)
+  if (contract.stakeAmount > 0) {
+    try {
+      await Effect.runPromise(
+        ledger.commit({
+          id: ulid(),
+          transfers: [
+            {
+              resource: contract.stakeResource,
+              qty: contract.stakeAmount,
+              from: contract.escrowActorId,
+              to: contract.clientId,
+            },
+          ],
+          cause: "eval-contract.expired",
+          actors: [contract.clientId, contract.contractorId],
+          ts: Date.now(),
+        }),
+      );
+    } catch {
+      // If ledger commit fails (e.g. already refunded), still mark as expired
+    }
   }
 
   const expired: EvalContract = { ...contract, state: "Expired" };
@@ -93,16 +95,18 @@ export function makeEvalContractServiceInMemory(
         const escrowActorId = `escrow:${id}`;
         const openedAt = Date.now();
 
-        // Debit stake from client to escrow
-        yield* ledger.commit({
-          id: ulid(),
-          transfers: [
-            { resource: stakeResource, qty: stakeAmount, from: clientId, to: escrowActorId },
-          ],
-          cause: "eval-contract.open",
-          actors: [clientId],
-          ts: openedAt,
-        });
+        // Debit stake from client to escrow (skip if zero-stake — ledger requires qty > 0)
+        if (stakeAmount > 0) {
+          yield* ledger.commit({
+            id: ulid(),
+            transfers: [
+              { resource: stakeResource, qty: stakeAmount, from: clientId, to: escrowActorId },
+            ],
+            cause: "eval-contract.open",
+            actors: [clientId],
+            ts: openedAt,
+          });
+        }
 
         const contract: EvalContract = {
           id,
@@ -177,21 +181,23 @@ export function makeEvalContractServiceInMemory(
           );
         }
 
-        // Return escrow to client
-        yield* ledger.commit({
-          id: ulid(),
-          transfers: [
-            {
-              resource: contract.stakeResource,
-              qty: contract.stakeAmount,
-              from: contract.escrowActorId,
-              to: contract.clientId,
-            },
-          ],
-          cause: "eval-contract.declined",
-          actors: [contract.clientId, contract.contractorId],
-          ts: Date.now(),
-        });
+        // Return escrow to client (skip if zero-stake)
+        if (contract.stakeAmount > 0) {
+          yield* ledger.commit({
+            id: ulid(),
+            transfers: [
+              {
+                resource: contract.stakeResource,
+                qty: contract.stakeAmount,
+                from: contract.escrowActorId,
+                to: contract.clientId,
+              },
+            ],
+            cause: "eval-contract.declined",
+            actors: [contract.clientId, contract.contractorId],
+            ts: Date.now(),
+          });
+        }
 
         const updated: EvalContract = { ...contract, state: "Declined" };
         contracts.set(contractId, updated);

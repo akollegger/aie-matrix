@@ -492,6 +492,12 @@ async function main(): Promise<void> {
     | GroupService
     | EvalContractService;
 
+  // Layers with inter-dependencies must have those deps explicitly provided before
+  // entering mergeAll — mergeAll does not resolve cross-dependencies between peers.
+  const inMemoryBaseLayers = Layer.merge(LedgerServiceInMemoryLayer, GroupServiceInMemoryLayer);
+  const proposalLayer = Layer.provide(ProposalServiceWithGroupLayer, inMemoryBaseLayers);
+  const evalContractLayer = Layer.provide(EvalContractServiceInMemoryLayer, inMemoryBaseLayers);
+
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
     makeRegistryStoreLayer(store),
@@ -509,8 +515,8 @@ async function main(): Promise<void> {
     calendarLayer,
     LedgerServiceInMemoryLayer,
     GroupServiceInMemoryLayer,
-    ProposalServiceWithGroupLayer,
-    EvalContractServiceInMemoryLayer,
+    proposalLayer,
+    evalContractLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
