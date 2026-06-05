@@ -4,8 +4,10 @@
  */
 import assert from "node:assert/strict";
 import test from "node:test";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { ulid } from "ulid";
+import { LedgerServiceInMemoryLayer } from "../src/LedgerServiceInMemory.js";
+import { WorldBridgeService } from "../src/WorldBridgeService.js";
 
 const NEO4J_URI = process.env.NEO4J_URI;
 const skip = !NEO4J_URI;
@@ -14,8 +16,6 @@ const label = skip ? "[SKIP — NEO4J_URI unset] " : "";
 test(`${label}GroupServiceLive.createGroup — creates Group node and MEMBER_OF edges`, { skip }, async () => {
   const neo4j = await import("neo4j-driver");
   const { makeGroupServiceLiveLayer } = await import("../src/GroupServiceLive.js");
-  const { WorldBridgeService } = await import("../src/WorldBridgeService.js");
-  const { Layer, Effect: Eff } = await import("effect");
 
   const driver = neo4j.default.driver(
     NEO4J_URI!,
@@ -33,7 +33,10 @@ test(`${label}GroupServiceLive.createGroup — creates Group node and MEMBER_OF 
 
   const layer = Layer.provide(
     makeGroupServiceLiveLayer(driver, "/tmp/aie-matrix-test-groups"),
-    Layer.succeed(WorldBridgeService, noopBridge as any),
+    Layer.merge(
+      Layer.succeed(WorldBridgeService, noopBridge as any),
+      LedgerServiceInMemoryLayer,
+    ),
   );
 
   try {
@@ -41,8 +44,8 @@ test(`${label}GroupServiceLive.createGroup — creates Group node and MEMBER_OF 
     const result = await Effect.runPromise(
       Effect.provide(
         Effect.gen(function* () {
-          const groups = yield* GroupService;
-          const r = yield* groups.createGroup({
+          const svc = yield* GroupService;
+          const r = yield* svc.createGroup({
             groupId: ulid(),
             ghostA: `gA-${ulid()}`,
             ghostB: `gB-${ulid()}`,
@@ -65,8 +68,6 @@ test(`${label}GroupServiceLive.createGroup — creates Group node and MEMBER_OF 
 test(`${label}GroupServiceLive.listMemberships — returns groups after createGroup`, { skip }, async () => {
   const neo4j = await import("neo4j-driver");
   const { makeGroupServiceLiveLayer } = await import("../src/GroupServiceLive.js");
-  const { WorldBridgeService } = await import("../src/WorldBridgeService.js");
-  const { Layer, Effect: Eff } = await import("effect");
 
   const driver = neo4j.default.driver(
     NEO4J_URI!,
@@ -76,7 +77,10 @@ test(`${label}GroupServiceLive.listMemberships — returns groups after createGr
   const noopBridge = { getGhostCell: () => undefined, listOccupantsOnCell: () => [], setGhostMode: () => {}, getGhostMode: () => "normal" as const, setGhostLastAction: () => {}, fanoutWorldV1: () => {} };
   const layer = Layer.provide(
     makeGroupServiceLiveLayer(driver, "/tmp/aie-matrix-test-groups"),
-    Layer.succeed(WorldBridgeService, noopBridge as any),
+    Layer.merge(
+      Layer.succeed(WorldBridgeService, noopBridge as any),
+      LedgerServiceInMemoryLayer,
+    ),
   );
 
   const ghostA = `gA-${ulid()}`;

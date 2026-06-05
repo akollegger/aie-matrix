@@ -9,4 +9,5 @@ export * from "./time.js";
 export * from "./scheduler-context.js";
 export * from "./ledger.js";
 export * from "./group.js";
+export * from "./eval-contract.js";
 

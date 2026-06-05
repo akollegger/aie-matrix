@@ -101,6 +101,9 @@ export function handleAdoptGhostEffect(
       ...(typeof parsed.displayName === "string" && parsed.displayName.trim().length > 0
         ? { displayName: parsed.displayName.trim() }
         : {}),
+      ...(typeof parsed.agentId === "string" && parsed.agentId.trim().length > 0
+        ? { agentId: parsed.agentId.trim() }
+        : {}),
     });
     store.activeByCaretaker.set(parsed.caretakerId, ghostId);
     const token = mintGhostToken({
@@ -108,6 +111,9 @@ export function handleAdoptGhostEffect(
       ghostId,
       caretakerId: parsed.caretakerId,
       agentHostId: parsed.agentHostId,
+      ...(typeof parsed.agentId === "string" && parsed.agentId.trim().length > 0
+        ? { agentId: parsed.agentId.trim() }
+        : {}),
     });
     const out: AdoptGhostResponse = {
       ghostId,

@@ -64,6 +64,12 @@ export interface LedgerServiceOps {
 
   /** Return all resource types registered for this session. */
   resourceTypes(): Effect.Effect<ResourceType[]>;
+
+  /**
+   * Register a resource type if it is not already present. No-op if already registered.
+   * Used to lazily declare agent-granted resource types before seeding.
+   */
+  ensureResourceType(rt: ResourceType): Effect.Effect<void, LedgerPersistenceError>;
 }
 
 export class LedgerService extends Context.Tag("world-api/LedgerService")<

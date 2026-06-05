@@ -1,6 +1,6 @@
 # RFC-0022: Eval Contract Protocol
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-06-04  
 **Authors:** @akollegger  
 **Depends on:** [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger)  
@@ -165,3 +165,44 @@ This RFC specifies the contract primitive only. The following are explicitly out
 **Binary verdict only (pass/fail).** Removes the scoring formula and simplifies settlement to a single conditional transfer. Rejected because higher-level mechanics (difficulty weighting, partial-credit exam scoring) need a continuous signal to build on. Binary is a special case of [0,1]; supporting it costs nothing.
 
 **Configurable settlement function per contract.** Each contract specifies its own payout formula. Rejected because configurable settlement introduces ambiguity about what constitutes a valid formula, creates a new attack surface (e.g., a formula that always pays the client), and is not needed — clients can encode richer payout logic by choosing the stake amount before opening.
+
+---
+
+## Addendum: Agent Resource Grants (2026-06-04)
+
+### Motivation
+
+Eval contracts require the client ghost to hold resources before it can stake them. Ghost agents that act as clients need a reliable source of initial resources. Rather than requiring map-level declarations (which couples agent identity to world topology) or hard-coded startup logic (which is fragile and non-declarative), this addendum defines a lightweight grant mechanism at the **catalog entry** level.
+
+### Design
+
+Each entry in the agent-host `catalog.json` (type `CatalogEntry`) may declare a `resourceGrants` field:
+
+```typescript
+resourceGrants?: ReadonlyArray<{
+  /** Stable identifier for this resource type, e.g. "funder-credits". */
+  resourceId: string;
+  /** Human-readable label shown in ledger UI. */
+  label: string;
+  /** "conserved" (finite world supply) or "monotonic" (can only increase per actor). */
+  class: "conserved" | "monotonic";
+  /** Quantity seeded into the agent's ghost bag when first connecting to a session. */
+  qty: number;
+}>
+```
+
+### Behaviour
+
+1. **Session initialization**: when `LedgerService.init()` runs, the world-api reads all registered agent catalog entries and collects their declared `resourceGrants`. Each unique `resourceId` is registered as a `ResourceType` with the ledger before any ghost connects.
+2. **First connect**: when a ghost with a matching `agentId` first issues any MCP call in a session, the world-api checks whether the ghost's bag already holds the declared resource. If the balance is zero (first connect), a seed transaction `world → ghostBag` is committed for each declared grant. Subsequent reconnects in the same session are no-ops.
+3. **Idempotency**: the seed transaction carries a deterministic ULID derived from `<sessionId>:<agentId>:<resourceId>` so double-seeding is rejected by the ledger's duplicate-transaction check.
+
+### Scope
+
+- This mechanism is for **first-party agents** whose catalog entries are operator-controlled. It is not a general-purpose resource faucet for arbitrary ghosts.
+- Grant quantities should be modest; large grants inflate conserved resource supplies and affect world balance.
+- The `resourceGrants` field is optional and backwards-compatible — existing catalog entries without it are unaffected.
+
+### Resolved Open Question
+
+This addendum resolves the previously unaddressed question of how agent ghost clients acquire initial resources to stake in eval contracts, without requiring changes to the map format or a new provisioning RFC.

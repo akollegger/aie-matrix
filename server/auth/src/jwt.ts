@@ -14,6 +14,9 @@ export interface GhostClaims {
   ghostId: string;
   caretakerId?: string;
   agentHostId?: string;
+  /** Specific agent catalog ID (e.g. "funder-agent") — set when an agent-host spawns the ghost.
+   *  Used by world-api to look up catalog resourceGrants. */
+  agentId?: string;
 }
 
 export function mintGhostToken(claims: GhostClaims, ttlSeconds = 60 * 60 * 8): string {
@@ -22,6 +25,7 @@ export function mintGhostToken(claims: GhostClaims, ttlSeconds = 60 * 60 * 8): s
       ghostId: claims.ghostId,
       ...(claims.caretakerId !== undefined ? { caretakerId: claims.caretakerId } : {}),
       ...(claims.agentHostId !== undefined ? { agentHostId: claims.agentHostId } : {}),
+      ...(claims.agentId !== undefined ? { agentId: claims.agentId } : {}),
     },
     getJwtSecret(),
     {
@@ -55,6 +59,7 @@ export function verifyGhostToken(token: string): Effect.Effect<GhostClaims, JwtE
       ghostId: decoded.ghostId,
       caretakerId: typeof decoded.caretakerId === "string" ? decoded.caretakerId : undefined,
       agentHostId: typeof decoded.agentHostId === "string" ? decoded.agentHostId : undefined,
+      agentId: typeof decoded.agentId === "string" ? decoded.agentId : undefined,
     };
   });
 }

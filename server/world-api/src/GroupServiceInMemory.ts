@@ -275,6 +275,14 @@ export function makeGroupServiceInMemory(
       });
     },
 
+    getGroupMembers(groupId) {
+      return Effect.gen(function* () {
+        const group = getGroup(groupId);
+        if (!group) return yield* Effect.fail(new GroupNotFound({ groupId }));
+        return [...group.members.keys()];
+      });
+    },
+
     groupSay({ groupId, senderId, senderName, content, senderTile }) {
       return Effect.gen(function* () {
         const group = getGroup(groupId);

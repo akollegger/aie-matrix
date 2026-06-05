@@ -388,7 +388,27 @@ export function makeLedgerServiceLive(
 
   const resourceTypesOp = () => Effect.sync(() => Array.from(resourceTypes.values()));
 
-  return { init, bag, quote, commit, verify, resourceTypes: resourceTypesOp };
+  const ensureResourceType = (rt: ResourceType) =>
+    Effect.tryPromise({
+      try: async () => {
+        if (resourceTypes.has(rt.id)) return;
+        resourceTypes.set(rt.id, rt);
+        // Persist the resource type to Neo4j so it survives a replay
+        const writeSession = driver.session({ defaultAccessMode: neo4j.session.WRITE });
+        try {
+          await writeSession.run(
+            `MERGE (r:ResourceType { id: $id, sessionId: $sessionId })
+             ON CREATE SET r.label = $label, r.class = $class, r.qty = $qty, r.floor = $floor`,
+            { id: rt.id, sessionId, label: rt.label, class: rt.class, qty: neo4j.int(rt.qty ?? 0), floor: neo4j.int(rt.floor ?? 0) }
+          );
+        } finally {
+          await writeSession.close();
+        }
+      },
+      catch: (e) => new LedgerPersistenceError({ cause: String(e) }),
+    });
+
+  return { init, bag, quote, commit, verify, resourceTypes: resourceTypesOp, ensureResourceType };
 }
 
 export function makeLedgerServiceLiveLayer(driver: Driver, sessionId: string): Layer.Layer<LedgerService> {

@@ -1,3 +1,20 @@
 {
-  "agents": {}
+  "agents": {
+    "funder-agent": {
+      "kind": "agent",
+      "agentId": "funder-agent",
+      "baseUrl": "http://funder-agent:4002",
+      "resourceGrants": [
+        {
+          "resourceId": "funder-credits",
+          "label": "Funder Credits",
+          "class": "conserved",
+          "qty": 50
+        }
+      ],
+      "builtIn": true,
+      "registeredAt": "2026-06-04T00:00:00.000Z",
+      "agentCard": {}
+    }
+  }
 }

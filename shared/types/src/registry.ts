@@ -20,6 +20,9 @@ export interface AdoptGhostRequest {
    *  on the GhostRecord so other ghosts can resolve names via
    *  GET /registry/ghosts/:id. */
   displayName?: string;
+  /** Specific agent catalog ID (e.g. "funder-agent"). When set, included
+   *  in the ghost JWT so the world-api can look up catalog resourceGrants. */
+  agentId?: string;
 }
 
 export interface GhostSessionCredential {

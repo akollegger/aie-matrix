@@ -442,6 +442,31 @@ function makeGroupServiceLive(
       });
     },
 
+    getGroupMembers(groupId) {
+      return Effect.tryPromise({
+        try: async () => {
+          const session = driver.session();
+          try {
+            const result = await session.executeRead((tx) =>
+              tx.run(
+                `MATCH (m:Ghost)-[:MEMBER_OF]->(g:Group {group_id: $groupId})
+                 WHERE g.dissolved_at IS NULL
+                 RETURN m.ghost_id AS ghostId`,
+                { groupId },
+              ),
+            );
+            if (result.records.length === 0) {
+              throw new GroupNotFound({ groupId });
+            }
+            return result.records.map((r) => r.get("ghostId") as string);
+          } finally {
+            await session.close();
+          }
+        },
+        catch: (e) => (e instanceof GroupNotFound ? e : new GroupNotFound({ groupId })),
+      });
+    },
+
     groupSay({ groupId, senderId, senderName, content, senderTile }) {
       return Effect.gen(function* () {
         const group = getGroup(groupId);
