@@ -65,13 +65,13 @@ if (NEO4J_URI) {
     const ledgerLayer = Layer.succeed(LedgerService, makeLedgerServiceLive(driver, sessionId));
     const neo4jStub = Layer.succeed(Neo4jGraphService, null as unknown as Neo4jGraphService["Type"]);
     const evalLayer = makeEvalContractServiceLiveLayer(driver);
+    const deps = Layer.merge(Layer.merge(ledgerLayer, GroupServiceInMemoryLayer), neo4jStub);
 
-    return Layer.provide(
-      evalLayer,
-      Layer.merge(
-        Layer.merge(ledgerLayer, GroupServiceInMemoryLayer),
-        neo4jStub,
-      ),
+    // Layer.provide consumes LedgerService internally; merge it back so test
+    // effects can yield* LedgerService directly (e.g. to call init()).
+    return Layer.merge(
+      Layer.provide(evalLayer, deps),
+      ledgerLayer,
     );
   }
 
