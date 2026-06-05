@@ -276,6 +276,13 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
 
   const resourceTypesOp = () => Effect.sync(() => Array.from(resourceTypes.values()));
 
+  const ensureResourceType = (rt: ResourceType) =>
+    Effect.sync(() => {
+      if (!resourceTypes.has(rt.id)) {
+        resourceTypes.set(rt.id, rt);
+      }
+    });
+
   const ops: LedgerService["Type"] & { _getLog: () => typeof log } = {
     init,
     bag,
@@ -283,6 +290,7 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
     commit,
     verify,
     resourceTypes: resourceTypesOp,
+    ensureResourceType,
     // Test-only escape hatch for tamper detection tests
     _getLog: () => log,
   };

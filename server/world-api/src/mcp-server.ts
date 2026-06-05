@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual, createHash } from "node:crypto";
 import { ulid } from "ulid";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CellId } from "@aie-matrix/server-colyseus";
@@ -55,6 +55,29 @@ import { ProposalService } from "./ProposalService.js";
 import { GroupService } from "./GroupService.js";
 import { EvalContractService } from "./EvalContractService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
+
+// ---------------------------------------------------------------------------
+// Catalog resource grants — populated at startup via setCatalogGrants().
+// Keyed by agentId (catalog entry key, e.g. "funder-agent").
+// ---------------------------------------------------------------------------
+
+export type CatalogResourceGrant = {
+  readonly resourceId: string;
+  readonly label: string;
+  readonly class: "conserved" | "monotonic";
+  readonly qty: number;
+};
+
+/** agentId → grants */
+let _catalogGrants: Map<string, ReadonlyArray<CatalogResourceGrant>> = new Map();
+
+/** Called once at startup with the built-in catalog entries. */
+export function setCatalogGrants(grants: Map<string, ReadonlyArray<CatalogResourceGrant>>): void {
+  _catalogGrants = grants;
+}
+
+/** Set of ghostIds that have already been seeded this process lifetime to avoid re-seeding on reconnect. */
+const _seededGhosts = new Set<string>();
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -1967,7 +1990,15 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
             const e = either.left as any;
             return { ok: false, code: e._tag, message: e.message ?? e._tag };
           }
-          return { contractId, state: either.right.state };
+          const submitted = either.right;
+          // Dispatch world.contract.submitted to the evaluator ghost (fire-and-forget)
+          const bridge = yield* WorldBridgeService;
+          bridge.fanoutWorldV1({
+            t: "contract.submitted",
+            targetGhostId: submitted.evaluatorId,
+            payload: { contractId: submitted.id, contractorId: ghostId },
+          });
+          return { contractId, state: submitted.state };
         }),
         extra,
       ),
@@ -2113,6 +2144,58 @@ export function handleGhostMcpEffect(
     const adminAuth = tryAdminAuth(req);
     const auth = adminAuth ?? (yield* authenticateGhostRequestEffect(req));
     req.auth = auth;
+
+    // First-connect resource seeding: if the ghost's agentId maps to catalog resourceGrants,
+    // seed the ghost's bag once per process lifetime (ledger duplicate-tx check prevents double-seeding).
+    const authExtra = auth.extra as { ghostId?: string; agentId?: string } | undefined;
+    const seedGhostId = authExtra?.ghostId;
+    const seedAgentId = authExtra?.agentId;
+    if (seedGhostId && seedAgentId && !_seededGhosts.has(seedGhostId)) {
+      const grants = _catalogGrants.get(seedAgentId);
+      if (grants && grants.length > 0) {
+        _seededGhosts.add(seedGhostId);
+        // Fire-and-forget seeding — errors logged but do not fail the MCP request
+        const ledgerSvc = yield* LedgerService;
+        for (const grant of grants) {
+          const txId = createHash("sha256")
+            .update(`${seedGhostId}:${seedAgentId}:${grant.resourceId}`)
+            .digest("hex")
+            .slice(0, 26)
+            .toUpperCase();
+          // Ensure resource type is registered, then commit seed transaction
+          // Wrapped in orElse(logAndIgnore) so errors never propagate
+          void Effect.runPromise(
+            Effect.gen(function* () {
+              yield* ledgerSvc.ensureResourceType({
+                id: grant.resourceId,
+                label: grant.label,
+                class: grant.class,
+                qty: 0,
+                floor: 0,
+              });
+              yield* ledgerSvc.commit({
+                id: txId,
+                transfers: [{ resource: grant.resourceId, qty: grant.qty, from: "world", to: seedGhostId }],
+                cause: "agent.resource-grant",
+                actors: [seedGhostId],
+                ts: Date.now(),
+              });
+            }).pipe(
+              Effect.catchAll((e) =>
+                Effect.sync(() => {
+                  // DuplicateTransaction is expected on reconnect — suppress it silently
+                  const tag = (e as { _tag?: string })._tag ?? "";
+                  if (tag !== "LedgerError.DuplicateTransaction") {
+                    logJson({ kind: "mcp.seed.warn", ghostId: seedGhostId, agentId: seedAgentId, resource: grant.resourceId, error: tag });
+                  }
+                })
+              )
+            )
+          );
+        }
+      }
+    }
+
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
     const rules = yield* MovementRulesService;

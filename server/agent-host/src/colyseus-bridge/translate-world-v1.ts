@@ -16,6 +16,7 @@ const KIND_BY_T: Record<string, WorldEventKind> = {
   "quest.trigger": "world.quest.trigger",
   "session.start": "world.session.start",
   "session.end": "world.session.end",
+  "contract.submitted": "world.contract.submitted",
 };
 
 /**

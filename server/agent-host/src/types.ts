@@ -15,6 +15,14 @@ export type CatalogEntry =
       readonly agentCard: AgentCard;
       readonly registeredAt: string;
       readonly builtIn: boolean;
+      /** Resource grants seeded into the agent's ghost bag on first connect.
+       *  Only honoured for built-in catalog entries; ignored on external /register payloads. */
+      readonly resourceGrants?: ReadonlyArray<{
+        readonly resourceId: string;
+        readonly label: string;
+        readonly class: "conserved" | "monotonic";
+        readonly qty: number;
+      }>;
     }
   | {
       readonly kind: "mini-game";
@@ -112,7 +120,8 @@ export type WorldEventKind =
   | "world.proximity.exit"
   | "world.quest.trigger"
   | "world.session.start"
-  | "world.session.end";
+  | "world.session.end"
+  | "world.contract.submitted";
 
 export type WorldEvent = {
   readonly schema: "aie-matrix.world-event.v1";

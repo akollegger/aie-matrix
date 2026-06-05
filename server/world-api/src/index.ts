@@ -136,7 +136,11 @@ export {
   type MapListItem,
   type MapListResponse,
 } from "./map/MapRoutes.js";
-export { handleGhostMcpEffect } from "./mcp-server.js";
+export {
+  handleGhostMcpEffect,
+  setCatalogGrants,
+  type CatalogResourceGrant,
+} from "./mcp-server.js";
 export {
   ItemService,
   ItemServiceImpl,

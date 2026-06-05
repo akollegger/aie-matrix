@@ -18,6 +18,8 @@ export interface CaretakerRecord {
 export interface GhostRecord {
   id: string;
   agentHostId?: string;
+  /** Specific agent catalog ID (e.g. "funder-agent"). Set when an agent-host spawns the ghost. */
+  agentId?: string;
   caretakerId?: string;
   h3Index: string;
   /** Cell this ghost was placed on at adoption. Used by /respawn to teleport
