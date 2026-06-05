@@ -1,5 +1,6 @@
 import { Effect, Layer } from "effect";
 import { ulid } from "ulid";
+import { createHash } from "node:crypto";
 import type { EvalContract, EvalContractId, EvalContractState } from "@aie-matrix/shared-types";
 import type { Driver, Record as Neo4jRecord } from "neo4j-driver";
 import {
@@ -108,25 +109,28 @@ async function checkAndApplyExpiry(
   if (contract.state !== "Accepted") return contract;
   if (Date.now() <= contract.deadline) return contract;
 
-  try {
-    await Effect.runPromise(
-      ledger.commit({
-        id: ulid(),
-        transfers: [
-          {
-            resource: contract.stakeResource,
-            qty: contract.stakeAmount,
-            from: contract.escrowActorId,
-            to: contract.clientId,
-          },
-        ],
-        cause: "eval-contract.expired",
-        actors: [contract.clientId, contract.contractorId],
-        ts: Date.now(),
-      }),
-    );
-  } catch {
-    // If ledger commit fails (e.g. already refunded), still mark as expired
+  // Transition to Expired: return escrow to client (skip if zero-stake)
+  if (contract.stakeAmount > 0) {
+    try {
+      await Effect.runPromise(
+        ledger.commit({
+          id: ulid(),
+          transfers: [
+            {
+              resource: contract.stakeResource,
+              qty: contract.stakeAmount,
+              from: contract.escrowActorId,
+              to: contract.clientId,
+            },
+          ],
+          cause: "eval-contract.expired",
+          actors: [contract.clientId, contract.contractorId],
+          ts: Date.now(),
+        }),
+      );
+    } catch {
+      // If ledger commit fails (e.g. already refunded), still mark as expired
+    }
   }
 
   const expired: EvalContract = { ...contract, state: "Expired" };
@@ -204,15 +208,18 @@ function makeEvalContractServiceLive(
         const escrowActorId = `escrow:${id}`;
         const openedAt = Date.now();
 
-        yield* ledger.commit({
-          id: ulid(),
-          transfers: [
-            { resource: stakeResource, qty: stakeAmount, from: clientId, to: escrowActorId },
-          ],
-          cause: "eval-contract.open",
-          actors: [clientId],
-          ts: openedAt,
-        });
+        // Debit stake from client to escrow (skip if zero-stake — ledger requires qty > 0)
+        if (stakeAmount > 0) {
+          yield* ledger.commit({
+            id: ulid(),
+            transfers: [
+              { resource: stakeResource, qty: stakeAmount, from: clientId, to: escrowActorId },
+            ],
+            cause: "eval-contract.open",
+            actors: [clientId],
+            ts: openedAt,
+          });
+        }
 
         const contract: EvalContract = {
           id,
@@ -247,10 +254,14 @@ function makeEvalContractServiceLive(
           );
         }
 
+        // Authorization: caller must be the contractorId (ghost) or a current member of the group
         if (callerId !== raw.contractorId) {
-          return yield* Effect.fail(
-            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can accept" }),
-          );
+          const membersEither = yield* Effect.either(groups.getGroupMembers(raw.contractorId));
+          if (membersEither._tag !== "Right" || !membersEither.right.includes(callerId)) {
+            return yield* Effect.fail(
+              new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can accept" }),
+            );
+          }
         }
 
         let beneficiaries: string[] = [];
@@ -276,26 +287,33 @@ function makeEvalContractServiceLive(
           );
         }
 
+        // Authorization: caller must be the contractorId (ghost) or a current member of the group
         if (callerId !== raw.contractorId) {
-          return yield* Effect.fail(
-            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can decline" }),
-          );
+          const membersEither = yield* Effect.either(groups.getGroupMembers(raw.contractorId));
+          if (membersEither._tag !== "Right" || !membersEither.right.includes(callerId)) {
+            return yield* Effect.fail(
+              new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can decline" }),
+            );
+          }
         }
 
-        yield* ledger.commit({
-          id: ulid(),
-          transfers: [
-            {
-              resource: raw.stakeResource,
-              qty: raw.stakeAmount,
-              from: raw.escrowActorId,
-              to: raw.clientId,
-            },
-          ],
-          cause: "eval-contract.declined",
-          actors: [raw.clientId, raw.contractorId],
-          ts: Date.now(),
-        });
+        // Return escrow to client (skip if zero-stake)
+        if (raw.stakeAmount > 0) {
+          yield* ledger.commit({
+            id: ulid(),
+            transfers: [
+              {
+                resource: raw.stakeResource,
+                qty: raw.stakeAmount,
+                from: raw.escrowActorId,
+                to: raw.clientId,
+              },
+            ],
+            cause: "eval-contract.declined",
+            actors: [raw.clientId, raw.contractorId],
+            ts: Date.now(),
+          });
+        }
 
         const updated: EvalContract = { ...raw, state: "Declined" };
         yield* persistEff(updated);
@@ -322,7 +340,11 @@ function makeEvalContractServiceLive(
           );
         }
 
-        if (callerId !== contract.contractorId) {
+        // Authorization: allow the contractorId, any frozen beneficiary (group member), or both
+        const allowedCallers = contract.beneficiaries.length > 0
+          ? [...contract.beneficiaries, contract.contractorId]
+          : [contract.contractorId];
+        if (!allowedCallers.includes(callerId)) {
           return yield* Effect.fail(
             new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can submit" }),
           );
@@ -364,7 +386,19 @@ function makeEvalContractServiceLive(
         }
 
         const stake = raw.stakeAmount;
+        const escrow = raw.escrowActorId;
+        const resource = raw.stakeResource;
         const movements: Array<{ from: string; to: string; amount: number }> = [];
+
+        // Deterministic settlement tx ID for idempotency
+        const settleTxId = createHash("sha256")
+          .update("settle:" + contractId)
+          .digest("hex")
+          .slice(0, 26)
+          .toUpperCase();
+
+        // Build a single transfers array for atomic settlement
+        const transfers: Array<{ resource: string; qty: number; from: string; to: string }> = [];
 
         let contractorPayment: number;
         let clientRefund: number;
@@ -374,62 +408,38 @@ function makeEvalContractServiceLive(
           const perShare = Math.floor((stake * verdict) / n);
           const totalPaid = perShare * n;
           clientRefund = stake - totalPaid;
+          contractorPayment = totalPaid;
 
           for (const beneficiary of raw.beneficiaries) {
             if (perShare > 0) {
-              yield* ledger.commit({
-                id: ulid(),
-                transfers: [
-                  { resource: raw.stakeResource, qty: perShare, from: raw.escrowActorId, to: beneficiary },
-                ],
-                cause: "eval-contract.settle.beneficiary",
-                actors: [raw.evaluatorId, beneficiary],
-                ts: Date.now(),
-              });
-              movements.push({ from: raw.escrowActorId, to: beneficiary, amount: perShare });
+              transfers.push({ resource, qty: perShare, from: escrow, to: beneficiary });
+              movements.push({ from: escrow, to: beneficiary, amount: perShare });
             }
           }
-
-          contractorPayment = totalPaid;
         } else {
           contractorPayment = Math.floor(stake * verdict);
           clientRefund = stake - contractorPayment;
 
           if (contractorPayment > 0) {
-            yield* ledger.commit({
-              id: ulid(),
-              transfers: [
-                {
-                  resource: raw.stakeResource,
-                  qty: contractorPayment,
-                  from: raw.escrowActorId,
-                  to: raw.contractorId,
-                },
-              ],
-              cause: "eval-contract.settle.contractor",
-              actors: [raw.evaluatorId, raw.contractorId],
-              ts: Date.now(),
-            });
-            movements.push({ from: raw.escrowActorId, to: raw.contractorId, amount: contractorPayment });
+            transfers.push({ resource, qty: contractorPayment, from: escrow, to: raw.contractorId });
+            movements.push({ from: escrow, to: raw.contractorId, amount: contractorPayment });
           }
         }
 
         if (clientRefund > 0) {
+          transfers.push({ resource, qty: clientRefund, from: escrow, to: raw.clientId });
+          movements.push({ from: escrow, to: raw.clientId, amount: clientRefund });
+        }
+
+        // Single atomic commit with all transfers
+        if (transfers.length > 0) {
           yield* ledger.commit({
-            id: ulid(),
-            transfers: [
-              {
-                resource: raw.stakeResource,
-                qty: clientRefund,
-                from: raw.escrowActorId,
-                to: raw.clientId,
-              },
-            ],
-            cause: "eval-contract.settle.refund",
-            actors: [raw.evaluatorId, raw.clientId],
+            id: settleTxId,
+            transfers,
+            cause: "eval-contract.settle",
+            actors: [raw.evaluatorId, raw.contractorId, raw.clientId],
             ts: Date.now(),
           });
-          movements.push({ from: raw.escrowActorId, to: raw.clientId, amount: clientRefund });
         }
 
         const settled: EvalContract = { ...raw, state: "Settled", verdict };
@@ -446,22 +456,40 @@ function makeEvalContractServiceLive(
 
         const contract = yield* expiryEff(raw);
 
-        if (
-          callerId !== contract.clientId &&
-          callerId !== contract.contractorId &&
-          callerId !== contract.evaluatorId
-        ) {
-          return yield* Effect.fail(
-            new EvalContractNotAuthorized({ contractId, callerId, reason: "Not a party to this contract" }),
-          );
+        // Authorization: client and evaluator always authorized
+        if (callerId === contract.clientId || callerId === contract.evaluatorId) {
+          return contract;
+        }
+        // Ghost contractor authorized
+        if (callerId === contract.contractorId) {
+          return contract;
+        }
+        // Frozen beneficiary authorized (Accepted+)
+        if (contract.beneficiaries.includes(callerId)) {
+          return contract;
+        }
+        // For Open contracts, check live group membership
+        if (contract.state === "Open") {
+          const membersEither = yield* Effect.either(groups.getGroupMembers(contract.contractorId));
+          if (membersEither._tag === "Right" && membersEither.right.includes(callerId)) {
+            return contract;
+          }
         }
 
-        return contract;
+        return yield* Effect.fail(
+          new EvalContractNotAuthorized({ contractId, callerId, reason: "Not a party to this contract" }),
+        );
       });
     },
 
     listContracts({ callerId, state }) {
       return Effect.gen(function* () {
+        // Get caller's group memberships to include group contracts
+        const membershipsEither = yield* Effect.either(groups.listMemberships(callerId));
+        const callerGroupIds: string[] = membershipsEither._tag === "Right"
+          ? membershipsEither.right.map((g) => g.groupId)
+          : [];
+
         const contracts = yield* Effect.tryPromise({
           try: async () => {
             const session = driver.session();
@@ -469,14 +497,18 @@ function makeEvalContractServiceLive(
               const result = await session.executeRead((tx) =>
                 tx.run(
                   `MATCH (c:EvalContract)
-                   WHERE c.clientId = $callerId OR c.contractorId = $callerId OR c.evaluatorId = $callerId
+                   WHERE c.clientId = $callerId
+                      OR c.contractorId = $callerId
+                      OR c.evaluatorId = $callerId
+                      OR ANY(gid IN $callerGroupIds WHERE c.contractorId = gid)
+                      OR ANY(b IN c.beneficiaries WHERE b = $callerId)
                    RETURN c.id AS id, c.clientId AS clientId, c.contractorId AS contractorId,
                           c.evaluatorId AS evaluatorId, c.request AS request,
                           c.submission AS submission, c.stakeResource AS stakeResource,
                           c.stakeAmount AS stakeAmount, c.deadline AS deadline,
                           c.state AS state, c.verdict AS verdict, c.beneficiaries AS beneficiaries,
                           c.openedAt AS openedAt, c.escrowActorId AS escrowActorId`,
-                  { callerId },
+                  { callerId, callerGroupIds },
                 ),
               );
               return result.records.map(rowToContract);

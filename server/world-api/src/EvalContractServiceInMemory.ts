@@ -1,5 +1,6 @@
 import { Effect, Layer } from "effect";
 import { ulid } from "ulid";
+import { createHash } from "node:crypto";
 import type { EvalContract, EvalContractId } from "@aie-matrix/shared-types";
 import {
   EvalContractDeadlineExpired,
@@ -143,10 +144,14 @@ export function makeEvalContractServiceInMemory(
           );
         }
 
+        // Authorization: caller must be the contractorId (ghost) or a current member of the group
         if (callerId !== contract.contractorId) {
-          return yield* Effect.fail(
-            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can accept" }),
-          );
+          const membersEither = yield* Effect.either(groups.getGroupMembers(contract.contractorId));
+          if (membersEither._tag !== "Right" || !membersEither.right.includes(callerId)) {
+            return yield* Effect.fail(
+              new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can accept" }),
+            );
+          }
         }
 
         // Freeze beneficiaries if contractor is a group
@@ -175,10 +180,14 @@ export function makeEvalContractServiceInMemory(
           );
         }
 
+        // Authorization: caller must be the contractorId (ghost) or a current member of the group
         if (callerId !== contract.contractorId) {
-          return yield* Effect.fail(
-            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can decline" }),
-          );
+          const membersEither = yield* Effect.either(groups.getGroupMembers(contract.contractorId));
+          if (membersEither._tag !== "Right" || !membersEither.right.includes(callerId)) {
+            return yield* Effect.fail(
+              new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can decline" }),
+            );
+          }
         }
 
         // Return escrow to client (skip if zero-stake)
@@ -227,7 +236,11 @@ export function makeEvalContractServiceInMemory(
           );
         }
 
-        if (callerId !== contract.contractorId) {
+        // Authorization: allow the contractorId, any frozen beneficiary (group member), or both
+        const allowedCallers = contract.beneficiaries.length > 0
+          ? [...contract.beneficiaries, contract.contractorId]
+          : [contract.contractorId];
+        if (!allowedCallers.includes(callerId)) {
           return yield* Effect.fail(
             new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can submit" }),
           );
@@ -273,7 +286,19 @@ export function makeEvalContractServiceInMemory(
         }
 
         const stake = contract.stakeAmount;
+        const escrow = contract.escrowActorId;
+        const resource = contract.stakeResource;
         const movements: Array<{ from: string; to: string; amount: number }> = [];
+
+        // Deterministic settlement tx ID for idempotency
+        const settleTxId = createHash("sha256")
+          .update("settle:" + contractId)
+          .digest("hex")
+          .slice(0, 26)
+          .toUpperCase();
+
+        // Build a single transfers array for atomic settlement
+        const transfers: Array<{ resource: string; qty: number; from: string; to: string }> = [];
 
         let contractorPayment: number;
         let clientRefund: number;
@@ -284,64 +309,39 @@ export function makeEvalContractServiceInMemory(
           const perShare = Math.floor((stake * verdict) / n);
           const totalPaid = perShare * n;
           clientRefund = stake - totalPaid;
+          contractorPayment = totalPaid;
 
           for (const beneficiary of contract.beneficiaries) {
             if (perShare > 0) {
-              yield* ledger.commit({
-                id: ulid(),
-                transfers: [
-                  { resource: contract.stakeResource, qty: perShare, from: contract.escrowActorId, to: beneficiary },
-                ],
-                cause: "eval-contract.settle.beneficiary",
-                actors: [contract.evaluatorId, beneficiary],
-                ts: Date.now(),
-              });
-              movements.push({ from: contract.escrowActorId, to: beneficiary, amount: perShare });
+              transfers.push({ resource, qty: perShare, from: escrow, to: beneficiary });
+              movements.push({ from: escrow, to: beneficiary, amount: perShare });
             }
           }
-
-          contractorPayment = totalPaid; // total paid to all beneficiaries
         } else {
           // Ghost contractor: single payment
           contractorPayment = Math.floor(stake * verdict);
           clientRefund = stake - contractorPayment;
 
           if (contractorPayment > 0) {
-            yield* ledger.commit({
-              id: ulid(),
-              transfers: [
-                {
-                  resource: contract.stakeResource,
-                  qty: contractorPayment,
-                  from: contract.escrowActorId,
-                  to: contract.contractorId,
-                },
-              ],
-              cause: "eval-contract.settle.contractor",
-              actors: [contract.evaluatorId, contract.contractorId],
-              ts: Date.now(),
-            });
-            movements.push({ from: contract.escrowActorId, to: contract.contractorId, amount: contractorPayment });
+            transfers.push({ resource, qty: contractorPayment, from: escrow, to: contract.contractorId });
+            movements.push({ from: escrow, to: contract.contractorId, amount: contractorPayment });
           }
         }
 
-        // Return remainder to client
         if (clientRefund > 0) {
+          transfers.push({ resource, qty: clientRefund, from: escrow, to: contract.clientId });
+          movements.push({ from: escrow, to: contract.clientId, amount: clientRefund });
+        }
+
+        // Single atomic commit with all transfers
+        if (transfers.length > 0) {
           yield* ledger.commit({
-            id: ulid(),
-            transfers: [
-              {
-                resource: contract.stakeResource,
-                qty: clientRefund,
-                from: contract.escrowActorId,
-                to: contract.clientId,
-              },
-            ],
-            cause: "eval-contract.settle.refund",
-            actors: [contract.evaluatorId, contract.clientId],
+            id: settleTxId,
+            transfers,
+            cause: "eval-contract.settle",
+            actors: [contract.evaluatorId, contract.contractorId, contract.clientId],
             ts: Date.now(),
           });
-          movements.push({ from: contract.escrowActorId, to: contract.clientId, amount: clientRefund });
         }
 
         const settled: EvalContract = { ...contract, state: "Settled", verdict };
@@ -361,31 +361,51 @@ export function makeEvalContractServiceInMemory(
           checkAndApplyExpiry(raw, contracts, ledger),
         );
 
-        // Authorization: caller must be client, contractor, or evaluator
-        if (
-          callerId !== contract.clientId &&
-          callerId !== contract.contractorId &&
-          callerId !== contract.evaluatorId
-        ) {
-          return yield* Effect.fail(
-            new EvalContractNotAuthorized({ contractId, callerId, reason: "Not a party to this contract" }),
-          );
+        // Authorization: client and evaluator always authorized
+        if (callerId === contract.clientId || callerId === contract.evaluatorId) {
+          return contract;
+        }
+        // Ghost contractor authorized
+        if (callerId === contract.contractorId) {
+          return contract;
+        }
+        // Frozen beneficiary authorized (Accepted+)
+        if (contract.beneficiaries.includes(callerId)) {
+          return contract;
+        }
+        // For Open contracts, check live group membership
+        if (contract.state === "Open") {
+          const membersEither = yield* Effect.either(groups.getGroupMembers(contract.contractorId));
+          if (membersEither._tag === "Right" && membersEither.right.includes(callerId)) {
+            return contract;
+          }
         }
 
-        return contract;
+        return yield* Effect.fail(
+          new EvalContractNotAuthorized({ contractId, callerId, reason: "Not a party to this contract" }),
+        );
       });
     },
 
     listContracts({ callerId, state }) {
       return Effect.gen(function* () {
+        // Get caller's group memberships to include group contracts
+        const membershipsEither = yield* Effect.either(groups.listMemberships(callerId));
+        const callerGroupIds: string[] = membershipsEither._tag === "Right"
+          ? membershipsEither.right.map((g) => g.groupId)
+          : [];
+
         const result: EvalContract[] = [];
         for (const [, raw] of contracts) {
-          // Check if caller is a party
-          if (
-            callerId !== raw.clientId &&
-            callerId !== raw.contractorId &&
-            callerId !== raw.evaluatorId
-          ) {
+          // Check if caller is a party (direct or via group membership or beneficiary)
+          const isDirectParty =
+            callerId === raw.clientId ||
+            callerId === raw.contractorId ||
+            callerId === raw.evaluatorId;
+          const isGroupParty = callerGroupIds.includes(raw.contractorId);
+          const isBeneficiary = raw.beneficiaries.includes(callerId);
+
+          if (!isDirectParty && !isGroupParty && !isBeneficiary) {
             continue;
           }
 

@@ -131,8 +131,8 @@ async function startFunderLoop(ctx: SpawnContext): Promise<void> {
               to: from,
             }).catch(() => {});
 
-            // If they said "accept", open a contract
-            if (text.toLowerCase().includes("accept")) {
+            // If they said "accept" (exact word match, not "I don't accept"), open a contract
+            if (/^\s*accept\s*$/i.test(text)) {
               const openCount = openContractCount.get(ghostId) ?? 0;
               if (openCount >= MAX_OPEN) {
                 await mcp.callTool("say", {

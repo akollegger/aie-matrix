@@ -2,7 +2,7 @@
 
 **Feature Branch**: `024-eval-contracts`  
 **Created**: 2026-06-04  
-**Status**: Draft  
+**Status**: accepted  
 **Input**: User description: "eval contracts between ghosts as described in proposals/rfc/0022-eval-contract-protocol.md"
 
 ## Proposal Context *(mandatory)*

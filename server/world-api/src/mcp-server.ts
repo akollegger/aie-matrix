@@ -76,8 +76,6 @@ export function setCatalogGrants(grants: Map<string, ReadonlyArray<CatalogResour
   _catalogGrants = grants;
 }
 
-/** Set of ghostIds that have already been seeded this process lifetime to avoid re-seeding on reconnect. */
-const _seededGhosts = new Set<string>();
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -2150,10 +2148,9 @@ export function handleGhostMcpEffect(
     const authExtra = auth.extra as { ghostId?: string; agentId?: string } | undefined;
     const seedGhostId = authExtra?.ghostId;
     const seedAgentId = authExtra?.agentId;
-    if (seedGhostId && seedAgentId && !_seededGhosts.has(seedGhostId)) {
+    if (seedGhostId && seedAgentId) {
       const grants = _catalogGrants.get(seedAgentId);
       if (grants && grants.length > 0) {
-        _seededGhosts.add(seedGhostId);
         // Fire-and-forget seeding — errors logged but do not fail the MCP request
         const ledgerSvc = yield* LedgerService;
         for (const grant of grants) {

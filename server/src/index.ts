@@ -535,7 +535,7 @@ async function main(): Promise<void> {
   // Load agent catalog and register resource grants so world-api knows which
   // agents get seeded with resources on first MCP connect.
   {
-    const catalogPath = process.env.CATALOG_FILE_PATH ?? "./catalog.json";
+    const catalogPath = process.env.CATALOG_FILE_PATH ?? join(repoRoot, "server/agent-host/catalog.json");
     try {
       const raw = await readFile(catalogPath, "utf8");
       const parsed = JSON.parse(raw) as { agents?: Record<string, unknown> };

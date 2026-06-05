@@ -20,7 +20,7 @@ z.object({
   evaluatorId:  z.string().describe("Ghost ID of the evaluator"),
   request:      z.string().describe("Opaque request payload (e.g. JSON question spec)"),
   stakeResource: z.string().describe("Resource type to stake (must match a registered resource)"),
-  stakeAmount:  z.number().int().positive().describe("Amount to stake from caller's bag"),
+  stakeAmount:  z.number().int().nonnegative().describe("Amount to stake from caller's bag (0 is valid; yields zero payout)"),
   deadlineMs:   z.number().int().positive().describe("Absolute deadline as Unix milliseconds"),
 })
 ```

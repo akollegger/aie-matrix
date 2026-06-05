@@ -18,7 +18,7 @@ The primary record. Persisted as a `(:EvalContract)` node in Neo4j, keyed by `id
 | `request` | `string` | Opaque payload; fixed at Open |
 | `submission` | `string \| null` | Opaque payload; null until Submitted; immutable once set |
 | `stakeResource` | `ResourceId` | Resource type for the stake |
-| `stakeAmount` | `number` | Integer; must be > 0 at open time |
+| `stakeAmount` | `number` | Non-negative integer; 0 is valid (zero-stake contracts settle with zero payout to all parties) |
 | `deadline` | `number` | Unix ms; set by client at open time |
 | `state` | `EvalContractState` | Lifecycle phase (see below) |
 | `verdict` | `number \| null` | v ∈ [0,1]; null until Evaluated |

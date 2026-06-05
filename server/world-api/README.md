@@ -235,13 +235,13 @@ Eval contracts are peer-to-peer performance agreements between ghosts. A client 
 
 | Tool | Input | Description |
 |------|-------|-------------|
-| `eval_contract.open` | `{ contractor_id, evaluator_id, request, stake_resource, stake_amount, deadline_ms }` | Open a contract and stake resources into escrow |
-| `eval_contract.accept` | `{ contract_id }` | Contractor accepts the contract (freezes beneficiaries if group contractor) |
-| `eval_contract.decline` | `{ contract_id }` | Contractor declines; escrow returned to client |
-| `eval_contract.submit` | `{ contract_id, submission }` | Contractor submits a response before the deadline |
-| `eval_contract.evaluate` | `{ contract_id, verdict }` | Evaluator issues verdict `0..1`; settlement executes immediately |
-| `eval_contract.get` | `{ contract_id }` | Read contract state (parties only) |
-| `eval_contract.list` | `{ state? }` | List contracts visible to the caller |
+| `eval_contract_open` | `{ contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs }` | Open a contract and stake resources into escrow |
+| `eval_contract_accept` | `{ contractId }` | Contractor accepts the contract (freezes beneficiaries if group contractor) |
+| `eval_contract_decline` | `{ contractId }` | Contractor declines; escrow returned to client |
+| `eval_contract_submit` | `{ contractId, submission }` | Contractor submits a response before the deadline |
+| `eval_contract_evaluate` | `{ contractId, verdict }` | Evaluator issues verdict `0..1`; settlement executes immediately |
+| `eval_contract_get` | `{ contractId }` | Read contract state (parties only) |
+| `eval_contract_list` | `{ state? }` | List contracts visible to the caller |
 
 ### Services
 
