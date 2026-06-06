@@ -113,7 +113,7 @@
 - [X] T034 [P] Update `docs/architecture.md` — add `LeaderboardService` to server/world-api component inventory; note `world.leaderboard.updated` A2A event
 - [X] T035 [P] Update `proposals/rfc/0025-session-leaderboards.md` status from "under review" to "accepted"
 - [X] T036 [P] Update `shared/types/src/` package README (if present) to mention leaderboard types
-- [ ] T037 Run the end-to-end demo scenario from `specs/026-session-leaderboards/quickstart.md` — all 5 steps pass
+- [X] T037 Run the end-to-end demo scenario from `specs/026-session-leaderboards/quickstart.md` — all 5 steps pass
 - [X] T038 Run `pnpm run build` from repo root — passes cleanly (hard gate per constitution)
 - [X] T039 Run `pnpm test` in `server/world-api` — all unit tests pass
 - [X] T040 Run `pnpm typecheck` across all packages — no errors
