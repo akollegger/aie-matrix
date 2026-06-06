@@ -68,7 +68,7 @@ What other approaches were considered?
 | [RFC-0019](0019-barnacle-protocol.md) | The Barnacle Protocol — mini-game plugin contract | draft |
 | [RFC-0020](0020-platform-links.md) | Platform Links — Pocket World Navigation Protocol | draft |
 | [RFC-0021](0021-world-calendar.md) | World Calendar — Temporal Dimension and Scheduled Events | accepted |
-| [RFC-0022](0022-group-exam-eval-protocol.md) | Group Exam Eval Protocol — Survival-Driven Multi-Agent Evaluation | draft |
+| [RFC-0022](0022-eval-contract-protocol.md) | Eval Contract Protocol | accepted |
 | [RFC-0023](0023-in-world-resource-ledger.md) | In-World Resource Ledger | draft |
 | [RFC-0024](0024-group-formation-and-chat.md) | Group Formation and Group Chat | draft |
 | [RFC-0025](0025-session-leaderboards.md) | Session Leaderboards | under review |

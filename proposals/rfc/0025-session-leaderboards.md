@@ -3,7 +3,7 @@
 **Status:** under review  
 **Date:** 2026-06-06  
 **Authors:** @akollegger  
-**Related:** [RFC-0021](0021-world-calendar.md) (World Calendar — game-end via calendar event), [RFC-0022](0022-eval-contract-protocol.md) (Eval Contract Protocol — graded completions as ledger entries), [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger — authoritative source for all rankings), [RFC-0024](0024-group-formation-and-chat.md) (Group Formation — group bag as rankable actor), [RFC-0007](0007-agent-host-architecture.md) (Agent Host Architecture — needs update for card/instance name model; dependency for full display name support)
+**Related:** [RFC-0021](0021-world-calendar.md) (World Calendar — game-end via calendar event), [RFC-0022](0022-eval-contract-protocol.md) (Eval Contract Protocol — graded completions as ledger entries), [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger — authoritative source for all rankings), [RFC-0024](0024-group-formation-and-chat.md) (Group Formation — group bag as rankable actor), [RFC-0007](0007-ghost-house-architecture.md) (Agent Host Architecture — needs update for card/instance name model; dependency for full display name support)
 
 ## Summary
 
@@ -35,7 +35,7 @@ A leaderboard is a named query over `(:LedgerEntry)` nodes in the session subgra
 
 | Parameter | Description | Examples |
 |---|---|---|
-| `resource` | The resource type to aggregate (or `*` for any) | `"gold"`, `"eval-token"`, `*` |
+| `resource` | The resource type to aggregate (or `"*"` for any) | `"gold"`, `"eval-token"`, `"*"` |
 | `aggregation` | How to reduce movements | `"sum"`, `"count"`, `"max"` |
 | `direction` | Which side of movements to count | `"received"`, `"distributed"`, `"net"` |
 | `actorKind` | Filter to a class of actors | `"ghost"`, `"group"`, `"any"` |
@@ -48,7 +48,7 @@ These parameters are sufficient to reconstruct all obvious rankings from existin
 - **Best eval completions (by count)** → `{ resource: "eval-token", aggregation: "count", direction: "received", cause: "eval.completion" }`
 - **Most group activity** → `{ resource: "*", aggregation: "count", actorKind: "group" }`
 
-The query runs against the live ledger and is always current. No separate counter or denormalized state is maintained.
+The query runs against the live ledger. Results are TTL-cached server-side (see §3) — fresh within the cache window, not on every request. No separate counter or denormalized state is maintained.
 
 ### 2. Map Declaration
 
@@ -92,7 +92,7 @@ A `LeaderboardService` in `server/world-api` manages the declared leaderboards f
 
 A leaderboard query result must carry: the leaderboard identity and description, an ordered list of entries (each with actor identity, display name, and numeric score), the time the result was computed, and a flag indicating whether the result is the final frozen snapshot. Field naming is left to the implementer.
 
-**Query path:** The service runs a Cypher aggregate for a leaderboard's parameters against `(:LedgerEntry)` nodes in `LIVE_SESSION_ID`'s subgraph and returns a ranked list. Results are not cached between requests; freshness is the point.
+**Query path:** The service runs a Cypher aggregate for a leaderboard's parameters against `(:LedgerEntry)` nodes in `LIVE_SESSION_ID`'s subgraph and returns a ranked list. Results are TTL-cached — the service recomputes on a configurable interval (environment variable, same pattern as `CALENDAR_TICK_MS`) rather than on every request or every ledger write.
 
 **Game-end:** When the `WorldCalendarService` fires a calendar event with `kind: "game-end"`, `LeaderboardService` computes all leaderboards one final time, stores the snapshots as Neo4j nodes (`:LeaderboardSnapshot`), and marks them `isFinal: true`. Subsequent queries return the frozen snapshot rather than recomputing. This decouples the leaderboard from the timing mechanism — the calendar fires a command (`"finalize-leaderboards"`), the same command executor path used by all other calendar events.
 
@@ -196,9 +196,9 @@ A contributor can verify the full mechanic end-to-end in roughly fifteen minutes
 
 7. ~~**`spectator` role definition.**~~ **Resolved:** `leaderboards()` and `leaderboard { id }` require no authentication — leaderboard data is public, consistent with Intermedium's unauthenticated deployment at `matrix.neo4j.gg`. `finalize-leaderboards` remains scheduler/admin only. Full IAM model (covering `admin.neo4j.gg` and `api.neo4j.gg`) is outstanding work outside the scope of this RFC.
 
-9. ~~**Stale domain references in `docs/architecture.md`.**~~ **Resolved:** `docs/architecture.md` and RFC-0014 have been updated to use `matrix.neo4j.gg` and `admin.neo4j.gg`.
-
 8. ~~**Intermedium access to leaderboard data.**~~ **Resolved:** `LeaderboardService` emits a `world.leaderboard.updated` A2A event after each TTL recompute when rankings have changed, and once more with `isFinal: true` on finalization. Intermedium receives updates as an existing A2A subscriber — no Colyseus schema change, no client polling loop. The event shape follows the existing `WorldEventKind` pattern (see RFC-0021 `world.announcement` addendum).
+
+9. ~~**Stale domain references in `docs/architecture.md`.**~~ **Resolved:** `docs/architecture.md` and RFC-0014 have been updated to use `matrix.neo4j.gg` and `admin.neo4j.gg`.
 
 ---
 
