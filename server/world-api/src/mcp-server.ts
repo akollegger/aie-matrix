@@ -2160,14 +2160,14 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   );
 
   server.registerTool(
-    "finalize_leaderboards",
+    "finalize-leaderboards",
     {
       description: "Freeze all leaderboards. Admin/scheduler only. Idempotent.",
       inputSchema: {},
     },
     async (_input, extra) =>
       runTool(
-        "finalize_leaderboards",
+        "finalize-leaderboards",
         {},
         Effect.gen(function* () {
           if (

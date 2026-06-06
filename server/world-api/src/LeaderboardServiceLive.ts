@@ -151,7 +151,8 @@ function makeLeaderboardServiceLive(
       return result.records.map((r) => ({
         transfersJson: r.get("transfersJson") as string | null,
         cause: r.get("cause") as string,
-        ts: r.get("ts") as string | number,
+        // Neo4j may return integers as neo4j.Integer objects — coerce to JS number
+        ts: (r.get("ts") as any).toNumber?.() ?? Number(r.get("ts")),
       }));
     } finally {
       await session.close();
@@ -328,6 +329,9 @@ function makeLeaderboardServiceLive(
           try: () => fetchActiveSessionId(),
           catch: (e) => new LeaderboardPersistenceError({ cause: String(e) }),
         });
+
+        // Idempotent — if already finalized, no-op
+        if (isFinal) return;
 
         // Compute all leaderboards
         const results = yield* Effect.tryPromise({

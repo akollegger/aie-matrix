@@ -15,8 +15,6 @@ interface LeaderboardUpdatedEvent {
   entries: LeaderboardResult["entries"];
 }
 
-const POLL_INTERVAL_MS = 60_000;
-
 async function fetchLeaderboard(
   apiBase: string,
   id: string,
@@ -55,75 +53,67 @@ export interface LeaderboardState {
 }
 
 /**
- * Fetches a leaderboard by ID and keeps it live via Colyseus `leaderboard.updated` fanout.
- * Falls back to polling every 60 s if the Colyseus message is never received.
+ * Fetches a leaderboard by ID once on mount, then stays live via
+ * Colyseus `"world-v1"` fanout messages (no polling loop).
  */
 export function useLeaderboard(leaderboardId: string): LeaderboardState {
   const [result, setResult] = useState<LeaderboardResult | null>(null);
   const [loading, setLoading] = useState(false);
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
 
-  // Keep a ref so poll callback always has the latest apiBase without re-subscribing.
   const apiBaseRef = useRef(apiBase);
   apiBaseRef.current = apiBase;
 
-  // Initial fetch + polling fallback.
+  // Fetch once on mount (or when leaderboardId changes).
   useEffect(() => {
     if (!leaderboardId) return;
     let cancelled = false;
 
-    const load = async () => {
-      setLoading(true);
-      try {
-        const r = await fetchLeaderboard(apiBaseRef.current, leaderboardId);
-        if (!cancelled && r) setResult(r);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
+    setLoading(true);
+    fetchLeaderboard(apiBaseRef.current, leaderboardId)
+      .then((r) => { if (!cancelled && r) setResult(r); })
+      .finally(() => { if (!cancelled) setLoading(false); });
 
-    void load();
-    // TODO: replace polling with Colyseus message subscription below once confirmed working.
-    const timerId = setInterval(() => { void load(); }, POLL_INTERVAL_MS);
-
-    return () => {
-      cancelled = true;
-      clearInterval(timerId);
-    };
+    return () => { cancelled = true; };
   }, [leaderboardId]);
 
-  // Subscribe to Colyseus `leaderboard.updated` fanout messages.
+  // Subscribe to Colyseus `"world-v1"` fanout for live updates — no polling.
   useEffect(() => {
     if (!leaderboardId) return;
 
-    let unsubRoom: (() => void) | null = null;
+    // Handler must be detachable, so we capture it per-effect run.
+    const handleMessage = (type: unknown, message: unknown) => {
+      if (type !== "world-v1") return;
+      const payload = message as LeaderboardUpdatedEvent | undefined;
+      if (!payload || payload.t !== "leaderboard.updated") return;
+      if (payload.leaderboardId !== leaderboardId) return;
 
-    const attachRoom = (room: import("colyseus.js").Room | null) => {
-      // Each time the room changes, re-attach the listener.
-      if (!room) return;
-      room.onMessage("*", (type: unknown, message: unknown) => {
-        if (type !== "world_v1") return;
-        const payload = message as LeaderboardUpdatedEvent | undefined;
-        if (!payload || payload.t !== "leaderboard.updated") return;
-        if (payload.leaderboardId !== leaderboardId) return;
-
-        setResult((prev) => ({
-          id: leaderboardId,
-          title: payload.title,
-          description: prev?.description ?? "",
-          entries: payload.entries,
-          computedAt: payload.computedAt,
-          isFinal: payload.isFinal,
-        }));
-      });
+      setResult((prev) => ({
+        id: leaderboardId,
+        title: payload.title,
+        description: prev?.description ?? "",
+        entries: payload.entries,
+        computedAt: payload.computedAt,
+        isFinal: payload.isFinal,
+      }));
     };
 
-    // Attach to already-connected room (if any) and future rooms.
+    // colyseus.js Room.onMessage returns a cleanup function.
+    const cleanupHandlers: Array<() => void> = [];
+
+    const attachRoom = (room: import("colyseus.js").Room | null) => {
+      if (!room) return;
+      // onMessage returns a function that removes this specific handler.
+      const off = room.onMessage("*", handleMessage);
+      if (typeof off === "function") cleanupHandlers.push(off);
+    };
+
     attachRoom(getSpectatorRoom());
-    unsubRoom = onSpectatorRoom((r) => { attachRoom(r); });
+    const unsubRoom = onSpectatorRoom((r) => { attachRoom(r); });
 
     return () => {
       unsubRoom?.();
+      for (const off of cleanupHandlers) off();
     };
   }, [leaderboardId]);
 
