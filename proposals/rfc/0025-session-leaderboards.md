@@ -1,6 +1,6 @@
 # RFC-0025: Session Leaderboards
 
-**Status:** under review  
+**Status:** accepted  
 **Date:** 2026-06-06  
 **Authors:** @akollegger  
 **Related:** [RFC-0021](0021-world-calendar.md) (World Calendar — game-end via calendar event), [RFC-0022](0022-eval-contract-protocol.md) (Eval Contract Protocol — graded completions as ledger entries), [RFC-0023](0023-in-world-resource-ledger.md) (In-World Resource Ledger — authoritative source for all rankings), [RFC-0024](0024-group-formation-and-chat.md) (Group Formation — group bag as rankable actor), [RFC-0007](0007-ghost-house-architecture.md) (Agent Host Architecture — needs update for card/instance name model; dependency for full display name support)

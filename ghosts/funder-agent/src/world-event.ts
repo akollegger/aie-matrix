@@ -6,7 +6,8 @@ export type WorldEventKind =
   | "world.quest.trigger"
   | "world.session.start"
   | "world.session.end"
-  | "world.contract.submitted";
+  | "world.contract.submitted"
+  | "world.leaderboard.updated";
 
 export type WorldEvent = {
   readonly schema: "aie-matrix.world-event.v1";

@@ -40,6 +40,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Neo4j (`(:Group)` nodes, `MEMBER_OF`/`PARTICIPANT_IN`/`OWNS` edges in session subgraph); JSONL on disk (`{group_id}.jsonl` group chat threads in `CONVERSATION_DATA_DIR`); in-memory `Map` caches for group state and vote windows (023-group-formation)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `ulid`, `zod` 3 — all already in `server/world-api` (024-eval-contracts)
 - Neo4j (`(:EvalContract)` nodes); in-memory `Map` for unit tests (024-eval-contracts)
+- TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `@relateby/pattern` (gram AST), `zod` v3, `ulid` — all already present in `server/world-api` (026-session-leaderboards)
+- Neo4j (`(:LeaderboardSnapshot)` nodes in session subgraph); in-memory TTL cache for live rankings (026-session-leaderboards)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -87,6 +89,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 026-session-leaderboards: Added TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `@relateby/pattern` (gram AST), `zod` v3, `ulid` — all already present in `server/world-api`
 - 024-eval-contracts: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `ulid`, `zod` 3 — all already in `server/world-api`
 - 023-group-formation: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `ulid`, `unique-names-generator` (new dep in `server/world-api`)
-- 022-in-world-resource-ledger: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@relateby/pattern` (gram AST), `ulid`, `node:crypto` (SHA-256, no new dep)

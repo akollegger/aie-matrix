@@ -7,9 +7,10 @@ import { fileURLToPath } from "node:url";
 import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import { Effect, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime } from "effect";
 import { parseCalendarGramFile } from "../src/calendar/parse-calendar-gram.js";
 import { makeWorldCalendarLayer, WorldCalendarService } from "../src/calendar/WorldCalendarService.js";
+import { LeaderboardServiceInMemoryLayer } from "../src/LeaderboardServiceInMemory.js";
 
 const fixtureDir = join(dirname(fileURLToPath(import.meta.url)), "../src/calendar/fixtures");
 const sampleCalendarPath = join(fixtureDir, "sample.calendar.gram");
@@ -42,7 +43,7 @@ test("calendar loading: recurring event has repeat and until fields", async () =
 
 test("calendar loading: WorldCalendarService starts without error", async () => {
   const events = await Effect.runPromise(parseCalendarGramFile(sampleCalendarPath));
-  const layer = makeWorldCalendarLayer(events);
+  const layer = Layer.provide(makeWorldCalendarLayer(events), LeaderboardServiceInMemoryLayer);
   const runtime = ManagedRuntime.make(layer);
   try {
     const upcoming = await runtime.runPromise(
@@ -65,7 +66,7 @@ test("calendar loading: WorldCalendarService starts without error", async () => 
 });
 
 test("calendar loading: empty calendar works", async () => {
-  const layer = makeWorldCalendarLayer([]);
+  const layer = Layer.provide(makeWorldCalendarLayer([]), LeaderboardServiceInMemoryLayer);
   const runtime = ManagedRuntime.make(layer);
   try {
     const upcoming = await runtime.runPromise(

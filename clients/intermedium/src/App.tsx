@@ -10,6 +10,7 @@ import { GhostArrivalOverlay } from "./components/GhostArrivalOverlay.js";
 import { ReconnectingBanner } from "./components/ReconnectingBanner.js";
 import { ChatPanel } from "./components/ChatPanel/ChatPanel.js";
 import { NavHint } from "./components/NavHint.js";
+import { LeaderboardPanel } from "./components/LeaderboardPanel/LeaderboardPanel.js";
 
 /** Fade duration in ms for the deck.gl ↔ R3F renderer swap (FR-028, T090). */
 const FADE_MS = 200;
@@ -27,6 +28,43 @@ function AppInner() {
   const [fadeOpacity, setFadeOpacity] = useState(1);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [leaderboardIds, setLeaderboardIds] = useState<string[]>([]);
+
+  // Fetch declared leaderboard IDs on mount via MCP `leaderboards` tool.
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
+    if (!apiBase) return;
+    const base = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
+
+    const load = async () => {
+      try {
+        const res = await fetch(`${base}/mcp`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "leaderboards", arguments: {} },
+          }),
+        });
+        if (!res.ok) return;
+        const envelope = (await res.json()) as {
+          result?: { content?: Array<{ type: string; text?: string }> };
+        };
+        const textItem = envelope.result?.content?.find((c) => c.type === "text");
+        if (!textItem?.text) return;
+        const list = JSON.parse(textItem.text) as Array<{ id: string }>;
+        if (Array.isArray(list)) {
+          setLeaderboardIds(list.map((l) => l.id));
+        }
+      } catch {
+        // world server may not be running
+      }
+    };
+
+    void load();
+  }, []);
 
   useEffect(() => {
     const wantPersonal = stop === "personal";
@@ -144,6 +182,9 @@ function AppInner() {
               visible={state.mapGramStatus === "ready" && state.ghosts.size === 0}
             />
             <PanelView viewState={state.viewState} pairing={state.pairing} />
+            {(stop === "global" || stop === "regional") && leaderboardIds.length > 0 && (
+              <LeaderboardPanel leaderboardIds={leaderboardIds} />
+            )}
           </>
         )}
 

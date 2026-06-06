@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react"
 import type { CSSProperties } from "react"
-import type { AdminSelection } from "../../hooks/useAdminSelection"
-import { AgentHostError, getAgentCard } from "../../services/agentHostClient"
-import { getGhostPosition } from "../../services/registryClient"
-import { useEditor } from "../../state/editor-context"
+import type { AdminSelection } from "../../hooks/useAdminSelection.js"
+import { AgentHostError, getAgentCard } from "../../services/agentHostClient.js"
+import { getGhostPosition } from "../../services/registryClient.js"
+import { useEditor } from "../../state/editor-context.js"
+import { LeaderboardDefinitionCard } from "./LeaderboardDefinitionCard.js"
 
 function formatDate(iso: string): string {
   try {
@@ -49,7 +50,7 @@ export interface DetailPanelProps {
 export function DetailPanel({ selection }: DetailPanelProps) {
   const { selectedMap, selectedSessionId, selectedAgentId, selectedGhostSessionId, selectedGhostId } = selection
   const hasSelection = !!(selectedMap || selectedSessionId || selectedAgentId || selectedGhostSessionId)
-  const { dispatch } = useEditor()
+  const { state, dispatch } = useEditor()
 
   // Fetched A2A agent card — loaded whenever selectedAgentId changes.
   const [agentCardData, setAgentCardData] = useState<unknown>(null)
@@ -177,6 +178,15 @@ export function DetailPanel({ selection }: DetailPanelProps) {
                   {selectedMap.contentHash.slice(0, 12)}…
                 </span>
               </div>
+            )}
+
+            {state.leaderboards.length > 0 && (
+              <>
+                <div style={sectionLabel}>Leaderboards</div>
+                {state.leaderboards.map(spec => (
+                  <LeaderboardDefinitionCard key={spec.id} spec={spec} />
+                ))}
+              </>
             )}
 
             <div style={{ padding: "8px 8px", fontSize: 10, color: "#445" }}>

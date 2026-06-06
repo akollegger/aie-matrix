@@ -54,6 +54,7 @@ import { LedgerService } from "./LedgerService.js";
 import { ProposalService } from "./ProposalService.js";
 import { GroupService } from "./GroupService.js";
 import { EvalContractService } from "./EvalContractService.js";
+import { LeaderboardService } from "./LeaderboardService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 // ---------------------------------------------------------------------------
@@ -95,7 +96,8 @@ type ToolServices =
   | LedgerService
   | ProposalService
   | GroupService
-  | EvalContractService;
+  | EvalContractService
+  | LeaderboardService;
 
 function logJson(record: Record<string, unknown>): void {
   console.info(JSON.stringify(record));
@@ -2104,6 +2106,91 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       ),
   );
 
+  // ---------------------------------------------------------------------------
+  // Leaderboard tools
+  // ---------------------------------------------------------------------------
+
+  server.registerTool(
+    "leaderboards",
+    {
+      description: "List all declared leaderboards for the current session.",
+      inputSchema: {},
+    },
+    async (_input, extra) =>
+      runTool(
+        "leaderboards",
+        {},
+        Effect.gen(function* () {
+          const svc = yield* LeaderboardService;
+          return yield* svc.listLeaderboards();
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "leaderboard",
+    {
+      description: "Get ranked results for a specific leaderboard.",
+      inputSchema: {
+        id: z.string().describe("Leaderboard ID"),
+      },
+    },
+    async ({ id }, extra) =>
+      runTool(
+        "leaderboard",
+        { id },
+        Effect.gen(function* () {
+          const svc = yield* LeaderboardService;
+          const either = yield* Effect.either(svc.getLeaderboard(id));
+          if (either._tag === "Left") {
+            const e = either.left;
+            return {
+              ok: false,
+              code: e._tag,
+              message: e._tag === "LeaderboardError.NotFound"
+                ? `Leaderboard not found: ${id}`
+                : (e as { cause: string }).cause,
+            };
+          }
+          return either.right;
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "finalize-leaderboards",
+    {
+      description: "Freeze all leaderboards. Admin/scheduler only. Idempotent.",
+      inputSchema: {},
+    },
+    async (_input, extra) =>
+      runTool(
+        "finalize-leaderboards",
+        {},
+        Effect.gen(function* () {
+          if (
+            !extra.authInfo?.scopes?.includes("admin") &&
+            !extra.authInfo?.scopes?.includes("scheduler")
+          ) {
+            yield* Effect.fail(
+              new AuthMissingCredentials({
+                message: "finalize-leaderboards requires admin or scheduler authentication",
+              }),
+            );
+          }
+          const svc = yield* LeaderboardService;
+          const either = yield* Effect.either(svc.finalizeLeaderboards());
+          if (either._tag === "Left") {
+            return { ok: false, code: either.left._tag, message: either.left.cause };
+          }
+          return { ok: true };
+        }),
+        extra,
+      ),
+  );
+
   return server;
 }
 
@@ -2205,6 +2292,7 @@ export function handleGhostMcpEffect(
     const proposalSvc = yield* ProposalService;
     const groupSvc = yield* GroupService;
     const evalContractSvc = yield* EvalContractService;
+    const leaderboardSvc = yield* LeaderboardService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -2218,6 +2306,7 @@ export function handleGhostMcpEffect(
       Layer.succeed(ProposalService, proposalSvc),
       Layer.succeed(GroupService, groupSvc),
       Layer.succeed(EvalContractService, evalContractSvc),
+      Layer.succeed(LeaderboardService, leaderboardSvc),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
