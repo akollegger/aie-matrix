@@ -19,7 +19,7 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 | Horizontal scaling | [Redis](https://redis.io/) (`RedisPresence` + `RedisDriver`) | Colyseus multi-process pub/sub and matchmaking |
 | World model | [Neo4j](https://neo4j.com/) | Tile graph, ghost positions, social graph, goal state, quest progress |
 | Blob storage | S3 (or compatible) | Session recordings, slide assets, post-processed artifacts |
-| Front-end hosting | GCS backend buckets + Cloud CDN + Cloud Load Balancer | Static SPA hosting: `play.matrix.relateby.dev` (Intermedium, public CDN) and `admin.matrix.relateby.dev` (Admin, IAP-gated); separate from GKE Ingress ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)) |
+| Front-end hosting | GCS backend buckets + Cloud CDN + Cloud Load Balancer | Static SPA hosting: `matrix.neo4j.gg` (Intermedium, public CDN) and `admin.neo4j.gg` (Admin, IAP-gated); separate from GKE Ingress ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)) |
 | Operator access control | Google Identity-Aware Proxy (IAP) | Authenticates operators to the Admin client via Google Identity at the load-balancer layer; no application code required ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)) |
 | Deployment | Docker + Kubernetes | Containerized services, scalable cluster deployment |
 
