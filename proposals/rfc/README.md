@@ -71,3 +71,4 @@ What other approaches were considered?
 | [RFC-0022](0022-group-exam-eval-protocol.md) | Group Exam Eval Protocol — Survival-Driven Multi-Agent Evaluation | draft |
 | [RFC-0023](0023-in-world-resource-ledger.md) | In-World Resource Ledger | draft |
 | [RFC-0024](0024-group-formation-and-chat.md) | Group Formation and Group Chat | draft |
+| [RFC-0025](0025-session-leaderboards.md) | Session Leaderboards | under review |

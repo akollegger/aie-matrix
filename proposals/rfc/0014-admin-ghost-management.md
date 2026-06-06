@@ -9,7 +9,7 @@
 
 ## Summary
 
-Extend the admin client (the IAP-gated SPA hosted at `admin.matrix.relateby.dev`) with a Ghost Management panel that gives operators in-browser control over the agent-host: browsing the registered agent catalog, spawning ghost sessions for a given ghost identity, monitoring active sessions, and shutting sessions down. These controls are the operational complement to the ghost deployment infrastructure introduced in ADR-0009 and Spec 018 — once first-party ghost agents are running, operators need visibility and control without resorting to raw `curl` commands.
+Extend the admin client (the IAP-gated SPA hosted at `admin.neo4j.gg`) with a Ghost Management panel that gives operators in-browser control over the agent-host: browsing the registered agent catalog, spawning ghost sessions for a given ghost identity, monitoring active sessions, and shutting sessions down. These controls are the operational complement to the ghost deployment infrastructure introduced in ADR-0009 and Spec 018 — once first-party ghost agents are running, operators need visibility and control without resorting to raw `curl` commands.
 
 ## Motivation
 
@@ -143,7 +143,7 @@ No unresolved questions for the initial staging release. The four questions belo
 
 ## Alternatives
 
-**Separate admin SPA for ghost management.** A dedicated admin app at `agents.admin.matrix.relateby.dev` would isolate the ghost management UI from the map editor. The cost: a second IAP-gated bucket to configure, a second build pipeline, and split operational attention. The benefit (independent deployment, no shared state) does not outweigh the overhead for an initial operator-facing tool at this scale.
+**Separate admin SPA for ghost management.** A dedicated admin app at a separate subdomain of `admin.neo4j.gg` would isolate the ghost management UI from the map editor. The cost: a second IAP-gated bucket to configure, a second build pipeline, and split operational attention. The benefit (independent deployment, no shared state) does not outweigh the overhead for an initial operator-facing tool at this scale.
 
 **CLI / curl-based operator workflow.** The existing `quickstart.md` documents all the `curl` commands operators need. This requires terminal access and knowledge of the API — acceptable during development, not at a live conference where a non-technical operations room person may need to restart a ghost session quickly. The admin panel reduces operational risk at the event.
 
