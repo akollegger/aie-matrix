@@ -18,13 +18,13 @@
 
 **Purpose**: Shared types and gram parsing foundation that all other phases depend on.
 
-- [ ] T001 Add `shared/types/src/leaderboard.ts` defining `LeaderboardSpec`, `LeaderboardEntry`, and `LeaderboardResult` types per `data-model.md`
-- [ ] T002 Export `LeaderboardSpec`, `LeaderboardEntry`, `LeaderboardResult` from `shared/types/src/index.ts`
-- [ ] T003 Add `"world.leaderboard.updated"` to the `WorldEventKind` union in `shared/types/src/` (migrate canonical definition from `ghosts/funder-agent/src/world-event.ts` if needed)
-- [ ] T004 Create `server/world-api/src/leaderboard-errors.ts` with typed `Data.TaggedError` types: `LeaderboardNotFound`, `LeaderboardPersistenceError`
-- [ ] T005 Create `server/world-api/src/parse-leaderboard-gram.ts` — parse `[leaderboards:Leaderboards | ...]` gram block into `LeaderboardSpec[]`; return empty array when block is absent
-- [ ] T006 [P] Add `LeaderboardSpec` to `tools/map-editor/src/types/map-gram.ts`
-- [ ] T007 [P] Update `tools/map-editor/src/io/import-gram.ts` to extract the `[leaderboards:Leaderboards | ...]` block into `leaderboards: LeaderboardSpec[]` (alongside existing rules block parsing at lines 157–166)
+- [X] T001 Add `shared/types/src/leaderboard.ts` defining `LeaderboardSpec`, `LeaderboardEntry`, and `LeaderboardResult` types per `data-model.md`
+- [X] T002 Export `LeaderboardSpec`, `LeaderboardEntry`, `LeaderboardResult` from `shared/types/src/index.ts`
+- [X] T003 Add `"world.leaderboard.updated"` to the `WorldEventKind` union in `shared/types/src/` (migrate canonical definition from `ghosts/funder-agent/src/world-event.ts` if needed)
+- [X] T004 Create `server/world-api/src/leaderboard-errors.ts` with typed `Data.TaggedError` types: `LeaderboardNotFound`, `LeaderboardPersistenceError`
+- [X] T005 Create `server/world-api/src/parse-leaderboard-gram.ts` — parse `[leaderboards:Leaderboards | ...]` gram block into `LeaderboardSpec[]`; return empty array when block is absent
+- [X] T006 [P] Add `LeaderboardSpec` to `tools/map-editor/src/types/map-gram.ts`
+- [X] T007 [P] Update `tools/map-editor/src/io/import-gram.ts` to extract the `[leaderboards:Leaderboards | ...]` block into `leaderboards: LeaderboardSpec[]` (alongside existing rules block parsing at lines 157–166)
 
 **Checkpoint**: Shared types compile; gram parser returns `LeaderboardSpec[]` from a test `.map.gram`; map-editor types updated.
 
@@ -34,10 +34,10 @@
 
 **Purpose**: `LeaderboardService` interface and in-memory implementation — required before any user story can be wired up.
 
-- [ ] T008 Create `server/world-api/src/LeaderboardService.ts` — `Context.Tag("aie-matrix/LeaderboardService")` with `LeaderboardServiceOps` interface: `listLeaderboards()`, `getLeaderboard(id)`, `finalizeLeaderboards()`
-- [ ] T009 Create `server/world-api/src/LeaderboardServiceInMemory.ts` — in-memory `Layer` implementation backed by `Map<string, LeaderboardResult>` and `Map<string, LeaderboardSpec>`; no Neo4j dependency
-- [ ] T010 Write unit tests for `LeaderboardServiceInMemory` in `server/world-api/src/leaderboard.test.ts` — cover all interface methods and error paths (`LeaderboardNotFound` on unknown id, empty entries when no data, idempotent finalize, stale-cache fallback on simulated compute failure, tie-breaking: two actors with equal score where earlier contributor ranks first per FR-009)
-- [ ] T011 Verify `pnpm test` passes in `server/world-api` with in-memory tests green
+- [X] T008 Create `server/world-api/src/LeaderboardService.ts` — `Context.Tag("aie-matrix/LeaderboardService")` with `LeaderboardServiceOps` interface: `listLeaderboards()`, `getLeaderboard(id)`, `finalizeLeaderboards()`
+- [X] T009 Create `server/world-api/src/LeaderboardServiceInMemory.ts` — in-memory `Layer` implementation backed by `Map<string, LeaderboardResult>` and `Map<string, LeaderboardSpec>`; no Neo4j dependency
+- [X] T010 Write unit tests for `LeaderboardServiceInMemory` in `server/world-api/src/leaderboard.test.ts` — cover all interface methods and error paths (`LeaderboardNotFound` on unknown id, empty entries when no data, idempotent finalize, stale-cache fallback on simulated compute failure, tie-breaking: two actors with equal score where earlier contributor ranks first per FR-009)
+- [X] T011 Verify `pnpm test` passes in `server/world-api` with in-memory tests green
 
 **Checkpoint**: `LeaderboardService` interface defined; in-memory implementation passes all unit tests.
 
@@ -49,12 +49,12 @@
 
 **Independent Test**: Load a map with one declared leaderboard, trigger two ghost ledger entries with different amounts, call `leaderboard { id }` — higher-scoring ghost appears first; `isFinal: false`.
 
-- [ ] T012 [P] [US1] Create `server/world-api/src/LeaderboardServiceLive.ts` — Neo4j-backed `Layer` implementing `LeaderboardServiceOps`; TTL cache (`LEADERBOARD_TTL_MS`, default `60000`); Cypher aggregate query per `data-model.md` including secondary sort on `lastContributingAt` for tie-breaking (FR-009) and `instanceName`→`actorId` fallback for display name (FR-010); stale-cache fallback on query failure (FR-015); emit `world.leaderboard.updated` via `WorldBridgeService` when live rankings change (live-recompute path only — finalization emission handled in T018)
-- [ ] T013 [P] [US1] Write integration tests for `LeaderboardServiceLive` in `server/world-api/src/leaderboard.integration.test.ts` — skip when `NEO4J_URI` not set; cover `listLeaderboards`, `getLeaderboard` with real ledger entries, `finalizeLeaderboards()` with snapshot persistence and `isFinal: true` verification, empty-session path, stale-cache path
-- [ ] T014 [US1] Add `leaderboards` MCP tool to `server/world-api/src/mcp-server.ts` — no auth required; returns `[{ id, title, description }]` for active session; returns `[]` when no session or no declarations
-- [ ] T015 [US1] Add `leaderboard` MCP tool to `server/world-api/src/mcp-server.ts` — no auth required; input `{ id: string }`; returns `LeaderboardResult`; returns `LeaderboardNotFound` error for unknown id
-- [ ] T016 [US1] Wire `LeaderboardService` into the live service `Layer` in `server/world-api/src/live/` (alongside `GroupService`, `EvalContractService`)
-- [ ] T017 [US1] Load leaderboard specs from map gram at session start — call `parse-leaderboard-gram.ts` in the map-loading path and pass specs to `LeaderboardService`
+- [X] T012 [P] [US1] Create `server/world-api/src/LeaderboardServiceLive.ts` — Neo4j-backed `Layer` implementing `LeaderboardServiceOps`; TTL cache (`LEADERBOARD_TTL_MS`, default `60000`); Cypher aggregate query per `data-model.md` including secondary sort on `lastContributingAt` for tie-breaking (FR-009) and `instanceName`→`actorId` fallback for display name (FR-010); stale-cache fallback on query failure (FR-015); emit `world.leaderboard.updated` via `WorldBridgeService` when live rankings change (live-recompute path only — finalization emission handled in T018)
+- [X] T013 [P] [US1] Write integration tests for `LeaderboardServiceLive` in `server/world-api/src/leaderboard.integration.test.ts` — skip when `NEO4J_URI` not set; cover `listLeaderboards`, `getLeaderboard` with real ledger entries, `finalizeLeaderboards()` with snapshot persistence and `isFinal: true` verification, empty-session path, stale-cache path
+- [X] T014 [US1] Add `leaderboards` MCP tool to `server/world-api/src/mcp-server.ts` — no auth required; returns `[{ id, title, description }]` for active session; returns `[]` when no session or no declarations
+- [X] T015 [US1] Add `leaderboard` MCP tool to `server/world-api/src/mcp-server.ts` — no auth required; input `{ id: string }`; returns `LeaderboardResult`; returns `LeaderboardNotFound` error for unknown id
+- [X] T016 [US1] Wire `LeaderboardService` into the live service `Layer` in `server/world-api/src/live/` (alongside `GroupService`, `EvalContractService`)
+- [X] T017 [US1] Load leaderboard specs from map gram at session start — call `parse-leaderboard-gram.ts` in the map-loading path and pass specs to `LeaderboardService`
 
 **Checkpoint**: `leaderboards()` and `leaderboard { id }` respond correctly; live rankings reflect ledger entries; TTL cache prevents per-request recompute.
 
@@ -66,13 +66,13 @@
 
 **Independent Test**: Call `finalize-leaderboards` as scheduler; call `leaderboard { id }` — returns `isFinal: true` with unchanged entries; repeat call returns same frozen result.
 
-- [ ] T018 [US2] Implement `finalizeLeaderboards()` in `LeaderboardServiceLive.ts` — compute final rankings, persist `(:LeaderboardSnapshot)` Neo4j nodes linked to session via `[:SNAPSHOT_OF]`, set `isFinal: true`, emit `world.leaderboard.updated` with `isFinal: true` for each leaderboard via `WorldBridgeService` (finalization-specific emission; live-recompute emission is in T012)
-- [ ] T019 [US2] Register `finalize-leaderboards` command handler in `server/world-api/src/calendar/CalendarCommandDispatcher.ts` — restricted to `scheduler` and `admin` roles (same guard as `announce`)
-- [ ] T020 [US2] Add `finalize-leaderboards` MCP tool entry in `server/world-api/src/mcp-server.ts` with `requireRole(["scheduler", "admin"])` guard
-- [ ] T022 [US2] Create `clients/intermedium/src/hooks/useLeaderboard.ts` — fetch `leaderboard { id }` once on mount (initial load); subscribe to `world.leaderboard.updated` A2A events; set `sessionComplete` flag when `isFinal: true`
-- [ ] T023 [US2] Create `clients/intermedium/src/components/LeaderboardPanel/LeaderboardEntry.tsx` — render single rank row: rank number, display name, score
-- [ ] T024 [US2] Create `clients/intermedium/src/components/LeaderboardPanel/LeaderboardPanel.tsx` — collapsible sidebar panel; ranked table using `LeaderboardEntry`; "Session Complete" badge when `sessionComplete`; tabs/carousel for multiple leaderboards
-- [ ] T025 [US2] Integrate `LeaderboardPanel` into `clients/intermedium/src/App.tsx` — visible at Global and Regional camera stops
+- [X] T018 [US2] Implement `finalizeLeaderboards()` in `LeaderboardServiceLive.ts` — compute final rankings, persist `(:LeaderboardSnapshot)` Neo4j nodes linked to session via `[:SNAPSHOT_OF]`, set `isFinal: true`, emit `world.leaderboard.updated` with `isFinal: true` for each leaderboard via `WorldBridgeService` (finalization-specific emission; live-recompute emission is in T012)
+- [X] T019 [US2] Register `finalize-leaderboards` command handler in `server/world-api/src/calendar/CalendarCommandDispatcher.ts` — restricted to `scheduler` and `admin` roles (same guard as `announce`)
+- [X] T020 [US2] Add `finalize-leaderboards` MCP tool entry in `server/world-api/src/mcp-server.ts` with `requireRole(["scheduler", "admin"])` guard
+- [X] T022 [US2] Create `clients/intermedium/src/hooks/useLeaderboard.ts` — fetch `leaderboard { id }` once on mount (initial load); subscribe to `world.leaderboard.updated` A2A events; set `sessionComplete` flag when `isFinal: true`
+- [X] T023 [US2] Create `clients/intermedium/src/components/LeaderboardPanel/LeaderboardEntry.tsx` — render single rank row: rank number, display name, score
+- [X] T024 [US2] Create `clients/intermedium/src/components/LeaderboardPanel/LeaderboardPanel.tsx` — collapsible sidebar panel; ranked table using `LeaderboardEntry`; "Session Complete" badge when `sessionComplete`; tabs/carousel for multiple leaderboards
+- [X] T025 [US2] Integrate `LeaderboardPanel` into `clients/intermedium/src/App.tsx` — visible at Global and Regional camera stops
 
 **Checkpoint**: `finalize-leaderboards` freezes rankings; Intermedium shows "Session Complete" and rankings stop updating.
 
@@ -84,11 +84,11 @@
 
 **Independent Test**: Load two maps (one with block, one without); call `leaderboards()` for each — first returns declared specs, second returns `[]`.
 
-- [ ] T026 [US3] Add leaderboard spec display to `tools/map-editor/src/panels/detail/DetailPanel.tsx` — render each `LeaderboardSpec` from parsed gram as a read-only card showing title, description, resource, aggregation, direction, actorKind, cause
-- [ ] T027 [US3] Create `tools/map-editor/src/panels/detail/LeaderboardDefinitionCard.tsx` — read-only card component
-- [ ] T028 [US3] Add `[leaderboards:Leaderboards | ...]` block to `maps/sandbox/canonical.map.gram` — include `top-distributors` and `eval-champions` leaderboard specs from RFC-0025 §2 as the demo map
-- [ ] T029 [US3] Update ghost system prompt in `maps/sandbox/canonical.map.gram` — reference the competitive objective so ghosts optimize behavior the leaderboard captures (per RFC-0025 §5)
-- [ ] T030 [US3] Verify `leaderboards()` returns `[]` for a map without a `[leaderboards:Leaderboards | ...]` block (covered by existing `parse-leaderboard-gram.ts` empty-block behavior from T005)
+- [X] T026 [US3] Add leaderboard spec display to `tools/map-editor/src/panels/detail/DetailPanel.tsx` — render each `LeaderboardSpec` from parsed gram as a read-only card showing title, description, resource, aggregation, direction, actorKind, cause
+- [X] T027 [US3] Create `tools/map-editor/src/panels/detail/LeaderboardDefinitionCard.tsx` — read-only card component
+- [X] T028 [US3] Add `[leaderboards:Leaderboards | ...]` block to `maps/sandbox/canonical.map.gram` — include `top-distributors` and `eval-champions` leaderboard specs from RFC-0025 §2 as the demo map
+- [X] T029 [US3] Update ghost system prompt in `maps/sandbox/canonical.map.gram` — reference the competitive objective so ghosts optimize behavior the leaderboard captures (per RFC-0025 §5)
+- [X] T030 [US3] Verify `leaderboards()` returns `[]` for a map without a `[leaderboards:Leaderboards | ...]` block (covered by existing `parse-leaderboard-gram.ts` empty-block behavior from T005)
 
 **Checkpoint**: Map editor shows leaderboard definition cards; `maps/sandbox/canonical.map.gram` loads and surfaces the declared leaderboards; maps without the block return `[]`.
 
@@ -100,9 +100,9 @@
 
 **Independent Test**: Call `finalize-leaderboards` as scheduler — succeeds. Call as ghost role — rejected. Fire `game-end` calendar event — leaderboards auto-finalize.
 
-- [ ] T031 [US4] Add `game-end` calendar event with `enterCommands: ["finalize-leaderboards"]` to `maps/sandbox/canonical.map.gram` — follows RFC-0025 §6 pattern
-- [ ] T032 [US4] Verify `requireRole(["scheduler", "admin"])` guard on `finalize-leaderboards` rejects ghost tokens — add a test case to `leaderboard.test.ts` asserting `AuthorizationError` for non-privileged callers
-- [ ] T033 [US4] Verify calendar dispatch of `finalize-leaderboards` end-to-end — add a test in `CalendarCommandDispatcher` tests (or integration test) that fires the command as scheduler role and asserts `isFinal: true` on subsequent `getLeaderboard` calls
+- [X] T031 [US4] Add `game-end` calendar event with `enterCommands: ["finalize-leaderboards"]` to `maps/sandbox/canonical.map.gram` — follows RFC-0025 §6 pattern
+- [X] T032 [US4] Verify `requireRole(["scheduler", "admin"])` guard on `finalize-leaderboards` rejects ghost tokens — add a test case to `leaderboard.test.ts` asserting `AuthorizationError` for non-privileged callers
+- [X] T033 [US4] Verify calendar dispatch of `finalize-leaderboards` end-to-end — add a test in `CalendarCommandDispatcher` tests (or integration test) that fires the command as scheduler role and asserts `isFinal: true` on subsequent `getLeaderboard` calls
 
 **Checkpoint**: Authorization guard verified; calendar-triggered finalization verified end-to-end.
 
@@ -110,13 +110,13 @@
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T034 [P] Update `docs/architecture.md` — add `LeaderboardService` to server/world-api component inventory; note `world.leaderboard.updated` A2A event
-- [ ] T035 [P] Update `proposals/rfc/0025-session-leaderboards.md` status from "under review" to "accepted"
-- [ ] T036 [P] Update `shared/types/src/` package README (if present) to mention leaderboard types
+- [X] T034 [P] Update `docs/architecture.md` — add `LeaderboardService` to server/world-api component inventory; note `world.leaderboard.updated` A2A event
+- [X] T035 [P] Update `proposals/rfc/0025-session-leaderboards.md` status from "under review" to "accepted"
+- [X] T036 [P] Update `shared/types/src/` package README (if present) to mention leaderboard types
 - [ ] T037 Run the end-to-end demo scenario from `specs/026-session-leaderboards/quickstart.md` — all 5 steps pass
-- [ ] T038 Run `pnpm run build` from repo root — passes cleanly (hard gate per constitution)
-- [ ] T039 Run `pnpm test` in `server/world-api` — all unit tests pass
-- [ ] T040 Run `pnpm typecheck` across all packages — no errors
+- [X] T038 Run `pnpm run build` from repo root — passes cleanly (hard gate per constitution)
+- [X] T039 Run `pnpm test` in `server/world-api` — all unit tests pass
+- [X] T040 Run `pnpm typecheck` across all packages — no errors
 
 ---
 

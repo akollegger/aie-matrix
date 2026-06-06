@@ -248,3 +248,12 @@ export {
   EvalContractPersistenceError,
   type EvalContractError,
 } from "./eval-contract-errors.js";
+export { LeaderboardService, type LeaderboardServiceOps } from "./LeaderboardService.js";
+export { makeLeaderboardServiceInMemory, LeaderboardServiceInMemoryLayer } from "./LeaderboardServiceInMemory.js";
+export { makeLeaderboardServiceLiveLayer } from "./LeaderboardServiceLive.js";
+export {
+  LeaderboardNotFound,
+  LeaderboardPersistenceError,
+  type LeaderboardError,
+} from "./leaderboard-errors.js";
+export { parseLeaderboardGramText } from "./parse-leaderboard-gram.js";

@@ -29,6 +29,10 @@ import {
   GroupServiceInMemoryLayer,
   EvalContractService,
   EvalContractServiceInMemoryLayer,
+  LeaderboardService,
+  LeaderboardServiceInMemoryLayer,
+  makeLeaderboardServiceLiveLayer,
+  parseLeaderboardGramText,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
   makeLocalLiveSessionLayer,
@@ -382,6 +386,7 @@ async function main(): Promise<void> {
 
   let movementRules;
   let parsedMapForLedger: Awaited<ReturnType<typeof parseMapGram>> | undefined;
+  let mapGramText: string | undefined;
   try {
     movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
     // Merge rule costs from the map file when one is loaded (costs are declared in the map's
@@ -389,6 +394,7 @@ async function main(): Promise<void> {
     if (mapPath) {
       try {
         const mapText = await readFile(mapPath, "utf8");
+        mapGramText = mapText;
         const parsedMap = await parseMapGram(mapText);
         parsedMapForLedger = parsedMap;
         const withCosts = rulesetFromParsedMap(parsedMap);
@@ -490,13 +496,19 @@ async function main(): Promise<void> {
     | LedgerService
     | ProposalService
     | GroupService
-    | EvalContractService;
+    | EvalContractService
+  | LeaderboardService;
 
   // Layers with inter-dependencies must have those deps explicitly provided before
   // entering mergeAll — mergeAll does not resolve cross-dependencies between peers.
   const inMemoryBaseLayers = Layer.merge(LedgerServiceInMemoryLayer, GroupServiceInMemoryLayer);
   const proposalLayer = Layer.provide(ProposalServiceWithGroupLayer, inMemoryBaseLayers);
   const evalContractLayer = Layer.provide(EvalContractServiceInMemoryLayer, inMemoryBaseLayers);
+  const leaderboardLayer = neoDriver
+    ? Layer.provide(makeLeaderboardServiceLiveLayer(neoDriver), makeWorldBridgeLayer(bridge))
+    : LeaderboardServiceInMemoryLayer;
+
+  const calendarLayerWithLeaderboard = Layer.provide(calendarLayer, leaderboardLayer);
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -512,11 +524,12 @@ async function main(): Promise<void> {
     redisGhostStoreLayer,
     mapMgmtLayer,
     liveSessionLayer,
-    calendarLayer,
+    calendarLayerWithLeaderboard,
     LedgerServiceInMemoryLayer,
     GroupServiceInMemoryLayer,
     proposalLayer,
     evalContractLayer,
+    leaderboardLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
@@ -530,6 +543,24 @@ async function main(): Promise<void> {
     ) as unknown as Effect.Effect<void, unknown, never>;
     await Effect.runPromise(initEffect)
       .catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  }
+
+  // Load leaderboard specs from the map gram
+  if (mapGramText) {
+    try {
+      const leaderboardSpecs = await parseLeaderboardGramText(mapGramText);
+      if (leaderboardSpecs.length > 0) {
+        const leaderboardInitEffect = LeaderboardService.pipe(
+          Effect.flatMap(svc => svc.init(leaderboardSpecs)),
+          Effect.provide(runtimeLayer as any),
+        ) as unknown as Effect.Effect<void, unknown, never>;
+        await Effect.runPromise(leaderboardInitEffect)
+          .catch((e: unknown) => console.warn("[aie-matrix] Leaderboard init warning:", e));
+        console.info(`[aie-matrix] Loaded ${leaderboardSpecs.length} leaderboard spec(s) from map`);
+      }
+    } catch (e) {
+      console.warn("[aie-matrix] Could not load leaderboard specs from map:", e);
+    }
   }
 
   // Load agent catalog and register resource grants so world-api knows which

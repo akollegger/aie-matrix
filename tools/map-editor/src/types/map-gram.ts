@@ -91,3 +91,18 @@ export interface MovementRule {
   fromTypeName: string
   toTypeName: string
 }
+
+// ---------------------------------------------------------------------------
+// Leaderboard definitions
+// ---------------------------------------------------------------------------
+
+export interface LeaderboardSpec {
+  id: string
+  title: string
+  description: string
+  resource: string
+  aggregation: "sum" | "count" | "max"
+  direction: "received" | "distributed" | "net"
+  actorKind: "ghost" | "group" | "any"
+  cause?: string
+}

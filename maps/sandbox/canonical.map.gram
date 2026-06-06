@@ -13,6 +13,26 @@
 
 [rules:Rules | (floor)-[:GO]->(floor), (floor)-[:GO]->(pillar)]
 
+[leaderboards:Leaderboards |
+  (top-distributors:Leaderboard {
+    title: "Top Distributors",
+    description: "Ghosts who distributed the most gold during the session.",
+    resource: "gold",
+    aggregation: "sum",
+    direction: "distributed",
+    actorKind: "ghost"
+  }),
+  (eval-champions:Leaderboard {
+    title: "Eval Champions",
+    description: "Ghosts with the most successfully graded eval completions.",
+    resource: "eval-token",
+    aggregation: "count",
+    direction: "received",
+    cause: "eval.completion",
+    actorKind: "ghost"
+  })
+]
+
 [schedule:Schedule |
   (morning-standup:Event {
     title: "Morning Standup",
@@ -44,5 +64,15 @@
     until: "18:00:00",
     enterCommands: [],
     exitCommands: []
+  }),
+  (game-end:CalendarEvent {
+    title: "Game End",
+    kind: "game-end",
+    startsAt: "23:00",
+    enterCommands: ["finalize-leaderboards"]
   })
 ]
+
+[system:GhostSystemPrompt {
+  text: "You are a ghost in the AIE Matrix, a hex-tile virtual world. Explore the map, interact with other ghosts, and collect resources. You are competing on leaderboards. Distribute gold to other ghosts to rank on the 'Top Distributors' board. Complete eval contracts to rank on the 'Eval Champions' board."
+}]
