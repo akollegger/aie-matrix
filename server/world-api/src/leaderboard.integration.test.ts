@@ -5,18 +5,32 @@ import { Effect, Layer } from "effect";
 import { makeLeaderboardServiceLiveLayer } from "./LeaderboardServiceLive.js";
 import { LeaderboardService } from "./LeaderboardService.js";
 import { WorldBridgeService } from "./WorldBridgeService.js";
+import type { ColyseusWorldBridge } from "./colyseus-bridge.js";
 import type { LeaderboardSpec } from "@aie-matrix/shared-types";
 import { ulid } from "ulid";
 
 const NEO4J_URI = process.env.NEO4J_URI;
 
 // ---------------------------------------------------------------------------
-// Stub WorldBridgeService (no-op fanout)
+// Stub WorldBridgeService — satisfies full ColyseusWorldBridge interface
 // ---------------------------------------------------------------------------
 
-const stubBridgeLayer = Layer.succeed(WorldBridgeService, {
-  fanoutWorldV1: () => { /* no-op in tests */ },
-});
+const noop = () => {};
+const stubBridge: ColyseusWorldBridge = {
+  getLoadedMap: () => ({ cells: [], rules: [] } as any),
+  setLoadedMap: noop,
+  getGhostCell: () => undefined,
+  setGhostCell: noop,
+  removeGhostCell: noop,
+  listOccupantsOnCell: () => [],
+  setGhostMode: noop,
+  getGhostMode: () => "normal",
+  setTileItems: noop,
+  setGhostInventory: noop,
+  setGhostLastAction: noop,
+  fanoutWorldV1: noop,
+};
+const stubBridgeLayer = Layer.succeed(WorldBridgeService, stubBridge);
 
 // ---------------------------------------------------------------------------
 // Helpers
