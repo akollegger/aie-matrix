@@ -49,7 +49,11 @@ Item placements in gram syntax support an optional `qty` attribute (default `1`)
 ]
 ```
 
-The parsed `itemPlacements` array contains `{ itemRef: string; qty: number; h3Index?: string }` entries. The server aggregates these into `ItemSeed[]` for ledger initialisation.
+The parsed `itemPlacements` array contains `ParsedItemPlacement` entries:
+```typescript
+{ itemRef: string; qty: number; h3Index: string; layerIdentity: string }
+```
+`h3Index` is always present (placements are always cell-located). The server aggregates these into `ItemSeed[]` for ledger initialisation.
 
 `[resources:Resources]` blocks are **forbidden** in 027+ maps. Use `ItemType` placements instead.
 

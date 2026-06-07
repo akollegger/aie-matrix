@@ -42,6 +42,9 @@ export interface LedgerServiceOps {
   /**
    * Validate proposed costs against the actor's current bag.
    * Returns a CostQuote on success. Does NOT commit anything.
+   * Resource IDs are arbitrary strings (027+); no registry is consulted.
+   * `LedgerUnknownResource` is retained in the error union for type-compat but
+   * current implementations never emit it — catch branches are dead code.
    */
   quote(
     actorId: ActorId,
@@ -50,8 +53,11 @@ export interface LedgerServiceOps {
 
   /**
    * Append a transaction to the ledger. Validates conservation, floor
-   * constraints, and duplicate ULID. Updates in-memory bag cache
-   * and persists atomically. Rolls back cache on persistence failure.
+   * constraints, and duplicate ID. Updates in-memory bag cache and persists
+   * atomically. Rolls back cache on persistence failure.
+   * Resource IDs are arbitrary strings (027+); no registry validation is performed.
+   * `LedgerUnknownResource` is retained in the error union for type-compat but
+   * current implementations never emit it — catch branches are dead code.
    */
   commit(
     tx: Omit<Transaction, "prevHash" | "hash">

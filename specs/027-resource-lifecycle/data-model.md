@@ -101,7 +101,7 @@ Error union on `commit()`: removes `LedgerMonotonicTradeRejected`. All transfers
 |---|---|---|
 | Tile-located world pool | `world@{h3Index}` | `world@8f2830828ffffff` |
 | Unlocated world pool | `world` | spawn grants, eval payouts |
-| Ghost | `ghost:{ghostId}` | `ghost@01JABCDEF...` |
+| Ghost | raw ghost ULID | `01JABCDEF...` |
 | Genesis (init only) | `world.genesis` | genesis transfer source |
 
 ---

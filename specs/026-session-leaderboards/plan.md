@@ -1,114 +1,88 @@
-# Implementation Plan: [FEATURE]
+# Implementation Plan: Session Leaderboards
 
-**Branch**: `[###-feature-name]` | **Date**: [DATE] | **Spec**: [link]
-**Input**: Feature specification from `/specs/[###-feature-name]/spec.md`
-
-**Note**: This template is filled in by the `/speckit.plan` command. See `.specify/templates/plan-template.md` for the execution workflow.
+**Branch**: `026-session-leaderboards` | **Date**: 2026-06-06 | **Spec**: [spec.md](spec.md)  
+**Input**: Feature specification from `specs/026-session-leaderboards/spec.md`
 
 ## Summary
 
-[Extract from feature spec: primary requirement + technical approach from research]
+Add a spectator-facing leaderboard mechanism that aggregates ledger entries into ranked actor lists. Maps declare leaderboard query parameters in a `[leaderboards:Leaderboards | ...]` gram block; a new `LeaderboardService` in `server/world-api` computes and TTL-caches rankings, freezes final snapshots on `finalize-leaderboards`, and exposes results via two new unauthenticated MCP tools. Intermedium renders the rankings as an overlay panel that updates via A2A push. The map editor displays leaderboard definitions read-only.
 
 ## Technical Context
 
-<!--
-  ACTION REQUIRED: Replace the content in this section with the technical details
-  for the project. The structure here is presented in advisory capacity to guide
-  the iteration process.
--->
-
-**Language/Version**: [e.g., Python 3.11, Swift 5.9, Rust 1.75 or NEEDS CLARIFICATION]  
-**Primary Dependencies**: [e.g., FastAPI, UIKit, LLVM or NEEDS CLARIFICATION]  
-**Storage**: [if applicable, e.g., PostgreSQL, CoreData, files or N/A]  
-**Testing**: [e.g., pytest, XCTest, cargo test or NEEDS CLARIFICATION]  
-**Target Platform**: [e.g., Linux server, iOS 15+, WASM or NEEDS CLARIFICATION]
-**Project Type**: [e.g., library/cli/web-service/mobile-app/compiler/desktop-app or NEEDS CLARIFICATION]  
-**Performance Goals**: [domain-specific, e.g., 1000 req/s, 10k lines/sec, 60 fps or NEEDS CLARIFICATION]  
-**Constraints**: [domain-specific, e.g., <200ms p95, <100MB memory, offline-capable or NEEDS CLARIFICATION]  
-**Scale/Scope**: [domain-specific, e.g., 10k users, 1M LOC, 50 screens or NEEDS CLARIFICATION]
+**Language/Version**: TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`)  
+**Primary Dependencies**: `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `@relateby/pattern` (gram AST), `zod` v3, `ulid` — all already present in `server/world-api`  
+**Storage**: Neo4j (`(:LeaderboardSnapshot)` nodes in session subgraph); in-memory TTL cache for live rankings  
+**Testing**: `vitest` (unit tests against in-memory implementation); Neo4j integration tests (same skip-if-no-env pattern as `LedgerService`)  
+**Target Platform**: Linux server (world-api) + browser (Intermedium, map-editor)  
+**Project Type**: server service + MCP tool surface + browser overlay component  
+**Performance Goals**: Rankings fresh within configurable TTL (default ~same order as `CALENDAR_TICK_MS`); no per-request query  
+**Constraints**: No new auth path — leaderboard reads are unauthenticated; `finalize-leaderboards` uses existing scheduler/admin role check  
+**Scale/Scope**: Conference scale (~hundreds of concurrent spectators); bounded by TTL cache
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
-
-- Proposal linkage identified (`proposals/rfc/...` or `proposals/adr/...`) and
-  scope matches the planned work.
-- Planned structure preserves documented architectural boundaries or explicitly
-  records any PoC-only shortcut.
-- Shared interfaces and cross-language touchpoints have contract artifacts planned
-  under `contracts/` or equivalent design docs.
-- Verification covers each user slice; if runnable code is introduced, at least
-  one smoke test and local run instructions are included.
-- Documentation impact is enumerated for `README.md`, `docs/architecture.md`,
-  `docs/project-overview.md`, `CONTRIBUTING.md`, and any package README files
-  affected by the work.
+| Gate | Status | Notes |
+|---|---|---|
+| Proposal linkage | PASS | RFC-0025 is the authoritative proposal; spec traces directly to it |
+| Architectural boundaries | PASS | New `LeaderboardService` follows existing `GroupService`/`EvalContractService` Layer/Tag pattern; no new top-level directories |
+| Shared interface contracts | PASS | `LeaderboardSpec`, `LeaderboardEntry`, `LeaderboardResult` in `shared/types/`; `world.leaderboard.updated` A2A event extending existing `WorldEventKind` |
+| Verifiable increments | PASS | 4 independent user slices; demo scenario in RFC-0025 defines end-to-end smoke test; quickstart documents local run |
+| Documentation impact | PASS | `docs/architecture.md`, demo `.map.gram`, RFC-0025 status enumerated in spec |
+| MCP/A2A-first | PASS | All domain operations via MCP tools (`leaderboards`, `leaderboard`); push delivery via A2A `world.leaderboard.updated`; no bespoke HTTP |
+| Service testing | PASS | `LeaderboardServiceInMemory` unit tests required in same change; Neo4j integration tests planned in same change, may land separately if CI container unavailable |
+| Build gate | REQUIRED | `pnpm run build` must pass before PR |
 
 ## Project Structure
 
 ### Documentation (this feature)
 
 ```text
-specs/[###-feature]/
-├── plan.md              # This file (/speckit.plan command output)
-├── research.md          # Phase 0 output (/speckit.plan command)
-├── data-model.md        # Phase 1 output (/speckit.plan command)
-├── quickstart.md        # Phase 1 output (/speckit.plan command)
-├── contracts/           # Phase 1 output (/speckit.plan command)
-└── tasks.md             # Phase 2 output (/speckit.tasks command - NOT created by /speckit.plan)
+specs/026-session-leaderboards/
+├── plan.md              # This file
+├── research.md          # Phase 0 output
+├── data-model.md        # Phase 1 output
+├── quickstart.md        # Phase 1 output
+├── contracts/           # Phase 1 output
+│   ├── leaderboard-mcp-tools.md
+│   ├── world-leaderboard-updated-event.md
+│   └── leaderboard-gram-syntax.md
+└── tasks.md             # Phase 2 output (/speckit.tasks — NOT created here)
 ```
 
-### Source Code (repository root)
-<!--
-  ACTION REQUIRED: Replace the placeholder tree below with the concrete layout
-  for this feature. Delete unused options and expand the chosen structure with
-  real paths (e.g., apps/admin, packages/something). The delivered plan must
-  not include Option labels.
--->
+### Source Code
 
 ```text
-# [REMOVE IF UNUSED] Option 1: Single project (DEFAULT)
-src/
-├── models/
-├── services/
-├── cli/
-└── lib/
+shared/types/src/
+└── leaderboard.ts               # New: LeaderboardSpec, LeaderboardEntry, LeaderboardResult
 
-tests/
-├── contract/
-├── integration/
-└── unit/
+server/world-api/src/
+├── LeaderboardService.ts        # New: Context.Tag + interface (LeaderboardServiceOps)
+├── LeaderboardServiceLive.ts    # New: Neo4j-backed Layer — aggregate queries, snapshot persistence
+├── LeaderboardServiceInMemory.ts # New: In-memory Layer for unit tests
+├── leaderboard-errors.ts        # New: typed Data.TaggedError types
+├── mcp-server.ts                # Modified: add leaderboards + leaderboard tools; finalize-leaderboards command
+├── calendar/
+│   └── CalendarCommandDispatcher.ts  # Modified: register finalize-leaderboards command handler
 
-# [REMOVE IF UNUSED] Option 2: Web application (when "frontend" + "backend" detected)
-backend/
-├── src/
-│   ├── models/
-│   ├── services/
-│   └── api/
-└── tests/
+maps/sandbox/
+└── canonical.map.gram           # Modified: add [leaderboards:Leaderboards | ...] block + ghost system prompt
 
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   └── services/
-└── tests/
+clients/intermedium/src/
+├── components/LeaderboardPanel/
+│   ├── LeaderboardPanel.tsx     # New: ranked table panel + "Session Complete" state
+│   └── LeaderboardEntry.tsx     # New: single rank row
+├── hooks/
+│   └── useLeaderboard.ts        # New: subscribe to world.leaderboard.updated A2A events
 
-# [REMOVE IF UNUSED] Option 3: Mobile + API (when "iOS/Android" detected)
-api/
-└── [same as backend above]
-
-ios/ or android/
-└── [platform-specific structure: feature modules, UI flows, platform tests]
+tools/map-editor/src/
+├── io/import-gram.ts            # Modified: parse [leaderboards:Leaderboards | ...] block
+├── panels/detail/
+│   └── LeaderboardDefinitionCard.tsx  # New: read-only display of one Leaderboard node
+└── types/map-gram.ts            # Modified: add LeaderboardSpec to MapGram types
 ```
 
-**Structure Decision**: [Document the selected structure, justify any new
-top-level directory, and reference the real directories captured above]
+**Structure Decision**: No new top-level directories. `LeaderboardService` follows the three-file pattern (interface + live + in-memory) already established by `GroupService`, `EvalContractService`, and `LedgerService`. Shared types extend the existing `shared/types/src/` domain file pattern.
 
 ## Complexity Tracking
 
-> **Fill ONLY if Constitution Check has violations that must be justified**
-
-| Violation | Why Needed | Simpler Alternative Rejected Because |
-|-----------|------------|-------------------------------------|
-| [e.g., 4th project] | [current need] | [why 3 projects insufficient] |
-| [e.g., Repository pattern] | [specific problem] | [why direct DB access insufficient] |
+No constitution violations.

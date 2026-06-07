@@ -8,7 +8,12 @@ export type ActorId = string;
  */
 export type ResourceId = string;
 
-/** ULID-format transaction ID; also the idempotency key. */
+/**
+ * Transaction ID; also the idempotency key.
+ * Normal transactions use ULID. Idempotent spawn-grant transactions use a
+ * truncated SHA-256 hex string derived from `ghostId:role:itemRef` to ensure
+ * stable deduplication across reconnects. Callers MUST NOT assume ULID ordering.
+ */
 export type TransactionId = string;
 
 /** A single double-entry resource transfer between two actor bags. */
@@ -31,7 +36,8 @@ export interface Transaction {
   /**
    * What authored this transaction.
    * Valid values: "take" | "drop" | "spawn-grant" | "eval-payout" | "trade" |
-   *   "group-formation" | "group-leave" | "seed" | "agent.resource-grant"
+   *   "group-formation" | "group-leave" | "seed"
+   * Note: "agent.resource-grant" was removed in 027-resource-lifecycle; use "spawn-grant".
    */
   cause: string;
   /** Actors whose consent this transaction carries. */

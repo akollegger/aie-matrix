@@ -143,7 +143,7 @@ export class ItemServiceImpl implements ItemServiceOps {
       if (this.ledger) {
         yield* this.ledger.commit({
           id: ulid(),
-          transfers: [{ resource: itemRef, qty: 1, from: `world@${h3Index}`, to: ghostId }],
+          transfers: [{ resource: itemRef, qty: 1, from: `world@${h3Index}`, to: ghostId, location: { h3Index } }],
           cause: "take",
           actors: [ghostId],
           ts: Date.now(),
@@ -201,7 +201,7 @@ export class ItemServiceImpl implements ItemServiceOps {
       if (this.ledger) {
         yield* this.ledger.commit({
           id: ulid(),
-          transfers: [{ resource: itemRef, qty: 1, from: ghostId, to: `world@${h3Index}` }],
+          transfers: [{ resource: itemRef, qty: 1, from: ghostId, to: `world@${h3Index}`, location: { h3Index } }],
           cause: "drop",
           actors: [ghostId],
           ts: Date.now(),

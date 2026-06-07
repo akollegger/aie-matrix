@@ -1674,13 +1674,13 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "offer",
     {
-      description: "Propose a resource trade to another ghost. You offer to give one resource in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded. Both ghosts must be on the same tile.",
+      description: "Propose an item trade to another ghost. You offer to give one item in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Both ghosts must be on the same tile. Set `for_qty` to 0 to give an item as a gift with no return expected.",
       inputSchema: {
         to: z.string().describe("The ghost ID of the counterparty."),
         give_item: z.string().describe("The item you are offering to give."),
         give_qty: z.number().int().positive().describe("The quantity you are offering to give."),
-        for_item: z.string().describe("The item you want in return."),
-        for_qty: z.number().int().positive().describe("The quantity you want in return."),
+        for_item: z.string().describe("The item you want in return (use an empty string for a gift)."),
+        for_qty: z.number().int().nonnegative().describe("The quantity you want in return. Use 0 to give as a gift."),
       },
     },
     async ({ to, give_item, give_qty, for_item, for_qty }, extra) =>
@@ -1691,13 +1691,13 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "request",
     {
-      description: "Request a resource from another ghost, offering something in return. Same as `offer` but framed from the receiver's perspective. Both ghosts must be on the same tile.",
+      description: "Request an item from another ghost, offering something in return. Same as `offer` but framed from the receiver's perspective. Both ghosts must be on the same tile. Set `offering_qty` to 0 to request an item as a gift.",
       inputSchema: {
-        from: z.string().describe("The ghost ID to request the resource from."),
+        from: z.string().describe("The ghost ID to request the item from."),
         want_item: z.string().describe("The item you want to receive."),
         want_qty: z.number().int().positive().describe("The quantity you want to receive."),
-        offering_item: z.string().describe("The item you are offering in exchange."),
-        offering_qty: z.number().int().positive().describe("The quantity you are offering in exchange."),
+        offering_item: z.string().describe("The item you are offering in exchange (use an empty string for a gift request)."),
+        offering_qty: z.number().int().nonnegative().describe("The quantity you are offering in exchange. Use 0 to request as a gift."),
       },
     },
     async ({ from, want_item, want_qty, offering_item, offering_qty }, extra) =>
@@ -2240,8 +2240,11 @@ export function handleGhostMcpEffect(
     const authExtra = auth.extra as { ghostId?: string; agentId?: string; role?: string } | undefined;
     const seedGhostId = authExtra?.ghostId;
     const seedAgentId = authExtra?.agentId;
-    const seedRole = authExtra?.role;
-    if (seedGhostId && seedRole) {
+    // role comes from agent card metadata; absent defaults to "attendee" per FR-009.
+    // The JWT does not carry role — it must be fetched from the agent catalog via agentId.
+    // Until catalog lookup is wired here, we fall back to "attendee" for all connects.
+    const seedRole = authExtra?.role ?? "attendee";
+    if (seedGhostId) {
       const spawnGrant = _spawnGrants.find(g => g.role === seedRole);
       if (spawnGrant && spawnGrant.grants.length > 0) {
         // Fire-and-forget seeding — errors logged but do not fail the MCP request
