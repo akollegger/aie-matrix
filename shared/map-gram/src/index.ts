@@ -10,7 +10,7 @@ export type {
   ParsedPortal,
   ParsedRule,
   ParsedRuleCost,
-  ParsedResourceType,
+  SpawnGrant,
   TileTypeDef,
   ItemTypeDef,
 } from "./types.js";

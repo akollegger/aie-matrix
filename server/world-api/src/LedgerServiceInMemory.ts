@@ -7,7 +7,6 @@ import type {
   BagResult,
   CostQuote,
   ResourceId,
-  ResourceType,
   Transaction,
   Transfer,
 } from "@aie-matrix/shared-types";
@@ -16,10 +15,8 @@ import {
   LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
-  LedgerMonotonicTradeRejected,
-  LedgerUnknownResource,
 } from "./ledger-errors.js";
-import { LedgerService } from "./LedgerService.js";
+import { LedgerService, type ItemSeed } from "./LedgerService.js";
 
 // ---------------------------------------------------------------------------
 // Hashing
@@ -50,9 +47,6 @@ function hashTransaction(tx: HashableFields, prevHash: string): string {
 // ---------------------------------------------------------------------------
 
 export function makeLedgerServiceInMemory(): LedgerService["Type"] {
-  // Resource type registry
-  const resourceTypes = new Map<ResourceId, ResourceType>();
-
   // Bag cache: actorId → resourceId → balance
   const bags = new Map<ActorId, Map<ResourceId, number>>();
 
@@ -83,26 +77,27 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
   }
 
   function chainTip(): string {
-    return log.length === 0 ? "" : log[log.length - 1].hash;
+    return log.length === 0 ? "" : log[log.length - 1]!.hash;
   }
 
   // ---------------------------------------------------------------------------
   // init
   // ---------------------------------------------------------------------------
 
-  const init = (seed: ResourceType[]) =>
+  const init = (seed: ItemSeed[]) =>
     Effect.gen(function* () {
-      for (const rt of seed) {
-        resourceTypes.set(rt.id, rt);
-      }
+      const seedWithQty = seed.filter(s => s.qty > 0);
+      if (seedWithQty.length === 0) return;
 
-      const conservedSeed = seed.filter(rt => rt.class === "conserved" && rt.qty > 0);
-      if (conservedSeed.length === 0) return;
-
-      // Append genesis seed transaction so verify() counts it and the chain is valid
+      // Build genesis transfers: world.genesis → world@{h3Index} (or "world")
       const genesisTx = {
         id: ulid(),
-        transfers: conservedSeed.map(rt => ({ resource: rt.id, qty: rt.qty, from: "world.genesis", to: "world" })),
+        transfers: seedWithQty.map(s => ({
+          resource: s.itemRef,
+          qty: s.qty,
+          from: "world.genesis",
+          to: s.h3Index ? `world@${s.h3Index}` : "world",
+        })),
         cause: "seed",
         actors: [] as string[],
         ts: Date.now(),
@@ -122,8 +117,7 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
       if (actorBag) {
         for (const [resource, qty] of actorBag) {
           if (qty === 0) continue;
-          const rt = resourceTypes.get(resource);
-          holdings.push({ resource, qty, label: rt?.label ?? resource });
+          holdings.push({ resource, qty, label: resource });
         }
       }
       return { actorId, holdings } as BagResult;
@@ -136,12 +130,8 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
   const quote = (actorId: ActorId, costs: ActionCost[]) =>
     Effect.gen(function* () {
       for (const cost of costs) {
-        if (!resourceTypes.has(cost.resource)) {
-          yield* Effect.fail(new LedgerUnknownResource({ resource: cost.resource }));
-        }
         const avail = balance(actorId, cost.resource);
-        const floor = resourceTypes.get(cost.resource)!.floor;
-        if (avail - cost.qty < floor) {
+        if (avail - cost.qty < 0) {
           yield* Effect.fail(
             new LedgerInsufficientFunds({
               actorId,
@@ -180,29 +170,12 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
         yield* Effect.fail(new LedgerDuplicateTransaction({ id: tx.id }));
       }
 
-      // Validate resources exist
+      // Validate sufficient funds on the debit side
+      // (world.genesis is allowed to go negative — it's the seed authority)
       for (const t of tx.transfers) {
-        if (!resourceTypes.has(t.resource)) {
-          yield* Effect.fail(new LedgerUnknownResource({ resource: t.resource }));
-        }
-      }
-
-      // Monotonic resources may only flow FROM a world-authority actor (prefix "world")
-      for (const t of tx.transfers) {
-        const rt = resourceTypes.get(t.resource)!;
-        if (rt.class === "monotonic" && !t.from.startsWith("world")) {
-          yield* Effect.fail(new LedgerMonotonicTradeRejected({ resource: t.resource }));
-        }
-      }
-
-      // Validate floors (debit side only; monotonic minting skips floor check on issuer)
-      for (const t of tx.transfers) {
-        const rt = resourceTypes.get(t.resource)!;
-        if (rt.class === "monotonic") continue; // issuers are not balance-checked
-        if (t.from.startsWith("world")) continue; // world-authority actors may mint freely
+        if (t.from === "world.genesis") continue;
         const current = balance(t.from, t.resource);
-        const floor = rt.floor;
-        if (current - t.qty < floor) {
+        if (current - t.qty < 0) {
           yield* Effect.fail(
             new LedgerInsufficientFunds({
               actorId: t.from,
@@ -214,30 +187,27 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
         }
       }
 
-      // Conservation check: group by resource, ensure sum(from) === sum(to) for conserved
-      const conservedDeltas = new Map<ResourceId, number>();
+      // Conservation check: for each resource, sum(debit qty) === sum(credit qty)
+      const netByResource = new Map<ResourceId, number>();
       for (const t of tx.transfers) {
-        const rt = resourceTypes.get(t.resource)!;
-        if (rt.class !== "conserved") continue;
-        conservedDeltas.set(t.resource, (conservedDeltas.get(t.resource) ?? 0) + t.qty - t.qty);
-        // Track net: from loses, to gains — net should be 0
+        // from loses qty (debit), to gains qty (credit) — net should be 0
+        netByResource.set(t.resource, (netByResource.get(t.resource) ?? 0) - t.qty + t.qty);
       }
-      // Simplified check: from === to for each transfer (double-entry means qty in === qty out)
-      // Each Transfer is already double-entry by definition; conservation is guaranteed structurally.
+      // Each Transfer is self-balancing by construction (one from, one to, same qty).
+      // The conservation invariant holds automatically per Transfer.
 
       // Build full transaction
       const prev = chainTip();
       const full: Transaction = {
         ...tx,
         prevHash: prev,
-        hash: "", // computed below
+        hash: "",
       };
       full.hash = hashTransaction(full, prev);
 
       // Apply to in-memory cache
       applyTransfers(tx.transfers);
 
-      // In-memory: no persistence failure possible
       log.push(full);
       seenIds.add(full.id);
 
@@ -270,27 +240,12 @@ export function makeLedgerServiceInMemory(): LedgerService["Type"] {
       return { entries: log.length };
     });
 
-  // ---------------------------------------------------------------------------
-  // resourceTypes
-  // ---------------------------------------------------------------------------
-
-  const resourceTypesOp = () => Effect.sync(() => Array.from(resourceTypes.values()));
-
-  const ensureResourceType = (rt: ResourceType) =>
-    Effect.sync(() => {
-      if (!resourceTypes.has(rt.id)) {
-        resourceTypes.set(rt.id, rt);
-      }
-    });
-
   const ops: LedgerService["Type"] & { _getLog: () => typeof log } = {
     init,
     bag,
     quote,
     commit,
     verify,
-    resourceTypes: resourceTypesOp,
-    ensureResourceType,
     // Test-only escape hatch for tamper detection tests
     _getLog: () => log,
   };

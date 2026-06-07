@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect } from "effect";
 import { ulid } from "ulid";
-import type { ResourceType } from "@aie-matrix/shared-types";
+import type { ItemSeed } from "../src/LedgerService.js";
 import { makeLedgerServiceInMemory } from "../src/LedgerServiceInMemory.js";
 import { makeProposalService } from "../src/ProposalService.js";
 
@@ -10,11 +10,10 @@ import { makeProposalService } from "../src/ProposalService.js";
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const GOLD: ResourceType = { id: "gold", class: "conserved", qty: 200, floor: 0, label: "Gold" };
-const ENERGY: ResourceType = { id: "energy", class: "conserved", qty: 100, floor: 0, label: "Energy" };
-const XP: ResourceType = { id: "xp", class: "monotonic", qty: 0, floor: 0, label: "XP" };
+const GOLD: ItemSeed = { itemRef: "GoldCoin", qty: 200 };
+const ENERGY: ItemSeed = { itemRef: "EnergyCell", qty: 100 };
 
-function makeLedger(seed: ResourceType[] = [GOLD, ENERGY]) {
+function makeLedger(seed: ItemSeed[] = [GOLD, ENERGY]) {
   const svc = makeLedgerServiceInMemory();
   Effect.runSync(svc.init(seed));
   return svc;
@@ -23,7 +22,7 @@ function makeLedger(seed: ResourceType[] = [GOLD, ENERGY]) {
 function creditGold(ledger: ReturnType<typeof makeLedger>, actorId: string, qty: number) {
   Effect.runSync(ledger.commit({
     id: ulid(),
-    transfers: [{ resource: "gold", qty, from: "world", to: actorId }],
+    transfers: [{ resource: "GoldCoin", qty, from: "world", to: actorId }],
     cause: "test.credit", actors: [], ts: Date.now(),
   }));
 }
@@ -31,7 +30,7 @@ function creditGold(ledger: ReturnType<typeof makeLedger>, actorId: string, qty:
 function creditEnergy(ledger: ReturnType<typeof makeLedger>, actorId: string, qty: number) {
   Effect.runSync(ledger.commit({
     id: ulid(),
-    transfers: [{ resource: "energy", qty, from: "world", to: actorId }],
+    transfers: [{ resource: "EnergyCell", qty, from: "world", to: actorId }],
     cause: "test.credit", actors: [], ts: Date.now(),
   }));
 }
@@ -45,21 +44,10 @@ test("propose() creates a pending proposal and returns proposalId + expiresAt", 
   const svc = makeProposalService(ledger);
   const result = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 10 }, want: { resource: "energy", qty: 5 },
+    give: { resource: "GoldCoin", qty: 10 }, want: { resource: "EnergyCell", qty: 5 },
   }));
   assert.ok(result.proposalId, "proposalId should be set");
   assert.ok(result.expiresAt > Date.now(), "expiresAt should be in the future");
-});
-
-test("propose() rejects monotonic give resource", () => {
-  const ledger = makeLedger([GOLD, XP]);
-  const svc = makeProposalService(ledger);
-  const err = Effect.runSync(Effect.flip(svc.propose({
-    initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "xp", qty: 10 }, want: { resource: "gold", qty: 5 },
-  })));
-  assert.equal(err._tag, "LedgerError.MonotonicTradeRejected");
-  assert.equal((err as any).resource, "xp");
 });
 
 test("propose() rejects when counterparty is on a different tile", () => {
@@ -68,7 +56,7 @@ test("propose() rejects when counterparty is on a different tile", () => {
   const svc = makeProposalService(ledger);
   const err = Effect.runSync(Effect.flip(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+    give: { resource: "GoldCoin", qty: 5 }, want: { resource: "EnergyCell", qty: 2 },
   }, (id) => cellMap.get(id))));
   assert.equal(err._tag, "LedgerError.CounterpartyNotNearby");
 });
@@ -79,20 +67,11 @@ test("propose() succeeds when both ghosts are on the same tile", () => {
   const svc = makeProposalService(ledger);
   const result = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+    give: { resource: "GoldCoin", qty: 5 }, want: { resource: "EnergyCell", qty: 2 },
   }, (id) => cellMap.get(id)));
   assert.ok(result.proposalId);
 });
 
-test("propose() rejects monotonic want resource", () => {
-  const ledger = makeLedger([GOLD, XP]);
-  const svc = makeProposalService(ledger);
-  const err = Effect.runSync(Effect.flip(svc.propose({
-    initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 10 }, want: { resource: "xp", qty: 5 },
-  })));
-  assert.equal(err._tag, "LedgerError.MonotonicTradeRejected");
-});
 
 // ---------------------------------------------------------------------------
 // agree()
@@ -106,7 +85,7 @@ test("agree() atomically transfers both resources and marks proposal agreed", ()
 
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 10 }, want: { resource: "energy", qty: 5 },
+    give: { resource: "GoldCoin", qty: 10 }, want: { resource: "EnergyCell", qty: 5 },
   }));
 
   const result = Effect.runSync(svc.agree(proposalId, "ghost-b"));
@@ -114,10 +93,10 @@ test("agree() atomically transfers both resources and marks proposal agreed", ()
 
   const bagA = Effect.runSync(ledger.bag("ghost-a"));
   const bagB = Effect.runSync(ledger.bag("ghost-b"));
-  assert.equal(bagA.holdings.find(h => h.resource === "gold")?.qty, 40, "ghost-a gave 10 gold");
-  assert.equal(bagA.holdings.find(h => h.resource === "energy")?.qty, 5, "ghost-a received 5 energy");
-  assert.equal(bagB.holdings.find(h => h.resource === "energy")?.qty, 25, "ghost-b gave 5 energy");
-  assert.equal(bagB.holdings.find(h => h.resource === "gold")?.qty, 10, "ghost-b received 10 gold");
+  assert.equal(bagA.holdings.find(h => h.resource === "GoldCoin")?.qty, 40, "ghost-a gave 10 gold");
+  assert.equal(bagA.holdings.find(h => h.resource === "EnergyCell")?.qty, 5, "ghost-a received 5 energy");
+  assert.equal(bagB.holdings.find(h => h.resource === "EnergyCell")?.qty, 25, "ghost-b gave 5 energy");
+  assert.equal(bagB.holdings.find(h => h.resource === "GoldCoin")?.qty, 10, "ghost-b received 10 gold");
 });
 
 test("agree() rejects when a third party (not initiator or counterparty) tries to agree", () => {
@@ -127,14 +106,14 @@ test("agree() rejects when a third party (not initiator or counterparty) tries t
   const svc = makeProposalService(ledger);
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+    give: { resource: "GoldCoin", qty: 5 }, want: { resource: "EnergyCell", qty: 2 },
   }));
   // ghost-c is not a party — should be rejected
   const err = Effect.runSync(Effect.flip(svc.agree(proposalId, "ghost-c")));
   assert.equal(err._tag, "LedgerError.SelfAgreeDenied");
   // Balances must be unchanged
   const bagA = Effect.runSync(ledger.bag("ghost-a"));
-  assert.equal(bagA.holdings.find(h => h.resource === "gold")?.qty, 20, "ghost-a balance unchanged");
+  assert.equal(bagA.holdings.find(h => h.resource === "GoldCoin")?.qty, 20, "ghost-a balance unchanged");
 });
 
 test("agree() rejects when caller is the initiator (SelfAgreeDenied)", () => {
@@ -143,7 +122,7 @@ test("agree() rejects when caller is the initiator (SelfAgreeDenied)", () => {
   const svc = makeProposalService(ledger);
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 10 }, want: { resource: "energy", qty: 5 },
+    give: { resource: "GoldCoin", qty: 10 }, want: { resource: "EnergyCell", qty: 5 },
   }));
   const err = Effect.runSync(Effect.flip(svc.agree(proposalId, "ghost-a")));
   assert.equal(err._tag, "LedgerError.SelfAgreeDenied");
@@ -163,7 +142,7 @@ test("agree() rejects when initiator lacks sufficient balance (InsufficientFunds
   const svc = makeProposalService(ledger);
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 10 }, want: { resource: "energy", qty: 5 },
+    give: { resource: "GoldCoin", qty: 10 }, want: { resource: "EnergyCell", qty: 5 },
   }));
   const err = Effect.runSync(Effect.flip(svc.agree(proposalId, "ghost-b")));
   assert.equal(err._tag, "LedgerError.InsufficientFunds");
@@ -177,7 +156,7 @@ test("agree() conservation: sum of gold unchanged after trade", () => {
   const svc = makeProposalService(ledger);
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 15 }, want: { resource: "energy", qty: 10 },
+    give: { resource: "GoldCoin", qty: 15 }, want: { resource: "EnergyCell", qty: 10 },
   }));
   Effect.runSync(svc.agree(proposalId, "ghost-b"));
 
@@ -185,9 +164,9 @@ test("agree() conservation: sum of gold unchanged after trade", () => {
   const a = Effect.runSync(ledger.bag("ghost-a"));
   const b = Effect.runSync(ledger.bag("ghost-b"));
   const goldSum =
-    (world.holdings.find(h => h.resource === "gold")?.qty ?? 0) +
-    (a.holdings.find(h => h.resource === "gold")?.qty ?? 0) +
-    (b.holdings.find(h => h.resource === "gold")?.qty ?? 0);
+    (world.holdings.find(h => h.resource === "GoldCoin")?.qty ?? 0) +
+    (a.holdings.find(h => h.resource === "GoldCoin")?.qty ?? 0) +
+    (b.holdings.find(h => h.resource === "GoldCoin")?.qty ?? 0);
   assert.equal(goldSum, 200, "gold conservation holds after trade");
 });
 
@@ -201,14 +180,14 @@ test("decline() voids proposal with no ledger change", () => {
   const svc = makeProposalService(ledger);
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 10 }, want: { resource: "energy", qty: 5 },
+    give: { resource: "GoldCoin", qty: 10 }, want: { resource: "EnergyCell", qty: 5 },
   }));
 
   const result = Effect.runSync(svc.decline(proposalId, "ghost-b"));
   assert.equal(result.status, "declined");
 
   const bagA = Effect.runSync(ledger.bag("ghost-a"));
-  assert.equal(bagA.holdings.find(h => h.resource === "gold")?.qty, 20, "balance unchanged after decline");
+  assert.equal(bagA.holdings.find(h => h.resource === "GoldCoin")?.qty, 20, "balance unchanged after decline");
 });
 
 test("decline() by initiator also works", () => {
@@ -217,7 +196,7 @@ test("decline() by initiator also works", () => {
   const svc = makeProposalService(ledger);
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 10 }, want: { resource: "energy", qty: 5 },
+    give: { resource: "GoldCoin", qty: 10 }, want: { resource: "EnergyCell", qty: 5 },
   }));
   const result = Effect.runSync(svc.decline(proposalId, "ghost-a"));
   assert.equal(result.status, "declined");
@@ -229,7 +208,7 @@ test("decline() rejects when caller is not a party to the proposal", () => {
   const svc = makeProposalService(ledger);
   const { proposalId } = Effect.runSync(svc.propose({
     initiatorId: "ghost-a", counterpartyId: "ghost-b",
-    give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 },
+    give: { resource: "GoldCoin", qty: 5 }, want: { resource: "EnergyCell", qty: 2 },
   }));
   // ghost-c is not a party — should get ProposalNotFound (not revealing the proposal exists)
   const err = Effect.runSync(Effect.flip(svc.decline(proposalId, "ghost-c")));
@@ -254,8 +233,8 @@ test("listFor() returns proposals for both initiator and counterparty", () => {
   const ledger = makeLedger();
   creditGold(ledger, "ghost-a", 30);
   const svc = makeProposalService(ledger);
-  Effect.runSync(svc.propose({ initiatorId: "ghost-a", counterpartyId: "ghost-b", give: { resource: "gold", qty: 5 }, want: { resource: "energy", qty: 2 } }));
-  Effect.runSync(svc.propose({ initiatorId: "ghost-c", counterpartyId: "ghost-a", give: { resource: "gold", qty: 3 }, want: { resource: "energy", qty: 1 } }));
+  Effect.runSync(svc.propose({ initiatorId: "ghost-a", counterpartyId: "ghost-b", give: { resource: "GoldCoin", qty: 5 }, want: { resource: "EnergyCell", qty: 2 } }));
+  Effect.runSync(svc.propose({ initiatorId: "ghost-c", counterpartyId: "ghost-a", give: { resource: "GoldCoin", qty: 3 }, want: { resource: "EnergyCell", qty: 1 } }));
   const forA = Effect.runSync(svc.listFor("ghost-a"));
   assert.equal(forA.length, 2, "ghost-a appears in both proposals");
   const forC = Effect.runSync(svc.listFor("ghost-c"));

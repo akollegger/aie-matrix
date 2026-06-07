@@ -3,11 +3,28 @@
 (floor:TileType:Floor { name: "Floor", description: "Open walkable area", capacity: 4, style: css`background: #c8b89a` })
 (pillar:TileType:Pillar { name: "Pillar", description: "Impassable column", capacity: 0, style: css`background: #555` })
 
-(brassKey:ItemType:BrassKey { name: "Brass Key", description: "Opens the north door", glyph: char`🔑`, takeable: true, capacityCost: 1 })
+(brassKey:ItemType:BrassKey {
+    name: "Brass Key",
+    description: "Opens the north door",
+    glyph: char`🔑`, takeable: true, capacityCost: 1
+})
+(powerBar:ItemType:PowerBar {
+    name: "Chocolate Bar",
+    description: "Intense and bitter, with strong cocoa notes. This No. 1 Ecuador bar is single origin dark chocolate, made with cocoa beans sourced from one country, for a distinctive flavour profile.",
+    glyph: char`🍫`, takeable: true, capacityCost: 0
+})
+(water:ItemType:TapWater {
+    name: "Tap Water",
+    description: "Our tap water is clean, smooth, and refreshing.",
+    glyph: char`💧`, takeable: true, capacityCost: 0
+})
 
 [ground:Layer {kind: "polygon", name: "Ground"} | (:Polygon:Floor { geometry: [h3`8f2800000000195`, h3`8f2800000000012`, h3`8f2800000000015`, h3`8f2800000000198`] })]
 [overrides:Layer {kind: "tile", name: "Overrides"} | (:Tile:Pillar { geometry: [h3`8f2800000000012`] }), (:Portal { geometry: [h3`8f2800000000195`, h3`8f2800000000015`], mode: "Door" })]
 [collectibles:Layer {kind: "items", name: "Collectibles"} | (:Item:BrassKey { geometry: [h3`8f2800000000015`] })]
+
+[:Grants { attendee: 1, explorer: 2 } | (brassKey)]
+[:Grants { attendee: 1, explorer: 1 } | (powerBar)]
 
 [layers:LayerStack | ground, overrides, collectibles]
 

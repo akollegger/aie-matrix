@@ -10,7 +10,7 @@
 ## Summary
 
 Introduce world objects: named, stateless definitions that can be placed on hex
-tiles, noticed by nearby ghosts, inspected up close, and — when carriable —
+tiles, noticed by nearby ghosts, inspected up close, and — when takeable —
 picked up into a ghost's inventory. Items are defined in a per-map sidecar
 file (`*.items.json`) and placed on tiles via a custom Tiled property. The
 world owns all positional state; an item definition knows nothing about where
@@ -26,7 +26,7 @@ unlock the next layer of world richness:
   readable context without requiring a dedicated NPC.
 - **Obstacles** — a statue or booth fixture that consumes tile capacity,
   creating space constraints ghosts must navigate around.
-- **Quest mechanics** — carriable items (keys, badges, tokens) that gates
+- **Quest mechanics** — takeable items (keys, badges, tokens) that gates
   unlock via item-dependent rules in the RFC-0002 ruleset graph.
 - **Proximity incentives** — items visible from adjacent tiles reward ghosts
   that explore rather than idle.
@@ -45,7 +45,7 @@ definition describes what an item *is*; it carries no location.
 "sign-welcome": {
   "name": "Welcome Board",
   "itemClass": "Sign",
-  "carriable": false,
+  "takeable": false,
   "capacityCost": 0,
   "description": "A large board listing the day's sessions and booth locations."
 }
@@ -55,7 +55,7 @@ definition describes what an item *is*; it carries no location.
 |---|---|---|---|
 | `name` | string | yes | Short display name surfaced by `look`. |
 | `itemClass` | string | yes | Label used by the ruleset graph for `PICK_UP`, `PUT_DOWN`, and item-constraint matching. Colon-separated multi-label follows the tile convention (e.g. `Key:Brass`). |
-| `carriable` | boolean | yes | Whether a ghost may take this object into inventory. |
+| `takeable` | boolean | yes | Whether a ghost may take this object into inventory. |
 | `capacityCost` | integer | yes | How much of the host tile's `capacity` this object consumes. `0` for signs and small items that do not block movement. |
 | `description` | string | no | Text returned by `inspect`. Omitting it means `inspect` returns only the `name`. |
 
@@ -70,21 +70,21 @@ object ID. The ID is the key; it does not appear redundantly inside the record.
   "sign-welcome": {
     "name": "Welcome Board",
     "itemClass": "Sign",
-    "carriable": false,
+    "takeable": false,
     "capacityCost": 0,
     "description": "A large board listing the day's sessions and booth locations."
   },
   "key-brass": {
     "name": "Brass Key",
     "itemClass": "Key:Brass",
-    "carriable": true,
+    "takeable": true,
     "capacityCost": 0,
     "description": "A small brass key stamped with the letter N."
   },
   "statue": {
     "name": "Marble Statue",
     "itemClass": "Obstacle",
-    "carriable": false,
+    "takeable": false,
     "capacityCost": 1,
     "description": "A marble sculpture of a classical figure. It is not going anywhere."
   }
@@ -196,10 +196,11 @@ Failure codes: `NOT_HERE`, `NOT_FOUND`.
 
 #### `take`
 
-Pick up a carriable object from the current tile into the ghost's inventory.
-The object must be on the same tile and be `carriable: true`. Subject to
+Pick up a takeable object from the current tile into the ghost's inventory.
+The object must be on the same tile and have `takeable: true`. Subject to
 `PICK_UP` ruleset evaluation (RFC-0002) — the ruleset may further restrict
-which ghost classes may take which object classes.
+which ghost classes may take which object classes. The transfer is recorded
+in the ledger as `world@{h3Index} → ghost:{ghostId}` (RFC-0023).
 
 ```
 take { itemRef: "key-brass" }
@@ -217,7 +218,7 @@ Failure codes: `NOT_CARRIABLE`, `NOT_HERE`, `NOT_FOUND`, `RULESET_DENY`.
 Place a carried item from the ghost's inventory onto the current tile.
 Subject to `PUT_DOWN` ruleset evaluation. Fails if the tile's effective
 capacity (ghosts + existing object costs + this object's cost) would be
-exceeded.
+exceeded. The transfer is recorded in the ledger as `ghost:{ghostId} → world@{h3Index}` (RFC-0023).
 
 ```
 drop { itemRef: "key-brass" }
@@ -275,7 +276,7 @@ delivers the syntax for expressing the conditions.
 With the sandbox map running and a ghost adopted:
 
 1. Author `maps/sandbox/freeplay.items.json` with at least one `Sign` and one
-   carriable `Key`.
+   takeable `Key`.
 2. Add `items` custom properties to two tile types in `color-set.tsx` placing
    the sign on one tile class and the key on another.
 3. Start the server. Confirm startup succeeds with no errors.

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { Effect } from "effect";
+import type { SpawnGrant } from "@aie-matrix/map-gram";
 import { makeLedgerServiceInMemory } from "./LedgerServiceInMemory.js";
-import type { ResourceType } from "@aie-matrix/shared-types";
+import type { ItemSeed } from "./LedgerService.js";
+import { createHash } from "node:crypto";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -12,57 +14,52 @@ function makeLedger() {
   return makeLedgerServiceInMemory();
 }
 
-const goldType: ResourceType = {
-  id: "gold",
-  label: "Gold",
-  class: "conserved",
-  qty: 100,
-  floor: 0,
-};
-
-const funderCreditsType: ResourceType = {
-  id: "funder-credits",
-  label: "Funder Credits",
-  class: "conserved",
-  qty: 0,
-  floor: 0,
-};
+const goldSeed: ItemSeed = { itemRef: "GoldCoin", qty: 100 };
+const keySeed: ItemSeed = { itemRef: "BrassKey", qty: 5, h3Index: "8f2800000000015" };
 
 // ---------------------------------------------------------------------------
-// I-T005: ensureResourceType tests
+// Ledger init with ItemSeed
 // ---------------------------------------------------------------------------
 
-describe("ensureResourceType", () => {
-  it("registers a new resource type", async () => {
+describe("ledger init with ItemSeed[]", () => {
+  it("seeds world bag from ItemSeed with no h3Index", async () => {
     const ledger = makeLedger();
     await Effect.runPromise(
       Effect.gen(function* () {
-        yield* ledger.init([]);
-        yield* ledger.ensureResourceType(funderCreditsType);
-        const types = yield* ledger.resourceTypes();
-        assert.ok(types.some(t => t.id === "funder-credits"), "funder-credits should be registered");
+        yield* ledger.init([goldSeed]);
+        const bag = yield* ledger.bag("world");
+        const gold = bag.holdings.find(h => h.resource === "GoldCoin");
+        assert.equal(gold?.qty, 100, "world should have 100 GoldCoin");
       })
     );
   });
 
-  it("second call is a no-op (does not throw, original label preserved)", async () => {
+  it("seeds world@{h3Index} bag from ItemSeed with h3Index", async () => {
+    const ledger = makeLedger();
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* ledger.init([keySeed]);
+        const tileBag = yield* ledger.bag("world@8f2800000000015");
+        const keys = tileBag.holdings.find(h => h.resource === "BrassKey");
+        assert.equal(keys?.qty, 5, "tile actor should have 5 BrassKey");
+      })
+    );
+  });
+
+  it("init with empty seed produces no genesis transaction", async () => {
     const ledger = makeLedger();
     await Effect.runPromise(
       Effect.gen(function* () {
         yield* ledger.init([]);
-        yield* ledger.ensureResourceType(funderCreditsType);
-        // Call again with different label — should not overwrite
-        yield* ledger.ensureResourceType({ ...funderCreditsType, label: "Different Label" });
-        const types = yield* ledger.resourceTypes();
-        const fc = types.find(t => t.id === "funder-credits");
-        assert.equal(fc?.label, "Funder Credits", "original label should be preserved");
+        const bag = yield* ledger.bag("world");
+        assert.equal(bag.holdings.length, 0, "world bag should be empty after empty seed");
       })
     );
   });
 });
 
 // ---------------------------------------------------------------------------
-// I-T005: seeding tests (simulating what mcp-server.ts does)
+// Agent resource grant seeding (simulating what mcp-server.ts does)
 // ---------------------------------------------------------------------------
 
 describe("agent resource grant seeding", () => {
@@ -72,23 +69,20 @@ describe("agent resource grant seeding", () => {
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        yield* ledger.init([goldType]);
+        yield* ledger.init([goldSeed]);
 
-        // Ensure funder-credits type
-        yield* ledger.ensureResourceType(funderCreditsType);
-
-        // Seed the ghost (simulating mcp-server first-connect logic)
+        // Seed the ghost with 50 GoldCoin from world bag
         yield* ledger.commit({
           id: "ABCDEF1234567890ABCDEF1234", // deterministic tx id
-          transfers: [{ resource: "funder-credits", qty: 50, from: "world", to: ghostId }],
+          transfers: [{ resource: "GoldCoin", qty: 50, from: "world", to: ghostId }],
           cause: "agent.resource-grant",
           actors: [ghostId],
           ts: Date.now(),
         });
 
         const bag = yield* ledger.bag(ghostId);
-        const fc = bag.holdings.find(h => h.resource === "funder-credits");
-        assert.equal(fc?.qty, 50, "ghost should have 50 funder-credits");
+        const gold = bag.holdings.find(h => h.resource === "GoldCoin");
+        assert.equal(gold?.qty, 50, "ghost should have 50 GoldCoin");
       })
     );
   });
@@ -100,12 +94,11 @@ describe("agent resource grant seeding", () => {
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        yield* ledger.init([goldType]);
-        yield* ledger.ensureResourceType(funderCreditsType);
+        yield* ledger.init([goldSeed]);
 
         yield* ledger.commit({
           id: txId,
-          transfers: [{ resource: "funder-credits", qty: 50, from: "world", to: ghostId }],
+          transfers: [{ resource: "GoldCoin", qty: 50, from: "world", to: ghostId }],
           cause: "agent.resource-grant",
           actors: [ghostId],
           ts: Date.now(),
@@ -115,7 +108,7 @@ describe("agent resource grant seeding", () => {
         const result = yield* Effect.either(
           ledger.commit({
             id: txId,
-            transfers: [{ resource: "funder-credits", qty: 50, from: "world", to: ghostId }],
+            transfers: [{ resource: "GoldCoin", qty: 50, from: "world", to: ghostId }],
             cause: "agent.resource-grant",
             actors: [ghostId],
             ts: Date.now(),
@@ -126,23 +119,120 @@ describe("agent resource grant seeding", () => {
 
         // Balance unchanged
         const bag = yield* ledger.bag(ghostId);
-        const fc = bag.holdings.find(h => h.resource === "funder-credits");
-        assert.equal(fc?.qty, 50, "balance should remain 50 after failed re-seed");
+        const gold = bag.holdings.find(h => h.resource === "GoldCoin");
+        assert.equal(gold?.qty, 50, "balance should remain 50 after failed re-seed");
       })
     );
   });
 
-  it("ghost without a catalog entry is unaffected", async () => {
+  it("ghost without a grant entry is unaffected", async () => {
     const ledger = makeLedger();
     const unrelatedGhostId = "ghost-no-agent-001";
 
     await Effect.runPromise(
       Effect.gen(function* () {
-        yield* ledger.init([goldType]);
-        // No ensureResourceType, no seeding for this ghost
+        yield* ledger.init([goldSeed]);
+        // No seeding for this ghost
         const bag = yield* ledger.bag(unrelatedGhostId);
         assert.equal(bag.holdings.length, 0, "unrelated ghost should have no holdings");
       })
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Spawn grant seeding (simulates mcp-server.ts first-connect logic)
+// ---------------------------------------------------------------------------
+
+/** Deterministic tx ID matching mcp-server.ts: SHA-256(ghostId:role:itemRef) */
+function spawnGrantTxId(ghostId: string, role: string, itemRef: string): string {
+  return createHash("sha256").update(`${ghostId}:${role}:${itemRef}`).digest("hex").slice(0, 26);
+}
+
+function applySpawnGrant(
+  ledger: ReturnType<typeof makeLedger>,
+  spawnGrants: SpawnGrant[],
+  ghostId: string,
+  role: string,
+) {
+  const grant = spawnGrants.find(g => g.role === role);
+  if (!grant) return Effect.void;
+  return Effect.forEach(grant.grants, (g) =>
+    ledger.commit({
+      id: spawnGrantTxId(ghostId, role, g.itemRef),
+      transfers: [{ resource: g.itemRef, qty: g.qty, from: "world", to: ghostId }],
+      cause: "spawn-grant",
+      actors: [ghostId],
+      ts: Date.now(),
+    }).pipe(
+      Effect.catchTag("LedgerError.InsufficientFunds", () => Effect.void),
+      Effect.catchTag("LedgerError.DuplicateTransaction", () => Effect.void),
+      Effect.asVoid,
+    )
+  , { discard: true });
+}
+
+describe("spawn grant seeding", () => {
+  const spawnGrants: SpawnGrant[] = [
+    { role: "attendee", grants: [{ itemRef: "BrassKey", qty: 1 }] },
+    { role: "explorer", grants: [{ itemRef: "BrassKey", qty: 2 }, { itemRef: "PowerBar", qty: 1 }] },
+  ];
+
+  it("attendee ghost receives 1 BrassKey on first connect", async () => {
+    const ledger = makeLedger();
+    const ghostId = "ghost-spawn-001";
+
+    await Effect.runPromise(Effect.gen(function* () {
+      yield* ledger.init([{ itemRef: "BrassKey", qty: 10 }]);
+      yield* applySpawnGrant(ledger, spawnGrants, ghostId, "attendee");
+      const bag = yield* ledger.bag(ghostId);
+      const keys = bag.holdings.find(h => h.resource === "BrassKey");
+      assert.equal(keys?.qty, 1, "attendee should receive 1 BrassKey");
+    }));
+  });
+
+  it("explorer ghost receives 2 BrassKey and 1 PowerBar on first connect", async () => {
+    const ledger = makeLedger();
+    const ghostId = "ghost-spawn-002";
+
+    await Effect.runPromise(Effect.gen(function* () {
+      yield* ledger.init([
+        { itemRef: "BrassKey", qty: 10 },
+        { itemRef: "PowerBar", qty: 10 },
+      ]);
+      yield* applySpawnGrant(ledger, spawnGrants, ghostId, "explorer");
+      const bag = yield* ledger.bag(ghostId);
+      const keys = bag.holdings.find(h => h.resource === "BrassKey");
+      const bars = bag.holdings.find(h => h.resource === "PowerBar");
+      assert.equal(keys?.qty, 2, "explorer should receive 2 BrassKey");
+      assert.equal(bars?.qty, 1, "explorer should receive 1 PowerBar");
+    }));
+  });
+
+  it("reconnect (same tx ID) is silently skipped — no double-seeding", async () => {
+    const ledger = makeLedger();
+    const ghostId = "ghost-spawn-003";
+
+    await Effect.runPromise(Effect.gen(function* () {
+      yield* ledger.init([{ itemRef: "BrassKey", qty: 10 }]);
+      yield* applySpawnGrant(ledger, spawnGrants, ghostId, "attendee");
+      yield* applySpawnGrant(ledger, spawnGrants, ghostId, "attendee"); // reconnect
+      const bag = yield* ledger.bag(ghostId);
+      const keys = bag.holdings.find(h => h.resource === "BrassKey");
+      assert.equal(keys?.qty, 1, "balance unchanged after reconnect");
+    }));
+  });
+
+  it("insufficient world bag balance skips grant without blocking spawn", async () => {
+    const ledger = makeLedger();
+    const ghostId = "ghost-spawn-004";
+
+    await Effect.runPromise(Effect.gen(function* () {
+      // World has 0 BrassKey — grant should silently skip
+      yield* ledger.init([]);
+      yield* applySpawnGrant(ledger, spawnGrants, ghostId, "attendee");
+      const bag = yield* ledger.bag(ghostId);
+      assert.equal(bag.holdings.length, 0, "ghost should have nothing when world bag empty");
+    }));
   });
 });

@@ -125,7 +125,7 @@ export function makeMapManagementLayer(driver: Driver): Layer.Layer<MapManagemen
 
           const itemRows = parsedMap.itemPlacements.map((p) => ({
             h3Index: p.h3Index,
-            itemTypeName: p.itemTypeName,
+            itemTypeName: p.itemRef,
             layerIdentity: p.layerIdentity,
           }));
 

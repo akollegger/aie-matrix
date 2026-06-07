@@ -89,6 +89,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 027-resource-lifecycle: Removed `ResourceType` registry and `[resources:Resources]` map block; items are now the sole conserved resource. `LedgerService.init()` seeds from `ItemSeed[]` (map placements). `take`/`drop` commit `Transfer` with `location: { h3Index }`. Spawn grants use per-item `[:Grants { role: qty } | (itemRef)]` gram blocks. MCP trade fields renamed `*_item`. Monotonic resource class removed throughout.
 - 026-session-leaderboards: Added TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `@relateby/pattern` (gram AST), `zod` v3, `ulid` — all already present in `server/world-api`
 - 024-eval-contracts: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `ulid`, `zod` 3 — all already in `server/world-api`
-- 023-group-formation: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `ulid`, `unique-names-generator` (new dep in `server/world-api`)

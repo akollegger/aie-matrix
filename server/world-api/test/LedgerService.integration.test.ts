@@ -11,15 +11,14 @@ import test from "node:test";
 import neo4j from "neo4j-driver";
 import { Effect } from "effect";
 import { ulid } from "ulid";
-import type { ResourceType } from "@aie-matrix/shared-types";
+import type { ItemSeed } from "../src/LedgerService.js";
 import { makeLedgerServiceLive } from "../src/LedgerServiceLive.js";
 
 const NEO4J_URI = process.env["NEO4J_URI"];
 const NEO4J_USER = process.env["NEO4J_USER"] ?? "neo4j";
 const NEO4J_PASSWORD = process.env["NEO4J_PASSWORD"] ?? "password";
 
-const GOLD: ResourceType = { id: "gold", class: "conserved", qty: 100, floor: 0, label: "Gold" };
-const XP: ResourceType = { id: "xp", class: "monotonic", qty: 0, floor: 0, label: "Experience" };
+const GOLD: ItemSeed = { itemRef: "GoldCoin", qty: 100 };
 
 test.skip(!NEO4J_URI, "NEO4J_URI not set — skipping integration tests");
 
@@ -73,17 +72,17 @@ if (NEO4J_URI) {
     const svc1 = makeLedgerServiceLive(driver, sessionId);
     await Effect.runPromise(svc1.init([GOLD]));
     await Effect.runPromise(svc1.commit({
-      id: ulid(), transfers: [{ from: "world", to: "ghost-001", resource: "gold", qty: 20 }],
+      id: ulid(), transfers: [{ from: "world", to: "ghost-001", resource: "GoldCoin", qty: 20 }],
       cause: "reward", actors: ["ghost-001"], ts: Date.now()
     }));
     const pre = await Effect.runPromise(svc1.bag("ghost-001"));
-    assert.equal(pre.holdings.find(h => h.resource === "gold")?.qty, 20);
+    assert.equal(pre.holdings.find(h => h.resource === "GoldCoin")?.qty, 20);
 
     // Second instance — replays from Neo4j
     const svc2 = makeLedgerServiceLive(driver, sessionId);
     await Effect.runPromise(svc2.init([GOLD]));
     const post = await Effect.runPromise(svc2.bag("ghost-001"));
-    assert.equal(post.holdings.find(h => h.resource === "gold")?.qty, 20,
+    assert.equal(post.holdings.find(h => h.resource === "GoldCoin")?.qty, 20,
       "balance should survive restart via Neo4j replay");
   });
 
@@ -95,8 +94,8 @@ if (NEO4J_URI) {
 
     const id1 = ulid();
     const id2 = ulid();
-    await Effect.runPromise(svc.commit({ id: id1, transfers: [{ from: "world", to: "ghost-a", resource: "gold", qty: 10 }], cause: "r1", actors: [], ts: Date.now() }));
-    await Effect.runPromise(svc.commit({ id: id2, transfers: [{ from: "world", to: "ghost-b", resource: "gold", qty: 5 }],  cause: "r2", actors: [], ts: Date.now() }));
+    await Effect.runPromise(svc.commit({ id: id1, transfers: [{ from: "world", to: "ghost-a", resource: "GoldCoin", qty: 10 }], cause: "r1", actors: [], ts: Date.now() }));
+    await Effect.runPromise(svc.commit({ id: id2, transfers: [{ from: "world", to: "ghost-b", resource: "GoldCoin", qty: 5 }],  cause: "r2", actors: [], ts: Date.now() }));
 
     const rs = driver.session({ defaultAccessMode: neo4j.session.READ });
     try {
@@ -120,7 +119,7 @@ if (NEO4J_URI) {
     await setupSession(sessionId);
     const svc = makeLedgerServiceLive(driver, sessionId);
     await Effect.runPromise(svc.init([GOLD]));
-    await Effect.runPromise(svc.commit({ id: ulid(), transfers: [{ from: "world", to: "ghost-x", resource: "gold", qty: 10 }], cause: "test", actors: [], ts: Date.now() }));
+    await Effect.runPromise(svc.commit({ id: ulid(), transfers: [{ from: "world", to: "ghost-x", resource: "GoldCoin", qty: 10 }], cause: "test", actors: [], ts: Date.now() }));
     const result = await Effect.runPromise(svc.verify());
     assert.ok(result.entries >= 2, "should have genesis + 1 commit entries");
   });

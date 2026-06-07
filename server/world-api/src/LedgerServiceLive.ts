@@ -8,7 +8,6 @@ import type {
   BagResult,
   CostQuote,
   ResourceId,
-  ResourceType,
   Transaction,
   Transfer,
 } from "@aie-matrix/shared-types";
@@ -17,11 +16,9 @@ import {
   LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
-  LedgerMonotonicTradeRejected,
   LedgerPersistenceError,
-  LedgerUnknownResource,
 } from "./ledger-errors.js";
-import { LedgerService } from "./LedgerService.js";
+import { LedgerService, type ItemSeed } from "./LedgerService.js";
 
 // ---------------------------------------------------------------------------
 // Hashing (shared with in-memory impl)
@@ -56,7 +53,6 @@ export function makeLedgerServiceLive(
   sessionId: string,
   publish?: (channel: string, event: unknown) => void,
 ): LedgerService["Type"] {
-  const resourceTypes = new Map<ResourceId, ResourceType>();
   const bags = new Map<ActorId, Map<ResourceId, number>>();
   const seenIds = new Set<string>();
   let tipHash = "";
@@ -88,13 +84,9 @@ export function makeLedgerServiceLive(
   // init — replay chain from Neo4j or seed genesis
   // ---------------------------------------------------------------------------
 
-  const init = (seed: ResourceType[]) =>
+  const init = (seed: ItemSeed[]) =>
     Effect.tryPromise({
       try: async () => {
-        for (const rt of seed) {
-          resourceTypes.set(rt.id, rt);
-        }
-
         // Replay existing chain from LEDGER_HEAD
         const readSession = driver.session({ defaultAccessMode: neo4j.session.READ });
         let entries: Transaction[] = [];
@@ -133,11 +125,17 @@ export function makeLedgerServiceLive(
         }
 
         // No existing chain — append genesis seed transaction
+        const seedWithQty = seed.filter(s => s.qty > 0);
+        if (seedWithQty.length === 0) return;
+
         const genesisTx: Transaction = {
           id: ulid(),
-          transfers: seed
-            .filter((rt) => rt.class === "conserved" && rt.qty > 0)
-            .map((rt) => ({ resource: rt.id, qty: rt.qty, from: "world.genesis", to: "world" })),
+          transfers: seedWithQty.map(s => ({
+            resource: s.itemRef,
+            qty: s.qty,
+            from: "world.genesis",
+            to: s.h3Index ? `world@${s.h3Index}` : "world",
+          })),
           cause: "seed",
           actors: [],
           ts: Date.now(),
@@ -219,8 +217,7 @@ export function makeLedgerServiceLive(
       if (actorBag) {
         for (const [resource, qty] of actorBag) {
           if (qty === 0) continue;
-          const rt = resourceTypes.get(resource);
-          holdings.push({ resource, qty, label: rt?.label ?? resource });
+          holdings.push({ resource, qty, label: resource });
         }
       }
       return { actorId, holdings } as BagResult;
@@ -233,11 +230,8 @@ export function makeLedgerServiceLive(
   const quote = (actorId: ActorId, costs: ActionCost[]) =>
     Effect.gen(function* () {
       for (const cost of costs) {
-        if (!resourceTypes.has(cost.resource))
-          yield* Effect.fail(new LedgerUnknownResource({ resource: cost.resource }));
         const avail = balance(actorId, cost.resource);
-        const floor = resourceTypes.get(cost.resource)!.floor;
-        if (avail - cost.qty < floor)
+        if (avail - cost.qty < 0)
           yield* Effect.fail(new LedgerInsufficientFunds({ actorId, resource: cost.resource, required: cost.qty, available: avail }));
       }
       return { transactionId: ulid(), costs } as CostQuote;
@@ -263,22 +257,11 @@ export function makeLedgerServiceLive(
       if (seenIds.has(tx.id))
         yield* Effect.fail(new LedgerDuplicateTransaction({ id: tx.id }));
 
+      // Validate sufficient funds (world.genesis may go negative — seed authority)
       for (const t of tx.transfers) {
-        if (!resourceTypes.has(t.resource))
-          yield* Effect.fail(new LedgerUnknownResource({ resource: t.resource }));
-      }
-
-      for (const t of tx.transfers) {
-        const rt = resourceTypes.get(t.resource)!;
-        if (rt.class === "monotonic" && !t.from.startsWith("world"))
-          yield* Effect.fail(new LedgerMonotonicTradeRejected({ resource: t.resource }));
-      }
-
-      for (const t of tx.transfers) {
-        const rt = resourceTypes.get(t.resource)!;
-        if (rt.class === "monotonic") continue;
+        if (t.from === "world.genesis") continue;
         const current = balance(t.from, t.resource);
-        if (current - t.qty < rt.floor)
+        if (current - t.qty < 0)
           yield* Effect.fail(new LedgerInsufficientFunds({ actorId: t.from, resource: t.resource, required: t.qty, available: current }));
       }
 
@@ -382,33 +365,7 @@ export function makeLedgerServiceLive(
       },
     });
 
-  // ---------------------------------------------------------------------------
-  // resourceTypes
-  // ---------------------------------------------------------------------------
-
-  const resourceTypesOp = () => Effect.sync(() => Array.from(resourceTypes.values()));
-
-  const ensureResourceType = (rt: ResourceType) =>
-    Effect.tryPromise({
-      try: async () => {
-        if (resourceTypes.has(rt.id)) return;
-        resourceTypes.set(rt.id, rt);
-        // Persist the resource type to Neo4j so it survives a replay
-        const writeSession = driver.session({ defaultAccessMode: neo4j.session.WRITE });
-        try {
-          await writeSession.run(
-            `MERGE (r:ResourceType { id: $id, sessionId: $sessionId })
-             ON CREATE SET r.label = $label, r.class = $class, r.qty = $qty, r.floor = $floor`,
-            { id: rt.id, sessionId, label: rt.label, class: rt.class, qty: neo4j.int(rt.qty ?? 0), floor: neo4j.int(rt.floor ?? 0) }
-          );
-        } finally {
-          await writeSession.close();
-        }
-      },
-      catch: (e) => new LedgerPersistenceError({ cause: String(e) }),
-    });
-
-  return { init, bag, quote, commit, verify, resourceTypes: resourceTypesOp, ensureResourceType };
+  return { init, bag, quote, commit, verify };
 }
 
 export function makeLedgerServiceLiveLayer(driver: Driver, sessionId: string): Layer.Layer<LedgerService> {

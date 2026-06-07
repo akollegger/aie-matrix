@@ -14,7 +14,6 @@ import {
   LedgerCounterpartyNotNearby,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
-  LedgerMonotonicTradeRejected,
   LedgerPersistenceError,
   LedgerProposalExpired,
   LedgerProposalNotFound,
@@ -63,7 +62,7 @@ export interface ProposalServiceOps {
   /** Create a pending proposal. Returns the proposal ID and expiry timestamp.
    *  Pass `getGhostCell` to enforce same-tile proximity; omit to skip the check.
    *  When `params.shared` is true, both sides must use the same resource (FR-011). */
-  propose(params: ProposeParams, getGhostCell?: GhostCellLookup): Effect.Effect<{ proposalId: string; expiresAt: number }, LedgerMonotonicTradeRejected | LedgerCounterpartyNotNearby | GroupResourceMismatch>;
+  propose(params: ProposeParams, getGhostCell?: GhostCellLookup): Effect.Effect<{ proposalId: string; expiresAt: number }, LedgerCounterpartyNotNearby | GroupResourceMismatch>;
 
   /**
    * Accept a pending proposal. Atomically commits the ledger transaction carrying
@@ -80,7 +79,6 @@ export interface ProposalServiceOps {
     | LedgerProposalExpired
     | LedgerSelfAgreeDenied
     | LedgerInsufficientFunds
-    | LedgerMonotonicTradeRejected
     | LedgerConservationViolation
     | LedgerDuplicateTransaction
     | LedgerUnknownResource
@@ -145,18 +143,6 @@ export function makeProposalService(
             counterpartyId: params.counterpartyId,
           }));
         }
-      }
-
-      // Validate: neither resource can be monotonic (checked by trying a quote — any transfer of
-      // monotonic from a non-world actor would fail in commit; we pre-validate here for UX)
-      const types = yield* ledger.resourceTypes();
-      const giveType = types.find(t => t.id === params.give.resource);
-      const wantType = types.find(t => t.id === params.want.resource);
-      if (giveType?.class === "monotonic") {
-        yield* Effect.fail(new LedgerMonotonicTradeRejected({ resource: params.give.resource }));
-      }
-      if (wantType?.class === "monotonic") {
-        yield* Effect.fail(new LedgerMonotonicTradeRejected({ resource: params.want.resource }));
       }
 
       const proposalId = ulid();

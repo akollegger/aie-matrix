@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Room } from "@colyseus/core";
-import type { ItemDefinition } from "@aie-matrix/shared-types";
+import type { ItemTypeDef } from "@aie-matrix/map-gram";
 import type { LoadedMap } from "./mapTypes.js";
 import { loadHexMap } from "./mapLoader.js";
 import { TileCoord, WorldSpectatorState } from "./room-schema.js";
@@ -12,7 +12,7 @@ export interface MatrixRoomOptions {
   itemsPath?: string;
 }
 
-/** Max UTF-16 code units stored per `ItemDefinition.glyph` in `WorldSpectatorState.itemGlyphs`. */
+/** Max UTF-16 code units stored per `ItemTypeDef.glyph` in `WorldSpectatorState.itemGlyphs`. */
 const MAX_ITEM_GLYPH_UTF16 = 8;
 
 function clipGlyphForSpectator(raw: string): string {
@@ -24,7 +24,7 @@ function clipGlyphForSpectator(raw: string): string {
 }
 
 function seedItemGlyphsFromSidecar(
-  sidecar: Map<string, ItemDefinition>,
+  sidecar: Map<string, ItemTypeDef>,
   emit: (itemRef: string, glyph: string) => void,
 ): void {
   for (const [ref, def] of sidecar) {

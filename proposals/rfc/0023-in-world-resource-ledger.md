@@ -1,15 +1,17 @@
 # RFC-0023: In-World Resource Ledger
 
-**Status:** draft  
+**Status:** implemented (027-resource-lifecycle — see notes below)  
 **Date:** 2026-05-31  
 **Authors:** @akollegger  
-**Related:** RFC-0002 (Rule-Based Movement — costs attach to `:GO` rules), RFC-0006 (World Items — discrete carriable objects, unified into the ledger as quantity-1 conserved resources), RFC-0018 (RDC Skill Tiers — sketches a bespoke `rdc-ledger`; this RFC supersedes that sketch), RFC-0021 (World Calendar — scheduled transfers ride the calendar), RFC-0022 (Group Exam Eval Protocol — depends on this RFC for token budgets and jackpot distribution)
+**Related:** RFC-0002 (Rule-Based Movement — costs attach to `:GO` rules), RFC-0006 (World Items — discrete takeable objects, unified into the ledger as quantity-1 conserved resources), RFC-0018 (RDC Skill Tiers — sketches a bespoke `rdc-ledger`; this RFC supersedes that sketch), RFC-0021 (World Calendar — scheduled transfers ride the calendar), RFC-0022 (Group Exam Eval Protocol — depends on this RFC for token budgets and jackpot distribution)
 
 ---
 
 ## Summary
 
-Introduce an in-world resource ledger: an append-only, hash-chained, double-entry transaction log that records every movement of every resource between actor-owned "bags," scoped to a single map session. All resources begin in the world bag, seeded by the map definition. Two resource classes are supported: **conserved** resources move between bags and are never silently created or destroyed; **monotonic** resources (XP, badges, certificates) are explicitly minted by authorized mechanics and only accumulate. The ledger is the authoritative source of truth; per-actor bags are materialized caches that can always be rebuilt and validated against the log. This one primitive backs item ownership, action costs, currency, exam token budgets, jackpots, and accumulating rewards like XP and badges.
+Introduce an in-world resource ledger: an append-only, hash-chained, double-entry transaction log that records every movement of every resource between actor-owned "bags," scoped to a single map session. All resources begin in the world bag, seeded by the map definition. Resources are **conserved**: they only move between bags and are never silently created or destroyed; a bag cannot go below zero except for the special `world.genesis` seeding authority. The ledger is the authoritative source of truth; per-actor bags are materialized caches that can always be rebuilt and validated against the log. This one primitive backs item ownership, currency, exam token budgets, jackpots, and initial ghost grants.
+
+> **Implementation note (027-resource-lifecycle):** The originally-drafted **monotonic** resource class (XP, badges, certificates) was removed during implementation. Any string is now a valid resource ID; there is no type registry. See the "Design" section notes below.
 
 ---
 
@@ -36,22 +38,21 @@ Without a shared ledger, each mechanic invents its own storage with no consisten
 
 Tiles are **not** actors and own nothing. An item resting on a tile is owned by the **world**; its tile location is an *attribute of the holding*, not a claim by the tile. Picking it up transfers ownership `world → ghost` and clears the location; dropping it transfers `ghost → world` and sets a new location.
 
-**Resources** are named, typed quantities tracked in bags. Two classes:
+**Resources** are named quantities tracked in bags. All resources are **conserved**: total supply is fixed at seed time; resources only move between bags and are never minted or destroyed outside of genesis seeding.
 
-| Class | Semantics | Examples |
-|---|---|---|
-| **Conserved** | Total supply is fixed at seed time. Resources only *move* between bags; never minted or destroyed. A bag cannot go negative because you cannot transfer what you do not hold. | gold, energy, exam-token, raffle-ticket, world items (quantity-1) |
-| **Monotonic** | Minted by authorized mechanics, never moved or destroyed. Accumulate only. Cannot be traded away. | xp, hands-played, badges, certificates |
+> **Removed (027):** The originally-drafted **monotonic** class (XP, badges, certificates — accumulate-only, not tradeable) was cut during implementation. Any string is a valid resource ID; there is no `ResourceType` registry and no `class` field. If accumulating-only mechanics are needed in a later feature, a separate design is required.
 
-The conservation invariant applies only to conserved resources: `Σ(all bags' holdings of a conserved resource) == seeded total`, for all time. This makes scarcity real and designed — how much exam-token exists in the world is a deliberate lever, not an accident.
+The conservation invariant: `Σ(all bags' holdings of a resource) == seeded total`, for all time. The sole exception is the special `world.genesis` actor used at ledger initialisation — it may go negative so that the seeding transfers (`world.genesis → world@{h3Index}`) can bootstrap the world bag. All other actors are floor-capped at zero.
+
+This makes scarcity real and designed — how many BrassKeys or GoldCoins exist in the world is a deliberate lever embedded in the map definition, not an accident.
 
 **Transactions.** The ledger's only write is `append(transaction)`. A transaction is an atomic, ordered set of **movements**, each a double-entry transfer. The shape below is illustrative; field names and types are not normative **except** the chain fields (`prevHash` / `hash`) and `id` as the idempotency key, which the verifiability contract depends on:
 
 ```ts
 interface Movement {
-  resource: string        // resource type id
-  qty: number             // integer
-  from: string            // source bag (actor id); for monotonic mint, a designated source
+  resource: string        // resource id (any string — no registry required)
+  qty: number             // positive integer
+  from: string            // source bag (actor id)
   to: string              // destination bag (actor id)
   location?: Location     // optional: set when an item movement establishes a world location
 }
@@ -67,7 +68,7 @@ interface Transaction {
 }
 ```
 
-Every conserved movement balances (`from` loses exactly what `to` gains). A monotonic mint is represented as a movement whose `from` is the resource's authorized source actor (e.g. the world acting as an XP issuer); it is logged identically but exempt from the conservation check.
+Every movement balances: `from` loses exactly what `to` gains. There is no exemption from this rule after genesis. The `world.genesis` actor seeds the world at session start and may go negative; all other actors are floor-capped at zero.
 
 There is no `credit`, `debit`, `distribute`, `transfer`, or `drain` as distinct operations — they are all **transactions of one or more movements**:
 
@@ -145,7 +146,7 @@ Stateful items, and eventually animate objects (chests with their own commands a
 
 ### 9. Relationship to RFC-0018 RDC Ledger
 
-RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **monotonic** resource minted on each hand completion; skill tier remains a value *derived* from that count against RFC-0018's threshold table (computed on read, not stored as a resource — a tier is not independently additive).
+RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` was originally proposed as a **monotonic** resource, but the monotonic class was dropped. If RFC-0018 is revisited, `hands-played` should be modelled as a **conserved** resource seeded to the world at session start, with each hand completion moving one unit from `world → ghost` (effectively a reward). Skill tier remains a value *derived* from that count against RFC-0018's threshold table (computed on read, not stored).
 
 ### 10. Package Ownership
 
@@ -155,7 +156,7 @@ RFC-0018's bespoke `rdc-ledger` should not be built. `hands-played` becomes a **
 | `server/world-api/src/movement.ts` | Cost evaluation on `:GO` rules; quote/accept/receipt integration into the `go` path |
 | `server/world-api/src/world-api-errors.ts` | New `Data.TaggedError` types: `InsufficientFunds`, `ConservationViolation`, `ConsentRequired`, `UnknownResource`. Any that surface through `/mcp` must be added to the `HttpMappingError` union in `server/src/errors.ts` and handled in `errorToResponse()` via the `_tag` switch + `assertNever` pattern. |
 | `server/world-api/src/mcp-server.ts` | New `inventory` MCP tool (actor-scoped view of the calling actor's bag); consent fields on costed actions |
-| `shared/types/` | `Movement`, `Transaction`, `ResourceType`, `BagResult` types |
+| `shared/types/` | `Transfer`, `Transaction`, `BagResult` types (`ResourceType` removed — any string is a valid resource ID) |
 | `server/colyseus/` | Subscribes to transaction events; broadcasts bag changes for spectator-visible resources |
 | `maps/<scene>/` | Map definition seeds the world bag; ruleset `.gram` carries `:GO` costs |
 
@@ -179,7 +180,7 @@ With a sandbox map seeding `gold: 100` into the world bag and a ruleset `:GO` ru
 
 ## Open Questions
 
-1. **Resource type & seed declaration.** Where are resource types and the world bag's initial seed declared — in the map definition (`.map.gram`), a sidecar, or an admin API? Static map-embedded declaration is auditable and fits the "seeded by the map definition" model; an API enables vendor mechanics to register types at runtime without a restart. Likely map-embedded for MVP.
+1. **Resource seed declaration.** ~~Where are resource types and the world bag's initial seed declared?~~ **Resolved (027):** Item placements in `.map.gram` carry `qty` attributes; the server groups them into `ItemSeed[]` passed to `ledger.init()`. No type registry exists — any string is a valid resource ID. Ghost starting grants use `[:Grants { role: qty } | (itemRef)]` blocks in the map file — one block per item, with role→qty props.
 
 2. **Hashing & chain detail.** Which hash (SHA-256?), what exactly is included in the hashed body, and is the chain per-session-genesis only or does it anchor to anything external? Enough to be tamper-evident for v1; designed so a merkle layer can be added without reshaping transactions.
 
@@ -191,7 +192,7 @@ With a sandbox map seeding `gold: 100` into the world bag and a ruleset `:GO` ru
 
 6. **Idempotency window.** Transaction IDs are idempotency keys, but how long must the ledger remember seen IDs to reject duplicates — the whole session, or a bounded window? Whole-session is simplest given the log is durable anyway.
 
-7. **Negative balances for special mechanics.** Conservation forbids negative conserved balances by construction. Do any mechanics legitimately need debt/deficit (a bag allowed below zero)? If so, that resource is effectively monotonic-negative and breaks conservation — probably better modeled as owing a separate resource than as a negative balance.
+7. **Negative balances for special mechanics.** **Resolved (027):** `world.genesis` is the only actor permitted to go negative, and only during ledger initialisation (seeding). All other actors are floor-capped at zero. Mechanics that previously considered monotonic-negative debt should model debt as a separate conserved resource if needed.
 
 8. **Snapshot trigger (post-MVP).** When snapshots land, what triggers one — transaction count, wall-clock interval, or session checkpoint — and where are they stored relative to the log?
 
@@ -211,7 +212,7 @@ With a sandbox map seeding `gold: 100` into the world bag and a ruleset `:GO` ru
 
 **Items as a separate system from resources.** Keep RFC-0006's discrete-object model wholly distinct from fungible quantities. Rejected because stateless items *are* conserved quantity-1 resources; unifying them removes a whole parallel ownership/persistence system. (Stateful/animate items remain a future actor-layer concern either way.)
 
-**Non-conserving faucet/sink economy.** Allow any mechanic to mint or burn conserved resources freely. More flexible, but loses the conservation invariant that makes scarcity meaningful and verification trivial. Rejected for conserved resources; the monotonic class is the sanctioned, explicit exception for accumulating-only quantities.
+**Non-conserving faucet/sink economy.** Allow any mechanic to mint or burn resources freely. More flexible, but loses the conservation invariant that makes scarcity meaningful and verification trivial. Rejected — all resources are conserved. There is no sanctioned exception class.
 
 **External ledger service (payments API, blockchain).** Operationally heavy for a single-session, in-process need. Rejected for AIEWF 2026.
 

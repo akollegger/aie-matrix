@@ -58,23 +58,18 @@ import { LeaderboardService } from "./LeaderboardService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 
 // ---------------------------------------------------------------------------
-// Catalog resource grants — populated at startup via setCatalogGrants().
-// Keyed by agentId (catalog entry key, e.g. "funder-agent").
+// Spawn grants — populated at map load from parsed SpawnGrant[] blocks.
+// Keyed by role (e.g. "explorer", "funder").
 // ---------------------------------------------------------------------------
 
-export type CatalogResourceGrant = {
-  readonly resourceId: string;
-  readonly label: string;
-  readonly class: "conserved" | "monotonic";
-  readonly qty: number;
-};
+import type { SpawnGrant } from "@aie-matrix/map-gram";
 
-/** agentId → grants */
-let _catalogGrants: Map<string, ReadonlyArray<CatalogResourceGrant>> = new Map();
+/** role → grants. Populated when a map is loaded. */
+let _spawnGrants: SpawnGrant[] = [];
 
-/** Called once at startup with the built-in catalog entries. */
-export function setCatalogGrants(grants: Map<string, ReadonlyArray<CatalogResourceGrant>>): void {
-  _catalogGrants = grants;
+/** Called when a new map is loaded so spawn grants are available at ghost first-connect. */
+export function setSpawnGrants(grants: SpawnGrant[]): void {
+  _spawnGrants = grants;
 }
 
 
@@ -533,10 +528,8 @@ function nearestEffect(
     if (wantedItemClass) {
       const target = wantedItemClass.toLowerCase();
       for (const [ref, def] of sidecar) {
-        // itemClass may be colon-separated multi-label (e.g. "Badge:Sponsor");
-        // match any segment.
-        const segments = def.itemClass.toLowerCase().split(":");
-        if (segments.includes(target)) matchingItemRefs.add(ref);
+        // Match against typeName (e.g. "BrassKey", "GoldCoin")
+        if (def.typeName.toLowerCase() === target) matchingItemRefs.add(ref);
       }
     }
 
@@ -950,6 +943,12 @@ function takeEffect(
             code: "NOT_CARRIABLE" as const,
             reason: `Item "${itemRef}" cannot be picked up.`,
           }),
+        "LedgerError.InsufficientFunds": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_HERE" as const,
+            reason: `Item "${itemRef}" is not available on this tile.`,
+          }),
       }),
     );
   });
@@ -998,6 +997,12 @@ function dropEffect(
             code: "TILE_FULL" as const,
             reason: `Tile ${hereId} is at full capacity.`,
           }),
+        "LedgerError.InsufficientFunds": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_CARRYING" as const,
+            reason: `You are not carrying "${itemRef}" (ledger check failed).`,
+          }),
       }),
     );
   });
@@ -1038,7 +1043,7 @@ function timecheckEffect(
 // ---------------------------------------------------------------------------
 
 function offerEffect(
-  input: { to: string; give_resource: string; give_qty: number; for_resource: string; for_qty: number },
+  input: { to: string; give_item: string; give_qty: number; for_item: string; for_qty: number },
   extra: McpToolExtra,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
   return Effect.gen(function* () {
@@ -1049,8 +1054,8 @@ function offerEffect(
     const either = yield* Effect.either(proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.to,
-      give: { resource: input.give_resource, qty: input.give_qty },
-      want: { resource: input.for_resource, qty: input.for_qty },
+      give: { resource: input.give_item, qty: input.give_qty },
+      want: { resource: input.for_item, qty: input.for_qty },
     }, (id) => bridge.getGhostCell(id)));
     if (either._tag === "Left") {
       const e = either.left;
@@ -1063,7 +1068,7 @@ function offerEffect(
 }
 
 function requestEffect(
-  input: { from: string; want_resource: string; want_qty: number; offering_resource: string; offering_qty: number },
+  input: { from: string; want_item: string; want_qty: number; offering_item: string; offering_qty: number },
   extra: McpToolExtra,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
   return Effect.gen(function* () {
@@ -1074,8 +1079,8 @@ function requestEffect(
     const either = yield* Effect.either(proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.from,
-      give: { resource: input.offering_resource, qty: input.offering_qty },
-      want: { resource: input.want_resource, qty: input.want_qty },
+      give: { resource: input.offering_item, qty: input.offering_qty },
+      want: { resource: input.want_item, qty: input.want_qty },
     }, (id) => bridge.getGhostCell(id)));
     if (either._tag === "Left") {
       const e = either.left;
@@ -1669,35 +1674,35 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "offer",
     {
-      description: "Propose a resource trade to another ghost. You offer to give one resource in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded. Both ghosts must be on the same tile.",
+      description: "Propose an item trade to another ghost. You offer to give one item in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Both ghosts must be on the same tile. Set `for_qty` to 0 to give an item as a gift with no return expected.",
       inputSchema: {
         to: z.string().describe("The ghost ID of the counterparty."),
-        give_resource: z.string().describe("The resource you are offering to give."),
+        give_item: z.string().describe("The item you are offering to give."),
         give_qty: z.number().int().positive().describe("The quantity you are offering to give."),
-        for_resource: z.string().describe("The resource you want in return."),
-        for_qty: z.number().int().positive().describe("The quantity you want in return."),
+        for_item: z.string().describe("The item you want in return (use an empty string for a gift)."),
+        for_qty: z.number().int().nonnegative().describe("The quantity you want in return. Use 0 to give as a gift."),
       },
     },
-    async ({ to, give_resource, give_qty, for_resource, for_qty }, extra) =>
-      runTool("offer", { to, give_resource, give_qty, for_resource, for_qty },
-        offerEffect({ to, give_resource, give_qty, for_resource, for_qty }, extra), extra),
+    async ({ to, give_item, give_qty, for_item, for_qty }, extra) =>
+      runTool("offer", { to, give_item, give_qty, for_item, for_qty },
+        offerEffect({ to, give_item, give_qty, for_item, for_qty }, extra), extra),
   );
 
   server.registerTool(
     "request",
     {
-      description: "Request a resource from another ghost, offering something in return. Same as `offer` but framed from the receiver's perspective. Both ghosts must be on the same tile.",
+      description: "Request an item from another ghost, offering something in return. Same as `offer` but framed from the receiver's perspective. Both ghosts must be on the same tile. Set `offering_qty` to 0 to request an item as a gift.",
       inputSchema: {
-        from: z.string().describe("The ghost ID to request the resource from."),
-        want_resource: z.string().describe("The resource you want to receive."),
+        from: z.string().describe("The ghost ID to request the item from."),
+        want_item: z.string().describe("The item you want to receive."),
         want_qty: z.number().int().positive().describe("The quantity you want to receive."),
-        offering_resource: z.string().describe("The resource you are offering in exchange."),
-        offering_qty: z.number().int().positive().describe("The quantity you are offering in exchange."),
+        offering_item: z.string().describe("The item you are offering in exchange (use an empty string for a gift request)."),
+        offering_qty: z.number().int().nonnegative().describe("The quantity you are offering in exchange. Use 0 to request as a gift."),
       },
     },
-    async ({ from, want_resource, want_qty, offering_resource, offering_qty }, extra) =>
-      runTool("request", { from, want_resource, want_qty, offering_resource, offering_qty },
-        requestEffect({ from, want_resource, want_qty, offering_resource, offering_qty }, extra), extra),
+    async ({ from, want_item, want_qty, offering_item, offering_qty }, extra) =>
+      runTool("request", { from, want_item, want_qty, offering_item, offering_qty },
+        requestEffect({ from, want_item, want_qty, offering_item, offering_qty }, extra), extra),
   );
 
   server.registerTool(
@@ -2230,47 +2235,40 @@ export function handleGhostMcpEffect(
     const auth = adminAuth ?? (yield* authenticateGhostRequestEffect(req));
     req.auth = auth;
 
-    // First-connect resource seeding: if the ghost's agentId maps to catalog resourceGrants,
-    // seed the ghost's bag once per process lifetime (ledger duplicate-tx check prevents double-seeding).
-    const authExtra = auth.extra as { ghostId?: string; agentId?: string } | undefined;
+    // First-connect spawn-grant seeding: seed the ghost's bag based on their role (from agent card metadata).
+    // Uses ledger duplicate-tx guard to prevent double-seeding on reconnect.
+    const authExtra = auth.extra as { ghostId?: string; agentId?: string; role?: string } | undefined;
     const seedGhostId = authExtra?.ghostId;
     const seedAgentId = authExtra?.agentId;
-    if (seedGhostId && seedAgentId) {
-      const grants = _catalogGrants.get(seedAgentId);
-      if (grants && grants.length > 0) {
+    // role comes from agent card metadata; absent defaults to "attendee" per FR-009.
+    // The JWT does not carry role — it must be fetched from the agent catalog via agentId.
+    // Until catalog lookup is wired here, we fall back to "attendee" for all connects.
+    const seedRole = authExtra?.role ?? "attendee";
+    if (seedGhostId) {
+      const spawnGrant = _spawnGrants.find(g => g.role === seedRole);
+      if (spawnGrant && spawnGrant.grants.length > 0) {
         // Fire-and-forget seeding — errors logged but do not fail the MCP request
         const ledgerSvc = yield* LedgerService;
-        for (const grant of grants) {
+        for (const grant of spawnGrant.grants) {
           const txId = createHash("sha256")
-            .update(`${seedGhostId}:${seedAgentId}:${grant.resourceId}`)
+            .update(`${seedGhostId}:${seedRole}:${grant.itemRef}`)
             .digest("hex")
             .slice(0, 26)
             .toUpperCase();
-          // Ensure resource type is registered, then commit seed transaction
-          // Wrapped in orElse(logAndIgnore) so errors never propagate
           void Effect.runPromise(
-            Effect.gen(function* () {
-              yield* ledgerSvc.ensureResourceType({
-                id: grant.resourceId,
-                label: grant.label,
-                class: grant.class,
-                qty: 0,
-                floor: 0,
-              });
-              yield* ledgerSvc.commit({
-                id: txId,
-                transfers: [{ resource: grant.resourceId, qty: grant.qty, from: "world", to: seedGhostId }],
-                cause: "agent.resource-grant",
-                actors: [seedGhostId],
-                ts: Date.now(),
-              });
+            ledgerSvc.commit({
+              id: txId,
+              transfers: [{ resource: grant.itemRef, qty: grant.qty, from: "world", to: seedGhostId }],
+              cause: "spawn-grant",
+              actors: [seedGhostId],
+              ts: Date.now(),
             }).pipe(
               Effect.catchAll((e) =>
                 Effect.sync(() => {
                   // DuplicateTransaction is expected on reconnect — suppress it silently
                   const tag = (e as { _tag?: string })._tag ?? "";
                   if (tag !== "LedgerError.DuplicateTransaction") {
-                    logJson({ kind: "mcp.seed.warn", ghostId: seedGhostId, agentId: seedAgentId, resource: grant.resourceId, error: tag });
+                    logJson({ kind: "mcp.spawn-grant.warn", ghostId: seedGhostId, agentId: seedAgentId ?? "unknown", role: seedRole, itemRef: grant.itemRef, error: tag });
                   }
                 })
               )

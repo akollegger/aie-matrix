@@ -14,6 +14,27 @@ import type { MapFileReadError, MapNotFoundError } from "../map/map-errors.js";
 import type { GcsError } from "../gcs/GcsService.js";
 import { loadGramMap } from "@aie-matrix/server-colyseus";
 import { WorldBridgeService } from "../WorldBridgeService.js";
+import { LedgerService } from "../LedgerService.js";
+import type { ItemSeed } from "../LedgerService.js";
+import type { ParsedItemPlacement } from "@aie-matrix/map-gram";
+
+/**
+ * Derive ItemSeed[] from ParsedItemPlacement[] by grouping on (itemRef, h3Index)
+ * and summing qty. Used to call ledger.init() at session start.
+ */
+function deriveItemSeeds(placements: ParsedItemPlacement[]): ItemSeed[] {
+  const map = new Map<string, ItemSeed>();
+  for (const p of placements) {
+    const key = `${p.itemRef}::${p.h3Index ?? ""}`;
+    const existing = map.get(key);
+    if (existing) {
+      existing.qty += p.qty;
+    } else {
+      map.set(key, { itemRef: p.itemRef, qty: p.qty, ...(p.h3Index ? { h3Index: p.h3Index } : {}) });
+    }
+  }
+  return Array.from(map.values());
+}
 
 const LIVE_SINGLE_SEGMENT = /^\/live\/([^/]+)$/;
 const LIVE_MAPS_SEGMENT = /^\/live\/([^/]+)\/maps$/;
@@ -83,7 +104,7 @@ export function tryHandleLiveSession(
   | MapNotFoundError
   | MapFileReadError
   | GcsError,
-  LiveSessionService | MapManagementService | MapService | WorldBridgeService
+  LiveSessionService | MapManagementService | MapService | WorldBridgeService | LedgerService
 > {
   const { pathname } = url;
 
@@ -184,10 +205,15 @@ export function tryHandleLiveSession(
               }).pipe(Effect.catchAll(() => Effect.succeed(null)));
               if (newMap !== null) {
                 worldBridge.setLoadedMap(newMap);
+                // Seed ledger from map item placements
+                const ledger = yield* LedgerService;
+                const itemSeeds = deriveItemSeeds(newMap.itemPlacements ?? []);
+                yield* ledger.init(itemSeeds).pipe(Effect.catchAll(() => Effect.void));
                 console.info(JSON.stringify({
                   kind: "live-session.map-reloaded",
                   sessionId: record.id,
                   mapId: primaryMap.mapId,
+                  itemSeedCount: itemSeeds.length,
                 }));
               }
             }
@@ -256,11 +282,16 @@ export function tryHandleLiveSession(
                 }).pipe(Effect.catchAll(() => Effect.succeed(null)));
                 if (newMap !== null) {
                   worldBridge.setLoadedMap(newMap);
+                  // Re-seed ledger from new map placements (duplicate-tx guard prevents double-counting)
+                  const ledger = yield* LedgerService;
+                  const itemSeeds = deriveItemSeeds(newMap.itemPlacements ?? []);
+                  yield* ledger.init(itemSeeds).pipe(Effect.catchAll(() => Effect.void));
                   console.info(JSON.stringify({
                     kind: "live-session.map-reloaded",
                     sessionId: id,
                     mapId: primaryMap.mapId,
                     trigger: "map-switch",
+                    itemSeedCount: itemSeeds.length,
                   }));
                 }
               }

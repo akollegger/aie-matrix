@@ -170,39 +170,41 @@ This RFC specifies the contract primitive only. The following are explicitly out
 
 ## Addendum: Agent Resource Grants (2026-06-04)
 
+> **Superseded by `[:Grants { role: qty } | (itemRef)]` gram syntax (2026-06-07, branch 027-resource-lifecycle)**
+>
+> The `resourceGrants` field on `catalog.json` and the `ResourceType`/`CatalogResourceGrant` types
+> have been removed. The initial-resource problem is now solved at the **map level** instead.
+
 ### Motivation
 
-Eval contracts require the client ghost to hold resources before it can stake them. Ghost agents that act as clients need a reliable source of initial resources. Rather than requiring map-level declarations (which couples agent identity to world topology) or hard-coded startup logic (which is fragile and non-declarative), this addendum defines a lightweight grant mechanism at the **catalog entry** level.
+Eval contracts require the client ghost to hold resources before it can stake them. Ghost agents that act as clients need a reliable source of initial resources.
 
-### Design
+### Current design (027+)
 
-Each entry in the agent-host `catalog.json` (type `CatalogEntry`) may declare a `resourceGrants` field:
+Initial item grants are declared directly in the `.map.gram` file using per-item `Grants` blocks — an entity-component pattern where grant data is attached to item type nodes:
 
-```typescript
-resourceGrants?: ReadonlyArray<{
-  /** Stable identifier for this resource type, e.g. "funder-credits". */
-  resourceId: string;
-  /** Human-readable label shown in ledger UI. */
-  label: string;
-  /** "conserved" (finite world supply) or "monotonic" (can only increase per actor). */
-  class: "conserved" | "monotonic";
-  /** Quantity seeded into the agent's ghost bag when first connecting to a session. */
-  qty: number;
-}>
+```gram
+(goldCoin:ItemType:GoldCoin { name: "Gold Coin", takeable: true })
+
+[:Grants { attendee: 10, funder: 500 } | (goldCoin)]
 ```
 
-### Behaviour
+Multiple items and roles compose naturally across blocks:
 
-1. **Session initialization**: when `LedgerService.init()` runs, the world-api reads all registered agent catalog entries and collects their declared `resourceGrants`. Each unique `resourceId` is registered as a `ResourceType` with the ledger before any ghost connects.
-2. **First connect**: when a ghost with a matching `agentId` first issues any MCP call in a session, the world-api checks whether the ghost's bag already holds the declared resource. If the balance is zero (first connect), a seed transaction `world → ghostBag` is committed for each declared grant. Subsequent reconnects in the same session are no-ops.
-3. **Idempotency**: the seed transaction carries a deterministic ULID derived from `<sessionId>:<agentId>:<resourceId>` so double-seeding is rejected by the ledger's duplicate-transaction check.
+```gram
+[:Grants { attendee: 1, funder: 5 } | (brassKey)]
+[:Grants { attendee: 10, funder: 500 } | (goldCoin)]
+```
 
-### Scope
+At ghost first-connect the world-api reads the ghost's `role` from its A2A agent card metadata, aggregates all `Grants` blocks for that role, and commits one ledger transfer (`world → ghostId`) per grant item. Subsequent reconnects are idempotent — the transaction ID is deterministically derived from `SHA-256(ghostId:role:itemRef)`.
 
-- This mechanism is for **first-party agents** whose catalog entries are operator-controlled. It is not a general-purpose resource faucet for arbitrary ghosts.
-- Grant quantities should be modest; large grants inflate conserved resource supplies and affect world balance.
-- The `resourceGrants` field is optional and backwards-compatible — existing catalog entries without it are unaffected.
+### Key differences from the original catalog-based design
 
-### Resolved Open Question
+| Old (catalog.json) | New (map gram) |
+|---|---|
+| `resourceGrants` field on each `CatalogEntry` | `[:Grants { role: qty } \| (itemRef)]` blocks in `.map.gram` |
+| `ResourceType` registry — every resource pre-declared | Any string is a valid `itemRef`; no registry needed |
+| `class: "conserved" \| "monotonic"` | Only conserved resources exist; monotonic class removed |
+| Coupled to agent catalog (operator-controlled per agent) | Coupled to map (operator-controlled per session) |
 
-This addendum resolves the previously unaddressed question of how agent ghost clients acquire initial resources to stake in eval contracts, without requiring changes to the map format or a new provisioning RFC.
+This resolves the initial-resource acquisition problem while keeping resource identity fully map-driven rather than catalog-driven.

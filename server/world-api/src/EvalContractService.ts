@@ -12,7 +12,6 @@ import type {
   LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
-  LedgerMonotonicTradeRejected,
   LedgerPersistenceError,
   LedgerUnknownResource,
 } from "./ledger-errors.js";
@@ -23,7 +22,6 @@ export type LedgerCommitError =
   | LedgerConservationViolation
   | LedgerDuplicateTransaction
   | LedgerUnknownResource
-  | LedgerMonotonicTradeRejected
   | LedgerPersistenceError;
 
 export interface EvalContractServiceOps {
