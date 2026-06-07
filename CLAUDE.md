@@ -89,6 +89,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 027-resource-lifecycle: Added [if applicable, e.g., PostgreSQL, CoreData, files or N/A]
 - 026-session-leaderboards: Added TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `@relateby/pattern` (gram AST), `zod` v3, `ulid` — all already present in `server/world-api`
 - 024-eval-contracts: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `ulid`, `zod` 3 — all already in `server/world-api`
-- 023-group-formation: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `ulid`, `unique-names-generator` (new dep in `server/world-api`)
