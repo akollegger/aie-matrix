@@ -1,5 +1,5 @@
-import type { Compass, ItemDefinition } from "@aie-matrix/shared-types";
-import type { ParsedPortal } from "@aie-matrix/map-gram";
+import type { Compass } from "@aie-matrix/shared-types";
+import type { ItemTypeDef, ParsedItemPlacement, ParsedPortal, SpawnGrant } from "@aie-matrix/map-gram";
 
 /**
  * Canonical cell id for APIs: H3 res-15 index from the map loader.
@@ -34,7 +34,11 @@ export interface LoadedMap {
   /** Populated navigable cells only, keyed by `h3Index`. */
   cells: Map<CellId, CellRecord>;
   /** Item definitions keyed by itemRef / ItemType typeName. */
-  itemSidecar: Map<string, ItemDefinition>;
+  itemSidecar: Map<string, ItemTypeDef>;
   /** Non-adjacent traversal links. Populated from gram Portal elements. */
   portals?: ParsedPortal[];
+  /** Raw item placements from the map, used to derive ItemSeed[] for ledger.init(). */
+  itemPlacements?: ParsedItemPlacement[];
+  /** Spawn grants keyed by role, used at ghost first-connect. */
+  spawnGrants?: SpawnGrant[];
 }

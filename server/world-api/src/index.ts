@@ -78,6 +78,7 @@ export {
 } from "./world-api-errors.js";
 export {
   LedgerService,
+  type LedgerServiceOps,
 } from "./LedgerService.js";
 export {
   ProposalService,
@@ -103,7 +104,6 @@ export {
   LedgerProposalNotFound,
   LedgerSelfAgreeDenied,
   LedgerProposalExpired,
-  LedgerMonotonicTradeRejected,
   LedgerCounterpartyNotNearby,
   type LedgerError,
 } from "./ledger-errors.js";
@@ -138,8 +138,7 @@ export {
 } from "./map/MapRoutes.js";
 export {
   handleGhostMcpEffect,
-  setCatalogGrants,
-  type CatalogResourceGrant,
+  setSpawnGrants,
 } from "./mcp-server.js";
 export {
   ItemService,

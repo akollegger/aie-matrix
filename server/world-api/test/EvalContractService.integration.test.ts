@@ -11,7 +11,7 @@ import test from "node:test";
 import neo4j from "neo4j-driver";
 import { Effect, Layer } from "effect";
 import { ulid } from "ulid";
-import type { ResourceType } from "@aie-matrix/shared-types";
+import type { ItemSeed } from "../src/LedgerService.js";
 import { makeLedgerServiceLive } from "../src/LedgerServiceLive.js";
 import { LedgerService } from "../src/LedgerService.js";
 import { GroupService } from "../src/GroupService.js";
@@ -24,7 +24,7 @@ const NEO4J_URI = process.env["NEO4J_URI"];
 const NEO4J_USER = process.env["NEO4J_USER"] ?? "neo4j";
 const NEO4J_PASSWORD = process.env["NEO4J_PASSWORD"] ?? "password";
 
-const TRUST: ResourceType = { id: "trust", class: "conserved", qty: 1000, floor: 0, label: "Trust" };
+const TRUST: ItemSeed = { itemRef: "TrustToken", qty: 1000 };
 
 test.skip(!NEO4J_URI, "NEO4J_URI not set — skipping EvalContractService integration tests");
 
@@ -101,7 +101,7 @@ if (NEO4J_URI) {
       // Give client some trust
       yield* ledger.commit({
         id: ulid(),
-        transfers: [{ resource: "trust", qty: 100, from: "world", to: clientId }],
+        transfers: [{ resource: "TrustToken", qty: 100, from: "world", to: clientId }],
         cause: "test.seed",
         actors: [],
         ts: Date.now(),
@@ -113,7 +113,7 @@ if (NEO4J_URI) {
         contractorId,
         evaluatorId,
         request: "Do the thing",
-        stakeResource: "trust",
+        stakeResource: "TrustToken",
         stakeAmount: 20,
         deadline: Date.now() + 60_000,
       });
@@ -124,7 +124,7 @@ if (NEO4J_URI) {
 
       // Client bag should be debited
       const bag = yield* ledger.bag(clientId);
-      const trustHolding = bag.holdings.find(h => h.resource === "trust");
+      const trustHolding = bag.holdings.find(h => h.resource === "TrustToken");
       assert.equal(trustHolding?.qty, 80);
     }));
   });
@@ -144,7 +144,7 @@ if (NEO4J_URI) {
       yield* ledger.init([TRUST]);
       yield* ledger.commit({
         id: ulid(),
-        transfers: [{ resource: "trust", qty: 50, from: "world", to: clientId }],
+        transfers: [{ resource: "TrustToken", qty: 50, from: "world", to: clientId }],
         cause: "test.seed",
         actors: [],
         ts: Date.now(),
@@ -154,7 +154,7 @@ if (NEO4J_URI) {
       const opened = yield* evalSvc.openContract({
         clientId, contractorId, evaluatorId,
         request: "Accept me",
-        stakeResource: "trust", stakeAmount: 10,
+        stakeResource: "TrustToken", stakeAmount: 10,
         deadline: Date.now() + 60_000,
       });
 
@@ -178,7 +178,7 @@ if (NEO4J_URI) {
       yield* ledger.init([TRUST]);
       yield* ledger.commit({
         id: ulid(),
-        transfers: [{ resource: "trust", qty: 50, from: "world", to: clientId }],
+        transfers: [{ resource: "TrustToken", qty: 50, from: "world", to: clientId }],
         cause: "test.seed",
         actors: [],
         ts: Date.now(),
@@ -188,20 +188,20 @@ if (NEO4J_URI) {
       const opened = yield* evalSvc.openContract({
         clientId, contractorId, evaluatorId,
         request: "Decline me",
-        stakeResource: "trust", stakeAmount: 15,
+        stakeResource: "TrustToken", stakeAmount: 15,
         deadline: Date.now() + 60_000,
       });
 
       // Verify stake was moved out of client
       const bagBefore = yield* ledger.bag(clientId);
-      assert.equal(bagBefore.holdings.find(h => h.resource === "trust")?.qty, 35);
+      assert.equal(bagBefore.holdings.find(h => h.resource === "TrustToken")?.qty, 35);
 
       const declined = yield* evalSvc.declineContract({ contractId: opened.id, callerId: contractorId });
       assert.equal(declined.state, "Declined");
 
       // Verify escrow returned to client
       const bagAfter = yield* ledger.bag(clientId);
-      assert.equal(bagAfter.holdings.find(h => h.resource === "trust")?.qty, 50);
+      assert.equal(bagAfter.holdings.find(h => h.resource === "TrustToken")?.qty, 50);
     }));
   });
 
@@ -220,7 +220,7 @@ if (NEO4J_URI) {
       yield* ledger.init([TRUST]);
       yield* ledger.commit({
         id: ulid(),
-        transfers: [{ resource: "trust", qty: 50, from: "world", to: clientId }],
+        transfers: [{ resource: "TrustToken", qty: 50, from: "world", to: clientId }],
         cause: "test.seed", actors: [], ts: Date.now(),
       });
 
@@ -228,7 +228,7 @@ if (NEO4J_URI) {
       const opened = yield* evalSvc.openContract({
         clientId, contractorId, evaluatorId,
         request: "Submit me",
-        stakeResource: "trust", stakeAmount: 10,
+        stakeResource: "TrustToken", stakeAmount: 10,
         deadline: Date.now() + 60_000,
       });
 
@@ -260,7 +260,7 @@ if (NEO4J_URI) {
       yield* ledger.init([TRUST]);
       yield* ledger.commit({
         id: ulid(),
-        transfers: [{ resource: "trust", qty: 100, from: "world", to: clientId }],
+        transfers: [{ resource: "TrustToken", qty: 100, from: "world", to: clientId }],
         cause: "test.seed", actors: [], ts: Date.now(),
       });
 
@@ -268,7 +268,7 @@ if (NEO4J_URI) {
       const opened = yield* evalSvc.openContract({
         clientId, contractorId, evaluatorId,
         request: "Evaluate me at full",
-        stakeResource: "trust", stakeAmount: 40,
+        stakeResource: "TrustToken", stakeAmount: 40,
         deadline: Date.now() + 60_000,
       });
 
@@ -283,7 +283,7 @@ if (NEO4J_URI) {
       assert.equal(result.clientRefund, 0);
 
       const contractorBag = yield* ledger.bag(contractorId);
-      assert.equal(contractorBag.holdings.find(h => h.resource === "trust")?.qty, 40);
+      assert.equal(contractorBag.holdings.find(h => h.resource === "TrustToken")?.qty, 40);
     }));
   });
 
@@ -303,7 +303,7 @@ if (NEO4J_URI) {
       yield* ledger.init([TRUST]);
       yield* ledger.commit({
         id: ulid(),
-        transfers: [{ resource: "trust", qty: 50, from: "world", to: clientId }],
+        transfers: [{ resource: "TrustToken", qty: 50, from: "world", to: clientId }],
         cause: "test.seed", actors: [], ts: Date.now(),
       });
 
@@ -311,7 +311,7 @@ if (NEO4J_URI) {
       const opened = yield* evalSvc.openContract({
         clientId, contractorId, evaluatorId,
         request: "Get me",
-        stakeResource: "trust", stakeAmount: 5,
+        stakeResource: "TrustToken", stakeAmount: 5,
         deadline: Date.now() + 60_000,
       });
 
@@ -344,7 +344,7 @@ if (NEO4J_URI) {
       yield* ledger.init([TRUST]);
       yield* ledger.commit({
         id: ulid(),
-        transfers: [{ resource: "trust", qty: stakeAmount, from: "world", to: clientId }],
+        transfers: [{ resource: "TrustToken", qty: stakeAmount, from: "world", to: clientId }],
         cause: "test.seed", actors: [], ts: Date.now(),
       });
 
@@ -352,7 +352,7 @@ if (NEO4J_URI) {
       const opened = yield* evalSvc.openContract({
         clientId, contractorId, evaluatorId,
         request: "Half and half",
-        stakeResource: "trust", stakeAmount,
+        stakeResource: "TrustToken", stakeAmount,
         deadline: Date.now() + 60_000,
       });
 
@@ -365,8 +365,8 @@ if (NEO4J_URI) {
 
       const contractorBag = yield* ledger.bag(contractorId);
       const clientBag = yield* ledger.bag(clientId);
-      const contractorQty = contractorBag.holdings.find(h => h.resource === "trust")?.qty ?? 0;
-      const clientQty = clientBag.holdings.find(h => h.resource === "trust")?.qty ?? 0;
+      const contractorQty = contractorBag.holdings.find(h => h.resource === "TrustToken")?.qty ?? 0;
+      const clientQty = clientBag.holdings.find(h => h.resource === "TrustToken")?.qty ?? 0;
 
       assert.equal(contractorQty + clientQty, stakeAmount,
         "total resources conserved: contractor + client must equal original stake");

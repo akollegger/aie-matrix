@@ -25,7 +25,7 @@ function makeSuite() {
 
 async function initLedger(ledger: ReturnType<typeof makeLedgerServiceInMemory>) {
   await Effect.runPromise(
-    ledger.init([{ id: TEST_RESOURCE, label: "Tokens", class: "conserved", qty: 10_000, floor: 0 }]),
+    ledger.init([{ itemRef: TEST_RESOURCE, qty: 10_000 }]),
   );
   // Seed client with tokens from world bag
   await Effect.runPromise(
@@ -694,6 +694,54 @@ describe("US4: group contractor", () => {
     assert.equal(result.clientRefund, 100 - perShare * 2);
     assert.equal(result.contractorPayment + result.clientRefund, 100);
     assert.equal(result.movements.filter(m => m.to !== "client").length, 2);
+  });
+
+  it("odd-remainder: 11-token stake, verdict=1, 2 members → 5 each + 1 refund to client", async () => {
+    const { ledger, svc, groups } = makeSuite();
+    await initLedger(ledger);
+
+    await Effect.runPromise(
+      groups.createGroup({
+        groupId: "group-odd",
+        ghostA: "odd-memberA",
+        ghostB: "odd-memberB",
+        resource: TEST_RESOURCE,
+        amount: 0,
+        formationTxId: ulid(),
+      }),
+    );
+
+    const contract = await Effect.runPromise(
+      svc.openContract({
+        clientId: "client",
+        contractorId: "group-odd",
+        evaluatorId: "evaluator",
+        request: "odd payout test",
+        stakeResource: TEST_RESOURCE,
+        stakeAmount: 11,
+        deadline: DEADLINE_FUTURE,
+      }),
+    );
+    await Effect.runPromise(svc.acceptContract({ contractId: contract.id, callerId: "group-odd" }));
+    await Effect.runPromise(
+      svc.submitContract({ contractId: contract.id, callerId: "group-odd", submission: "answer" }),
+    );
+
+    // verdict=1, stake=11, N=2: perShare=floor(11*1/2)=floor(5.5)=5
+    // total paid = 10, clientRefund = 1
+    const result = await Effect.runPromise(
+      svc.evaluateContract({ contractId: contract.id, callerId: "evaluator", verdict: 1 }),
+    );
+
+    assert.equal(result.contractorPayment, 10, "2 members × 5 = 10");
+    assert.equal(result.clientRefund, 1, "remainder 1 returned to client");
+    assert.equal(result.contractorPayment + result.clientRefund, 11, "conservation holds");
+
+    // Verify ledger bags
+    const bagA = await Effect.runPromise(ledger.bag("odd-memberA"));
+    const bagB = await Effect.runPromise(ledger.bag("odd-memberB"));
+    assert.equal(bagA.holdings.find(h => h.resource === TEST_RESOURCE)?.qty, 5, "memberA receives 5");
+    assert.equal(bagB.holdings.find(h => h.resource === TEST_RESOURCE)?.qty, 5, "memberB receives 5");
   });
 
   it("evaluator=beneficiary is rejected", async () => {

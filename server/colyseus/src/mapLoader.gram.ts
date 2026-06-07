@@ -1,5 +1,5 @@
 import { parseMapGram } from "@aie-matrix/map-gram";
-import type { ItemDefinition } from "@aie-matrix/shared-types";
+import type { ItemTypeDef } from "@aie-matrix/map-gram";
 import { COMPASS_DIRECTIONS } from "@aie-matrix/shared-types";
 import type { Compass } from "@aie-matrix/shared-types";
 import { assignCompassToNeighbors } from "./hexCompass.js";
@@ -49,15 +49,9 @@ export async function loadGramMap(gramText: string): Promise<LoadedMap> {
   }
 
   // Build itemSidecar from ItemType declarations (keyed by typeName to match cell.items)
-  const itemSidecar = new Map<string, ItemDefinition>();
+  const itemSidecar = new Map<string, ItemTypeDef>();
   for (const def of parsed.itemTypes.values()) {
-    itemSidecar.set(def.typeName, {
-      name: def.name,
-      itemClass: def.typeName,
-      carriable: def.takeable ?? false,
-      capacityCost: def.capacityCost ?? 0,
-      ...(def.glyph !== undefined ? { glyph: def.glyph } : {}),
-    });
+    itemSidecar.set(def.typeName, def);
   }
 
   const anchorH3 = [...parsed.cells.keys()].sort()[0] ?? "";
@@ -69,5 +63,7 @@ export async function loadGramMap(gramText: string): Promise<LoadedMap> {
     cells: graph,
     itemSidecar,
     portals: parsed.portals,
+    itemPlacements: parsed.itemPlacements,
+    spawnGrants: parsed.spawnGrants,
   };
 }

@@ -11,9 +11,9 @@ import type {
   ParsedMap,
   ParsedPolygon,
   ParsedPortal,
-  ParsedResourceType,
   ParsedRule,
   ParsedRuleCost,
+  SpawnGrant,
   TileTypeDef,
 } from "./types.js";
 import { MapGramParseError } from "./types.js";
@@ -30,8 +30,10 @@ type PropMap = HashMap.HashMap<
 const CATEGORY_LABELS = new Set([
   "TileType", "ItemType", "Tile", "Polygon", "Item", "Portal",
   "Layer", "LayerStack", "Rules",
-  "Resources", "Resource",            // ledger resource seed declarations
-  "Schedule", "Event", // calendar blocks — parsed by WorldCalendarService, not the map parser
+  "Grants",                        // per-item role grants: [:Grants { role: qty } | (itemRef)]
+  "Schedule", "Event",             // calendar blocks — parsed by WorldCalendarService
+  "Leaderboards", "Leaderboard",   // leaderboard config — parsed by LeaderboardService
+  "GhostSystemPrompt",             // system prompt config
 ]);
 
 function getNonCategoryLabel(labels: HashSet.HashSet<string>): string | undefined {
@@ -92,11 +94,11 @@ type LayerKind = "polygon" | "tile" | "items";
 interface LayerData {
   kind: LayerKind;
   name: string;
-  cells: Map<string, string>;        // h3Index → tileType (merged, for navigation)
-  items: Map<string, string[]>;      // h3Index → [itemTypeName, ...]
+  cells: Map<string, string>;                         // h3Index → tileType (merged, for navigation)
+  items: Map<string, Array<{ typeName: string; qty: number }>>;  // h3Index → [{typeName, qty}, ...]
   portals: ParsedPortal[];
-  explicitTiles: ParsedExplicitTile[]; // only (:Tile:X) declarations
-  polygons: ParsedPolygon[];           // only (:Polygon:X) definitions (unexpanded)
+  explicitTiles: ParsedExplicitTile[];                // only (:Tile:X) declarations
+  polygons: ParsedPolygon[];                          // only (:Polygon:X) definitions (unexpanded)
 }
 
 // ---------------------------------------------------------------------------
@@ -109,8 +111,8 @@ interface LayerData {
  * Performs Gram validation, walks the AST, expands polygon fills, and applies
  * layers in LayerStack order (polygon fill → tile override → items overlay).
  *
- * @throws {MapGramParseError} for gram syntax errors, missing LayerStack, or
- *   invalid H3 indices. Polygons with bad vertex counts are warned and skipped.
+ * @throws {MapGramParseError} for gram syntax errors, missing LayerStack,
+ *   invalid H3 indices, or a forbidden [resources:Resources] block.
  */
 export async function parseMapGram(gramText: string): Promise<ParsedMap> {
   // Step 1: parse the gram document
@@ -141,7 +143,7 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
 
   const tileTypes = new Map<string, TileTypeDef>();
   const itemTypes = new Map<string, ItemTypeDef>();
-  const resourceTypes: ParsedResourceType[] = [];
+  const spawnGrants: SpawnGrant[] = [];
 
   const layersById = new Map<string, LayerData>();
   const layerOrder: string[] = [];
@@ -196,30 +198,48 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
         ...(capacityCost !== undefined ? { capacityCost } : {}),
       });
 
+    // Resources block — forbidden; error out
+    } else if (HashSet.has(labels, "Resources")) {
+      throw new MapGramParseError(
+        "resources-block-forbidden",
+        `[resources:Resources] block is no longer supported. Declare items via ItemType + Item placements. ` +
+        `Non-spatial resources (e.g. XP) have been removed from the map grammar.`,
+      );
+
+    // Grants block — per-item role grants: [:Grants { role: qty, ... } | (itemRef)]
+    // Props on the block are role → qty. Elements are bound-id refs to ItemType nodes.
+    // Multiple Grants blocks are merged; result is accumulated into spawnGrants by role.
+    } else if (HashSet.has(labels, "Grants")) {
+      // Collect role→qty pairs from block properties (subject = the [:Grants {...}] head)
+      const roleQty: Array<{ role: string; qty: number }> = [];
+      for (const [key, val] of HashMap.entries(props)) {
+        if (val._tag === "IntVal") {
+          roleQty.push({ role: key, qty: val.value as number });
+        }
+      }
+      if (roleQty.length === 0) continue;
+      // Each element is a reference to a bound ItemType identifier — resolve to typeName
+      for (const elemPattern of pattern.elements) {
+        const boundId = elemPattern.value.identity;
+        if (!boundId) continue;
+        const itemTypeDef = itemTypes.get(boundId);
+        if (!itemTypeDef) continue;
+        const itemRef = itemTypeDef.typeName;
+        for (const { role, qty } of roleQty) {
+          const existing = spawnGrants.find(g => g.role === role);
+          if (existing) {
+            existing.grants.push({ itemRef, qty });
+          } else {
+            spawnGrants.push({ role, grants: [{ itemRef, qty }] });
+          }
+        }
+      }
+
     // LayerStack — collect ordered layer IDs
     } else if (HashSet.has(labels, "LayerStack")) {
       for (const elemPattern of pattern.elements) {
         const elemId = elemPattern.value.identity;
         if (elemId) layerOrder.push(elemId);
-      }
-
-    // Resources — collect resource type declarations for the ledger seed
-    } else if (HashSet.has(labels, "Resources")) {
-      for (const elemPattern of pattern.elements) {
-        const elem = elemPattern.value;
-        if (!HashSet.has(elem.labels, "Resource")) continue;
-        const elemProps = elem.properties;
-        const id = strProp(elemProps, "id");
-        const cls = strProp(elemProps, "class");
-        const label = strProp(elemProps, "label");
-        if (!id || !label || (cls !== "conserved" && cls !== "monotonic")) continue;
-        resourceTypes.push({
-          id,
-          class: cls,
-          qty: intProp(elemProps, "qty") ?? 0,
-          floor: intProp(elemProps, "floor") ?? 0,
-          label,
-        });
       }
 
     // Rules — collect (fromTypeId)-[:GO { costResource?, costQty? }]->(toTypeId) pairs
@@ -319,8 +339,9 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
           if (!typeName || h3s.length === 0) continue;
           const h3 = h3s[0]!;
           if (!isValidCell(h3)) throw new MapGramParseError("invalid-h3", `Invalid H3 index in Item:${typeName}: ${h3}`);
+          const qty = intProp(elemProps, "qty") ?? 1;
           const existing = layerData.items.get(h3) ?? [];
-          existing.push(typeName);
+          existing.push({ typeName, qty });
           layerData.items.set(h3, existing);
         }
       }
@@ -374,16 +395,19 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
         cells.set(h3, { h3Index: h3, tileType, items: [] });
       }
     }
-    // Attach items to merged cells (for navigation) and collect placements (for Neo4j)
-    for (const [h3, itemNames] of layer.items) {
+    // Attach items to merged cells (for navigation) and collect placements (for Neo4j / ledger seed)
+    for (const [h3, itemEntries] of layer.items) {
       let cell = cells.get(h3);
       if (!cell) {
         cell = { h3Index: h3, tileType: "open", items: [] };
         cells.set(h3, cell);
       }
-      cell.items.push(...itemNames);
-      for (const itemTypeName of itemNames) {
-        itemPlacements.push({ h3Index: h3, itemTypeName, layerIdentity: layerId });
+      for (const { typeName, qty } of itemEntries) {
+        // Expand qty into repeated refs for the navigation cell (backward-compatible)
+        for (let i = 0; i < qty; i++) {
+          cell.items.push(typeName);
+        }
+        itemPlacements.push({ h3Index: h3, itemRef: typeName, layerIdentity: layerId, qty });
       }
     }
     // Collect explicit tiles, polygons, and portals with their layer membership
@@ -392,5 +416,5 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
     portals.push(...layer.portals);
   }
 
-  return { name, elevation, tileTypes, itemTypes, resourceTypes, cells, layers, explicitTiles, polygons, itemPlacements, portals, rules };
+  return { name, elevation, tileTypes, itemTypes, cells, layers, explicitTiles, polygons, itemPlacements, portals, rules, spawnGrants };
 }

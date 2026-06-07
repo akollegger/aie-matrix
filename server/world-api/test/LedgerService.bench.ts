@@ -13,10 +13,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect } from "effect";
 import { ulid } from "ulid";
-import type { ResourceType } from "@aie-matrix/shared-types";
+import type { ItemSeed } from "../src/LedgerService.js";
 import { makeLedgerServiceInMemory } from "../src/LedgerServiceInMemory.js";
 
-const GOLD: ResourceType = { id: "gold", class: "conserved", qty: 10_000, floor: 0, label: "Gold" };
+const GOLD: ItemSeed = { itemRef: "GoldCoin", qty: 10_000 };
 const ITERATIONS = 1000;
 
 test(`SC-008: commit() p95 < 10ms over ${ITERATIONS} sequential calls (in-memory)`, () => {
@@ -27,7 +27,7 @@ test(`SC-008: commit() p95 < 10ms over ${ITERATIONS} sequential calls (in-memory
   for (let i = 0; i < 50; i++) {
     Effect.runSync(svc.commit({
       id: ulid(),
-      transfers: [{ resource: "gold", qty: 1, from: "world", to: `ghost-warm-${i}` }],
+      transfers: [{ resource: "GoldCoin", qty: 1, from: "world", to: `ghost-warm-${i}` }],
       cause: "bench.warmup", actors: [], ts: Date.now(),
     }));
   }
@@ -37,7 +37,7 @@ test(`SC-008: commit() p95 < 10ms over ${ITERATIONS} sequential calls (in-memory
     const start = performance.now();
     Effect.runSync(svc.commit({
       id: ulid(),
-      transfers: [{ resource: "gold", qty: 1, from: "world", to: `ghost-bench-${i % 100}` }],
+      transfers: [{ resource: "GoldCoin", qty: 1, from: "world", to: `ghost-bench-${i % 100}` }],
       cause: "bench.commit", actors: [], ts: Date.now(),
     }));
     latencies.push(performance.now() - start);

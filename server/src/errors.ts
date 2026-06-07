@@ -69,7 +69,6 @@ export {
   LedgerProposalNotFound,
   LedgerSelfAgreeDenied,
   LedgerProposalExpired,
-  LedgerMonotonicTradeRejected,
   LedgerCounterpartyNotNearby,
   type LedgerError,
 } from "@aie-matrix/server-world-api";
@@ -377,11 +376,6 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
       return {
         status: 410,
         body: JSON.stringify({ ok: false, code: "PROPOSAL_EXPIRED", proposalId: error.proposalId }),
-      };
-    case "LedgerError.MonotonicTradeRejected":
-      return {
-        status: 422,
-        body: JSON.stringify({ ok: false, code: "MONOTONIC_TRADE_REJECTED", resource: error.resource }),
       };
     case "LedgerError.CounterpartyNotNearby":
       return {

@@ -16,8 +16,8 @@
 
 **Purpose**: Confirm branch state, record proposal linkage, no new directories needed.
 
-- [ ] T001 Verify `specs/027-resource-lifecycle/` artifacts are committed and plan.md references RFC-0023 correctly
-- [ ] T002 Update `maps/sandbox/redbluegreen.map.gram` — remove `[resources:Resources]` block (lines 11–15) and remove `costResource`/`costQty` attributes from GO rules (lines 23–25), leaving free movement between tile types
+- [x] T001 Verify `specs/027-resource-lifecycle/` artifacts are committed and plan.md references RFC-0023 correctly
+- [x] T002 Update `maps/sandbox/redbluegreen.map.gram` — remove `[resources:Resources]` block (lines 11–15) and remove `costResource`/`costQty` attributes from GO rules (lines 23–25), leaving free movement between tile types
 
 ---
 
@@ -27,19 +27,19 @@
 
 ⚠️ **CRITICAL**: All downstream packages import from `shared/map-gram` and `shared/types`. Complete this phase before touching `server/`.
 
-- [ ] T003 In `shared/map-gram/src/types.ts`: rename `itemTypeName → itemRef` in `ParsedItemPlacement`; add `qty: number` (default 1); add `SpawnGrant` interface; remove `ParsedResourceType`; remove `resourceTypes` from `ParsedMap`; add `spawnGrants: SpawnGrant[]` to `ParsedMap`
-- [ ] T004 In `shared/map-gram/src/parse.ts`: parse `qty` from item placement gram node using `intProp` helper (default 1); parse `[spawngrants:SpawnGrants | ...]` block into `SpawnGrant[]`; emit `MapGramParseError` when `[resources:Resources]` block is present; stop populating `resourceTypes`
-- [ ] T005 In `shared/map-gram/src/index.ts`: export `SpawnGrant`; remove `ParsedResourceType` export
-- [ ] T006 [P] In `shared/types/src/items.ts`: remove `ItemDefinition` interface and `ItemSidecar` type alias (consumers will import `ItemTypeDef` from `@aie-matrix/map-gram`)
-- [ ] T006b [P] In `shared/types/src/ledger.ts`: remove `ResourceType` interface; remove `CatalogResourceGrant` type
-- [ ] T007 In `shared/types/src/index.ts`: remove re-exports of `ItemDefinition`, `ItemSidecar`, `ResourceType`, `CatalogResourceGrant`
-- [ ] T008 Add `ItemSeed` interface to `server/world-api/src/LedgerService.ts`: `{ itemRef: string; qty: number; h3Index?: string }`; change `init(seed: ResourceType[])` → `init(seed: ItemSeed[])`; remove `resourceTypes()` and `ensureResourceType()` from `LedgerServiceOps`
-- [ ] T009 In `server/world-api/src/ledger-errors.ts`: delete `LedgerMonotonicTradeRejected` class; remove it from the `LedgerError` union type
-- [ ] T010 In `server/world-api/src/LedgerServiceInMemory.ts`: remove `ResourceType` import and `resourceTypes` Map; remove monotonic checks (`rt.class === "monotonic"` branches); remove `LedgerMonotonicTradeRejected` usage; simplify `init()` to accept `ItemSeed[]` and create genesis transfers to `world@{h3Index}` or `world`; remove `resourceTypes()` and `ensureResourceType()` implementations; remove `LedgerUnknownResource` check based on resource type registry (validation moves upstream)
-- [ ] T011 In `server/world-api/src/LedgerServiceLive.ts`: same removals as T010 for the Neo4j-backed implementation; replace `ResourceType` Neo4j node write (`MERGE (r:ResourceType ...)`) with no-op or `ItemType` registration if needed for replay; update genesis Cypher to use `ItemSeed` actor IDs (`world@{h3Index}` / `world`)
-- [ ] T012 In `server/world-api/src/mechanics.ts`: delete monotonic mint helpers (`awardXp`, movement cost helpers); delete file if empty after removal
-- [ ] T013 Update `shared/map-gram` unit tests: update `ParsedItemPlacement` fixture field from `itemTypeName` → `itemRef`; add test for `qty` parsing; add test for `SpawnGrant` block parsing; add test asserting `MapGramParseError` when `[resources:Resources]` block present
-- [ ] T014 Update `server/world-api/src/agent-resource-grants.test.ts`: replace `ResourceType` fixtures with `ItemSeed` fixtures; remove `ensureResourceType` calls; verify `init()` accepts `ItemSeed[]`
+- [x] T003 In `shared/map-gram/src/types.ts`: rename `itemTypeName → itemRef` in `ParsedItemPlacement`; add `qty: number` (default 1); add `SpawnGrant` interface; remove `ParsedResourceType`; remove `resourceTypes` from `ParsedMap`; add `spawnGrants: SpawnGrant[]` to `ParsedMap`
+- [x] T004 In `shared/map-gram/src/parse.ts`: parse `qty` from item placement gram node using `intProp` helper (default 1); parse `[spawngrants:SpawnGrants | ...]` block into `SpawnGrant[]`; emit `MapGramParseError` when `[resources:Resources]` block is present; stop populating `resourceTypes`
+- [x] T005 In `shared/map-gram/src/index.ts`: export `SpawnGrant`; remove `ParsedResourceType` export
+- [x] T006 [P] In `shared/types/src/items.ts`: remove `ItemDefinition` interface and `ItemSidecar` type alias (consumers will import `ItemTypeDef` from `@aie-matrix/map-gram`)
+- [x] T006b [P] In `shared/types/src/ledger.ts`: remove `ResourceType` interface; remove `CatalogResourceGrant` type
+- [x] T007 In `shared/types/src/index.ts`: remove re-exports of `ItemDefinition`, `ItemSidecar`, `ResourceType`, `CatalogResourceGrant`
+- [x] T008 Add `ItemSeed` interface to `server/world-api/src/LedgerService.ts`: `{ itemRef: string; qty: number; h3Index?: string }`; change `init(seed: ResourceType[])` → `init(seed: ItemSeed[])`; remove `resourceTypes()` and `ensureResourceType()` from `LedgerServiceOps`
+- [x] T009 In `server/world-api/src/ledger-errors.ts`: delete `LedgerMonotonicTradeRejected` class; remove it from the `LedgerError` union type
+- [x] T010 In `server/world-api/src/LedgerServiceInMemory.ts`: remove `ResourceType` import and `resourceTypes` Map; remove monotonic checks (`rt.class === "monotonic"` branches); remove `LedgerMonotonicTradeRejected` usage; simplify `init()` to accept `ItemSeed[]` and create genesis transfers to `world@{h3Index}` or `world`; remove `resourceTypes()` and `ensureResourceType()` implementations; remove `LedgerUnknownResource` check based on resource type registry (validation moves upstream)
+- [x] T011 In `server/world-api/src/LedgerServiceLive.ts`: same removals as T010 for the Neo4j-backed implementation; replace `ResourceType` Neo4j node write (`MERGE (r:ResourceType ...)`) with no-op or `ItemType` registration if needed for replay; update genesis Cypher to use `ItemSeed` actor IDs (`world@{h3Index}` / `world`)
+- [x] T012 In `server/world-api/src/mechanics.ts`: delete monotonic mint helpers (`awardXp`, movement cost helpers); delete file if empty after removal
+- [x] T013 Update `shared/map-gram` unit tests: update `ParsedItemPlacement` fixture field from `itemTypeName` → `itemRef`; add test for `qty` parsing; add test for `SpawnGrant` block parsing; add test asserting `MapGramParseError` when `[resources:Resources]` block present
+- [x] T014 Update `server/world-api/src/agent-resource-grants.test.ts`: replace `ResourceType` fixtures with `ItemSeed` fixtures; remove `ensureResourceType` calls; verify `init()` accepts `ItemSeed[]`
 
 **Checkpoint**: `pnpm run build` passes. `pnpm test` in `shared/map-gram` and `server/world-api` passes with updated fixtures.
 
@@ -51,11 +51,11 @@
 
 **Independent Test**: Parse a `.map.gram` fixture with `qty: 10` on a placement; confirm `ParsedItemPlacement.qty === 10` and world bag after `ledger.init()` holds 10 units at that tile.
 
-- [ ] T015 [US1] In `server/colyseus/src/mapLoader.gram.ts`: import `ItemTypeDef` from `@aie-matrix/map-gram` instead of `ItemDefinition` from `@aie-matrix/shared-types`; update `LoadedMap.itemSidecar` type to `Map<string, ItemTypeDef>`; expand `qty` in `initialItemRefs` by repeating itemRef N times per placement
-- [ ] T016 [US1] In `server/colyseus/src/mapTypes.ts` (or wherever `LoadedMap` is defined): update `itemSidecar: Map<string, ItemTypeDef>` type
-- [ ] T017 [US1] In `server/world-api/src/index.ts` (or session init): derive `ItemSeed[]` from `parsedMap.itemPlacements` by grouping on `(itemRef, h3Index)` and summing `qty`; pass to `ledger.init()`; remove any `resourceTypes`-based seeding
-- [ ] T018 [US1] Add unit test in `shared/map-gram`: given map with `(:Item:GoldCoin { geometry: [h3\`…\`], qty: 10 })`, assert `itemPlacements[0].qty === 10`
-- [ ] T019 [US1] Add unit test in `server/world-api`: given `ItemSeed[{ itemRef: "GoldCoin", qty: 10, h3Index: "…" }]`, after `ledger.init()` assert `bag("world@{h3Index}").GoldCoin === 10`
+- [x] T015 [US1] In `server/colyseus/src/mapLoader.gram.ts`: import `ItemTypeDef` from `@aie-matrix/map-gram` instead of `ItemDefinition` from `@aie-matrix/shared-types`; update `LoadedMap.itemSidecar` type to `Map<string, ItemTypeDef>`; expand `qty` in `initialItemRefs` by repeating itemRef N times per placement
+- [x] T016 [US1] In `server/colyseus/src/mapTypes.ts` (or wherever `LoadedMap` is defined): update `itemSidecar: Map<string, ItemTypeDef>` type
+- [x] T017 [US1] In `server/world-api/src/index.ts` (or session init): derive `ItemSeed[]` from `parsedMap.itemPlacements` by grouping on `(itemRef, h3Index)` and summing `qty`; pass to `ledger.init()`; remove any `resourceTypes`-based seeding
+- [x] T018 [US1] Add unit test in `shared/map-gram`: given map with `(:Item:GoldCoin { geometry: [h3\`…\`], qty: 10 })`, assert `itemPlacements[0].qty === 10`
+- [x] T019 [US1] Add unit test in `server/world-api`: given `ItemSeed[{ itemRef: "GoldCoin", qty: 10, h3Index: "…" }]`, after `ledger.init()` assert `bag("world@{h3Index}").GoldCoin === 10`
 
 **Checkpoint**: `pnpm test` in `shared/map-gram` (qty tests) and `server/world-api` (init seeding tests) pass.
 
@@ -67,9 +67,9 @@
 
 **Independent Test**: Start a session from a map with only item placements (no resources block); `ledger_verify` returns `{ valid: true }`; `ledger.bag("world@{h3}")` equals placement qty.
 
-- [ ] T020 [US2] In `server/world-api`: wire `parsedMap.spawnGrants` into session state so it's available at ghost first-connect time (store in module-level variable alongside the existing `_catalogGrants` pattern, or pass through the `ToolServices` layer)
-- [ ] T021 [US2] Remove `_catalogGrants`, `CatalogResourceGrant`, `setCatalogGrants` from `server/world-api/src/mcp-server.ts`; remove the first-connect `ensureResourceType` + `commit` block that uses them
-- [ ] T022 [US2] Add integration smoke-test note to `quickstart.md`: start server with `canonical.map.gram`, assert `ledger_verify` clean on first ghost connect
+- [x] T020 [US2] In `server/world-api`: wire `parsedMap.spawnGrants` into session state so it's available at ghost first-connect time (store in module-level variable alongside the existing `_catalogGrants` pattern, or pass through the `ToolServices` layer)
+- [x] T021 [US2] Remove `_catalogGrants`, `CatalogResourceGrant`, `setCatalogGrants` from `server/world-api/src/mcp-server.ts`; remove the first-connect `ensureResourceType` + `commit` block that uses them
+- [x] T022 [US2] Add integration smoke-test note to `quickstart.md`: start server with `canonical.map.gram`, assert `ledger_verify` clean on first ghost connect
 
 **Checkpoint**: Server starts with `canonical.map.gram`; no resource block errors; `ledger_verify` clean.
 
@@ -81,11 +81,11 @@
 
 **Independent Test**: Ghost on tile T calls `take GoldCoin`; ledger records transfer `{ from: world@T, to: ghost, cause: "take" }`; `inventory` shows GoldCoin; `ledger_verify` clean.
 
-- [ ] T023 [US3] Refactor `server/world-api/src/ItemService.ts`: add `LedgerService` dependency to `ItemServiceOps` (or inject via constructor); update `takeItem()` to call `ledger.commit({ transfers: [{ resource: itemRef, qty: 1, from: "world@{h3}", to: ghostId, location: { h3Index }, cause: "take" }] })` before updating in-memory arrays and calling Colyseus bridge; keep bridge calls synchronous after commit
-- [ ] T024 [US3] Update `dropItem()` in `server/world-api/src/ItemService.ts`: call `ledger.commit({ transfers: [{ resource: itemRef, qty: 1, from: ghostId, to: "world@{h3}", location: { h3Index }, cause: "drop" }] })` after capacity pre-check; bridge calls synchronous after commit
-- [ ] T025 [US3] Update `server/world-api/src/ItemService.test.ts`: inject mock `LedgerService` into `ItemServiceImpl`; assert `commit` called with correct transfer on `takeItem`; assert `commit` called with correct transfer on `dropItem`; assert bridge called synchronously after commit; assert `LedgerInsufficientFunds` propagates correctly from `takeItem`
-- [ ] T026 [US3] Update Effect `Layer` wiring in `server/world-api/src/index.ts` or `mcp-server.ts`: ensure `ItemService` receives `LedgerService` via Layer injection (not global reference)
-- [ ] T027 [US3] Update `takeEffect` and `dropEffect` in `server/world-api/src/mcp-server.ts`: capacity pre-check for `drop` stays in MCP handler; remove any direct ItemService in-memory mutation that now belongs in `ItemService.takeItem`/`dropItem`
+- [x] T023 [US3] Refactor `server/world-api/src/ItemService.ts`: add `LedgerService` dependency to `ItemServiceOps` (or inject via constructor); update `takeItem()` to call `ledger.commit({ transfers: [{ resource: itemRef, qty: 1, from: "world@{h3}", to: ghostId, location: { h3Index }, cause: "take" }] })` before updating in-memory arrays and calling Colyseus bridge; keep bridge calls synchronous after commit
+- [x] T024 [US3] Update `dropItem()` in `server/world-api/src/ItemService.ts`: call `ledger.commit({ transfers: [{ resource: itemRef, qty: 1, from: ghostId, to: "world@{h3}", location: { h3Index }, cause: "drop" }] })` after capacity pre-check; bridge calls synchronous after commit
+- [x] T025 [US3] Update `server/world-api/src/ItemService.test.ts`: inject mock `LedgerService` into `ItemServiceImpl`; assert `commit` called with correct transfer on `takeItem`; assert `commit` called with correct transfer on `dropItem`; assert bridge called synchronously after commit; assert `LedgerInsufficientFunds` propagates correctly from `takeItem`
+- [x] T026 [US3] Update Effect `Layer` wiring in `server/world-api/src/index.ts` or `mcp-server.ts`: ensure `ItemService` receives `LedgerService` via Layer injection (not global reference)
+- [x] T027 [US3] Update `takeEffect` and `dropEffect` in `server/world-api/src/mcp-server.ts`: capacity pre-check for `drop` stays in MCP handler; remove any direct ItemService in-memory mutation that now belongs in `ItemService.takeItem`/`dropItem`
 
 **Checkpoint**: `pnpm test server/world-api` — ItemService tests pass with ledger assertions. Manual: take + drop leaves ledger balanced.
 
@@ -97,10 +97,10 @@
 
 **Independent Test**: Two ghosts on same tile; ghost A offers BrassKey for GoldCoin; ghost B agrees; ledger records two transfers; both inventories update.
 
-- [ ] T028 [US4] In `server/world-api/src/ProposalService.ts`: replace `ledger.resourceTypes()` call (line 152) with `ItemService.getSidecar().has(resourceId)` check; add `ItemService` to `ProposalService` factory params or inject via Effect Layer
-- [ ] T029 [US4] In `server/world-api/src/mcp-server.ts`: rename MCP tool schema fields `give_resource` → `give_item`, `for_resource` → `for_item` in `offer` tool; rename `want_resource` → `want_item`, `offering_resource` → `offering_item` in `request` tool; update `offerEffect` and `requestEffect` call sites accordingly
-- [ ] T030 [US4] Update `server/world-api/src/EvalContractService.ts`: remove `LedgerMonotonicTradeRejected` from import and error union (already removed in T009, confirm no remaining references)
-- [ ] T031 [US4] Verify `ProposalService` unit tests in `server/world-api` still pass with sidecar-based validation; update fixtures to use itemRef strings instead of ResourceType objects
+- [x] T028 [US4] In `server/world-api/src/ProposalService.ts`: replace `ledger.resourceTypes()` call (line 152) with `ItemService.getSidecar().has(resourceId)` check; add `ItemService` to `ProposalService` factory params or inject via Effect Layer
+- [x] T029 [US4] In `server/world-api/src/mcp-server.ts`: rename MCP tool schema fields `give_resource` → `give_item`, `for_resource` → `for_item` in `offer` tool; rename `want_resource` → `want_item`, `offering_resource` → `offering_item` in `request` tool; update `offerEffect` and `requestEffect` call sites accordingly
+- [x] T030 [US4] Update `server/world-api/src/EvalContractService.ts`: remove `LedgerMonotonicTradeRejected` from import and error union (already removed in T009, confirm no remaining references)
+- [x] T031 [US4] Verify `ProposalService` unit tests in `server/world-api` still pass with sidecar-based validation; update fixtures to use itemRef strings instead of ResourceType objects
 
 **Checkpoint**: `pnpm test server/world-api` — ProposalService tests pass. `offer`/`agree` schema validates itemRefs against sidecar.
 
@@ -112,9 +112,9 @@
 
 **Independent Test**: Map declares `SpawnGrant { role: "sponsor", GoldCoin: 5 }`; ghost with `agentCard.metadata.role: "sponsor"` connects; ledger records `Transfer { from: "world", to: ghost, cause: "spawn-grant", qty: 5 }`; ghost inventory shows 5 GoldCoin.
 
-- [ ] T032 [US5] In `server/world-api/src/mcp-server.ts`: replace `_catalogGrants` first-connect block with spawn-grant lookup: read `role` from `agentCard.metadata.role` (default `"attendee"`); find matching `SpawnGrant` from session's parsed map; commit `{ from: "world", to: ghostId, resource: itemRef, qty, cause: "spawn-grant" }` per grant item; wrap in duplicate-tx catch (reconnect safety)
-- [ ] T033 [US5] Add `SpawnGrant` syntax to `maps/sandbox/canonical.map.gram`: add a `[spawngrants:SpawnGrants | ...]` block with `attendee → { BrassKey: 1 }` as a demonstration grant
-- [ ] T034 [US5] Add unit test in `server/world-api/src/agent-resource-grants.test.ts`: mock `SpawnGrant[{ role: "attendee", grants: [{ itemRef: "BrassKey", qty: 1 }] }]`; assert ledger commit called with correct spawn-grant transfer; assert insufficient world bag balance skips grant without blocking spawn
+- [x] T032 [US5] In `server/world-api/src/mcp-server.ts`: replace `_catalogGrants` first-connect block with spawn-grant lookup: read `role` from `agentCard.metadata.role` (default `"attendee"`); find matching `SpawnGrant` from session's parsed map; commit `{ from: "world", to: ghostId, resource: itemRef, qty, cause: "spawn-grant" }` per grant item; wrap in duplicate-tx catch (reconnect safety)
+- [x] T033 [US5] Add `SpawnGrant` syntax to `maps/sandbox/canonical.map.gram`: add a `[spawngrants:SpawnGrants | ...]` block with `attendee → { BrassKey: 1 }` as a demonstration grant
+- [x] T034 [US5] Add unit test in `server/world-api/src/agent-resource-grants.test.ts`: mock `SpawnGrant[{ role: "attendee", grants: [{ itemRef: "BrassKey", qty: 1 }] }]`; assert ledger commit called with correct spawn-grant transfer; assert insufficient world bag balance skips grant without blocking spawn
 
 **Checkpoint**: `pnpm test server/world-api` — spawn grant tests pass. Ghost with matching role receives items on connect.
 
@@ -126,8 +126,8 @@
 
 **Independent Test**: Group of 2 ghosts accepts eval contract for 10 GoldCoin; funder resolves; each member receives 5 GoldCoin; ledger records two `eval-payout` transfers; group bag unchanged.
 
-- [ ] T035 [US6] In `server/world-api/src/EvalContractService.ts`: add group payout path — when `contract.targetId` resolves to a group, read frozen member list stored at acceptance time; compute `share = floor(totalQty / memberCount)`; commit individual `ledger.commit({ transfers: [{ resource: itemRef, qty: share, from: "world", to: memberId, cause: "eval-payout" }] })` per member; commit remainder `(totalQty - share * memberCount)` back to `"world"` if > 0
-- [ ] T036 [US6] In `server/world-api/src/EvalContractService.test.ts`: add group payout scenario — 2-member group, 10 GoldCoin reward; assert each member ledger transfer = 5; assert group bag not modified; add odd-remainder test (11 GoldCoin → 5 each + 1 to world)
+- [x] T035 [US6] In `server/world-api/src/EvalContractService.ts`: add group payout path — when `contract.targetId` resolves to a group, read frozen member list stored at acceptance time; compute `share = floor(totalQty / memberCount)`; commit individual `ledger.commit({ transfers: [{ resource: itemRef, qty: share, from: "world", to: memberId, cause: "eval-payout" }] })` per member; commit remainder `(totalQty - share * memberCount)` back to `"world"` if > 0
+- [x] T036 [US6] In `server/world-api/src/EvalContractService.test.ts`: add group payout scenario — 2-member group, 10 GoldCoin reward; assert each member ledger transfer = 5; assert group bag not modified; add odd-remainder test (11 GoldCoin → 5 each + 1 to world)
 
 **Checkpoint**: `pnpm test server/world-api` — EvalContractService group payout tests pass.
 
@@ -137,13 +137,13 @@
 
 **Purpose**: Verification grep, documentation, type consolidation.
 
-- [ ] T037 Run verification grep and confirm zero matches: `grep -r "LedgerMonotonicTradeRejected\|ResourceType\|ItemDefinition\|CatalogResourceGrant\|resources:Resources" server/ shared/ --include="*.ts"` (excluding `node_modules`, `dist`)
-- [ ] T038 [P] Update `docs/mcp-tools.md`: revise `take`, `drop` schemas to show ledger commit; rename `give_resource`/`for_resource` → `give_item`/`for_item` in `offer`/`request` schemas
-- [ ] T039 [P] Update `shared/map-gram/README.md`: document `qty` on item placements; document `SpawnGrant` gram syntax; note removal of `[resources:Resources]` block
-- [ ] T040 [P] Add superseded-by note to `specs/022-in-world-resource-ledger/spec.md` pointing to this spec
-- [ ] T041 Run `pnpm run build` from repo root — must pass cleanly (hard gate)
-- [ ] T042 Run `pnpm test` in `shared/map-gram` and `server/world-api` — all tests pass
-- [ ] T043 Manual smoke test per `specs/027-resource-lifecycle/quickstart.md`: start server, ghost takes item, `ledger_verify` returns clean
+- [x] T037 Run verification grep and confirm zero matches: `grep -r "LedgerMonotonicTradeRejected\|ResourceType\|ItemDefinition\|CatalogResourceGrant\|resources:Resources" server/ shared/ --include="*.ts"` (excluding `node_modules`, `dist`)
+- [x] T038 [P] Update `docs/mcp-tools.md`: revise `take`, `drop` schemas to show ledger commit; rename `give_resource`/`for_resource` → `give_item`/`for_item` in `offer`/`request` schemas
+- [x] T039 [P] Update `shared/map-gram/README.md`: document `qty` on item placements; document `SpawnGrant` gram syntax; note removal of `[resources:Resources]` block
+- [x] T040 [P] Add superseded-by note to `specs/022-in-world-resource-ledger/spec.md` pointing to this spec
+- [x] T041 Run `pnpm run build` from repo root — must pass cleanly (hard gate)
+- [x] T042 Run `pnpm test` in `shared/map-gram` and `server/world-api` — all tests pass
+- [x] T043 Manual smoke test per `specs/027-resource-lifecycle/quickstart.md`: start server, ghost takes item, `ledger_verify` returns clean
 
 ---
 

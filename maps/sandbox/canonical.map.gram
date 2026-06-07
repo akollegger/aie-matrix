@@ -23,6 +23,9 @@
 [overrides:Layer {kind: "tile", name: "Overrides"} | (:Tile:Pillar { geometry: [h3`8f2800000000012`] }), (:Portal { geometry: [h3`8f2800000000195`, h3`8f2800000000015`], mode: "Door" })]
 [collectibles:Layer {kind: "items", name: "Collectibles"} | (:Item:BrassKey { geometry: [h3`8f2800000000015`] })]
 
+[:Grants { attendee: 1, explorer: 2 } | (brassKey)]
+[:Grants { attendee: 1, explorer: 1 } | (powerBar)]
+
 [layers:LayerStack | ground, overrides, collectibles]
 
 [rules:Rules | (floor)-[:GO]->(floor), (floor)-[:GO]->(pillar)]

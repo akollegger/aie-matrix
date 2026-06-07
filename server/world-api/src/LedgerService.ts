@@ -4,7 +4,6 @@ import type {
   ActorId,
   BagResult,
   CostQuote,
-  ResourceType,
   Transaction,
 } from "@aie-matrix/shared-types";
 import type {
@@ -12,20 +11,30 @@ import type {
   LedgerConservationViolation,
   LedgerDuplicateTransaction,
   LedgerInsufficientFunds,
-  LedgerMonotonicTradeRejected,
   LedgerPersistenceError,
   LedgerUnknownActor,
   LedgerUnknownResource,
 } from "./ledger-errors.js";
 
+/**
+ * Seed entry for ledger initialisation.
+ * Derived at session start by summing ParsedItemPlacement.qty per (itemRef, h3Index).
+ * `h3Index` present → actor "world@{h3Index}"; absent → actor "world" (spawn-grant pool).
+ */
+export interface ItemSeed {
+  itemRef: string;
+  qty: number;
+  h3Index?: string;
+}
+
 export interface LedgerServiceOps {
   /**
-   * Initialise the ledger for a session: register ResourceType declarations,
-   * replay the persisted chain to rebuild the bag cache, and append the genesis
-   * seed transaction if the chain is empty.
+   * Initialise the ledger for a session: replay the persisted chain to rebuild
+   * the bag cache, and append the genesis seed transaction if the chain is empty.
+   * Seeds are derived from map item placements (not ResourceType declarations).
    * Must be called once after the session is established.
    */
-  init(seed: ResourceType[]): Effect.Effect<void, LedgerPersistenceError>;
+  init(seed: ItemSeed[]): Effect.Effect<void, LedgerPersistenceError>;
 
   /** Return the current bag holdings for an actor. O(1) — memory cache. */
   bag(actorId: ActorId): Effect.Effect<BagResult, LedgerUnknownActor>;
@@ -41,7 +50,7 @@ export interface LedgerServiceOps {
 
   /**
    * Append a transaction to the ledger. Validates conservation, floor
-   * constraints, duplicate ULID, unknown resources. Updates in-memory bag cache
+   * constraints, and duplicate ULID. Updates in-memory bag cache
    * and persists atomically. Rolls back cache on persistence failure.
    */
   commit(
@@ -52,7 +61,6 @@ export interface LedgerServiceOps {
     | LedgerConservationViolation
     | LedgerDuplicateTransaction
     | LedgerUnknownResource
-    | LedgerMonotonicTradeRejected
     | LedgerPersistenceError
   >;
 
@@ -61,15 +69,6 @@ export interface LedgerServiceOps {
    * Returns the number of entries verified, or the first tamper violation.
    */
   verify(): Effect.Effect<{ entries: number }, LedgerChainTamperedError>;
-
-  /** Return all resource types registered for this session. */
-  resourceTypes(): Effect.Effect<ResourceType[]>;
-
-  /**
-   * Register a resource type if it is not already present. No-op if already registered.
-   * Used to lazily declare agent-granted resource types before seeding.
-   */
-  ensureResourceType(rt: ResourceType): Effect.Effect<void, LedgerPersistenceError>;
 }
 
 export class LedgerService extends Context.Tag("world-api/LedgerService")<

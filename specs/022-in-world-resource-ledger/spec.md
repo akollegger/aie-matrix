@@ -1,8 +1,14 @@
 # Feature Specification: In-World Resource Ledger
 
+> **⚠️ Superseded by [027-resource-lifecycle](../027-resource-lifecycle/spec.md)**
+>
+> The `ResourceType` registry, monotonic resource classes, and `CatalogResourceGrant` concepts
+> introduced here were removed in 027. Use `itemRef` strings and `SpawnGrant` blocks instead.
+> The hash-chained ledger core (double-entry, conservation invariant) was kept and extended.
+
 **Feature Branch**: `022-in-world-resource-ledger`  
 **Created**: 2026-05-31  
-**Status**: Draft  
+**Status**: Superseded  
 **Input**: In-world resource ledger as described in RFC-0023
 
 ## Proposal Context *(mandatory)*

@@ -54,10 +54,6 @@ export class LedgerProposalExpired extends Data.TaggedError("LedgerError.Proposa
   readonly proposalId: string;
 }> {}
 
-export class LedgerMonotonicTradeRejected extends Data.TaggedError("LedgerError.MonotonicTradeRejected")<{
-  readonly resource: ResourceId;
-}> {}
-
 export class LedgerCounterpartyNotNearby extends Data.TaggedError("LedgerError.CounterpartyNotNearby")<{
   readonly initiatorId: ActorId;
   readonly counterpartyId: ActorId;
@@ -75,5 +71,4 @@ export type LedgerError =
   | LedgerProposalNotFound
   | LedgerSelfAgreeDenied
   | LedgerProposalExpired
-  | LedgerMonotonicTradeRejected
   | LedgerCounterpartyNotNearby;

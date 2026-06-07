@@ -17,8 +17,7 @@ import {
   GcsService,
   getRequestTraceId,
   handleGhostMcpEffect,
-  setCatalogGrants,
-  type CatalogResourceGrant,
+  setSpawnGrants,
   loadMovementRulesFromEnv,
   rulesetFromParsedMap,
   LedgerService,
@@ -534,15 +533,38 @@ async function main(): Promise<void> {
 
   const runtime = ManagedRuntime.make(runtimeLayer);
 
-  // Seed ledger with resource types from the map (MVP: in-memory only; Neo4j wiring requires session-scoped layer, tracked in ADR-0011 follow-up)
-  if (parsedMapForLedger && parsedMapForLedger.resourceTypes.length > 0) {
-    const resourceTypes = parsedMapForLedger.resourceTypes;
+  // Wire ledger into ItemService for take/drop accounting
+  {
+    const ledgerOps = await runtime.runPromise(LedgerService);
+    itemServiceImpl.setLedger(ledgerOps);
+  }
+
+  // Seed ledger with items from the map placements
+  if (parsedMapForLedger && parsedMapForLedger.itemPlacements.length > 0) {
+    // Group by (itemRef, h3Index) summing qty → ItemSeed[]
+    const seedMap = new Map<string, { itemRef: string; qty: number; h3Index?: string }>();
+    for (const p of parsedMapForLedger.itemPlacements) {
+      const key = `${p.itemRef}::${p.h3Index ?? ""}`;
+      const existing = seedMap.get(key);
+      if (existing) {
+        existing.qty += p.qty;
+      } else {
+        seedMap.set(key, { itemRef: p.itemRef, qty: p.qty, ...(p.h3Index ? { h3Index: p.h3Index } : {}) });
+      }
+    }
+    const itemSeeds = Array.from(seedMap.values());
     const initEffect = LedgerService.pipe(
-      Effect.flatMap(svc => svc.init(resourceTypes)),
+      Effect.flatMap(svc => svc.init(itemSeeds)),
       Effect.provide(runtimeLayer as any),
     ) as unknown as Effect.Effect<void, unknown, never>;
     await Effect.runPromise(initEffect)
       .catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  }
+
+  // Load spawn grants from the parsed map so first-connect seeding works
+  if (parsedMapForLedger && parsedMapForLedger.spawnGrants.length > 0) {
+    setSpawnGrants(parsedMapForLedger.spawnGrants);
+    console.info(JSON.stringify({ kind: "aie-matrix.spawn-grants-loaded", count: parsedMapForLedger.spawnGrants.length }));
   }
 
   // Load leaderboard specs from the map gram
@@ -560,58 +582,6 @@ async function main(): Promise<void> {
       }
     } catch (e) {
       console.warn("[aie-matrix] Could not load leaderboard specs from map:", e);
-    }
-  }
-
-  // Load agent catalog and register resource grants so world-api knows which
-  // agents get seeded with resources on first MCP connect.
-  {
-    const catalogPath = process.env.CATALOG_FILE_PATH ?? join(repoRoot, "server/agent-host/catalog.json");
-    try {
-      const raw = await readFile(catalogPath, "utf8");
-      const parsed = JSON.parse(raw) as { agents?: Record<string, unknown> };
-      const entries = Object.entries(parsed.agents ?? {});
-      const grantsByAgent = new Map<string, ReadonlyArray<CatalogResourceGrant>>();
-      for (const [agentId, entry] of entries) {
-        const e = entry as { builtIn?: boolean; resourceGrants?: unknown };
-        if (!e.builtIn) continue; // only honor built-in agents
-        const grants = e.resourceGrants;
-        if (!Array.isArray(grants) || grants.length === 0) continue;
-        const typed = (grants as Array<{ resourceId: string; label: string; class: "conserved" | "monotonic"; qty: number }>).filter(
-          g => typeof g.resourceId === "string" && typeof g.qty === "number"
-        );
-        if (typed.length > 0) {
-          grantsByAgent.set(agentId, typed);
-        }
-      }
-      if (grantsByAgent.size > 0) {
-        setCatalogGrants(grantsByAgent);
-        // Pre-register all granted resource types so they exist before any ghost connects
-        const ensureEffect = LedgerService.pipe(
-          Effect.flatMap(svc =>
-            Effect.forEach(
-              [...grantsByAgent.values()].flat(),
-              (grant) => svc.ensureResourceType({
-                id: grant.resourceId,
-                label: grant.label,
-                class: grant.class,
-                qty: 0,
-                floor: 0,
-              }),
-              { concurrency: 1 }
-            )
-          ),
-          Effect.provide(runtimeLayer as any),
-        ) as unknown as Effect.Effect<void, unknown, never>;
-        await Effect.runPromise(ensureEffect)
-          .catch((e: unknown) => console.warn("[aie-matrix] Catalog resource type registration warning:", e));
-        console.info(JSON.stringify({ kind: "aie-matrix.catalog-grants-loaded", agentCount: grantsByAgent.size }));
-      }
-    } catch (e) {
-      // Catalog file absent or malformed — not fatal; agents just won't receive resource grants
-      if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
-        console.warn("[aie-matrix] Catalog load warning:", e);
-      }
     }
   }
 

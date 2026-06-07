@@ -1,24 +1,15 @@
-/** Actor identifier — ghost id, "world", NPC id, etc. */
+/** Actor identifier — ghost id, "world", "world@{h3Index}", NPC id, etc. */
 export type ActorId = string;
 
-/** Resource type identifier, e.g. "gold", "xp", "exam-token". */
+/**
+ * Resource / item identifier.
+ * For items this is the Pascal-case `ItemTypeDef.typeName` (e.g. "BrassKey", "GoldCoin").
+ * For abstract resources it is a plain string (e.g. "eval-token").
+ */
 export type ResourceId = string;
 
 /** ULID-format transaction ID; also the idempotency key. */
 export type TransactionId = string;
-
-export type ResourceClass = "conserved" | "monotonic";
-
-export interface ResourceType {
-  id: ResourceId;
-  class: ResourceClass;
-  /** Total seeded into the world bag at session start (conserved). Ignored for monotonic. */
-  qty: number;
-  /** Minimum allowed balance; default 0. */
-  floor: number;
-  /** Human-readable display name. */
-  label: string;
-}
 
 /** A single double-entry resource transfer between two actor bags. */
 export interface Transfer {
@@ -29,7 +20,7 @@ export interface Transfer {
   from: ActorId;
   /** Bag that gains qty. */
   to: ActorId;
-  /** Set when a world-owned item moves to/from a map tile. */
+  /** Set when a world-owned item moves to/from a map tile (take/drop). */
   location?: { h3Index: string };
 }
 
@@ -37,7 +28,11 @@ export interface Transaction {
   /** ULID; idempotency key. */
   id: TransactionId;
   transfers: Transfer[];
-  /** What authored this transaction, e.g. "go", "exam.jackpot", "seed", "trade". */
+  /**
+   * What authored this transaction.
+   * Valid values: "take" | "drop" | "spawn-grant" | "eval-payout" | "trade" |
+   *   "group-formation" | "group-leave" | "seed" | "agent.resource-grant"
+   */
   cause: string;
   /** Actors whose consent this transaction carries. */
   actors: ActorId[];

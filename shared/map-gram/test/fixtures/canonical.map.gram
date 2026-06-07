@@ -7,8 +7,10 @@
 
 [ground:Layer {kind: "polygon", name: "Ground"} | (:Polygon:Floor { geometry: [h3`8f2800000000195`, h3`8f2800000000012`, h3`8f2800000000015`, h3`8f2800000000198`] })]
 [overrides:Layer {kind: "tile", name: "Overrides"} | (:Tile:Pillar { geometry: [h3`8f2800000000012`] }), (:Portal { geometry: [h3`8f2800000000195`, h3`8f2800000000015`], mode: "Door" })]
-[collectibles:Layer {kind: "items", name: "Collectibles"} | (:Item:BrassKey { geometry: [h3`8f2800000000015`] })]
+[collectibles:Layer {kind: "items", name: "Collectibles"} | (:Item:BrassKey { geometry: [h3`8f2800000000015`], qty: 3 })]
 
 [layers:LayerStack | ground, overrides, collectibles]
 
 [rules:Rules | (floor)-[:GO]->(floor), (floor)-[:GO]->(pillar)]
+
+[:Grants { explorer: 1, attendee: 1 } | (brassKey)]
