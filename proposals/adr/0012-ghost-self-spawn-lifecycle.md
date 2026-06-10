@@ -3,7 +3,7 @@
 **Status:** proposed  
 **Date:** 2026-06-10  
 **Authors:** @akollegger  
-**Related:** [ADR-0004](0004-a2a-ghost-agent-protocol.md) (A2A ghost protocol — host-orchestrated spawn) · [ADR-0009](0009-first-party-ghost-deployment.md) (first-party, intra-cluster auth) · [ADR-0011](0011-unified-jwt-auth.md) (scoped JWT credentials) · [RFC-0007](../rfc/0007-ghost-house-architecture.md) (Agent Host Architecture) · [RFC-0026](../rfc/0026-npc-agent.md) (NPC Agent — first consumer)
+**Related:** [ADR-0004](0004-a2a-ghost-agent-protocol.md) (A2A ghost protocol — host-orchestrated spawn) · [ADR-0009](0009-first-party-ghost-deployment.md) (first-party, intra-cluster auth) · [ADR-0011](0011-unified-jwt-auth.md) (scoped JWT credentials) · [RFC-0007](../rfc/0007-ghost-house-architecture.md) (Agent Host Architecture) · RFC-0026 (NPC Agent — first consumer; authored on the `028-npc-agent` branch, lands on `main` when that work merges)
 
 ## Context
 
@@ -22,7 +22,7 @@ This requires a decision about **how a ghost agent enters a session**: how it di
 
 **Ghost agents own their spawn lifecycle. The agent-host shifts from orchestrator-driven push to supporting agent-driven self-spawn**, via one reused capability (session discovery) and two new additions (agent-callable self-spawn and session-start emission). The new self-spawn capability is authenticated through the unified scoped-credential system (ADR-0011) — never the dev token or a bare secret (Constitution §V):
 
-1. **Session discovery.** Agents discover the active session through the **existing world-api endpoint `GET /live?status=active`** ([LiveSessionRoutes.ts:228](../../server/world-api/src/live/LiveSessionRoutes.ts)) — the same public list the Intermedium client uses. It returns `SessionRecord[]` (`id`, `name`, `status`, `startedAt`, `world`, `maps`); MVP has at most one active record. On startup an agent queries it; if the list is empty, the agent **awaits** the newly-emitted `world.session.start` event (see #3) rather than polling indefinitely. No new discovery endpoint is introduced.
+1. **Session discovery.** Agents discover the active session through the **existing world-api endpoint `GET /live?status=active`** ([LiveSessionRoutes.ts:228](../../server/world-api/src/live/LiveSessionRoutes.ts#L228)) — the same public list the Intermedium client uses. It returns `SessionRecord[]` (`id`, `name`, `status`, `startedAt`, `world`, `maps`); MVP has at most one active record. On startup an agent queries it; if the list is empty, the agent **awaits** the newly-emitted `world.session.start` event (see #3) rather than polling indefinitely. No new discovery endpoint is introduced.
 
 2. **Agent-callable self-spawn.** The agent-host exposes a spawn capability an agent invokes **with its own scoped JWT** (an `agent-host`/`spawn`-scoped token per ADR-0011, issued to first-party agents per ADR-0009). The agent submits the roster *it* decides to create — N ghosts of whatever kinds its logic dictates — and the host adopts and spawns each via the existing `AgentSupervisor.spawn` engine, returning the spawn contexts. The host validates and supervises; it does not choose the roster.
 
@@ -73,7 +73,7 @@ The agent-host catalog/registration contract (ADR-0009 self-registration) is unc
 **Scope boundaries:**
 - **MVP single session.** Multi-session discovery (an agent choosing *which* of several active sessions to join, and selection policy) is **deferred**; `GET /live?status=active` returns the single active session today, and an agent takes the first record.
 - **First-party only.** Per ADR-0009, self-spawn credentials are issued to first-party agents intra-cluster. Third-party agent self-spawn inherits ADR-0009's deferral and ADR-0011's future third-party issuance path.
-- RFC-0026 is the first consumer and carries the concrete endpoint shapes (`contracts/agent-spawn-endpoint.md`, `contracts/world-session-start.md`).
+- RFC-0026 is the first consumer and carries the concrete endpoint shapes in `specs/028-npc-agent/contracts/` (`agent-spawn-endpoint.md`, `world-session-start.md`) — authored on the `028-npc-agent` feature branch, landing on `main` when that work merges.
 
 ## Maintainer-Confirmed Resolutions (2026-06-10)
 
