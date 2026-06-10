@@ -29,6 +29,9 @@ export interface GhostRecord {
    *  wandering, sitting at the poker table, and returning. Optional —
    *  legacy callers (random-agent demo) leave it unset. */
   displayName?: string;
+  /** Per-ghost background description (IC-008). Distinguishes NPC catalog
+   *  characters sharing one agent process; absent for regular ghosts. */
+  background?: string;
 }
 
 export interface RegistryStore {

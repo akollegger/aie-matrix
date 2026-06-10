@@ -27,7 +27,13 @@ export function translateColyseusWorldV1(raw: unknown): WorldEvent | null {
     return null;
   }
   const o = raw as ColyseusWorldV1Payload;
-  if (typeof o.t !== "string" || typeof o.targetGhostId !== "string" || o.targetGhostId.length === 0) {
+  if (typeof o.t !== "string") {
+    return null;
+  }
+  // "broadcast" is the sentinel for session-scoped fanouts (e.g. world.session.start).
+  // Other events still require a non-empty targetGhostId.
+  const isBroadcast = o.targetGhostId === "broadcast";
+  if (!isBroadcast && (typeof o.targetGhostId !== "string" || o.targetGhostId.length === 0)) {
     return null;
   }
   const kind = KIND_BY_T[o.t];

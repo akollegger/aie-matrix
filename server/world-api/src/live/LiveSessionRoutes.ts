@@ -219,6 +219,13 @@ export function tryHandleLiveSession(
             }
           }).pipe(Effect.catchAll(() => Effect.void));
         }
+        // IC-007: emit world.session.start to all connected agents
+        const worldBridge2 = yield* WorldBridgeService;
+        worldBridge2.fanoutWorldV1({
+          t: "session.start",
+          targetGhostId: "broadcast",
+          payload: { sessionId: record.id },
+        });
       }
       return true as const;
     });

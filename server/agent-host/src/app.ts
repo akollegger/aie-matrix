@@ -6,12 +6,13 @@ import { CatalogService } from "./catalog/CatalogService.js";
 import { AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { McpProxyService } from "./mcp-proxy/McpProxyService.js";
 import { ActiveSessionsPreventDeregister, Unauthorized } from "./errors.js";
-import type { WorldCredential } from "./types.js";
+import type { AgentSession, WorldCredential } from "./types.js";
 import { BarnacleSupervisor } from "./barnacle/index.js";
 import {
   BARNACLE_COMPLETE_SCHEMA,
   type BarnacleComplete,
 } from "@aie-matrix/shared-types";
+import { deriveCharacterGhostId } from "./roster-utils.js";
 
 export type AppRuntime = ManagedRuntime.ManagedRuntime<
   CatalogService | AgentSupervisor | McpProxyService | BarnacleSupervisor,
@@ -478,6 +479,104 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           ghostId: session.ghostId,
           mcpToken: session.mcpToken,
         });
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.sync(() => {
+            const m = mapHouseError(e);
+            res.status(m.status).json(m.body);
+          }),
+        ),
+      ),
+    );
+  });
+
+  // IC-006: agent-callable roster spawn endpoint.
+  // Authenticated by the calling agent's own MCP session token (not the host dev token).
+  app.post("/v1/sessions/spawn-roster/:agentId", (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        const tok = getBearerValue(req);
+        if (!tok) {
+          res.status(401).json({ error: "missing Authorization", code: "UNAUTHORIZED" });
+          return;
+        }
+        const supervisor = yield* AgentSupervisor;
+        const callerSession = supervisor.getByMcpToken(tok);
+        if (!callerSession) {
+          res.status(401).json({ error: "invalid agent session token", code: "UNAUTHORIZED" });
+          return;
+        }
+
+        const b = req.body as {
+          sessionId?: string;
+          characters?: Array<{
+            characterId?: string;
+            ghostId?: string;
+            displayName?: string;
+            background?: string;
+            credential?: { token?: string; worldApiBaseUrl?: string };
+          }>;
+        } | null;
+        if (!b || typeof b.sessionId !== "string" || !Array.isArray(b.characters)) {
+          res.status(400).json({ error: "sessionId and characters[] are required", code: "VALIDATION_FAILED" });
+          return;
+        }
+
+        const agentId = req.params.agentId!;
+        const spawned: Array<{ characterId: string; ghostId: string; sessionId: string; ok: true }> = [];
+        const failed: Array<{ characterId: string; reason: string }> = [];
+
+        type SpawnOutcome = { ok: true; session: AgentSession | null } | { ok: false; reason: string };
+
+        for (const char of b.characters) {
+          const characterId = char.characterId;
+          if (typeof characterId !== "string" || characterId.trim().length === 0) {
+            failed.push({ characterId: String(characterId ?? ""), reason: "characterId is required" });
+            continue;
+          }
+          // Use caller-provided ghostId if given; fall back to deterministic derivation
+          const ghostId = (typeof char.ghostId === "string" && char.ghostId.trim().length > 0)
+            ? char.ghostId.trim()
+            : deriveCharacterGhostId(b.sessionId, characterId);
+
+          if (!char.credential?.token || !char.credential?.worldApiBaseUrl) {
+            failed.push({ characterId, reason: "credential.token and credential.worldApiBaseUrl are required" });
+            continue;
+          }
+          const worldCredential: WorldCredential = {
+            token: char.credential.token,
+            worldApiBaseUrl: char.credential.worldApiBaseUrl,
+          };
+
+          const spawnResult: SpawnOutcome = yield* supervisor.spawn({
+            agentId,
+            ghostId,
+            credential: worldCredential,
+            displayName: char.displayName,
+            background: char.background,
+            characterId,
+          }).pipe(
+            Effect.map((session): SpawnOutcome => ({ ok: true, session })),
+            Effect.catchAll((e): Effect.Effect<SpawnOutcome> => {
+              // "ghostId already has an active session" = idempotent restart
+              if (e._tag === "SpawnFailed" && e.message.includes("ghostId already has an active session")) {
+                return Effect.succeed({ ok: true, session: null });
+              }
+              const reason = e._tag === "CapabilityUnmet"
+                ? `capability unmet: ${e.missing.join(", ")}`
+                : e.message;
+              return Effect.succeed({ ok: false, reason });
+            }),
+          );
+
+          if (spawnResult.ok) {
+            spawned.push({ characterId, ghostId, sessionId: b.sessionId, ok: true });
+          } else {
+            failed.push({ characterId, reason: spawnResult.reason });
+          }
+        }
+
+        res.status(200).json({ spawned, failed });
       }).pipe(
         Effect.catchAll((e) =>
           Effect.sync(() => {

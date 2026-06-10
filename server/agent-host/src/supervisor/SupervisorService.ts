@@ -284,6 +284,11 @@ export interface IAgentSupervisor {
      *  AgentSession.displayName so it flows through to peppers AND the
      *  Barnacle handoff. */
     displayName?: string;
+    /** Per-ghost background description (IC-008). Set for NPC catalog characters. */
+    background?: string;
+    /** Catalog character ID (IC-008). Set for NPC catalog characters so the
+     *  executor can map a spawned ghost back to its CharacterDefinition. */
+    characterId?: string;
   }) => Effect.Effect<AgentSession, SpawnFailed | SpawnTimeout | CapabilityUnmet>;
   readonly shutdown: (sessionId: string) => Effect.Effect<void, SessionNotFound>;
   readonly getSession: (sessionId: string) => AgentSession | undefined;
@@ -406,6 +411,8 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
             class: tier,
             displayName: effectiveDisplayName,
             partnerEmail: null,
+            ...(input.background !== undefined ? { background: input.background } : {}),
+            ...(input.characterId !== undefined ? { characterId: input.characterId } : {}),
           },
           worldEntryPoint,
           houseEndpoints: {
@@ -536,6 +543,32 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
 
     deliverWorldEvent: (event) =>
       Effect.gen(function* () {
+        // world.session.start (IC-007) is broadcast to ALL running push-capable
+        // sessions — each agent's coordinator receives its own copy with its ghostId.
+        if (event.kind === "world.session.start") {
+          for (const [, s] of state.sessions) {
+            if (s.status !== "running" || !s.usesA2APush || s.spawnClient == null) continue;
+            if (s.currentTaskId == null || s.currentA2AContextId == null) continue;
+            const sessionEvent = { ...event, ghostId: s.ghostId };
+            yield* pipe(
+              a2a.sendWorldEvent(s.spawnClient, {
+                taskId: s.currentTaskId,
+                contextId: s.currentA2AContextId,
+                event: sessionEvent,
+              }),
+              Effect.catchAllCause((cause) =>
+                Effect.sync(() =>
+                  slog("supervisor.session-start-fanout-fail", {
+                    sessionId: s.sessionId,
+                    ghostId: s.ghostId,
+                    message: String(cause),
+                  }),
+                ),
+              ),
+            );
+          }
+          return;
+        }
         const sid = state.byGhostId.get(event.ghostId);
         if (sid == null) return;
         const s = state.sessions.get(sid);

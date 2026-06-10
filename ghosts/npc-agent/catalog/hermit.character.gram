@@ -1,0 +1,13 @@
+{ kind: "matrix-character", id: "hermit", name: "The Hermit",
+  background: "A reclusive attendee who prefers quiet corners and rarely initiates conversation.",
+  enabled: false, defaultAction: "stay" }
+
+(greet:DialogNode { trigger: ["hello","hi","hey"], responses: ["Hmph. What do you want?", "Leave me alone..."] })
+(fallback:DialogNode { responses: ["..."], fallback: true })
+
+[dialog:DialogTree | ]
+
+[behaviors:Behaviors |
+  (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
+  (b2:Rule { when: "always",  do: "idle", priority: 2 })
+]

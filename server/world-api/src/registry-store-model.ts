@@ -29,6 +29,9 @@ export interface GhostRecord {
   /** Human-readable name (e.g. "Django Decypher"). Optional; read back
    *  via GET /registry/ghosts/:id so other ghosts can resolve names. */
   displayName?: string;
+  /** Per-ghost background description (IC-008). Distinguishes NPC characters
+   *  sharing one agent process; absent for regular ghosts. */
+  background?: string;
 }
 
 export interface RegistryStoreLike {

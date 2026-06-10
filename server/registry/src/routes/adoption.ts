@@ -104,6 +104,9 @@ export function handleAdoptGhostEffect(
       ...(typeof parsed.agentId === "string" && parsed.agentId.trim().length > 0
         ? { agentId: parsed.agentId.trim() }
         : {}),
+      ...(typeof parsed.background === "string" && parsed.background.trim().length > 0
+        ? { background: parsed.background.trim() }
+        : {}),
     });
     store.activeByCaretaker.set(parsed.caretakerId, ghostId);
     const token = mintGhostToken({

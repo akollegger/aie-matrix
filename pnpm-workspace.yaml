@@ -18,6 +18,7 @@ packages:
   - server/agent-host/examples/observer-agent
   - server/agent-host/examples/echo-agent
   - ghosts/random-agent
+  - ghosts/npc-agent
   - ghosts/funder-agent
   - ghosts/ghost-cli
   - ghosts/tck

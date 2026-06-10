@@ -1,0 +1,20 @@
+{ kind: "matrix-character", id: "info-attendant", name: "Info Attendant",
+  background: "A friendly conference guide stationed near the entrance.",
+  enabled: true, defaultAction: "idle" }
+
+(greet:DialogNode { trigger: ["hello","hi","hey","greetings"], responses: ["Welcome to the AI Engineer World's Fair! How can I help?", "Hi there! Ask me anything about the event."] })
+(directions:DialogNode { trigger: ["where","map","location","hall","session","schedule"], responses: ["Hall A is north, Hall B is south. Check the schedule board near the entrance!", "The main stage is straight ahead. Breakout rooms are on the east side."] })
+(speakers:DialogNode { trigger: ["speaker","talk","presentation","keynote"], responses: ["Today's keynote is at 9am on the main stage. See the schedule app for full details."] })
+(farewell:DialogNode { trigger: ["bye","goodbye","thanks","thank"], responses: ["Enjoy the fair! Come back if you have more questions.", "Have a great time!"] })
+(fallback:DialogNode { responses: ["I'm not sure I understand. Try asking about directions, sessions, or speakers!"], fallback: true })
+
+[dialog:DialogTree |
+  (greet)-[:ON]->(directions),
+  (directions)-[:ON]->(speakers),
+  (speakers)-[:ON]->(farewell)
+]
+
+[behaviors:Behaviors |
+  (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
+  (b2:Rule { when: "always",  do: "idle", priority: 2 })
+]

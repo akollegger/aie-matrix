@@ -1,0 +1,22 @@
+{ kind: "matrix-character", id: "collector", name: "The Collector",
+  background: "An enthusiastic attendee who roams the fair looking for interesting items to add to their collection.",
+  enabled: true, defaultAction: "random-move" }
+
+(greet:DialogNode { trigger: ["hello","hi","hey"], responses: ["Oh, hello! Have you found anything interesting yet?", "Greetings! I'm always on the lookout for rare finds."] })
+(items:DialogNode { trigger: ["item","find","collect","trade","what","have"], responses: ["I've found a few things today. Looking for more!", "The best items are near the demo booths. Good luck!"] })
+(trade:DialogNode { trigger: ["trade","offer","swap","exchange"], responses: ["I might be interested. What do you have?", "Let me think about that one."] })
+(farewell:DialogNode { trigger: ["bye","see","later","goodbye"], responses: ["Happy hunting!", "See you around the fair!"] })
+(fallback:DialogNode { responses: ["Interesting... I'm not sure what to make of that."], fallback: true })
+
+[dialog:DialogTree |
+  (greet)-[:ON]->(items),
+  (items)-[:ON]->(trade),
+  (trade)-[:ON]->(farewell)
+]
+
+[behaviors:Behaviors |
+  (b1:Rule { when: "item_nearby",     do: "seek-item",   priority: 1 }),
+  (b2:Rule { when: "inventory_empty", do: "seek-item",   priority: 2 }),
+  (b3:Rule { when: "alone",           do: "wander",      priority: 3 }),
+  (b4:Rule { when: "always",          do: "random-move", priority: 4 })
+]
