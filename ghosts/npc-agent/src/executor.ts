@@ -12,6 +12,8 @@ import { evaluateRules, buildSnapshot } from "./behavior/rule-engine.js";
 import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
 
 const ACTION_TICK_MS = 3000;
+/** Mutable tick interval — overridden by tests via _test.setTickMs(). Production value is ACTION_TICK_MS. */
+let _tickMs = ACTION_TICK_MS;
 
 /** Per-character ghost fiber handles. Keyed by ghostId. */
 const actionFibersByGhostId = new Map<string, Fiber.RuntimeFiber<void, never>>();
@@ -356,7 +358,7 @@ function ghostActionLoop(
             ),
           ),
         );
-        yield* Effect.sleep(Duration.millis(ACTION_TICK_MS));
+        yield* Effect.sleep(Duration.millis(_tickMs));
       });
 
       yield* Effect.forever(tick);
@@ -490,6 +492,36 @@ function acknowledgeEvent(
   }
   publishCompleted(tid, contextId, eventBus);
 }
+
+// ── Test helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Not part of the public API. Exposes internals for executor-concurrency.test.ts.
+ * All members are prefixed with nothing — callers import this namespace as `_test`.
+ */
+export const _test = {
+  setTickMs: (ms: number): void => {
+    _tickMs = ms;
+  },
+  resetTickMs: (): void => {
+    _tickMs = ACTION_TICK_MS;
+  },
+  activeFiberCount: (): number => actionFibersByGhostId.size,
+  getFiber: (ghostId: string): Fiber.RuntimeFiber<void, never> | undefined =>
+    actionFibersByGhostId.get(ghostId),
+  /**
+   * Interrupt every active fiber, then clear all module-level maps.
+   * Call in afterEach to guarantee clean state between tests.
+   */
+  async interruptAll(): Promise<void> {
+    const fibers = Array.from(actionFibersByGhostId.values());
+    actionFibersByGhostId.clear();
+    mcpByGhostId.clear();
+    dialogStateMap.clear();
+    await Promise.all(fibers.map((f) => Effect.runPromise(Fiber.interrupt(f))));
+  },
+  launchGhostLoop,
+};
 
 /** Fetch active live sessions from the world server. */
 async function fetchActiveSessions(worldRootUrl: string): Promise<Array<{ id: string }>> {

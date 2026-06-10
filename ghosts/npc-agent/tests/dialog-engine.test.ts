@@ -191,3 +191,79 @@ describe("initialDialogState", () => {
     expect(state.lastUpdated).toBeTruthy();
   });
 });
+
+// ── Concurrent dialog state isolation (stress) ────────────────────────────────
+//
+// Simulates 50 partners talking to the same NPC simultaneously.
+// Each partner advances through the tree independently — no state bleeds across.
+
+describe("concurrent dialog state isolation", () => {
+  it("50 partners maintain fully independent FSM state", () => {
+    const PARTNER_COUNT = 50;
+
+    // Initialise a separate state object per partner.
+    const states = new Map<string, DialogState>();
+    for (let i = 0; i < PARTNER_COUNT; i++) {
+      states.set(`partner-${i}`, initialDialogState(CONFERENCE_TREE));
+    }
+
+    // Even-indexed partners ask about the schedule; odd-indexed say goodbye.
+    for (const [id, state] of states) {
+      const idx = parseInt(id.split("-")[1]!, 10);
+      const input = idx % 2 === 0 ? "what is the schedule?" : "goodbye";
+      const result = evaluateDialog(CONFERENCE_TREE, state, input);
+      states.set(id, { currentNodeId: result.nextNodeId, lastUpdated: new Date().toISOString() });
+    }
+
+    for (const [id, state] of states) {
+      const idx = parseInt(id.split("-")[1]!, 10);
+      if (idx % 2 === 0) {
+        expect(state.currentNodeId).toBe("schedule");
+      } else {
+        expect(state.currentNodeId).toBe("farewell");
+      }
+    }
+  });
+
+  it("partners in different states advance independently on the same input", () => {
+    // partnerA is already in "schedule" state; partnerB is at "idle".
+    const stateA: DialogState = { currentNodeId: "schedule", lastUpdated: new Date().toISOString() };
+    const stateB: DialogState = initialDialogState(CONFERENCE_TREE);
+
+    // Both receive the same message.
+    const resultA = evaluateDialog(CONFERENCE_TREE, stateA, "hello");
+    const resultB = evaluateDialog(CONFERENCE_TREE, stateB, "hello");
+
+    // stateA (schedule) has only a wildcard edge → returns to idle.
+    expect(resultA.nextNodeId).toBe("idle");
+    // stateB (idle) has no specific match → stays at idle via self-loop.
+    expect(resultB.nextNodeId).toBe("idle");
+  });
+
+  it("100 sequential turns across 10 partners produce consistent state transitions", () => {
+    const PARTNERS = 10;
+    const TURNS = 10;
+    const states = new Map<string, DialogState>();
+    for (let i = 0; i < PARTNERS; i++) {
+      states.set(`p${i}`, initialDialogState(CONFERENCE_TREE));
+    }
+
+    // Interleave turns: each partner advances one step at a time.
+    for (let turn = 0; turn < TURNS; turn++) {
+      for (const [id, state] of states) {
+        // Alternate between asking about schedule and saying goodbye each turn.
+        const idx = parseInt(id.slice(1), 10);
+        const input = (turn + idx) % 2 === 0 ? "schedule" : "goodbye";
+        const result = evaluateDialog(CONFERENCE_TREE, state, input);
+        states.set(id, { currentNodeId: result.nextNodeId, lastUpdated: new Date().toISOString() });
+      }
+    }
+
+    // After an even number of identical alternating turns, all partners must be
+    // in a valid tree node — none can be in an undefined or leaked state.
+    const validNodeIds = new Set(CONFERENCE_TREE.nodes.keys());
+    for (const state of states.values()) {
+      expect(validNodeIds.has(state.currentNodeId)).toBe(true);
+    }
+  });
+});
