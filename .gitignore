@@ -95,6 +95,9 @@ coverage.xml
 # Jupyter
 .ipynb_checkpoints/
 
+# End-to-end test artifacts
+e2e/test-results/
+
 # Tiled editor local session (absolute paths; noisy diffs)
 *.tiled-session
 

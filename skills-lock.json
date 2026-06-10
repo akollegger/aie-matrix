@@ -6,6 +6,12 @@
       "sourceType": "github",
       "computedHash": "6448e0503ec75d4c1e3e23a5c5e89f94d4a1b961d64023d38f3cccd0a7343e65"
     },
+    "effect-ts": {
+      "source": "Effect-TS/skills",
+      "sourceType": "github",
+      "skillPath": "skills/effect-ts/SKILL.md",
+      "computedHash": "301521e167410dd42d834dd0e7cedbe9cfffa519f630a12241dbea7b1d932324"
+    },
     "excalidraw-diagram-generator": {
       "source": "github/awesome-copilot",
       "sourceType": "github",

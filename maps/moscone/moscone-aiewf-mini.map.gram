@@ -1,0 +1,13 @@
+{ kind: "matrix-map", name: "moscone-aiewf-mini", description: "Moscone West 1st floor, simulating the AI Engineer World's Fair conference. ", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor" })
+(stage:TileType:Stage { name: "Stage", style: css`background: #0257b3` })
+(area:TileType:Area { name: "Area", style: css`background: #13874a` })
+
+[ground:Layer {kind: "tile", name: "Ground"}]
+[lyrc7bzj64:Layer {kind: "polygon", name: "Building"} | (:Polygon:Floor { geometry: [h3`8f283082aa352ea`, h3`8f283082aa30529`, h3`8f283082aa3442d`, h3`8f283082aa3596e`], name: "Moscone West 1", description: "First floor of Moscone West" })]
+[lyrp199dsg:Layer {kind: "polygon", name: "Rooms"} | (:Polygon:Stage { geometry: [h3`8f283082aa352ea`, h3`8f283082aa3561b`, h3`8f283082aa35735`, h3`8f283082aa3530c`], name: "Expo Srtage U1" }), (:Polygon:Stage { geometry: [h3`8f283082aa35321`, h3`8f283082aa3509c`, h3`8f283082aa35c58`, h3`8f283082aa35bae`], name: "Expo Stage L1" })]
+[lyrm9xy0ee:Layer {kind: "polygon", name: "Areas"} | (:Polygon:Area { geometry: [h3`8f283082aa3584b`, h3`8f283082aa35c46`, h3`8f283082ab1b6d8`, h3`8f283082aa3596e`], name: "Refresh and Relax", description: "Comfortable seating for lounging, chatting, and maybe doing a bit of work.  " }), (:Polygon:Area { geometry: [h3`8f283082aa35c0b`, h3`8f283082aa34359`, h3`8f283082aa34ac4`, h3`8f283082aa35d2e`], name: "Food Market", description: "Coffee, snacks and meals from mini food-truck vendors" }), (:Polygon:Area { geometry: [h3`8f283082aa34228`, h3`8f283082aa34399`, h3`8f283082aa34044`, h3`8f283082aa34a89`], name: "Curios" })]
+[layers:LayerStack | ground, lyrc7bzj64, lyrp199dsg, lyrm9xy0ee]
+
+[rules:Rules | (floor)-[:GO]->(floor), (stage)-[:GO]->(stage), (area)-[:GO]->(area)]
