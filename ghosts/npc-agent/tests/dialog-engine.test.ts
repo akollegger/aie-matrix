@@ -2,90 +2,88 @@ import { describe, it, expect } from "vitest";
 import { evaluateDialog, initialDialogState } from "../src/dialog/dialog-engine.js";
 import type { DialogTree, DialogState } from "../src/types.js";
 
-// ── Fixtures: AI Engineer World's Fair conference guide ───────────────────────
+// ── Fixture: AI Engineer World's Fair conference guide ────────────────────────
+//
+// States:   idle → schedule → (wildcard) → idle
+//                → farewell → (wildcard) → idle
+//                → (wildcard self-loop)  → idle
+//
+// FSM: idle is the root; every state returns to idle via its wildcard edge.
+// The idle state's wildcard edge is an explicit self-loop (authors must include it).
 
-/**
- * greet → (on "hello/hi/hey") → respond → transition to schedule
- * schedule → (on "schedule/talk/session/when") → respond → transition to farewell
- * farewell → (on "thanks/bye/goodbye") → respond → no transition (stays)
- * fallback → (no trigger, fallback: true) → catch-all
- */
 const CONFERENCE_TREE: DialogTree = {
-  rootId: "greet",
-  fallbackId: "fallback",
+  id: "dialog_1",
+  rootId: "idle",
   nodes: new Map([
     [
-      "greet",
+      "idle",
       {
-        id: "greet",
-        triggerConditions: ["hello", "hi", "hey"],
-        responses: ["Welcome to the AI Engineer World's Fair! What brings you here?"],
-        transition: "schedule",
+        id: "idle",
+        responses: ["How can I help? Ask about the schedule, sessions, or say goodbye."],
       },
     ],
     [
       "schedule",
       {
         id: "schedule",
-        triggerConditions: ["schedule", "talk", "session", "when"],
         responses: ["Keynotes start at 9am in Hall A. Workshops run all day in Hall B."],
-        transition: "farewell",
       },
     ],
     [
       "farewell",
       {
         id: "farewell",
-        triggerConditions: ["thanks", "bye", "goodbye"],
         responses: ["Enjoy the Fair!", "See you around!"],
       },
     ],
-    [
-      "fallback",
-      {
-        id: "fallback",
-        triggerConditions: [],
-        responses: ["I'm just a guide bot — try asking about the schedule!"],
-        fallback: true,
-      },
-    ],
   ]),
+  edges: [
+    { fromId: "idle", toId: "schedule", triggers: ["schedule", "talk", "session", "when"] },
+    { fromId: "idle", toId: "farewell", triggers: ["thanks", "bye", "goodbye"] },
+    { fromId: "idle", toId: "idle",     triggers: [] }, // explicit idle self-loop
+    { fromId: "schedule", toId: "idle", triggers: [] }, // return to idle
+    { fromId: "farewell", toId: "idle", triggers: [] }, // return to idle
+  ],
 };
 
 function freshState(): DialogState {
   return initialDialogState(CONFERENCE_TREE);
 }
 
-// ── Tests ────────────────────────────────────────────────────────────────────
+// ── Trigger matching ──────────────────────────────────────────────────────────
 
 describe("evaluateDialog — trigger matching", () => {
-  it("matches a greeting trigger case-insensitively", () => {
-    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "Hello there!");
-    expect(result.response).toBe("Welcome to the AI Engineer World's Fair! What brings you here?");
-  });
-
-  it("matches using substring (not exact word)", () => {
-    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "when does the schedule start?");
+  it("matches a schedule trigger and responds with the target node's text", () => {
+    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "when does it start?");
     expect(result.response).toBe(
       "Keynotes start at 9am in Hall A. Workshops run all day in Hall B.",
     );
   });
 
-  it("fires fallback when no trigger matches", () => {
+  it("matches using substring (not exact word)", () => {
+    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "what sessions are there?");
+    expect(result.response).toBe(
+      "Keynotes start at 9am in Hall A. Workshops run all day in Hall B.",
+    );
+  });
+
+  it("wildcard self-loop fires when no specific trigger matches from idle", () => {
     const result = evaluateDialog(CONFERENCE_TREE, freshState(), "Where is the nearest coffee?");
     expect(result.response).toBe(
-      "I'm just a guide bot — try asking about the schedule!",
+      "How can I help? Ask about the schedule, sessions, or say goodbye.",
     );
   });
 
   it("trigger match is case-insensitive", () => {
     const result = evaluateDialog(CONFERENCE_TREE, freshState(), "BYE BYE");
-    expect(result.response).toMatch(/Enjoy|See you/);
+    expect(["Enjoy the Fair!", "See you around!"]).toContain(result.response);
   });
 });
 
+// ── Response selection ────────────────────────────────────────────────────────
+
 describe("evaluateDialog — response selection", () => {
-  it("returns a response from the matching node's responses array", () => {
+  it("returns a response from the TARGET node's responses array", () => {
     const result = evaluateDialog(CONFERENCE_TREE, freshState(), "bye");
     expect(["Enjoy the Fair!", "See you around!"]).toContain(result.response);
   });
@@ -93,111 +91,103 @@ describe("evaluateDialog — response selection", () => {
   it("always returns one of the listed responses (100 trials)", () => {
     const allowed = ["Enjoy the Fair!", "See you around!"];
     for (let i = 0; i < 100; i++) {
-      const r = evaluateDialog(CONFERENCE_TREE, freshState(), "bye");
+      const r = evaluateDialog(CONFERENCE_TREE, freshState(), "goodbye");
       expect(allowed).toContain(r.response);
     }
   });
 
-  it("fallback response is returned when no trigger matched", () => {
+  it("wildcard self-loop response comes from idle node", () => {
     const result = evaluateDialog(CONFERENCE_TREE, freshState(), "xyzzy");
     expect(result.response).toBe(
-      "I'm just a guide bot — try asking about the schedule!",
+      "How can I help? Ask about the schedule, sessions, or say goodbye.",
     );
   });
 });
 
+// ── State transitions ─────────────────────────────────────────────────────────
+
 describe("evaluateDialog — state transitions", () => {
-  it("advances state to the transition target after a match", () => {
-    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "hello");
+  it("advances to the target node after a specific trigger match", () => {
+    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "session");
     expect(result.nextNodeId).toBe("schedule");
   });
 
-  it("stays at the matched node when no transition is defined", () => {
-    const state: DialogState = { currentNodeId: "farewell", lastUpdated: "" };
-    const result = evaluateDialog(CONFERENCE_TREE, state, "bye");
-    expect(result.nextNodeId).toBe("farewell");
+  it("wildcard self-loop keeps idle at idle", () => {
+    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "xyzzy");
+    expect(result.nextNodeId).toBe("idle");
   });
 
-  it("fallback node stays at fallback (no transition)", () => {
-    const result = evaluateDialog(CONFERENCE_TREE, freshState(), "xyzzy");
-    expect(result.nextNodeId).toBe("fallback");
+  it("wildcard return edge sends non-idle state back to idle", () => {
+    const atSchedule: DialogState = { currentNodeId: "schedule", lastUpdated: "" };
+    const result = evaluateDialog(CONFERENCE_TREE, atSchedule, "something unrelated");
+    expect(result.nextNodeId).toBe("idle");
+  });
+
+  it("returns idle's responses when returning from a non-idle state via wildcard", () => {
+    const atSchedule: DialogState = { currentNodeId: "schedule", lastUpdated: "" };
+    const result = evaluateDialog(CONFERENCE_TREE, atSchedule, "something unrelated");
+    expect(result.response).toBe(
+      "How can I help? Ask about the schedule, sessions, or say goodbye.",
+    );
   });
 });
+
+// ── Partner state isolation ───────────────────────────────────────────────────
 
 describe("evaluateDialog — two partners track independent state", () => {
-  it("state for partner-A does not affect partner-B", () => {
-    const stateA: DialogState = { currentNodeId: "greet", lastUpdated: "" };
-    const stateB: DialogState = { currentNodeId: "greet", lastUpdated: "" };
+  it("advancing state for partner A does not affect partner B", () => {
+    const stateA: DialogState = { currentNodeId: "idle", lastUpdated: "" };
+    const stateB: DialogState = { currentNodeId: "idle", lastUpdated: "" };
 
-    // Partner A says hello → advances A's state to schedule
-    const resultA = evaluateDialog(CONFERENCE_TREE, stateA, "hello");
+    // Partner A asks about sessions → advances to schedule
+    const resultA = evaluateDialog(CONFERENCE_TREE, stateA, "what sessions are on?");
     expect(resultA.nextNodeId).toBe("schedule");
 
-    // Partner B's state is unchanged — still at greet
-    expect(stateB.currentNodeId).toBe("greet");
+    // Partner B's object is unmodified — still at idle
+    expect(stateB.currentNodeId).toBe("idle");
 
-    // Partner B also says hello → still matches greet
-    const resultB = evaluateDialog(CONFERENCE_TREE, stateB, "hi");
-    expect(resultB.response).toBe(
-      "Welcome to the AI Engineer World's Fair! What brings you here?",
-    );
+    // Partner B says goodbye → matches farewell from idle
+    const resultB = evaluateDialog(CONFERENCE_TREE, stateB, "bye");
+    expect(["Enjoy the Fair!", "See you around!"]).toContain(resultB.response);
+    expect(resultB.nextNodeId).toBe("farewell");
   });
 });
+
+// ── Multi-turn conversation ───────────────────────────────────────────────────
 
 describe("evaluateDialog — multi-turn conversation", () => {
-  it("follows greet → schedule → farewell over three turns", () => {
+  it("follows idle → schedule → idle (wildcard) → farewell over three turns", () => {
     let state = freshState();
 
-    const r1 = evaluateDialog(CONFERENCE_TREE, state, "hi");
+    // Turn 1: specific trigger → schedule
+    const r1 = evaluateDialog(CONFERENCE_TREE, state, "what sessions are on?");
     expect(r1.response).toBe(
-      "Welcome to the AI Engineer World's Fair! What brings you here?",
-    );
-    state = { currentNodeId: r1.nextNodeId, lastUpdated: "" };
-
-    const r2 = evaluateDialog(CONFERENCE_TREE, state, "what sessions are on?");
-    expect(r2.response).toBe(
       "Keynotes start at 9am in Hall A. Workshops run all day in Hall B.",
     );
+    expect(r1.nextNodeId).toBe("schedule");
+    state = { currentNodeId: r1.nextNodeId, lastUpdated: "" };
+
+    // Turn 2: no match from schedule → wildcard → return to idle
+    const r2 = evaluateDialog(CONFERENCE_TREE, state, "cool thanks");
+    expect(r2.response).toBe(
+      "How can I help? Ask about the schedule, sessions, or say goodbye.",
+    );
+    expect(r2.nextNodeId).toBe("idle");
     state = { currentNodeId: r2.nextNodeId, lastUpdated: "" };
 
-    const r3 = evaluateDialog(CONFERENCE_TREE, state, "thanks!");
+    // Turn 3: farewell trigger from idle
+    const r3 = evaluateDialog(CONFERENCE_TREE, state, "goodbye!");
     expect(["Enjoy the Fair!", "See you around!"]).toContain(r3.response);
+    expect(r3.nextNodeId).toBe("farewell");
   });
 });
 
-describe("evaluateDialog — cycle guard", () => {
-  it("does not follow a self-referential transition into an infinite loop", () => {
-    const selfLoopTree: DialogTree = {
-      rootId: "loop",
-      fallbackId: "fallback",
-      nodes: new Map([
-        [
-          "loop",
-          {
-            id: "loop",
-            triggerConditions: ["ping"],
-            responses: ["pong"],
-            transition: "loop", // self-loop
-          },
-        ],
-        [
-          "fallback",
-          { id: "fallback", triggerConditions: [], responses: ["?"], fallback: true },
-        ],
-      ]),
-    };
-    const state: DialogState = { currentNodeId: "loop", lastUpdated: "" };
-    const result = evaluateDialog(selfLoopTree, state, "ping");
-    // Self-loop is guarded; nextNodeId stays at the responding node, not cycling
-    expect(result.nextNodeId).toBe("loop");
-    expect(result.response).toBe("pong");
-  });
-});
+// ── initialDialogState ────────────────────────────────────────────────────────
 
 describe("initialDialogState", () => {
   it("initializes at the tree's rootId", () => {
     const state = initialDialogState(CONFERENCE_TREE);
-    expect(state.currentNodeId).toBe("greet");
+    expect(state.currentNodeId).toBe("idle");
     expect(state.lastUpdated).toBeTruthy();
   });
 });

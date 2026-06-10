@@ -7,38 +7,42 @@ import { loadCatalog } from "../src/catalog/catalog-loader.js";
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const VALID_ENABLED = `
-{ kind: "matrix-character", id: "guide", name: "Conference Guide",
-  background: "Welcomes attendees.", enabled: true, defaultAction: "idle" }
-
-(fallback:DialogNode { responses: ["Let me find out!"], fallback: true })
-[dialog:DialogTree | ]
+{ kind: "matrix-character" }
+(charGuide:Character { id: "guide", name: "Conference Guide",
+  background: "Welcomes attendees.", enabled: true, defaultAction: "idle" })
+(idle:DialogNode { responses: ["Let me find out!"] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charGuide)-[:HAS_DIALOG]->(dialog_1)
 `;
 
 const VALID_DISABLED = `
-{ kind: "matrix-character", id: "hermit", name: "The Hermit",
-  background: "Prefers solitude.", enabled: false, defaultAction: "stay" }
-
-(fallback:DialogNode { responses: ["..."], fallback: true })
-[dialog:DialogTree | ]
+{ kind: "matrix-character" }
+(charHermit:Character { id: "hermit", name: "The Hermit",
+  background: "Prefers solitude.", enabled: false, defaultAction: "stay" })
+(idle:DialogNode { responses: ["..."] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charHermit)-[:HAS_DIALOG]->(dialog_1)
 `;
 
 const VALID_SECOND = `
-{ kind: "matrix-character", id: "collector", name: "Collector",
-  background: "Seeks rare items.", enabled: true, defaultAction: "random-move" }
-
-(fallback:DialogNode { responses: ["I collect things."], fallback: true })
-[dialog:DialogTree | ]
+{ kind: "matrix-character" }
+(charCollector:Character { id: "collector", name: "Collector",
+  background: "Seeks rare items.", enabled: true, defaultAction: "random-move" })
+(idle:DialogNode { responses: ["I collect things."] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charCollector)-[:HAS_DIALOG]->(dialog_1)
 `;
 
 const MALFORMED = `this is not valid gram at all {{{`;
 
 // Duplicate of VALID_ENABLED (same id: "guide")
 const DUPLICATE_ID = `
-{ kind: "matrix-character", id: "guide", name: "Guide Duplicate",
-  background: "Another guide.", enabled: true, defaultAction: "idle" }
-
-(fallback:DialogNode { responses: ["Hello?"], fallback: true })
-[dialog:DialogTree | ]
+{ kind: "matrix-character" }
+(charDup:Character { id: "guide", name: "Guide Duplicate",
+  background: "Another guide.", enabled: true, defaultAction: "idle" })
+(idle:DialogNode { responses: ["Hello?"] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charDup)-[:HAS_DIALOG]->(dialog_1)
 `;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

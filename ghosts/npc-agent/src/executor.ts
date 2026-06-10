@@ -1,6 +1,7 @@
 import type { Message, Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import { AgentExecutor, type ExecutionEventBus, type RequestContext } from "@a2a-js/sdk/server";
 import { randomUUID } from "node:crypto";
+import { Effect, Fiber, Duration } from "effect";
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import type { SpawnContext } from "./spawn-types.js";
 import { asWorldEvent } from "./world-event.js";
@@ -12,12 +13,10 @@ import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
 
 const ACTION_TICK_MS = 3000;
 
-type ActionLoop = { cancel: () => void };
+/** Per-character ghost fiber handles. Keyed by ghostId. */
+const actionFibersByGhostId = new Map<string, Fiber.RuntimeFiber<void, never>>();
 
-/** Per-character ghost action loops. Keyed by ghostId. */
-const actionLoopsByGhostId = new Map<string, ActionLoop>();
-
-/** Active MCP clients per ghostId. */
+/** Active MCP clients per ghostId (set during fiber acquire, cleared during release). */
 const mcpByGhostId = new Map<string, GhostMcpClient>();
 
 /**
@@ -189,16 +188,8 @@ export class NpcAgentExecutor implements AgentExecutor {
             characterId: sp.ghostCard.characterId,
           }),
         );
-        // Fire-and-forget; loop failure for one character MUST NOT block others (FR-005).
-        void startActionLoop(sp, characterDef).catch((e: unknown) => {
-          console.error(
-            JSON.stringify({
-              kind: "npc-agent.character.loop-startup-error",
-              ghostId: sp.ghostId,
-              error: e instanceof Error ? e.message : String(e),
-            }),
-          );
-        });
+        // launchGhostLoop awaits interrupt of any prior loop, then forks the new fiber.
+        await launchGhostLoop(sp, characterDef);
         publishCompleted(taskId, contextId, eventBus);
         return;
       }
@@ -243,10 +234,6 @@ export class NpcAgentExecutor implements AgentExecutor {
       return;
     }
 
-    // npc-agent authenticates itself to spawn-roster with its own MCP session token.
-    // Per IC-006: caller must have a valid MCP session token issued by the agent-host.
-    // Character-level tokens are empty in Phase 3; the host derives ghostIds via
-    // deriveCharacterGhostId. Phase 6 will wire in proper per-character credentials.
     const credential: RosterCredential = {
       mcpToken: sp.token,
       worldApiBaseUrl: sp.houseEndpoints.mcp,
@@ -300,36 +287,118 @@ async function handleDialogMessage(
   await mcp.callTool("say", { content: result.response, to: partnerGhostId });
 }
 
-// ── Per-character action loop ─────────────────────────────────────────────────
+// ── Per-character action loop (Effect-based) ──────────────────────────────────
 
-function cancelActionLoopForGhost(ghostId: string, reason: string): void {
-  const loop = actionLoopsByGhostId.get(ghostId);
-  if (loop) {
-    console.info(JSON.stringify({ kind: "npc-agent.character.loop-cancel", ghostId, reason }));
-    loop.cancel();
-  }
+/**
+ * Returns an Effect that connects an MCP client, runs behavior ticks every
+ * ACTION_TICK_MS until interrupted, then disconnects. The MCP client is stored
+ * in mcpByGhostId for use by the dialog handler while the fiber is alive.
+ *
+ * Tick failures are non-fatal (FR-005): logged and skipped; the loop continues.
+ * Connect failures propagate to the outer catchAll and are logged.
+ * Fiber interruption triggers the acquireRelease finalizer (disconnect + map cleanup).
+ */
+function ghostActionLoop(
+  ctx: SpawnContext,
+  characterDef: CharacterDefinition,
+): Effect.Effect<void, never> {
+  return Effect.scoped(
+    Effect.gen(function* () {
+      const mcp = yield* Effect.acquireRelease(
+        // Acquire: connect and register client.
+        Effect.tryPromise({
+          try: async () => {
+            const client = new GhostMcpClient({
+              worldApiBaseUrl: ctx.houseEndpoints.mcp,
+              token: ctx.token,
+            });
+            await client.connect();
+            mcpByGhostId.set(ctx.ghostId, client);
+            return client;
+          },
+          catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+        }),
+        // Release: disconnect unconditionally on fiber exit or interruption.
+        (client) =>
+          Effect.promise(() =>
+            client
+              .disconnect()
+              .catch(() => {})
+              .then(() => {
+                mcpByGhostId.delete(ctx.ghostId);
+              }),
+          ),
+      );
+
+      // Single tick: gather world state, evaluate behavior rules, then sleep.
+      const tick = Effect.gen(function* () {
+        yield* Effect.tryPromise({
+          try: async () => {
+            const whereami = (await mcp.callTool("whereami", {})) as Record<string, unknown>;
+            const exitsRaw = (await mcp.callTool("exits", {})) as Record<string, unknown>;
+            const inventoryRaw = (await mcp.callTool("inventory", {})) as Record<string, unknown>;
+            const lookRaw = (await mcp.callTool("look", {})) as Record<string, unknown>;
+            const snapshot = buildSnapshot(whereami, exitsRaw, inventoryRaw, lookRaw, ctx.ghostId);
+            await evaluateRules(characterDef, snapshot, mcp);
+          },
+          catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+        }).pipe(
+          // Tick failure is non-fatal: log and continue (FR-005).
+          Effect.catchAll((e) =>
+            Effect.sync(() =>
+              console.warn(
+                JSON.stringify({
+                  kind: "npc-agent.character.tick-error",
+                  ghostId: ctx.ghostId,
+                  error: e instanceof Error ? e.message : String(e),
+                }),
+              ),
+            ),
+          ),
+        );
+        yield* Effect.sleep(Duration.millis(ACTION_TICK_MS));
+      });
+
+      yield* Effect.forever(tick);
+    }),
+  ).pipe(
+    Effect.asVoid,
+    Effect.catchAll((e) =>
+      Effect.sync(() =>
+        console.error(
+          JSON.stringify({
+            kind: "npc-agent.character.loop-error",
+            ghostId: ctx.ghostId,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        ),
+      ),
+    ),
+  );
 }
 
-async function startActionLoop(ctx: SpawnContext, characterDef: CharacterDefinition): Promise<void> {
+/**
+ * Launch a ghost action loop as an Effect fiber. If a loop is already running
+ * for the given ghostId, it is interrupted (and its MCP client disconnected)
+ * before the new fiber starts.
+ */
+async function launchGhostLoop(
+  ctx: SpawnContext,
+  characterDef: CharacterDefinition,
+): Promise<void> {
   const { ghostId } = ctx;
-  cancelActionLoopForGhost(ghostId, "spawn-replace");
 
-  const mcp = new GhostMcpClient({
-    worldApiBaseUrl: ctx.houseEndpoints.mcp,
-    token: ctx.token,
-  });
-  await mcp.connect();
-  mcpByGhostId.set(ghostId, mcp);
+  const existing = actionFibersByGhostId.get(ghostId);
+  if (existing) {
+    console.info(
+      JSON.stringify({ kind: "npc-agent.character.loop-cancel", ghostId, reason: "spawn-replace" }),
+    );
+    await Effect.runPromise(Fiber.interrupt(existing));
+    actionFibersByGhostId.delete(ghostId);
+  }
 
-  let running = true;
-  let wakeUp: (() => void) | null = null;
-  const handle: ActionLoop = {
-    cancel: () => {
-      running = false;
-      wakeUp?.();
-    },
-  };
-  actionLoopsByGhostId.set(ghostId, handle);
+  const fiber = Effect.runFork(ghostActionLoop(ctx, characterDef));
+  actionFibersByGhostId.set(ghostId, fiber);
 
   console.info(
     JSON.stringify({
@@ -339,41 +408,9 @@ async function startActionLoop(ctx: SpawnContext, characterDef: CharacterDefinit
       tickMs: ACTION_TICK_MS,
     }),
   );
-
-  try {
-    while (running) {
-      try {
-        const whereami = (await mcp.callTool("whereami", {})) as Record<string, unknown>;
-        const exitsRaw = (await mcp.callTool("exits", {})) as Record<string, unknown>;
-        const inventoryRaw = (await mcp.callTool("inventory", {})) as Record<string, unknown>;
-        const lookRaw = (await mcp.callTool("look", {})) as Record<string, unknown>;
-
-        const snapshot = buildSnapshot(whereami, exitsRaw, inventoryRaw, lookRaw, ghostId);
-        await evaluateRules(characterDef, snapshot, mcp);
-      } catch (e: unknown) {
-        // Single tick failure — log and continue; loop must survive (FR-005).
-        console.warn(
-          JSON.stringify({
-            kind: "npc-agent.character.tick-error",
-            ghostId,
-            error: e instanceof Error ? e.message : String(e),
-          }),
-        );
-      }
-
-      await new Promise<void>((resolve) => {
-        wakeUp = resolve;
-        setTimeout(resolve, ACTION_TICK_MS);
-      });
-      wakeUp = null;
-    }
-  } finally {
-    await mcp.disconnect().catch(() => {});
-    mcpByGhostId.delete(ghostId);
-  }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function parseSpawnData(msg: Message | undefined): SpawnContext | null {
   for (const p of msg?.parts ?? []) {
@@ -413,7 +450,11 @@ function publishTask(
   }
 }
 
-function publishWorking(taskId: string, contextId: string | undefined, eventBus: ExecutionEventBus): void {
+function publishWorking(
+  taskId: string,
+  contextId: string | undefined,
+  eventBus: ExecutionEventBus,
+): void {
   eventBus.publish({
     kind: "status-update",
     taskId,
@@ -423,7 +464,11 @@ function publishWorking(taskId: string, contextId: string | undefined, eventBus:
   } satisfies TaskStatusUpdateEvent);
 }
 
-function publishCompleted(taskId: string, contextId: string | undefined, eventBus: ExecutionEventBus): void {
+function publishCompleted(
+  taskId: string,
+  contextId: string | undefined,
+  eventBus: ExecutionEventBus,
+): void {
   eventBus.publish({
     kind: "status-update",
     taskId,

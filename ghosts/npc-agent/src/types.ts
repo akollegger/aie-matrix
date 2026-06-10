@@ -22,20 +22,28 @@ export interface BehaviorRule {
 
 export interface DialogNode {
   readonly id: string;
-  /** Case-insensitive keyword/substring triggers. Empty only on fallback nodes. */
-  readonly triggerConditions: readonly string[];
-  /** At least one response string; one chosen at random per reply. */
+  /** Responses spoken when transitioning INTO this state; one chosen at random. */
   readonly responses: readonly string[];
-  /** Target node id after responding ([:ON]-> edge). */
-  readonly transition?: string;
-  /** Exactly one node per tree is the catch-all fallback. */
-  readonly fallback?: boolean;
+}
+
+/**
+ * A directed edge in the dialog FSM.
+ * Empty `triggers` = wildcard: matches any input not matched by a specific edge
+ * from the same source node. Every node must have exactly one wildcard outgoing
+ * edge — the idle/root node's wildcard edge points to itself (explicit self-loop).
+ */
+export interface DialogEdge {
+  readonly fromId: string;
+  readonly toId: string;
+  readonly triggers: readonly string[];
 }
 
 export interface DialogTree {
+  readonly id: string;
   readonly nodes: ReadonlyMap<string, DialogNode>;
+  readonly edges: readonly DialogEdge[];
+  /** Id of the idle/root node — identified by its wildcard self-loop. */
   readonly rootId: string;
-  readonly fallbackId: string;
 }
 
 export interface CharacterDefinition {

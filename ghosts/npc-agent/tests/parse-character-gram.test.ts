@@ -3,31 +3,42 @@ import { Effect } from "effect";
 import { parseCharacterGramText, CharacterParseError } from "../src/catalog/parse-character-gram.js";
 
 const VALID_CHARACTER = `
-{ kind: "matrix-character", id: "info-attendant", name: "Info Attendant",
-  background: "A friendly guide to the conference.", enabled: true, defaultAction: "idle" }
+{ kind: "matrix-character" }
 
-(greet:DialogNode { trigger: ["hello","hi"], responses: ["Welcome! How can I help?", "Hello there!"] })
-(directions:DialogNode { trigger: ["where","map","location"], responses: ["Hall A is north, Hall B is south."] })
-(fallback:DialogNode { responses: ["I'm not sure about that. Try the info desk!"], fallback: true })
+(charGuide:Character { id: "info-attendant", name: "Info Attendant",
+  background: "A friendly guide to the conference.", enabled: true, defaultAction: "idle" })
 
-[dialog:DialogTree |
-  (greet)-[:ON]->(directions),
-  (directions)-[:ON]->(greet)
+(idle:DialogNode       { responses: ["Welcome! How can I help?", "Hello there!"] })
+(directions:DialogNode { responses: ["Hall A is north, Hall B is south."] })
+
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: ["where","map","location"] }]->(directions),
+  (idle)-[:DialogTrigger { triggers: [] }]->(idle),
+  (directions)-[:DialogTrigger { triggers: [] }]->(idle)
 ]
 
-[behaviors:Behaviors |
+[behavior_1:Behaviors |
   (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
-  (b2:Rule { when: "always", do: "idle", priority: 2 })
+  (b2:Rule { when: "always",  do: "idle",        priority: 2 })
 ]
+
+(charGuide)-[:HAS_DIALOG]->(dialog_1)
+(charGuide)-[:EXHIBITS_BEHAVIOR]->(behavior_1)
 `;
 
 const DISABLED_CHARACTER = `
-{ kind: "matrix-character", id: "hermit", name: "The Hermit",
-  background: "Prefers solitude.", enabled: false, defaultAction: "stay" }
+{ kind: "matrix-character" }
 
-(fallback:DialogNode { responses: ["..."], fallback: true })
+(charHermit:Character { id: "hermit", name: "The Hermit",
+  background: "Prefers solitude.", enabled: false, defaultAction: "stay" })
 
-[dialog:DialogTree | ]
+(idle:DialogNode { responses: ["..."] })
+
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: [] }]->(idle)
+]
+
+(charHermit)-[:HAS_DIALOG]->(dialog_1)
 `;
 
 async function parse(text: string) {
@@ -57,32 +68,39 @@ describe("parseCharacterGramText", () => {
     expect(char.behaviorRules[1]!.action).toBe("idle");
   });
 
-  it("parses dialog nodes", async () => {
+  it("parses dialog nodes into the tree's nodes map", async () => {
     const char = await parse(VALID_CHARACTER);
     const nodes = char.dialogTree.nodes;
-    expect(nodes.size).toBe(3);
-    expect(nodes.has("greet")).toBe(true);
+    expect(nodes.size).toBe(2);
+    expect(nodes.has("idle")).toBe(true);
     expect(nodes.has("directions")).toBe(true);
-    expect(nodes.has("fallback")).toBe(true);
   });
 
-  it("correctly identifies fallback node", async () => {
+  it("identifies the root node by its wildcard self-loop", async () => {
     const char = await parse(VALID_CHARACTER);
-    expect(char.dialogTree.fallbackId).toBe("fallback");
-    expect(char.dialogTree.nodes.get("fallback")?.fallback).toBe(true);
+    expect(char.dialogTree.rootId).toBe("idle");
   });
 
-  it("parses trigger conditions as arrays", async () => {
+  it("parses dialog tree edges with triggers", async () => {
     const char = await parse(VALID_CHARACTER);
-    const greet = char.dialogTree.nodes.get("greet")!;
-    expect(greet.triggerConditions).toContain("hello");
-    expect(greet.triggerConditions).toContain("hi");
+    const edges = char.dialogTree.edges;
+    const specificEdge = edges.find((e) => e.fromId === "idle" && e.toId === "directions");
+    expect(specificEdge).toBeDefined();
+    expect(specificEdge!.triggers).toContain("where");
+    expect(specificEdge!.triggers).toContain("map");
   });
 
-  it("applies dialog tree transitions", async () => {
+  it("includes the wildcard self-loop in edges", async () => {
     const char = await parse(VALID_CHARACTER);
-    const greet = char.dialogTree.nodes.get("greet")!;
-    expect(greet.transition).toBe("directions");
+    const selfLoop = char.dialogTree.edges.find(
+      (e) => e.fromId === "idle" && e.toId === "idle" && e.triggers.length === 0,
+    );
+    expect(selfLoop).toBeDefined();
+  });
+
+  it("parses the dialog tree id from the block label", async () => {
+    const char = await parse(VALID_CHARACTER);
+    expect(char.dialogTree.id).toBe("dialog_1");
   });
 
   it("parses enabled: false correctly", async () => {
@@ -92,11 +110,18 @@ describe("parseCharacterGramText", () => {
     expect(char.defaultAction).toBe("stay");
   });
 
+  it("a character with no EXHIBITS_BEHAVIOR has empty behaviorRules", async () => {
+    const char = await parse(DISABLED_CHARACTER);
+    expect(char.behaviorRules).toHaveLength(0);
+  });
+
   it("fails on missing kind header", async () => {
     const text = `
-{ id: "test", name: "Test", background: "bg", enabled: true, defaultAction: "idle" }
-(fallback:DialogNode { responses: ["ok"], fallback: true })
-[dialog:DialogTree | ]
+{ id: "test", name: "Test", background: "bg" }
+(charTest:Character { id: "test", name: "Test", background: "bg", enabled: true, defaultAction: "idle" })
+(idle:DialogNode { responses: ["ok"] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charTest)-[:HAS_DIALOG]->(dialog_1)
 `;
     const err = await parseExpectError(text);
     expect(err.message).toMatch(/kind/);
@@ -104,19 +129,23 @@ describe("parseCharacterGramText", () => {
 
   it("fails on wrong kind value", async () => {
     const text = `
-{ kind: "matrix-map", id: "test", name: "Test", background: "bg", enabled: true, defaultAction: "idle" }
-(fallback:DialogNode { responses: ["ok"], fallback: true })
-[dialog:DialogTree | ]
+{ kind: "matrix-map" }
+(charTest:Character { id: "test", name: "Test", background: "bg", enabled: true, defaultAction: "idle" })
+(idle:DialogNode { responses: ["ok"] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charTest)-[:HAS_DIALOG]->(dialog_1)
 `;
     const err = await parseExpectError(text);
     expect(err.message).toMatch(/matrix-character/);
   });
 
-  it("fails on missing required fields", async () => {
+  it("fails on missing required Character fields", async () => {
     const text = `
-{ kind: "matrix-character", id: "test" }
-(fallback:DialogNode { responses: ["ok"], fallback: true })
-[dialog:DialogTree | ]
+{ kind: "matrix-character" }
+(charTest:Character { id: "test" })
+(idle:DialogNode { responses: ["ok"] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charTest)-[:HAS_DIALOG]->(dialog_1)
 `;
     const err = await parseExpectError(text);
     expect(err.message).toMatch(/missing required/);
@@ -124,34 +153,55 @@ describe("parseCharacterGramText", () => {
 
   it("fails on invalid defaultAction enum", async () => {
     const text = `
-{ kind: "matrix-character", id: "test", name: "T", background: "b", enabled: true, defaultAction: "fly" }
-(fallback:DialogNode { responses: ["ok"], fallback: true })
-[dialog:DialogTree | ]
+{ kind: "matrix-character" }
+(charTest:Character { id: "test", name: "T", background: "b", enabled: true, defaultAction: "fly" })
+(idle:DialogNode { responses: ["ok"] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
+(charTest)-[:HAS_DIALOG]->(dialog_1)
 `;
     const err = await parseExpectError(text);
     expect(err.message).toMatch(/defaultAction/);
   });
 
-  it("fails when no fallback node exists", async () => {
+  it("fails when no HAS_DIALOG relationship is present", async () => {
     const text = `
-{ kind: "matrix-character", id: "test", name: "T", background: "b", enabled: true, defaultAction: "idle" }
-(greet:DialogNode { trigger: ["hi"], responses: ["hello"] })
-[dialog:DialogTree | ]
+{ kind: "matrix-character" }
+(charTest:Character { id: "test", name: "T", background: "b", enabled: true, defaultAction: "idle" })
+(idle:DialogNode { responses: ["ok"] })
+[dialog_1:DialogTree | (idle)-[:DialogTrigger { triggers: [] }]->(idle) ]
 `;
     const err = await parseExpectError(text);
-    expect(err.message).toMatch(/fallback/);
+    expect(err.message).toMatch(/HAS_DIALOG/);
   });
 
-  it("fails when transition target does not resolve", async () => {
+  it("fails when the dialog tree has no idle state (wildcard self-loop)", async () => {
     const text = `
-{ kind: "matrix-character", id: "test", name: "T", background: "b", enabled: true, defaultAction: "idle" }
-(greet:DialogNode { trigger: ["hi"], responses: ["hello"] })
-(fallback:DialogNode { responses: ["hm?"], fallback: true })
-[dialog:DialogTree |
-  (greet)-[:ON]->(nonexistent)
+{ kind: "matrix-character" }
+(charTest:Character { id: "test", name: "T", background: "b", enabled: true, defaultAction: "idle" })
+(idle:DialogNode  { responses: ["ok"] })
+(other:DialogNode { responses: ["other"] })
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: ["hello"] }]->(other),
+  (other)-[:DialogTrigger { triggers: [] }]->(idle)
 ]
+(charTest)-[:HAS_DIALOG]->(dialog_1)
 `;
     const err = await parseExpectError(text);
-    expect(err.message).toMatch(/unresolved/);
+    expect(err.message).toMatch(/idle state/);
+  });
+
+  it("fails when a dialog tree edge references an undefined DialogNode", async () => {
+    const text = `
+{ kind: "matrix-character" }
+(charTest:Character { id: "test", name: "T", background: "b", enabled: true, defaultAction: "idle" })
+(idle:DialogNode { responses: ["ok"] })
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: [] }]->(idle),
+  (idle)-[:DialogTrigger { triggers: ["hi"] }]->(nonexistent)
+]
+(charTest)-[:HAS_DIALOG]->(dialog_1)
+`;
+    const err = await parseExpectError(text);
+    expect(err.message).toMatch(/undefined DialogNode/);
   });
 });

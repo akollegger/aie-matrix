@@ -6,13 +6,15 @@ export interface DialogResult {
 }
 
 /**
- * Evaluate a single inbound message against the dialog tree.
+ * Evaluate a single inbound message against the dialog FSM.
  *
- * Scans all non-fallback nodes in tree insertion order for a case-insensitive
- * keyword/substring match in `triggerConditions`. First match wins. Falls back
- * to the fallback node on no match. Randomly selects a response string from the
- * matched node. Returns the new state node id (the matched node's `transition`
- * target, or the matched node itself when no transition is defined).
+ * From the current state node, scan outgoing edges in declaration order:
+ * specific-trigger edges first (non-empty `triggers`), wildcard edge last
+ * (`triggers: []`). First match wins. The response is chosen randomly from
+ * the TARGET node's `responses`. State advances to the target node.
+ *
+ * Every valid tree has a wildcard edge from every node, so a match is always
+ * guaranteed. The idle/root node's wildcard edge is a self-loop.
  */
 export function evaluateDialog(
   tree: DialogTree,
@@ -21,39 +23,37 @@ export function evaluateDialog(
 ): DialogResult {
   const lowerText = inboundText.toLowerCase().trim();
 
-  // Find first node with a matching trigger (insertion order; fallback excluded).
-  let matchedNodeId: string | undefined;
-  for (const [nodeId, node] of tree.nodes) {
-    if (node.fallback) continue;
-    if (node.triggerConditions.length === 0) continue;
-    for (const trigger of node.triggerConditions) {
+  const outgoing = tree.edges.filter((e) => e.fromId === state.currentNodeId);
+
+  let matchedToId: string | undefined;
+
+  // Specific triggers first (non-empty), in declaration order.
+  for (const edge of outgoing) {
+    if (edge.triggers.length === 0) continue;
+    for (const trigger of edge.triggers) {
       if (lowerText.includes(trigger.toLowerCase())) {
-        matchedNodeId = nodeId;
+        matchedToId = edge.toId;
         break;
       }
     }
-    if (matchedNodeId !== undefined) break;
+    if (matchedToId !== undefined) break;
   }
 
-  const respondingNodeId = matchedNodeId ?? tree.fallbackId;
-  const respondingNode = tree.nodes.get(respondingNodeId);
+  // Wildcard fallback.
+  if (matchedToId === undefined) {
+    const wildcard = outgoing.find((e) => e.triggers.length === 0);
+    matchedToId = wildcard?.toId ?? state.currentNodeId;
+  }
 
-  if (!respondingNode || respondingNode.responses.length === 0) {
+  const targetNode = tree.nodes.get(matchedToId);
+  if (!targetNode || targetNode.responses.length === 0) {
     return { response: "...", nextNodeId: state.currentNodeId };
   }
 
-  // Random response selection.
   const response =
-    respondingNode.responses[Math.floor(Math.random() * respondingNode.responses.length)]!;
+    targetNode.responses[Math.floor(Math.random() * targetNode.responses.length)]!;
 
-  // Follow the transition, with a cycle guard: don't self-loop or follow to a missing node.
-  const rawNext = respondingNode.transition;
-  const nextNodeId =
-    rawNext !== undefined && rawNext !== respondingNodeId && tree.nodes.has(rawNext)
-      ? rawNext
-      : respondingNodeId;
-
-  return { response, nextNodeId };
+  return { response, nextNodeId: matchedToId };
 }
 
 /** Initialize a fresh dialog state for a new conversation partner. */

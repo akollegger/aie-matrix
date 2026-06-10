@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import { Gram, StandardGraph } from "@relateby/pattern";
-import { Effect, HashMap, HashSet, Option } from "effect";
+import { Gram } from "@relateby/pattern";
+import { Effect, HashSet, HashMap, Option } from "effect";
 import type { Subject, Pattern } from "@relateby/pattern";
 import type { Value } from "@relateby/pattern";
 import type {
@@ -9,6 +9,7 @@ import type {
   BehaviorRule,
   CharacterDefinition,
   DefaultAction,
+  DialogEdge,
   DialogNode,
   DialogTree,
 } from "../types.js";
@@ -71,7 +72,7 @@ const VALID_ACTIONS = new Set<string>([
 ]);
 const VALID_DEFAULT_ACTIONS = new Set<string>(["idle", "random-move", "stay"]);
 
-// ── Node extraction ──────────────────────────────────────────────────────────
+// ── Sub-parsers ──────────────────────────────────────────────────────────────
 
 function parseBehaviorRule(subject: Subject, index: number): BehaviorRule | null {
   const props = subject.properties;
@@ -99,26 +100,16 @@ function parseBehaviorsBlock(elements: ReadonlyArray<Pattern<Subject>>): Behavio
     }
   }
   const hasPriority = rules.some((r) => r.priority !== undefined);
-  if (hasPriority) {
-    rules.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
-  }
+  if (hasPriority) rules.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
   return rules;
 }
 
 function parseDialogNode(subject: Subject): DialogNode | null {
-  const props = subject.properties;
   const id = subject.identity;
   if (!id) return null;
-  const responses = strArrayProp(props, "responses");
+  const responses = strArrayProp(subject.properties, "responses");
   if (!responses || responses.length === 0) return null;
-  const triggerRaw = strArrayProp(props, "trigger") ?? [];
-  const fallback = boolProp(props, "fallback");
-  return {
-    id,
-    triggerConditions: triggerRaw,
-    responses,
-    ...(fallback ? { fallback: true } : {}),
-  };
+  return { id, responses };
 }
 
 // ── Public API ───────────────────────────────────────────────────────────────
@@ -145,14 +136,82 @@ export function parseCharacterGramText(
       );
     }
 
-    const id = typeof header["id"] === "string" ? header["id"].trim() : "";
-    const name = typeof header["name"] === "string" ? header["name"].trim() : "";
-    const background =
-      typeof header["background"] === "string" ? header["background"].trim() : "";
-    const defaultActionRaw =
-      typeof header["defaultAction"] === "string" ? header["defaultAction"] : "";
-    const enabled =
-      typeof header["enabled"] === "boolean" ? header["enabled"] : undefined;
+    // ── Collect all named blocks and nodes ───────────────────────────────────
+
+    let characterSubject: Subject | null = null;
+    const behaviorBlocks = new Map<string, BehaviorRule[]>();
+    const dialogTreeEdges = new Map<string, DialogEdge[]>();
+    const dialogNodes = new Map<string, DialogNode>();
+
+    // Wire edges: character → referenced block ids
+    let hasDialogTreeId: string | undefined;
+    let exhibitsBehaviorId: string | undefined;
+
+    for (const pattern of patterns) {
+      const subj = pattern.value;
+
+      // (char:Character { id, name, background, enabled, defaultAction })
+      if (HashSet.has(subj.labels, "Character")) {
+        characterSubject = subj;
+        continue;
+      }
+
+      // [behavior_1:Behaviors | (b:Rule {...}), ...]
+      if (HashSet.has(subj.labels, "Behaviors") && subj.identity) {
+        behaviorBlocks.set(subj.identity, parseBehaviorsBlock(pattern.elements));
+        continue;
+      }
+
+      // [dialog_1:DialogTree | (a)-[:DialogTrigger { triggers: [...] }]->(b), ...]
+      if (HashSet.has(subj.labels, "DialogTree") && subj.identity) {
+        const edges: DialogEdge[] = [];
+        for (const el of pattern.elements) {
+          if (HashSet.has(el.value.labels, "DialogTrigger") && el.elements.length === 2) {
+            const fromId = el.elements[0]!.value.identity;
+            const toId = el.elements[1]!.value.identity;
+            if (fromId && toId) {
+              const triggers = strArrayProp(el.value.properties, "triggers") ?? [];
+              edges.push({ fromId, toId, triggers });
+            }
+          }
+        }
+        dialogTreeEdges.set(subj.identity, edges);
+        continue;
+      }
+
+      // (node:DialogNode { responses: [...] }) — standalone node
+      if (HashSet.has(subj.labels, "DialogNode")) {
+        const node = parseDialogNode(subj);
+        if (node) dialogNodes.set(node.id, node);
+        continue;
+      }
+
+      // (char)-[:HAS_DIALOG]->(dialog_1) — top-level wiring edge
+      if (HashSet.has(subj.labels, "HAS_DIALOG") && pattern.elements.length === 2) {
+        hasDialogTreeId = pattern.elements[1]!.value.identity;
+        continue;
+      }
+
+      // (char)-[:EXHIBITS_BEHAVIOR]->(behavior_1) — top-level wiring edge
+      if (HashSet.has(subj.labels, "EXHIBITS_BEHAVIOR") && pattern.elements.length === 2) {
+        exhibitsBehaviorId = pattern.elements[1]!.value.identity;
+        continue;
+      }
+    }
+
+    // ── Extract character fields ──────────────────────────────────────────────
+
+    if (!characterSubject) {
+      return yield* Effect.fail(
+        new CharacterParseError("no Character node found", source),
+      );
+    }
+    const charProps = characterSubject.properties;
+    const id = strProp(charProps, "id")?.trim() ?? "";
+    const name = strProp(charProps, "name")?.trim() ?? "";
+    const background = strProp(charProps, "background")?.trim() ?? "";
+    const defaultActionRaw = strProp(charProps, "defaultAction") ?? "";
+    const enabled = boolProp(charProps, "enabled");
 
     const missing: string[] = [];
     if (!id) missing.push("id");
@@ -162,7 +221,7 @@ export function parseCharacterGramText(
     if (enabled === undefined) missing.push("enabled");
     if (missing.length > 0) {
       return yield* Effect.fail(
-        new CharacterParseError(`missing required header fields: ${missing.join(", ")}`, source),
+        new CharacterParseError(`Character missing required fields: ${missing.join(", ")}`, source),
       );
     }
     if (!VALID_DEFAULT_ACTIONS.has(defaultActionRaw)) {
@@ -174,91 +233,82 @@ export function parseCharacterGramText(
       );
     }
 
-    const behaviorRules: BehaviorRule[] = [];
-    const dialogNodeMap = new Map<string, DialogNode>();
-    const transitions = new Map<string, string>();
+    // ── Resolve dialog tree ───────────────────────────────────────────────────
 
-    for (const pattern of patterns) {
-      const subj = pattern.value;
-
-      // [behaviors:Behaviors | (b:Rule {...}), ...] — list block
-      if (HashSet.has(subj.labels, "Behaviors") && pattern.elements.length > 0) {
-        behaviorRules.push(...parseBehaviorsBlock(pattern.elements));
-        continue;
-      }
-
-      // [dialog:DialogTree | (a)-[:ON]->(b), ...] — list block.
-      // Each element is an edge pattern: value.labels = ["ON"], elements = [source, target].
-      // StandardGraph deduplicates by identity (all ON edges have ""), so parse directly.
-      if (HashSet.has(subj.labels, "DialogTree")) {
-        for (const el of pattern.elements) {
-          if (HashSet.has(el.value.labels, "ON") && el.elements.length === 2) {
-            const source = el.elements[0]!.value.identity;
-            const target = el.elements[1]!.value.identity;
-            if (source && target) transitions.set(source, target);
-          }
-        }
-        continue;
-      }
-
-      // (node:DialogNode {trigger: [...], responses: [...]}) — standalone node
-      if (HashSet.has(subj.labels, "DialogNode")) {
-        const node = parseDialogNode(subj);
-        if (node) dialogNodeMap.set(node.id, node);
-      }
-    }
-
-    // Also extract DialogNodes from the top-level graph (handles flat declarations)
-    const graph = StandardGraph.fromPatterns(patterns);
-    for (const [, nodePat] of graph.nodes()) {
-      const nodeSubj = nodePat.value;
-      if (HashSet.has(nodeSubj.labels, "DialogNode") && !dialogNodeMap.has(nodeSubj.identity)) {
-        const node = parseDialogNode(nodeSubj);
-        if (node) dialogNodeMap.set(node.id, node);
-      }
-    }
-
-    // Apply transitions
-    for (const [fromId, toId] of transitions) {
-      const node = dialogNodeMap.get(fromId);
-      if (node) dialogNodeMap.set(fromId, { ...node, transition: toId });
-    }
-
-    // Validate dialog tree
-    if (dialogNodeMap.size === 0) {
-      return yield* Effect.fail(
-        new CharacterParseError("no DialogNode entries found", source),
-      );
-    }
-    const fallbackNodes = Array.from(dialogNodeMap.values()).filter((n) => n.fallback);
-    if (fallbackNodes.length !== 1) {
+    if (!hasDialogTreeId) {
       return yield* Effect.fail(
         new CharacterParseError(
-          `expected exactly 1 fallback DialogNode, found ${fallbackNodes.length}`,
+          "no HAS_DIALOG relationship found — add (char)-[:HAS_DIALOG]->(dialog_id)",
           source,
         ),
       );
     }
-    for (const node of dialogNodeMap.values()) {
-      if (node.transition && !dialogNodeMap.has(node.transition)) {
+    const rawEdges = dialogTreeEdges.get(hasDialogTreeId);
+    if (rawEdges === undefined) {
+      return yield* Effect.fail(
+        new CharacterParseError(
+          `HAS_DIALOG references unknown DialogTree "${hasDialogTreeId}"`,
+          source,
+        ),
+      );
+    }
+
+    // Collect all node ids referenced in the edges.
+    const referencedNodeIds = new Set<string>();
+    for (const e of rawEdges) {
+      referencedNodeIds.add(e.fromId);
+      referencedNodeIds.add(e.toId);
+    }
+    for (const nodeId of referencedNodeIds) {
+      if (!dialogNodes.has(nodeId)) {
         return yield* Effect.fail(
           new CharacterParseError(
-            `DialogNode "${node.id}" has unresolved transition target "${node.transition}"`,
+            `DialogTree "${hasDialogTreeId}" references undefined DialogNode "${nodeId}"`,
             source,
           ),
         );
       }
     }
 
-    const fallbackNode = fallbackNodes[0]!;
-    const rootNode =
-      Array.from(dialogNodeMap.values()).find((n) => !n.fallback) ?? fallbackNode;
+    // Find root: the node with a wildcard self-loop (triggers: []).
+    const selfLoops = rawEdges.filter((e) => e.fromId === e.toId && e.triggers.length === 0);
+    if (selfLoops.length === 0) {
+      return yield* Effect.fail(
+        new CharacterParseError(
+          `DialogTree "${hasDialogTreeId}" has no idle state — add (idle)-[:DialogTrigger { triggers: [] }]->(idle)`,
+          source,
+        ),
+      );
+    }
+    const rootId = selfLoops[0]!.fromId;
+
+    const treeNodes = new Map<string, DialogNode>();
+    for (const nodeId of referencedNodeIds) {
+      treeNodes.set(nodeId, dialogNodes.get(nodeId)!);
+    }
 
     const dialogTree: DialogTree = {
-      nodes: dialogNodeMap,
-      rootId: rootNode.id,
-      fallbackId: fallbackNode.id,
+      id: hasDialogTreeId,
+      nodes: treeNodes,
+      edges: rawEdges,
+      rootId,
     };
+
+    // ── Resolve behaviors ─────────────────────────────────────────────────────
+
+    let behaviorRules: BehaviorRule[] = [];
+    if (exhibitsBehaviorId) {
+      const rules = behaviorBlocks.get(exhibitsBehaviorId);
+      if (rules === undefined) {
+        return yield* Effect.fail(
+          new CharacterParseError(
+            `EXHIBITS_BEHAVIOR references unknown Behaviors block "${exhibitsBehaviorId}"`,
+            source,
+          ),
+        );
+      }
+      behaviorRules = rules;
+    }
 
     return {
       id,

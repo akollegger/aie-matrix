@@ -26,55 +26,68 @@ Requires `AGENT_HOST_URL` and `AGENT_HOST_TOKEN` to be set (see env vars below).
 
 ## Catalog format
 
-Each character is defined in a `.character.gram` file in `NPC_CATALOG_DIR`. The file name is arbitrary; the `id` field in the header is the stable identifier.
+Each character is defined in a `.character.gram` file in `NPC_CATALOG_DIR`. The file name is arbitrary; the `id` field on the `Character` node is the stable identifier.
+
+The format is gram — the same syntax used for `.map.gram` and `.calendar.gram` files across the project. Files can be concatenated into a single world gram without ambiguity.
 
 ### Minimal example
 
 ```gram
-{ kind: "matrix-character", id: "guide", name: "Conference Guide",
+{ kind: "matrix-character" }
+
+(charGuide:Character { id: "guide", name: "Conference Guide",
   background: "A friendly guide stationed near the main entrance.",
-  enabled: true, defaultAction: "idle" }
+  enabled: true, defaultAction: "idle" })
 
-(greet:DialogNode { trigger: ["hello","hi","hey"],
-  responses: ["Welcome to the AI Engineer World's Fair! What brings you here?"],
-  transition: "schedule" })
+(idle:DialogNode     { responses: ["How can I help? Ask about the schedule or directions."] })
+(schedule:DialogNode { responses: ["Keynotes at 9am in Hall A. Workshops all day in Hall B."] })
+(farewell:DialogNode { responses: ["Enjoy the Fair!", "See you around!"] })
 
-(schedule:DialogNode { trigger: ["schedule","session","talk","when"],
-  responses: ["Keynotes at 9am in Hall A. Workshops all day in Hall B."],
-  transition: "farewell" })
-
-(farewell:DialogNode { trigger: ["thanks","bye","goodbye"],
-  responses: ["Enjoy the Fair!", "See you around!"] })
-
-(fallback:DialogNode { responses: ["I'm just a guide — try asking about the schedule!"],
-  fallback: true })
-
-[dialog:DialogTree |
-  (greet)-[:ON]->(schedule),
-  (schedule)-[:ON]->(farewell)
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: ["schedule","session","talk","when"] }]->(schedule),
+  (idle)-[:DialogTrigger { triggers: ["thanks","bye","goodbye"] }]->(farewell),
+  (idle)-[:DialogTrigger { triggers: [] }]->(idle),
+  (schedule)-[:DialogTrigger { triggers: [] }]->(idle),
+  (farewell)-[:DialogTrigger { triggers: [] }]->(idle)
 ]
+
+(charGuide)-[:HAS_DIALOG]->(dialog_1)
 ```
 
-### Header fields
+### Character node fields
 
 | Field | Type | Description |
 |---|---|---|
-| `kind` | `"matrix-character"` | Required. Must be exactly this value. |
 | `id` | string | Stable character identifier. Duplicate ids across files → second file skipped. |
 | `name` | string | Display name used as the ghost's `displayName` in the registry. |
 | `background` | string | One-line character background, surfaced in `whereami` (IC-008). |
 | `enabled` | boolean | `false` → character is never spawned. |
 | `defaultAction` | `idle` \| `random-move` \| `stay` | Action taken when no behavior rule matches. |
 
-### Behavior rules block
+### Dialog tree
+
+The dialog system is a finite-state machine (FSM):
+
+- **Nodes** are conversation states. `responses` are spoken when the NPC transitions INTO that node (chosen randomly from the array).
+- **Edges** (`[:DialogTrigger]`) carry the player's keywords. Specific triggers (non-empty `triggers` array) are evaluated in declaration order; first match wins. Wildcard edges (`triggers: []`) match anything and are evaluated last.
+- **Every node must have exactly one outgoing wildcard edge** — this is the "return path" when the player says something unexpected.
+- **The idle/root node must have an explicit wildcard self-loop** (`(idle)-[:DialogTrigger { triggers: [] }]->(idle)`). This is how the parser identifies the root and is the "stay put" behavior for unrecognized input.
+
+> **Author note on the self-loop:** The idle self-loop is deliberately explicit. It signals to readers that unrecognized input at idle is intentional, not an oversight. Don't omit it — the loader will reject the file.
+
+NPC↔NPC messages are ignored (sibling-NPC sender rejection). A random response is chosen from the target node's `responses` on each reply.
+
+### Behavior rules block (optional)
 
 ```gram
-[behaviors:Behaviors |
+[behavior_1:Behaviors |
   (b1:Rule { when: "inventory_empty", do: "seek-item",   priority: 1 }),
   (b2:Rule { when: "crowded",         do: "avoid-crowd", priority: 2 }),
   (b3:Rule { when: "alone",           do: "wander",      priority: 3 }),
   (b4:Rule { when: "always",          do: "idle",        priority: 4 })
 ]
+
+(charGuide)-[:EXHIBITS_BEHAVIOR]->(behavior_1)
 ```
 
 Rules are evaluated in ascending `priority` order. First match wins. If a rule's MCP action fails, evaluation continues to the next rule (graceful degradation).
@@ -83,31 +96,15 @@ Rules are evaluated in ascending `priority` order. First match wins. If a rule's
 
 **Supported actions:** `seek-item` (take here or move toward adjacent item), `avoid-crowd` (random exit), `wander` (random exit), `idle` (no-op)
 
-### Dialog tree block
-
-```gram
-(nodeId:DialogNode { trigger: ["keyword1","keyword2"],
-  responses: ["Reply text A", "Reply text B"],
-  transition: "nextNodeId" })
-
-(fallback:DialogNode { responses: ["I'm not sure about that."], fallback: true })
-
-[dialog:DialogTree |
-  (start)-[:ON]->(nextNodeId)
-]
-```
-
-- One node must have `fallback: true` (catch-all for unmatched messages).
-- `trigger` matching is case-insensitive substring scan over the inbound message.
-- A random response is chosen from `responses` on each reply.
-- `transition` moves the per-partner dialog state to the target node after responding.
-- NPC↔NPC messages are ignored (sibling-NPC sender rejection).
+See `schema/character.gram.md` for the full format specification.
 
 ## How to add a character
 
 1. Create `<name>.character.gram` in `NPC_CATALOG_DIR` (default `./catalog`).
-2. Set `enabled: true` and provide at least one dialog node with `fallback: true`.
-3. Restart the npc-agent (or start it fresh; catalog is loaded once at startup).
+2. Define a `Character` node with `enabled: true`.
+3. Define at least one `DialogNode` and a `DialogTree` block with an idle state self-loop.
+4. Wire with `(char)-[:HAS_DIALOG]->(dialog_id)`.
+5. Restart the npc-agent (catalog is loaded once at startup).
 
 The agent will spawn one ghost for the new character on the next session start.
 

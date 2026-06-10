@@ -1,13 +1,19 @@
-{ kind: "matrix-character", id: "hermit", name: "The Hermit",
+{ kind: "matrix-character" }
+
+(charHermit:Character { id: "hermit", name: "The Hermit",
   background: "A reclusive attendee who prefers quiet corners and rarely initiates conversation.",
-  enabled: false, defaultAction: "stay" }
+  enabled: false, defaultAction: "stay" })
 
-(greet:DialogNode { trigger: ["hello","hi","hey"], responses: ["Hmph. What do you want?", "Leave me alone..."] })
-(fallback:DialogNode { responses: ["..."], fallback: true })
+(idle:DialogNode { responses: ["Hmph. What do you want?", "Leave me alone...", "..."] })
 
-[dialog:DialogTree | ]
-
-[behaviors:Behaviors |
-  (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
-  (b2:Rule { when: "always",  do: "idle", priority: 2 })
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: [] }]->(idle)
 ]
+
+[behavior_1:Behaviors |
+  (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
+  (b2:Rule { when: "always",  do: "idle",        priority: 2 })
+]
+
+(charHermit)-[:HAS_DIALOG]->(dialog_1)
+(charHermit)-[:EXHIBITS_BEHAVIOR]->(behavior_1)
