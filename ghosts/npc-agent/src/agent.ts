@@ -5,7 +5,7 @@ import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/serve
 import express, { type Request, type RequestHandler, type Response } from "express";
 import { join } from "node:path";
 import { buildNpcAgentCard } from "./buildAgentCard.js";
-import { NpcAgentExecutor, initExecutor } from "./executor.js";
+import { NpcAgentExecutor, initExecutor, getDialogStateSnapshot } from "./executor.js";
 import { loadCatalog } from "./catalog/catalog-loader.js";
 
 loadRootEnv();
@@ -51,6 +51,11 @@ app.use(express.json({ limit: "4mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+// T030: introspection endpoint for TCK — returns current per-character dialog state.
+app.get("/_tck/dialog", requireToken, (_req, res) => {
+  res.json(getDialogStateSnapshot());
 });
 
 app.use(`/${AGENT_CARD_PATH}`, agentCardHandler({ agentCardProvider: requestHandler }));

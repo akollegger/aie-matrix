@@ -1,6 +1,6 @@
 # RFC-0026: NPC Agent — Rule-Based Character Roster
 
-**Status:** draft  
+**Status:** accepted  
 **Date:** 2026-06-10  
 **Authors:** @akollegger  
 **Related:** [ADR-0012](../adr/0012-ghost-self-spawn-lifecycle.md) (Ghost Self-Spawn Lifecycle — the architectural decision this feature is the first consumer of), [RFC-0007](0007-agent-host-architecture.md) (Agent Host Architecture — adds an agent-initiated spawn capability and per-ghost background), [RFC-0005](0005-ghost-conversation-model.md) (Ghost Conversation Model — dialog replies use the existing `say`/world-event path), [RFC-0009](0009-map-format-pipeline.md) (Map Format Pipeline — reuses the `.gram` format for a new `.character.gram` catalog), [RFC-0002](0002-rule-based-movement.md) (Rule-Based Movement — the deterministic decision model this generalizes)

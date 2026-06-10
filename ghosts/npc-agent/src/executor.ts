@@ -1,11 +1,39 @@
 import type { Message, Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import { AgentExecutor, type ExecutionEventBus, type RequestContext } from "@a2a-js/sdk/server";
 import { randomUUID } from "node:crypto";
+import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import type { SpawnContext } from "./spawn-types.js";
 import { asWorldEvent } from "./world-event.js";
-import type { NpcAgentCatalog } from "./types.js";
+import type { NpcAgentCatalog, CharacterDefinition, DialogState } from "./types.js";
 import type { RosterCredential } from "./roster/spawn-roster.js";
 import { spawnRoster } from "./roster/spawn-roster.js";
+import { evaluateRules, buildSnapshot } from "./behavior/rule-engine.js";
+import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
+
+const ACTION_TICK_MS = 3000;
+
+type ActionLoop = { cancel: () => void };
+
+/** Per-character ghost action loops. Keyed by ghostId. */
+const actionLoopsByGhostId = new Map<string, ActionLoop>();
+
+/** Active MCP clients per ghostId. */
+const mcpByGhostId = new Map<string, GhostMcpClient>();
+
+/**
+ * Per-partner dialog state. Key: `${characterGhostId}:${partnerGhostId}`.
+ * Exported via getDialogStateSnapshot() for the _tck/dialog endpoint.
+ */
+const dialogStateMap = new Map<string, DialogState>();
+
+function dialogKey(characterGhostId: string, partnerGhostId: string): string {
+  return `${characterGhostId}:${partnerGhostId}`;
+}
+
+/** Returns a serialisable snapshot of all active dialog states (keyed as above). */
+export function getDialogStateSnapshot(): Record<string, DialogState> {
+  return Object.fromEntries(dialogStateMap);
+}
 
 /** Runtime state shared across all executor invocations (one per agent process). */
 export interface NpcExecutorState {
@@ -19,6 +47,22 @@ const sharedState: NpcExecutorState = {
   spawnCtx: null,
   ghostIdByCharacter: new Map(),
 };
+
+/** Returns true if the given ghostId belongs to a spawned NPC character. */
+function isNpcCharacterGhost(ghostId: string): boolean {
+  for (const gid of sharedState.ghostIdByCharacter.values()) {
+    if (gid === ghostId) return true;
+  }
+  return false;
+}
+
+/** Returns the CharacterDefinition for a spawned character ghost, or undefined. */
+function characterForGhostId(ghostId: string): CharacterDefinition | undefined {
+  for (const [charId, gid] of sharedState.ghostIdByCharacter) {
+    if (gid === ghostId) return catalog?.byId.get(charId);
+  }
+  return undefined;
+}
 
 /** Dependency-injected by agent.ts after catalog is loaded. */
 let catalog: NpcAgentCatalog | null = null;
@@ -64,6 +108,36 @@ export class NpcAgentExecutor implements AgentExecutor {
         if (typeof sessionId === "string") {
           await this.triggerRosterSpawn(sessionId);
         }
+      } else if (ev.kind === "world.message.new") {
+        const pl = ev.payload as {
+          from?: string;
+          priority?: string;
+          text?: string;
+        };
+        const targetGhostId = ev.ghostId;
+        const senderGhostId = typeof pl.from === "string" ? pl.from : null;
+        const inboundText = typeof pl.text === "string" ? pl.text : null;
+        const priority = typeof pl.priority === "string" ? pl.priority : "";
+
+        if (
+          senderGhostId &&
+          inboundText &&
+          (priority === "PARTNER" || priority === "DIRECT") &&
+          isNpcCharacterGhost(targetGhostId) &&
+          !isNpcCharacterGhost(senderGhostId) // FR-009: ignore sibling-NPC senders
+        ) {
+          void handleDialogMessage(targetGhostId, senderGhostId, inboundText).catch(
+            (e: unknown) => {
+              console.error(
+                JSON.stringify({
+                  kind: "npc-agent.dialog.error",
+                  targetGhostId,
+                  error: e instanceof Error ? e.message : String(e),
+                }),
+              );
+            },
+          );
+        }
       }
       return;
     }
@@ -101,18 +175,43 @@ export class NpcAgentExecutor implements AgentExecutor {
     task: Task | undefined,
     eventBus: ExecutionEventBus,
   ): Promise<void> {
-    sharedState.spawnCtx = sp;
+    publishTask(taskId, contextId, task, eventBus);
+    publishWorking(taskId, contextId, eventBus);
 
+    // Character ghost spawn — start the behavior action loop for this character.
+    if (sp.ghostCard.characterId && catalog) {
+      const characterDef = catalog.byId.get(sp.ghostCard.characterId);
+      if (characterDef) {
+        console.info(
+          JSON.stringify({
+            kind: "npc-agent.character.spawn-received",
+            ghostId: sp.ghostId,
+            characterId: sp.ghostCard.characterId,
+          }),
+        );
+        // Fire-and-forget; loop failure for one character MUST NOT block others (FR-005).
+        void startActionLoop(sp, characterDef).catch((e: unknown) => {
+          console.error(
+            JSON.stringify({
+              kind: "npc-agent.character.loop-startup-error",
+              ghostId: sp.ghostId,
+              error: e instanceof Error ? e.message : String(e),
+            }),
+          );
+        });
+        publishCompleted(taskId, contextId, eventBus);
+        return;
+      }
+    }
+
+    // NPC-agent's own spawn — store context and trigger roster.
+    sharedState.spawnCtx = sp;
     console.info(
       JSON.stringify({
         kind: "npc-agent.spawn-received",
         ghostId: sp.ghostId,
-        characterId: sp.ghostCard.characterId,
       }),
     );
-
-    publishTask(taskId, contextId, task, eventBus);
-    publishWorking(taskId, contextId, eventBus);
 
     // On startup, check if a session is already active (ADR-0012 R3).
     const worldRootUrl = sp.worldEntryPoint;
@@ -164,6 +263,113 @@ export class NpcAgentExecutor implements AgentExecutor {
     );
 
     sharedState.ghostIdByCharacter = result.ghostIdByCharacter;
+  }
+}
+
+// ── Dialog handler ────────────────────────────────────────────────────────────
+
+async function handleDialogMessage(
+  characterGhostId: string,
+  partnerGhostId: string,
+  inboundText: string,
+): Promise<void> {
+  const characterDef = characterForGhostId(characterGhostId);
+  if (!characterDef) return;
+
+  const mcp = mcpByGhostId.get(characterGhostId);
+  if (!mcp) {
+    console.warn(
+      JSON.stringify({
+        kind: "npc-agent.dialog.no-mcp-client",
+        characterGhostId,
+      }),
+    );
+    return;
+  }
+
+  const key = dialogKey(characterGhostId, partnerGhostId);
+  const state = dialogStateMap.get(key) ?? initialDialogState(characterDef.dialogTree);
+
+  const result = evaluateDialog(characterDef.dialogTree, state, inboundText);
+
+  dialogStateMap.set(key, {
+    currentNodeId: result.nextNodeId,
+    lastUpdated: new Date().toISOString(),
+  });
+
+  await mcp.callTool("say", { content: result.response, to: partnerGhostId });
+}
+
+// ── Per-character action loop ─────────────────────────────────────────────────
+
+function cancelActionLoopForGhost(ghostId: string, reason: string): void {
+  const loop = actionLoopsByGhostId.get(ghostId);
+  if (loop) {
+    console.info(JSON.stringify({ kind: "npc-agent.character.loop-cancel", ghostId, reason }));
+    loop.cancel();
+  }
+}
+
+async function startActionLoop(ctx: SpawnContext, characterDef: CharacterDefinition): Promise<void> {
+  const { ghostId } = ctx;
+  cancelActionLoopForGhost(ghostId, "spawn-replace");
+
+  const mcp = new GhostMcpClient({
+    worldApiBaseUrl: ctx.houseEndpoints.mcp,
+    token: ctx.token,
+  });
+  await mcp.connect();
+  mcpByGhostId.set(ghostId, mcp);
+
+  let running = true;
+  let wakeUp: (() => void) | null = null;
+  const handle: ActionLoop = {
+    cancel: () => {
+      running = false;
+      wakeUp?.();
+    },
+  };
+  actionLoopsByGhostId.set(ghostId, handle);
+
+  console.info(
+    JSON.stringify({
+      kind: "npc-agent.character.loop-start",
+      ghostId,
+      characterId: characterDef.id,
+      tickMs: ACTION_TICK_MS,
+    }),
+  );
+
+  try {
+    while (running) {
+      try {
+        const whereami = (await mcp.callTool("whereami", {})) as Record<string, unknown>;
+        const exitsRaw = (await mcp.callTool("exits", {})) as Record<string, unknown>;
+        const inventoryRaw = (await mcp.callTool("inventory", {})) as Record<string, unknown>;
+        const lookRaw = (await mcp.callTool("look", {})) as Record<string, unknown>;
+
+        const snapshot = buildSnapshot(whereami, exitsRaw, inventoryRaw, lookRaw, ghostId);
+        await evaluateRules(characterDef, snapshot, mcp);
+      } catch (e: unknown) {
+        // Single tick failure — log and continue; loop must survive (FR-005).
+        console.warn(
+          JSON.stringify({
+            kind: "npc-agent.character.tick-error",
+            ghostId,
+            error: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      }
+
+      await new Promise<void>((resolve) => {
+        wakeUp = resolve;
+        setTimeout(resolve, ACTION_TICK_MS);
+      });
+      wakeUp = null;
+    }
+  } finally {
+    await mcp.disconnect().catch(() => {});
+    mcpByGhostId.delete(ghostId);
   }
 }
 

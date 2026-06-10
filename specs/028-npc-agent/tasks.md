@@ -69,10 +69,10 @@
 
 **Independent test**: Run a "resource-seeker" character in a world with items within 3 cells; after 20 ticks confirm it has moved toward and taken at least one item.
 
-- [ ] T023 [US2] Implement `ghosts/npc-agent/src/behavior/rule-engine.ts` — given a `CharacterDefinition` and a world-state snapshot, evaluate `behaviorRules` in priority order; for each rule call the appropriate `GhostMcpClient` method (`go`, `take`, etc.) when the condition holds; return on first match; fall back to `defaultAction` when no rule fires; degrade gracefully if an MCP call fails (skip rule, try next, then fallback) — per spec edge case
-- [ ] T024 [US2] Integrate the rule engine into the per-character action loop in `ghosts/npc-agent/src/executor.ts`: after roster spawn, start one async loop per spawned character (keyed by `ghostId`); each tick calls `whereami`, `exits`, `inventory` via `GhostMcpClient`, then `evaluateRules`; loop failure for one character MUST NOT affect others (FR-005)
-- [ ] T025 [P] [US2] Write unit tests `ghosts/npc-agent/tests/rule-engine.test.ts` — `inventory_empty` + item nearby → `seek-item` action fires; `crowded` → `avoid-crowd` fires; no rule matches → `defaultAction` returned; MCP failure on first rule → second rule evaluated; `always` condition always matches
-- [ ] T026 [P] [US2] Add condition evaluators for the closed condition set (`inventory_empty`, `crowded`, `item_nearby`, `alone`, `always`) in `ghosts/npc-agent/src/behavior/rule-engine.ts`; each takes the world-state snapshot, returns boolean
+- [X] T023 [US2] Implement `ghosts/npc-agent/src/behavior/rule-engine.ts` — given a `CharacterDefinition` and a world-state snapshot, evaluate `behaviorRules` in priority order; for each rule call the appropriate `GhostMcpClient` method (`go`, `take`, etc.) when the condition holds; return on first match; fall back to `defaultAction` when no rule fires; degrade gracefully if an MCP call fails (skip rule, try next, then fallback) — per spec edge case
+- [X] T024 [US2] Integrate the rule engine into the per-character action loop in `ghosts/npc-agent/src/executor.ts`: after roster spawn, start one async loop per spawned character (keyed by `ghostId`); each tick calls `whereami`, `exits`, `inventory` via `GhostMcpClient`, then `evaluateRules`; loop failure for one character MUST NOT affect others (FR-005)
+- [X] T025 [P] [US2] Write unit tests `ghosts/npc-agent/tests/rule-engine.test.ts` — `inventory_empty` + item nearby → `seek-item` action fires; `crowded` → `avoid-crowd` fires; no rule matches → `defaultAction` returned; MCP failure on first rule → second rule evaluated; `always` condition always matches
+- [X] T026 [P] [US2] Add condition evaluators for the closed condition set (`inventory_empty`, `crowded`, `item_nearby`, `alone`, `always`) in `ghosts/npc-agent/src/behavior/rule-engine.ts`; each takes the world-state snapshot, returns boolean
 
 **Checkpoint**: Unit tests pass. Manual: a catalog character with a `seek-item` rule moves toward a nearby item over several ticks.
 
@@ -84,11 +84,11 @@
 
 **Independent test**: External ghost sends "hello" then "bye" to an NPC with a greeting→farewell dialog tree; NPC replies with the greeting text then the farewell text (FR-015/SC-007/SC-008).
 
-- [ ] T027 [US3] Implement `ghosts/npc-agent/src/dialog/dialog-engine.ts` — `evaluateDialog(tree, state, senderGhostId, inboundText): { response: string, nextNodeId: nodeId }`: case-insensitive keyword-substring scan over trigger conditions; random selection among `responses`; transition update; fallback node on no-match (FR-010/FR-011/FR-012); cycle guard (max traversal depth or loop detection)
-- [ ] T028 [US3] Integrate the dialog engine into `ghosts/npc-agent/src/executor.ts`: handle incoming `world.message.new` A2A notifications; identify target character by `ghostId`; reject sibling-NPC senders (FR-009 — sender ghostId is in the roster map); look up or initialize `DialogState` for `(characterGhostId, partnerGhostId)`; call `evaluateDialog`; send reply via `GhostMcpClient.say` with `to: senderGhostId` for `DIRECT` delivery; update per-partner state (FR-012)
-- [ ] T029 [P] [US3] Write unit tests `ghosts/npc-agent/tests/dialog-engine.test.ts` — trigger match fires correct node; random response is from the node's `responses` list; transition updates state; fallback fires on no match; two partners advance independently (no shared state); sibling-NPC sender is rejected before dialog state is created; cycle guard prevents infinite loop
-- [ ] T030 [P] [US3] Add `_tck/dialog` introspection endpoint to `ghosts/npc-agent/src/agent.ts` — returns current per-character dialog state map (for integration-test assertion per R8)
-- [ ] T031 [US3] Add `ghosts/tck/src/npc.ts` integration harness — mirrors `social.ts` structure: validate agent card → register npc-agent → create caretaker+house → adopt one external ghost → spawn → inject `world.message.new` via `/internal/world-fanout` → assert NPC reply via `_tck/dialog` or conversation log; covers (a) single multi-turn dialog (SC-007) and (b) two interleaved conversations with independent state (SC-008)
+- [X] T027 [US3] Implement `ghosts/npc-agent/src/dialog/dialog-engine.ts` — `evaluateDialog(tree, state, senderGhostId, inboundText): { response: string, nextNodeId: nodeId }`: case-insensitive keyword-substring scan over trigger conditions; random selection among `responses`; transition update; fallback node on no-match (FR-010/FR-011/FR-012); cycle guard (max traversal depth or loop detection)
+- [X] T028 [US3] Integrate the dialog engine into `ghosts/npc-agent/src/executor.ts`: handle incoming `world.message.new` A2A notifications; identify target character by `ghostId`; reject sibling-NPC senders (FR-009 — sender ghostId is in the roster map); look up or initialize `DialogState` for `(characterGhostId, partnerGhostId)`; call `evaluateDialog`; send reply via `GhostMcpClient.say` with `to: senderGhostId` for `DIRECT` delivery; update per-partner state (FR-012)
+- [X] T029 [P] [US3] Write unit tests `ghosts/npc-agent/tests/dialog-engine.test.ts` — trigger match fires correct node; random response is from the node's `responses` list; transition updates state; fallback fires on no match; two partners advance independently (no shared state); sibling-NPC sender is rejected before dialog state is created; cycle guard prevents infinite loop
+- [X] T030 [P] [US3] Add `_tck/dialog` introspection endpoint to `ghosts/npc-agent/src/agent.ts` — returns current per-character dialog state map (for integration-test assertion per R8)
+- [X] T031 [US3] Add `ghosts/tck/src/npc.ts` integration harness — mirrors `social.ts` structure: validate agent card → register npc-agent → create caretaker+house → adopt one external ghost → spawn → inject `world.message.new` via `/internal/world-fanout` → assert NPC reply via `_tck/dialog` or conversation log; covers (a) single multi-turn dialog (SC-007) and (b) two interleaved conversations with independent state (SC-008)
 
 **Checkpoint**: `pnpm test` passes. Integration: `pnpm test:tck` npc harness (live server) completes the scripted 3-turn dialog and the two-ghost interleaved test with correct replies.
 
@@ -100,9 +100,9 @@
 
 **Independent test**: Add a new `.character.gram`, restart npc-agent, confirm the new character spawns.
 
-- [ ] T032 [US4] Verify `NPC_CATALOG_DIR` env var is read in `catalog-loader.ts` with a correct default (`./catalog`); write a test in `ghosts/npc-agent/tests/catalog-loader.test.ts` — empty dir → empty catalog + log warning; malformed file → skipped + warning, valid file loads; two files with duplicate `id` → second skipped; `enabled: false` entry excluded from `catalog.enabled()`
-- [ ] T033 [P] [US4] Add staging compose service block for `npc-agent` in `deploy/staging/docker-compose.yml` mirroring the `funder-agent` block (port 4004, `NPC_CATALOG_DIR` env + volume mount for catalog files)
-- [ ] T034 [P] [US4] Write `ghosts/npc-agent/Dockerfile` — 3-stage build mirroring `random-agent/Dockerfile`; add `@relateby/pattern` to topological build order
+- [X] T032 [US4] Verify `NPC_CATALOG_DIR` env var is read in `catalog-loader.ts` with a correct default (`./catalog`); write a test in `ghosts/npc-agent/tests/catalog-loader.test.ts` — empty dir → empty catalog + log warning; malformed file → skipped + warning, valid file loads; two files with duplicate `id` → second skipped; `enabled: false` entry excluded from `catalog.enabled()`
+- [X] T033 [P] [US4] Add staging compose service block for `npc-agent` in `deploy/staging/docker-compose.yml` mirroring the `funder-agent` block (port 4004, `NPC_CATALOG_DIR` env + volume mount for catalog files)
+- [X] T034 [P] [US4] Write `ghosts/npc-agent/Dockerfile` — 3-stage build mirroring `random-agent/Dockerfile`; add `@relateby/pattern` to topological build order
 
 **Checkpoint**: `docker build ghosts/npc-agent` succeeds. Staging compose starts with catalog volume mounted; adding a file and restarting produces the new character.
 
@@ -110,12 +110,12 @@
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T035 Write `ghosts/npc-agent/README.md` — catalog format, env vars (`NPC_CATALOG_DIR`, `AGENT_HOST_URL`, `MCP_TOKEN`), how to add a character, how to run locally
-- [ ] T036 [P] Update `docs/project-overview.md` — add npc-agent to the agent roster section, describe the character catalog concept
-- [ ] T037 [P] Update `AGENTS.md` — add npc-agent entry alongside random-agent for agent-consumer guidance
-- [ ] T038 [P] Update `docs/architecture.md` — add agent-callable self-spawn capability to the agent-host ↔ first-party-ghost link (around line 212) and note `world.session.start` is now emitted (per ADR-0012 Consequences)
-- [ ] T039 Run `pnpm typecheck` and `pnpm test` across the full workspace; fix any type errors introduced by IC-008 additive changes (spawn-types, registry, supervisor)
-- [ ] T040 [P] Verify RFC-0026 status in `proposals/rfc/0026-npc-agent.md` — update to `accepted` once all P1 tasks land
+- [X] T035 Write `ghosts/npc-agent/README.md` — catalog format, env vars (`NPC_CATALOG_DIR`, `AGENT_HOST_URL`, `MCP_TOKEN`), how to add a character, how to run locally
+- [X] T036 [P] Update `docs/project-overview.md` — add npc-agent to the agent roster section, describe the character catalog concept
+- [X] T037 [P] Update `AGENTS.md` — add npc-agent entry alongside random-agent for agent-consumer guidance
+- [X] T038 [P] Update `docs/architecture.md` — add agent-callable self-spawn capability to the agent-host ↔ first-party-ghost link (around line 212) and note `world.session.start` is now emitted (per ADR-0012 Consequences)
+- [X] T039 Run `pnpm typecheck` and `pnpm test` across the full workspace; fix any type errors introduced by IC-008 additive changes (spawn-types, registry, supervisor)
+- [X] T040 [P] Verify RFC-0026 status in `proposals/rfc/0026-npc-agent.md` — update to `accepted` once all P1 tasks land
 
 ---
 
