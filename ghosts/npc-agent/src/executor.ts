@@ -12,6 +12,10 @@ import { evaluateRules, buildSnapshot } from "./behavior/rule-engine.js";
 import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
 
 const ACTION_TICK_MS = 3000;
+
+// Placeholder until issue #49 resolves the say.intent model.
+// https://github.com/akollegger/aie-matrix/issues/49
+const DEFAULT_INTENT = "greet";
 /** Mutable tick interval — overridden by tests via _test.setTickMs(). Production value is ACTION_TICK_MS. */
 let _tickMs = ACTION_TICK_MS;
 
@@ -286,7 +290,7 @@ async function handleDialogMessage(
     lastUpdated: new Date().toISOString(),
   });
 
-  await mcp.callTool("say", { content: result.response, to: partnerGhostId });
+  await mcp.callTool("say", { intent: DEFAULT_INTENT, content: result.response, to: partnerGhostId });
 }
 
 // ── Per-character action loop (Effect-based) ──────────────────────────────────
