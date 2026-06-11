@@ -42,6 +42,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Neo4j (`(:EvalContract)` nodes); in-memory `Map` for unit tests (024-eval-contracts)
 - TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `@relateby/pattern` (gram AST), `zod` v3, `ulid` — all already present in `server/world-api` (026-session-leaderboards)
 - Neo4j (`(:LeaderboardSnapshot)` nodes in session subgraph); in-memory TTL cache for live rankings (026-session-leaderboards)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` 0.3.13+, `@modelcontextprotocol/sdk` 1.29+, `@aie-matrix/ghost-ts-client` (workspace), `@aie-matrix/root-env` (workspace), `@relateby/pattern` ^0.4.2 (catalog gram parsing — pin matches `shared/map-gram`), `express` ^4.21, `h3-js` ^4.1, `effect` v3+ (server-side service layers), `ulid` (028-npc-agent)
+- `.character.gram` files on disk under `NPC_CATALOG_DIR` (catalog); in-memory `Map` per-character/per-partner dialog state; Neo4j-backed registry gains a per-ghost `background` property (additive) (028-npc-agent)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -89,6 +91,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 028-npc-agent: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` 0.3.13+, `@modelcontextprotocol/sdk` 1.29+, `@aie-matrix/ghost-ts-client` (workspace), `@aie-matrix/root-env` (workspace), `@relateby/pattern` ^0.4.2 (catalog gram parsing — pin matches `shared/map-gram`), `express` ^4.21, `h3-js` ^4.1, `effect` v3+ (server-side service layers), `ulid`
 - 027-resource-lifecycle: Removed `ResourceType` registry and `[resources:Resources]` map block; items are now the sole conserved resource. `LedgerService.init()` seeds from `ItemSeed[]` (map placements). `take`/`drop` commit `Transfer` with `location: { h3Index }`. Spawn grants use per-item `[:Grants { role: qty } | (itemRef)]` gram blocks. MCP trade fields renamed `*_item`. Monotonic resource class removed throughout.
 - 026-session-leaderboards: Added TypeScript 5.7 / Node.js 24 (ESM `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `@relateby/pattern` (gram AST), `zod` v3, `ulid` — all already present in `server/world-api`
-- 024-eval-contracts: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `neo4j-driver` v5, `@modelcontextprotocol/sdk` 1.29+, `ulid`, `zod` 3 — all already in `server/world-api`

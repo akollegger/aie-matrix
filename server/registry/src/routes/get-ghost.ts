@@ -35,6 +35,7 @@ export function handleGetGhostEffect(
       spawnH3Index: ghost.spawnH3Index,
       status: ghost.status,
       ...(ghost.displayName !== undefined ? { displayName: ghost.displayName } : {}),
+      ...(ghost.background !== undefined ? { background: ghost.background } : {}),
     });
   });
 }

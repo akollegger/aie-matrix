@@ -88,7 +88,19 @@ When you establish a new pattern that other contributors will need to follow, up
 
 When you make an architectural decision, record it as an ADR. When you remove a guide because the technology was replaced, remove it — stale guides cause more harm than no guide.
 
+## First-party ghost agents
+
+| Agent | Port | Description |
+|---|---|---|
+| `ghosts/random-agent` | 4001 | Reference Wanderer — random movement, echoes PARTNER messages. Scaffold template for new ghosts. |
+| `ghosts/npc-agent` | 4004 | Rule-based NPC roster — reads `.character.gram` catalog files, spawns named ghosts on session start, drives each via behavior rules and scripted dialog. No LLM required. See `ghosts/npc-agent/README.md`. |
+
+When building a new ghost, mirror the `random-agent` or `npc-agent` package structure: `src/agent.ts` (express A2A server), `src/executor.ts` (AgentExecutor), `src/buildAgentCard.ts`, `Dockerfile`, `vitest.config.ts`.
+
+---
+
 ## Recent Changes
+- 028-npc-agent: Added `npc-agent` — rule-based NPC character roster with `.character.gram` catalog, behavior rule engine, scripted dialog tree, and TCK harness. Agent-callable self-spawn via `POST /v1/sessions/spawn-roster/:agentId` (ADR-0012/IC-006). `world.session.start` event now emitted on session activation (IC-007).
 - 011-intermedium-client: TypeScript 5.7 (browser) + React 18, deck.gl, Vite; `clients/intermedium` — full-bleed H3 scene, **overlay** UI, goals/memories wording (RFC-0008, `specs/011-intermedium-client/`)
 - 010-tmj-to-gram: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@effect/cli`, `@effect/platform-node`, `h3-js`, `@relateby/pattern`, `fast-xml-parser`, `pixelmatch` (Layer 3 test only), `pngjs` (Layer 3 test only)
 - 007-world-objects: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3, `h3-js` (existing), `fast-xml-parser` (existing — tileset parsing)

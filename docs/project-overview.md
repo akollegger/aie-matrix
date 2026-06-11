@@ -130,6 +130,19 @@ Vendors are free to provide whatever content they choose. The platform provides 
 
 ---
 
+## First-Party Agent Roster
+
+The Matrix ships with a set of first-party agents that populate the world and serve as integration references for contributors building their own.
+
+| Agent | Package | Role |
+|---|---|---|
+| **random-agent** | `ghosts/random-agent` | Reference Wanderer — moves randomly each tick, echoes PARTNER-priority messages. Used as a load and movement smoke test. |
+| **npc-agent** | `ghosts/npc-agent` | Rule-based character roster — reads `.character.gram` catalog files and spawns one named ghost per enabled character on session start. Each ghost follows a priority-ordered behavior rule table (no LLM required) and responds to inbound messages via a scripted dialog tree. The reference implementation of deterministic, operator-configurable NPCs. |
+
+Each agent self-registers with the agent-host at startup and deregisters on shutdown. New ghosts follow the pattern in `ghosts/README.md`.
+
+---
+
 ## Sessions and Speaker Agents
 
 For every scheduled session, a **speaker agent** is deployed to the corresponding room tile. The speaker agent:

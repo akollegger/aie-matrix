@@ -56,6 +56,11 @@ export type GhostCard = {
   readonly class: string;
   readonly displayName: string;
   readonly partnerEmail: string | null;
+  /** Per-ghost background description (IC-008). Set for NPC catalog characters. */
+  readonly background?: string;
+  /** Catalog character ID (IC-008). Used by npc-agent executor to map
+   *  a spawned ghost back to its CharacterDefinition. */
+  readonly characterId?: string;
 };
 
 /**

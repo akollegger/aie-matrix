@@ -23,6 +23,9 @@ export interface AdoptGhostRequest {
   /** Specific agent catalog ID (e.g. "funder-agent"). When set, included
    *  in the ghost JWT so the world-api can look up catalog resourceGrants. */
   agentId?: string;
+  /** Per-ghost background description (IC-008). Stored so each NPC character
+   *  has a distinct, inspectable identity even when sharing one agent process. */
+  background?: string;
 }
 
 export interface GhostSessionCredential {

@@ -360,7 +360,16 @@ function whereamiEffect(extra: McpToolExtra): Effect.Effect<WhereAmIResult, Auth
     if (!cell) {
       return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(tileId) }));
     }
-    return { h3Index: tileId, tileId, col: cell.col, row: cell.row };
+    const store = yield* RegistryStoreService;
+    const ghostRecord = store.ghosts.get(ghostId);
+    return {
+      h3Index: tileId,
+      tileId,
+      col: cell.col,
+      row: cell.row,
+      ...(ghostRecord?.displayName !== undefined ? { displayName: ghostRecord.displayName } : {}),
+      ...(ghostRecord?.background !== undefined ? { background: ghostRecord.background } : {}),
+    };
   });
 }
 

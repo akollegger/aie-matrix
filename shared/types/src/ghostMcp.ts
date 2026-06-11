@@ -31,6 +31,10 @@ export interface WhereAmIResult {
   tileId: string;
   col: number;
   row: number;
+  /** Human-readable display name for this ghost, if set at adoption. */
+  displayName?: string;
+  /** Per-ghost background description (IC-008). Present for NPC catalog characters. */
+  background?: string;
 }
 
 export interface LookArgs {
