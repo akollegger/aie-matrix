@@ -125,7 +125,7 @@ A session operator adds a new character to the catalog by creating a configurati
 ### Key Entities
 
 - **CharacterDefinition**: A catalog entry, authored as a `.character.gram` file. Attributes: `id` (unique slug), `name` (display name), `background` (description string), `enabled` (boolean), `defaultAction` (`idle` | `random-move` | `stay`), `behaviorRules` (ordered list), `dialogTree` (root node + node map)
-- **BehaviorRule**: A single rule in a character's decision table. Attributes: `id`, `condition` (declarative expression over world state), `action` (MCP tool call descriptor with parameters), `priority` (integer; lower = higher priority)
+- **BehaviorRule**: A single rule in a character's decision table. Attributes: `id`, `condition` (declarative expression over world state), `action` (`WorldAction` — a discriminated union keyed on `do`; parameters mirror MCP tool arguments). Declaration order is the authoritative priority; no `priority` field.
 - **DialogNode**: A node in a character's dialog tree. Attributes: `id`, `triggerConditions` (list of case-insensitive keyword/substring triggers; the node fires when any trigger appears in the lowercased inbound text), `responses` (list of text alternatives), `transition` (optional: next node ID after responding), `fallback` (boolean — designates the catch-all node)
 - **DialogState**: Per-character, per-conversation-partner runtime state tracking which dialog node is "current" for the next inbound message from that sender
 - **NpcAgentCatalog**: Runtime-loaded collection of validated CharacterDefinitions; provides lookup by ID and filtered list of enabled entries

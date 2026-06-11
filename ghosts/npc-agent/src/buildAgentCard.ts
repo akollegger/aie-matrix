@@ -38,7 +38,7 @@ export function buildNpcAgentCard(publicBase: string): AgentCard {
       schemaVersion: 1,
       tier: "social",
       ghostClasses: ["any"],
-      requiredTools: ["whereami", "exits", "go", "say", "inventory", "take"],
+      requiredTools: ["whereami", "exits", "look", "go", "say", "inventory", "take"],
       capabilitiesRequired: [],
       memoryKind: "none",
       llmProvider: "none",

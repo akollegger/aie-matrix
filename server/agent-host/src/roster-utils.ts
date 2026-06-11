@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
  * T012: derives a deterministic ghostId from (sessionId, characterId) so
  * npc-agent roster spawns are restart-idempotent.
  *
- * Format: `npc-<12-char hex prefix>` (safe for ghost IDs).
+ * Format: `npc-<24-char hex prefix>` (safe for ghost IDs).
  */
 export function deriveCharacterGhostId(sessionId: string, characterId: string): string {
   const hash = createHash("sha256")
