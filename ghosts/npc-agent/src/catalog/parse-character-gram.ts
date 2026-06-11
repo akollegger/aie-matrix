@@ -75,7 +75,8 @@ function parseWorldAction(props: HashMap.HashMap<string, Value>, doAction: strin
       return { do: "go", toward: toward as CompassDirection | "random" | "nearest_item" };
     }
     case "take": {
-      const item = (strProp(props, "item") ?? "nearest") as "nearest";
+      const item = strProp(props, "item") ?? "nearest";
+      if (item !== "nearest") return null;
       return { do: "take", item };
     }
     case "traverse": {
@@ -257,7 +258,7 @@ export function parseCharacterGramText(
     if (!defaultAction) {
       return yield* Effect.fail(
         new CharacterParseError(
-          `invalid defaultAction "${defaultActionRaw}": must be idle|go-random`,
+          `invalid defaultAction "${defaultActionRaw}": must be idle|go-random (legacy aliases: stay|random-move)`,
           source,
         ),
       );

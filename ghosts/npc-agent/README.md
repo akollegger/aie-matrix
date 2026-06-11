@@ -62,7 +62,7 @@ The format is gram — the same syntax used for `.map.gram` and `.calendar.gram`
 | `name` | string | Display name used as the ghost's `displayName` in the registry. |
 | `background` | string | One-line character background, surfaced in `whereami` (IC-008). |
 | `enabled` | boolean | `false` → character is never spawned. |
-| `defaultAction` | `idle` \| `random-move` \| `stay` | Action taken when no behavior rule matches. |
+| `defaultAction` | `idle` \| `go-random` | Action taken when no behavior rule matches. (Legacy aliases `stay`/`random-move` also accepted.) |
 
 ### Dialog tree
 
@@ -79,22 +79,29 @@ NPC↔NPC messages are ignored (sibling-NPC sender rejection). A random response
 
 ### Behavior rules block (optional)
 
+Rules are evaluated in **declaration order** — first match wins. Each rule's `do` field is the action type discriminant; parameters depend on the action. If a rule's MCP action fails, evaluation continues to the next rule (graceful degradation).
+
 ```gram
 [behavior_1:Behaviors |
-  (b1:Rule { when: "inventory_empty", do: "seek-item",   priority: 1 }),
-  (b2:Rule { when: "crowded",         do: "avoid-crowd", priority: 2 }),
-  (b3:Rule { when: "alone",           do: "wander",      priority: 3 }),
-  (b4:Rule { when: "always",          do: "idle",        priority: 4 })
+  (b1:Rule { when: "item_here",     do: "take"                        }),
+  (b2:Rule { when: "item_adjacent", do: "go",   toward: "nearest_item" }),
+  (b3:Rule { when: "crowded",       do: "go",   toward: "random"       }),
+  (b4:Rule { when: "always",        do: "idle"                         })
 ]
 
 (charGuide)-[:EXHIBITS_BEHAVIOR]->(behavior_1)
 ```
 
-Rules are evaluated in ascending `priority` order. First match wins. If a rule's MCP action fails, evaluation continues to the next rule (graceful degradation).
+**Supported conditions:** `inventory_empty`, `item_here` (item on current tile), `item_adjacent` (item on adjacent tile), `item_nearby` (either), `crowded` (≥2 other ghosts), `alone` (0 other ghosts), `always`
 
-**Supported conditions:** `inventory_empty`, `crowded` (≥2 other ghosts on tile), `item_nearby`, `alone` (0 other ghosts), `always`
+**Supported actions:**
 
-**Supported actions:** `seek-item` (take here or move toward adjacent item), `avoid-crowd` (random exit), `wander` (random exit), `idle` (no-op)
+| `do` | Params | Effect |
+|---|---|---|
+| `go` | `toward: "random" \| "nearest_item" \| n\|s\|ne\|nw\|se\|sw` | Move toward exit |
+| `take` | _(none)_ | Take nearest item on current tile |
+| `traverse` | `via: "<portal-id>"` | Use a named portal |
+| `idle` | _(none)_ | No-op |
 
 See `schema/character.gram.md` for the full format specification.
 

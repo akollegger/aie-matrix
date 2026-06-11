@@ -23,7 +23,7 @@ The header record contains only `kind`. All character identity fields live on a 
 | `name` | string | yes | Non-empty; used as ghost `displayName` at spawn |
 | `background` | string | yes | Non-empty; set as IC-008 per-ghost background |
 | `enabled` | bool | yes | `false` → excluded from roster spawn |
-| `defaultAction` | string | yes | `idle` \| `random-move` \| `stay` |
+| `defaultAction` | string | yes | `idle` \| `go-random` (legacy aliases: `stay`, `random-move`) |
 
 The node label (e.g. `charId`) is the gram identity used in wiring relationships below.
 
@@ -77,18 +77,39 @@ One `HAS_DIALOG` relationship per character is required. The target must be a de
 
 ## Behaviors block (optional)
 
+Rules are evaluated in **declaration order** — first match wins. Each rule's `do` field is the action type discriminant; parameters depend on the action.
+
 ```gram
 [behavior_1:Behaviors |
-  (b1:Rule { when: "inventory_empty", do: "seek-item",   priority: 1 }),
-  (b2:Rule { when: "crowded",         do: "avoid-crowd", priority: 2 }),
-  (b3:Rule { when: "always",          do: "idle",        priority: 3 })
+  (b1:Rule { when: "item_here",     do: "take"                        }),
+  (b2:Rule { when: "item_adjacent", do: "go",   toward: "nearest_item" }),
+  (b3:Rule { when: "crowded",       do: "go",   toward: "random"       }),
+  (b4:Rule { when: "always",        do: "idle"                         })
 ]
 ```
 
-- Element order = priority order unless explicit `priority` values are given.
-- `when` ∈ `inventory_empty | crowded | item_nearby | alone | always`.
-- `do` ∈ `seek-item | avoid-crowd | wander | idle`.
-- Missing or invalid rules are silently skipped at parse time.
+**Conditions** (`when`):
+
+| Value | Fires when… |
+|---|---|
+| `inventory_empty` | Ghost carries no items |
+| `item_here` | At least one item is on the current tile |
+| `item_adjacent` | At least one item is on an adjacent tile |
+| `item_nearby` | At least one item is on the current or any adjacent tile |
+| `crowded` | ≥2 other ghosts share the current tile |
+| `alone` | No other ghosts on the current tile |
+| `always` | Unconditional (use as a catch-all last rule) |
+
+**Actions** (`do`) and their parameters:
+
+| `do` | Required params | Effect |
+|---|---|---|
+| `go` | `toward: "random" \| "nearest_item" \| <compass>` | Move toward exit. `random` picks a random exit; `nearest_item` moves toward the closest adjacent item; a compass direction (`n`,`s`,`ne`,`nw`,`se`,`sw`) moves to a specific exit. |
+| `take` | _(none; picks first item on current tile)_ | Pick up the nearest item on the current tile. |
+| `traverse` | `via: "<portal-id>"` | Use a named portal or transition. |
+| `idle` | _(none)_ | No-op — skip the tick action. |
+
+Missing or invalid rules are silently skipped at parse time. If a rule's MCP action fails, evaluation continues to the next rule (graceful degradation, FR-005).
 
 ### Wiring the character to its behaviors
 
@@ -104,7 +125,7 @@ Per file, in order:
 
 1. Header `kind` check
 2. `Character` node present with all required fields
-3. `defaultAction` enum membership
+3. `defaultAction` is a valid value (`idle`, `go-random`, or legacy aliases `stay`/`random-move`)
 4. `HAS_DIALOG` relationship resolves to a declared `DialogTree` block
 5. All `DialogNode` ids referenced in the tree are declared
 6. Tree has exactly one wildcard self-loop (the idle/root node)
@@ -134,8 +155,8 @@ Per file, in order:
 ]
 
 [behavior_1:Behaviors |
-  (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
-  (b2:Rule { when: "always",  do: "idle",        priority: 2 })
+  (b1:Rule { when: "crowded", do: "go",   toward: "random" }),
+  (b2:Rule { when: "always",  do: "idle"                   })
 ]
 
 (charAttendant)-[:HAS_DIALOG]->(dialog_1)
