@@ -243,7 +243,7 @@ export class NpcAgentExecutor implements AgentExecutor {
     const credential: RosterCredential = {
       mcpToken: sp.token,
       worldApiBaseUrl: sp.houseEndpoints.mcp,
-      characterTokens: new Map(),
+      characterTokens: new Map(catalog.enabled().map((c) => [c.id, sp.token])),
       agentId,
     };
 

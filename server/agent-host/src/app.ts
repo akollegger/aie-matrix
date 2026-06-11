@@ -507,6 +507,12 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           return;
         }
 
+        const agentId = req.params.agentId!;
+        if (callerSession.agentId !== agentId) {
+          res.status(403).json({ error: "token does not belong to this agent", code: "FORBIDDEN" });
+          return;
+        }
+
         const b = req.body as {
           sessionId?: string;
           characters?: Array<{
@@ -521,8 +527,6 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           res.status(400).json({ error: "sessionId and characters[] are required", code: "VALIDATION_FAILED" });
           return;
         }
-
-        const agentId = req.params.agentId!;
         const spawned: Array<{ characterId: string; ghostId: string; sessionId: string; ok: true }> = [];
         const failed: Array<{ characterId: string; reason: string }> = [];
 
