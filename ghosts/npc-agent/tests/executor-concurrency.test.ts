@@ -40,7 +40,7 @@ function makeCharDef(id: string): CharacterDefinition {
     name: `Character ${id}`,
     background: "test background",
     enabled: true,
-    defaultAction: "idle",
+    defaultAction: { do: "idle" as const },
     behaviorRules: [],
     dialogTree: {
       id: "dialog_1",

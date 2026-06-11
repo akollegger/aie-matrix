@@ -22,9 +22,9 @@ function makeCharacter(overrides: Partial<CharacterDefinition> = {}): CharacterD
     name: "Test Character",
     background: "A test character.",
     enabled: true,
-    defaultAction: "idle",
+    defaultAction: { do: "idle" },
     behaviorRules: [],
-    dialogTree: { nodes: new Map(), rootId: "", fallbackId: "" },
+    dialogTree: { id: "dialog_1", nodes: new Map(), edges: [], rootId: "" },
     ...overrides,
   };
 }
@@ -42,7 +42,7 @@ const emptySnapshot: WorldSnapshot = {
 describe("evaluateRules", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
-  it("fires seek-item when inventory_empty condition holds and item is nearby", async () => {
+  it("fires take when inventory_empty condition holds and item is here", async () => {
     const { client, calls } = makeMcp();
     const snapshot: WorldSnapshot = {
       ...emptySnapshot,
@@ -50,7 +50,7 @@ describe("evaluateRules", () => {
       nearbyItems: [{ id: "item-1", name: "Badge", at: "here" }],
     };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "inventory_empty", action: "seek-item" }],
+      behaviorRules: [{ id: "r1", condition: "inventory_empty", action: { do: "take", item: "nearest" } }],
     });
     await evaluateRules(char, snapshot, client);
     expect(calls.some((c) => c.name === "take")).toBe(true);
@@ -64,21 +64,21 @@ describe("evaluateRules", () => {
       nearbyItems: [{ id: "item-2", name: "Pin", at: "here" }],
     };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "inventory_empty", action: "seek-item" }],
-      defaultAction: "idle",
+      behaviorRules: [{ id: "r1", condition: "inventory_empty", action: { do: "take", item: "nearest" } }],
+      defaultAction: { do: "idle" },
     });
     await evaluateRules(char, snapshot, client);
     expect(calls).toHaveLength(0);
   });
 
-  it("fires avoid-crowd when crowded (>=2 occupants)", async () => {
+  it("fires go when crowded (>=2 occupants)", async () => {
     const { client, calls } = makeMcp();
     const snapshot: WorldSnapshot = {
       ...emptySnapshot,
       occupants: ["ghost-a", "ghost-b"],
     };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "crowded", action: "avoid-crowd" }],
+      behaviorRules: [{ id: "r1", condition: "crowded", action: { do: "go", toward: "random" } }],
     });
     await evaluateRules(char, snapshot, client);
     expect(calls.some((c) => c.name === "go")).toBe(true);
@@ -88,8 +88,8 @@ describe("evaluateRules", () => {
     const { client, calls } = makeMcp();
     const snapshot: WorldSnapshot = { ...emptySnapshot, occupants: ["ghost-a"] };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "crowded", action: "avoid-crowd" }],
-      defaultAction: "idle",
+      behaviorRules: [{ id: "r1", condition: "crowded", action: { do: "go", toward: "random" } }],
+      defaultAction: { do: "idle" },
     });
     await evaluateRules(char, snapshot, client);
     expect(calls.some((c) => c.name === "go")).toBe(false);
@@ -98,7 +98,7 @@ describe("evaluateRules", () => {
   it("always condition always fires", async () => {
     const { client, calls } = makeMcp();
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "always", action: "wander" }],
+      behaviorRules: [{ id: "r1", condition: "always", action: { do: "go", toward: "random" } }],
     });
     await evaluateRules(char, emptySnapshot, client);
     expect(calls.some((c) => c.name === "go")).toBe(true);
@@ -108,20 +108,18 @@ describe("evaluateRules", () => {
     const { client, calls } = makeMcp();
     const snapshot: WorldSnapshot = { ...emptySnapshot, occupants: [] };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "crowded", action: "avoid-crowd" }],
-      defaultAction: "wander",
+      behaviorRules: [{ id: "r1", condition: "crowded", action: { do: "go", toward: "random" } }],
+      defaultAction: { do: "go", toward: "random" },
     });
     await evaluateRules(char, snapshot, client);
     expect(calls.some((c) => c.name === "go")).toBe(true);
   });
 
-  it("idle and stay defaultAction make no MCP calls", async () => {
-    for (const defaultAction of ["idle", "stay"] as const) {
-      const { client, calls } = makeMcp();
-      const char = makeCharacter({ behaviorRules: [], defaultAction });
-      await evaluateRules(char, emptySnapshot, client);
-      expect(calls).toHaveLength(0);
-    }
+  it("idle defaultAction makes no MCP calls", async () => {
+    const { client, calls } = makeMcp();
+    const char = makeCharacter({ behaviorRules: [], defaultAction: { do: "idle" } });
+    await evaluateRules(char, emptySnapshot, client);
+    expect(calls).toHaveLength(0);
   });
 
   it("skips rule on MCP failure and evaluates next rule", async () => {
@@ -139,17 +137,16 @@ describe("evaluateRules", () => {
     } as unknown as GhostMcpClient;
 
     const snapshot: WorldSnapshot = { ...emptySnapshot, occupants: [] };
-    // Two always rules: first fires wander (throws), second fires idle (no-op)
-    // The third rule (alone → wander) should fire after first two evaluated
+    // Two always rules: first fires go (throws), second fires idle (no-op).
     const char = makeCharacter({
       behaviorRules: [
-        { id: "r1", condition: "always", action: "wander", priority: 1 },
-        { id: "r2", condition: "always", action: "idle",   priority: 2 },
+        { id: "r1", condition: "always", action: { do: "go", toward: "random" } },
+        { id: "r2", condition: "always", action: { do: "idle" } },
       ],
     });
 
     await evaluateRules(char, snapshot, client);
-    // r1 fires wander → go throws → r1 skipped; r2 fires idle → no MCP call.
+    // r1 fires go → throws → r1 skipped; r2 fires idle → no MCP call.
     // Only the one failed "go" call.
     expect(calls.filter((c) => c.name === "go")).toHaveLength(1);
   });
@@ -158,7 +155,7 @@ describe("evaluateRules", () => {
     const { client, calls } = makeMcp();
     const snapshot: WorldSnapshot = { ...emptySnapshot, occupants: [] };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "alone", action: "wander" }],
+      behaviorRules: [{ id: "r1", condition: "alone", action: { do: "go", toward: "random" } }],
     });
     await evaluateRules(char, snapshot, client);
     expect(calls.some((c) => c.name === "go")).toBe(true);
@@ -168,14 +165,14 @@ describe("evaluateRules", () => {
     const { client, calls } = makeMcp();
     const snapshot: WorldSnapshot = { ...emptySnapshot, occupants: ["ghost-a"] };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "alone", action: "wander" }],
-      defaultAction: "idle",
+      behaviorRules: [{ id: "r1", condition: "alone", action: { do: "go", toward: "random" } }],
+      defaultAction: { do: "idle" },
     });
     await evaluateRules(char, snapshot, client);
     expect(calls.some((c) => c.name === "go")).toBe(false);
   });
 
-  it("item_nearby condition fires when nearbyItems is non-empty", async () => {
+  it("item_adjacent condition fires go toward nearest_item", async () => {
     const { client, calls } = makeMcp();
     const snapshot: WorldSnapshot = {
       ...emptySnapshot,
@@ -183,10 +180,25 @@ describe("evaluateRules", () => {
       exits: [{ toward: "n" }],
     };
     const char = makeCharacter({
-      behaviorRules: [{ id: "r1", condition: "item_nearby", action: "seek-item" }],
+      behaviorRules: [{ id: "r1", condition: "item_adjacent", action: { do: "go", toward: "nearest_item" } }],
     });
     await evaluateRules(char, snapshot, client);
-    expect(calls.some((c) => c.name === "go" || c.name === "take")).toBe(true);
+    expect(calls.some((c) => c.name === "go")).toBe(true);
+    expect(calls.find((c) => c.name === "go")?.args["toward"]).toBe("n");
+  });
+
+  it("item_here condition fires take on item at current tile", async () => {
+    const { client, calls } = makeMcp();
+    const snapshot: WorldSnapshot = {
+      ...emptySnapshot,
+      nearbyItems: [{ id: "item-1", name: "Badge", at: "here" }],
+    };
+    const char = makeCharacter({
+      behaviorRules: [{ id: "r1", condition: "item_here", action: { do: "take", item: "nearest" } }],
+    });
+    await evaluateRules(char, snapshot, client);
+    expect(calls.some((c) => c.name === "take")).toBe(true);
+    expect(calls.find((c) => c.name === "take")?.args["itemRef"]).toBe("item-1");
   });
 });
 

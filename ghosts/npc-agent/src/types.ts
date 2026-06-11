@@ -1,23 +1,30 @@
 /** Closed condition vocabulary for BehaviorRule. */
 export type BehaviorCondition =
   | "inventory_empty"
+  | "item_here"
+  | "item_adjacent"
   | "crowded"
   | "item_nearby"
   | "alone"
   | "always";
 
-/** Closed action vocabulary for BehaviorRule. */
-export type BehaviorAction = "seek-item" | "avoid-crowd" | "wander" | "idle";
+/** H3 compass directions used by the go action. */
+export type CompassDirection = "n" | "s" | "ne" | "nw" | "se" | "sw";
 
-/** Default action taken when no rule matches. */
-export type DefaultAction = "idle" | "random-move" | "stay";
+/**
+ * A parameterized world action — `do` is the type discriminant.
+ * Parameters mirror the corresponding MCP tool arguments.
+ */
+export type WorldAction =
+  | { readonly do: "go";       readonly toward: CompassDirection | "random" | "nearest_item" }
+  | { readonly do: "take";     readonly item: "nearest" }
+  | { readonly do: "traverse"; readonly via: string }
+  | { readonly do: "idle" };
 
 export interface BehaviorRule {
   readonly id: string;
   readonly condition: BehaviorCondition;
-  readonly action: BehaviorAction;
-  /** Array index is the authoritative priority; explicit value used only for sorting if present. */
-  readonly priority?: number;
+  readonly action: WorldAction;
 }
 
 export interface DialogNode {
@@ -51,7 +58,7 @@ export interface CharacterDefinition {
   readonly name: string;
   readonly background: string;
   readonly enabled: boolean;
-  readonly defaultAction: DefaultAction;
+  readonly defaultAction: WorldAction;
   readonly behaviorRules: readonly BehaviorRule[];
   readonly dialogTree: DialogTree;
 }

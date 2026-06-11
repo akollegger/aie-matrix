@@ -18,8 +18,8 @@ const VALID_CHARACTER = `
 ]
 
 [behavior_1:Behaviors |
-  (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
-  (b2:Rule { when: "always",  do: "idle",        priority: 2 })
+  (b1:Rule { when: "crowded", do: "go",   toward: "random" }),
+  (b2:Rule { when: "always",  do: "idle"                   })
 ]
 
 (charGuide)-[:HAS_DIALOG]->(dialog_1)
@@ -30,7 +30,7 @@ const DISABLED_CHARACTER = `
 { kind: "matrix-character" }
 
 (charHermit:Character { id: "hermit", name: "The Hermit",
-  background: "Prefers solitude.", enabled: false, defaultAction: "stay" })
+  background: "Prefers solitude.", enabled: false, defaultAction: "idle" })
 
 (idle:DialogNode { responses: ["..."] })
 
@@ -56,16 +56,16 @@ describe("parseCharacterGramText", () => {
     expect(char.name).toBe("Info Attendant");
     expect(char.background).toBe("A friendly guide to the conference.");
     expect(char.enabled).toBe(true);
-    expect(char.defaultAction).toBe("idle");
+    expect(char.defaultAction).toEqual({ do: "idle" });
   });
 
-  it("parses behavior rules in priority order", async () => {
+  it("parses behavior rules in declaration order as WorldAction objects", async () => {
     const char = await parse(VALID_CHARACTER);
     expect(char.behaviorRules).toHaveLength(2);
     expect(char.behaviorRules[0]!.condition).toBe("crowded");
-    expect(char.behaviorRules[0]!.action).toBe("avoid-crowd");
+    expect(char.behaviorRules[0]!.action).toEqual({ do: "go", toward: "random" });
     expect(char.behaviorRules[1]!.condition).toBe("always");
-    expect(char.behaviorRules[1]!.action).toBe("idle");
+    expect(char.behaviorRules[1]!.action).toEqual({ do: "idle" });
   });
 
   it("parses dialog nodes into the tree's nodes map", async () => {
@@ -107,7 +107,7 @@ describe("parseCharacterGramText", () => {
     const char = await parse(DISABLED_CHARACTER);
     expect(char.id).toBe("hermit");
     expect(char.enabled).toBe(false);
-    expect(char.defaultAction).toBe("stay");
+    expect(char.defaultAction).toEqual({ do: "idle" });
   });
 
   it("a character with no EXHIBITS_BEHAVIOR has empty behaviorRules", async () => {

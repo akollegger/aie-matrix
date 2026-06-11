@@ -1,5 +1,6 @@
+import { Match } from "effect";
 import type { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
-import type { CharacterDefinition, BehaviorAction, DefaultAction } from "../types.js";
+import type { CharacterDefinition, WorldAction, CompassDirection } from "../types.js";
 
 // ── World snapshot ────────────────────────────────────────────────────────────
 
@@ -38,6 +39,14 @@ function evalItemNearby(snapshot: WorldSnapshot): boolean {
   return snapshot.nearbyItems.length > 0;
 }
 
+function evalItemHere(snapshot: WorldSnapshot): boolean {
+  return snapshot.nearbyItems.some((i) => i.at === "here");
+}
+
+function evalItemAdjacent(snapshot: WorldSnapshot): boolean {
+  return snapshot.nearbyItems.some((i) => i.at !== "here");
+}
+
 function evalAlone(snapshot: WorldSnapshot): boolean {
   return snapshot.occupants.length === 0;
 }
@@ -47,69 +56,58 @@ function evaluateCondition(condition: string, snapshot: WorldSnapshot): boolean 
     case "inventory_empty": return evalInventoryEmpty(snapshot);
     case "crowded":         return evalCrowded(snapshot);
     case "item_nearby":     return evalItemNearby(snapshot);
+    case "item_here":       return evalItemHere(snapshot);
+    case "item_adjacent":   return evalItemAdjacent(snapshot);
     case "alone":           return evalAlone(snapshot);
     case "always":          return true;
     default:                return false;
   }
 }
 
-// ── Action handlers ───────────────────────────────────────────────────────────
+// ── Action resolution helpers ─────────────────────────────────────────────────
 
-async function doSeekItem(snapshot: WorldSnapshot, mcp: GhostMcpClient): Promise<void> {
-  // Take an item that is on the current tile first.
-  const hereItem = snapshot.nearbyItems.find((i) => i.at === "here");
-  if (hereItem) {
-    await mcp.callTool("take", { itemRef: hereItem.id });
-    return;
+function resolveToward(
+  toward: CompassDirection | "random" | "nearest_item",
+  snapshot: WorldSnapshot,
+): string {
+  if (toward === "random") {
+    if (snapshot.exits.length === 0) return "n";
+    return snapshot.exits[Math.floor(Math.random() * snapshot.exits.length)]!.toward;
   }
-  // Move toward the nearest adjacent item.
-  const adjacentItem = snapshot.nearbyItems.find((i) => i.at !== "here");
-  if (adjacentItem) {
-    const exit = snapshot.exits.find((e) => e.toward === adjacentItem.at);
-    if (exit) {
-      await mcp.callTool("go", { toward: exit.toward });
-      return;
-    }
+  if (toward === "nearest_item") {
+    const adj = snapshot.nearbyItems.find((i) => i.at !== "here");
+    if (adj) return adj.at;
+    if (snapshot.exits.length === 0) return "n";
+    return snapshot.exits[Math.floor(Math.random() * snapshot.exits.length)]!.toward;
   }
-  // No item found: fall through to wander.
-  await doWander(snapshot, mcp);
+  return toward;
 }
 
-async function doAvoidCrowd(snapshot: WorldSnapshot, mcp: GhostMcpClient): Promise<void> {
-  if (snapshot.exits.length === 0) return;
-  const pick = snapshot.exits[Math.floor(Math.random() * snapshot.exits.length)]!;
-  await mcp.callTool("go", { toward: pick.toward });
+function resolveItem(_item: "nearest", snapshot: WorldSnapshot): string {
+  return snapshot.nearbyItems.find((i) => i.at === "here")?.id ?? "";
 }
 
-async function doWander(snapshot: WorldSnapshot, mcp: GhostMcpClient): Promise<void> {
-  if (snapshot.exits.length === 0) return;
-  const pick = snapshot.exits[Math.floor(Math.random() * snapshot.exits.length)]!;
-  await mcp.callTool("go", { toward: pick.toward });
-}
-
-async function doRandomMove(snapshot: WorldSnapshot, mcp: GhostMcpClient): Promise<void> {
-  await doWander(snapshot, mcp);
-}
+// ── Action dispatch ───────────────────────────────────────────────────────────
 
 async function executeAction(
-  action: BehaviorAction | DefaultAction,
+  action: WorldAction,
   snapshot: WorldSnapshot,
   mcp: GhostMcpClient,
 ): Promise<void> {
-  switch (action) {
-    case "seek-item":   return doSeekItem(snapshot, mcp);
-    case "avoid-crowd": return doAvoidCrowd(snapshot, mcp);
-    case "wander":      return doWander(snapshot, mcp);
-    case "idle":        return;
-    case "random-move": return doRandomMove(snapshot, mcp);
-    case "stay":        return;
-  }
+  const dispatched = Match.value(action).pipe(
+    Match.when({ do: "go" as const },       (a) => mcp.callTool("go",       { toward: resolveToward(a.toward, snapshot) })),
+    Match.when({ do: "take" as const },     (a) => mcp.callTool("take",     { itemRef: resolveItem(a.item, snapshot) })),
+    Match.when({ do: "traverse" as const }, (a) => mcp.callTool("traverse", { via: a.via })),
+    Match.when({ do: "idle" as const },     ()  => Promise.resolve()),
+    Match.exhaustive,
+  );
+  await dispatched;
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Evaluate behavior rules for a character in priority order.
+ * Evaluate behavior rules for a character in declaration order.
  * Returns on the first matching rule whose action succeeds.
  * If an MCP action throws, the rule is skipped and evaluation continues.
  * Falls back to `character.defaultAction` when no rule fires or all fire with MCP errors.

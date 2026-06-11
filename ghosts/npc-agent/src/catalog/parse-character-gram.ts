@@ -4,11 +4,11 @@ import { Effect, HashSet, HashMap, Option } from "effect";
 import type { Subject, Pattern } from "@relateby/pattern";
 import type { Value } from "@relateby/pattern";
 import type {
-  BehaviorAction,
   BehaviorCondition,
   BehaviorRule,
   CharacterDefinition,
-  DefaultAction,
+  CompassDirection,
+  WorldAction,
   DialogEdge,
   DialogNode,
   DialogTree,
@@ -40,13 +40,6 @@ function boolProp(props: HashMap.HashMap<string, Value>, key: string): boolean |
   });
 }
 
-function intProp(props: HashMap.HashMap<string, Value>, key: string): number | undefined {
-  return Option.match(HashMap.get(props, key), {
-    onNone: () => undefined,
-    onSome: (v) => (v._tag === "IntVal" ? v.value : undefined),
-  });
-}
-
 function strArrayProp(
   props: HashMap.HashMap<string, Value>,
   key: string,
@@ -65,12 +58,52 @@ function strArrayProp(
 }
 
 const VALID_CONDITIONS = new Set<string>([
-  "inventory_empty", "crowded", "item_nearby", "alone", "always",
+  "inventory_empty", "item_here", "item_adjacent", "crowded", "item_nearby", "alone", "always",
 ]);
-const VALID_ACTIONS = new Set<string>([
-  "seek-item", "avoid-crowd", "wander", "idle",
+
+const VALID_TOWARD = new Set<string>([
+  "n", "s", "ne", "nw", "se", "sw", "random", "nearest_item",
 ]);
-const VALID_DEFAULT_ACTIONS = new Set<string>(["idle", "random-move", "stay"]);
+
+// ── WorldAction parser ───────────────────────────────────────────────────────
+
+function parseWorldAction(props: HashMap.HashMap<string, Value>, doAction: string): WorldAction | null {
+  switch (doAction) {
+    case "go": {
+      const toward = strProp(props, "toward");
+      if (!toward || !VALID_TOWARD.has(toward)) return null;
+      return { do: "go", toward: toward as CompassDirection | "random" | "nearest_item" };
+    }
+    case "take": {
+      const item = (strProp(props, "item") ?? "nearest") as "nearest";
+      return { do: "take", item };
+    }
+    case "traverse": {
+      const via = strProp(props, "via");
+      if (!via) return null;
+      return { do: "traverse", via };
+    }
+    case "idle":
+      return { do: "idle" };
+    default:
+      return null;
+  }
+}
+
+// ── defaultAction string → WorldAction ──────────────────────────────────────
+
+function parseDefaultAction(raw: string): WorldAction | null {
+  switch (raw) {
+    case "idle":
+    case "stay":        // legacy alias
+      return { do: "idle" };
+    case "random-move":
+    case "go-random":
+      return { do: "go", toward: "random" };
+    default:
+      return null;
+  }
+}
 
 // ── Sub-parsers ──────────────────────────────────────────────────────────────
 
@@ -79,15 +112,11 @@ function parseBehaviorRule(subject: Subject, index: number): BehaviorRule | null
   const when = strProp(props, "when");
   const doAction = strProp(props, "do");
   if (!when || !doAction) return null;
-  if (!VALID_CONDITIONS.has(when) || !VALID_ACTIONS.has(doAction)) return null;
+  if (!VALID_CONDITIONS.has(when)) return null;
+  const action = parseWorldAction(props, doAction);
+  if (!action) return null;
   const id = subject.identity ?? `rule-${index}`;
-  const priority = intProp(props, "priority");
-  return {
-    id,
-    condition: when as BehaviorCondition,
-    action: doAction as BehaviorAction,
-    ...(priority !== undefined ? { priority } : {}),
-  };
+  return { id, condition: when as BehaviorCondition, action };
 }
 
 function parseBehaviorsBlock(elements: ReadonlyArray<Pattern<Subject>>): BehaviorRule[] {
@@ -99,8 +128,7 @@ function parseBehaviorsBlock(elements: ReadonlyArray<Pattern<Subject>>): Behavio
       if (rule) rules.push(rule);
     }
   }
-  const hasPriority = rules.some((r) => r.priority !== undefined);
-  if (hasPriority) rules.sort((a, b) => (a.priority ?? 999) - (b.priority ?? 999));
+  // Declaration order is the authoritative priority — no sort needed.
   return rules;
 }
 
@@ -224,10 +252,12 @@ export function parseCharacterGramText(
         new CharacterParseError(`Character missing required fields: ${missing.join(", ")}`, source),
       );
     }
-    if (!VALID_DEFAULT_ACTIONS.has(defaultActionRaw)) {
+
+    const defaultAction = parseDefaultAction(defaultActionRaw);
+    if (!defaultAction) {
       return yield* Effect.fail(
         new CharacterParseError(
-          `invalid defaultAction "${defaultActionRaw}": must be idle|random-move|stay`,
+          `invalid defaultAction "${defaultActionRaw}": must be idle|go-random`,
           source,
         ),
       );
@@ -315,7 +345,7 @@ export function parseCharacterGramText(
       name,
       background,
       enabled: enabled!,
-      defaultAction: defaultActionRaw as DefaultAction,
+      defaultAction,
       behaviorRules,
       dialogTree,
     };

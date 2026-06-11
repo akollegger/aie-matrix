@@ -23,8 +23,8 @@
 ]
 
 [behavior_1:Behaviors |
-  (b1:Rule { when: "crowded", do: "avoid-crowd", priority: 1 }),
-  (b2:Rule { when: "always",  do: "idle",        priority: 2 })
+  (b1:Rule { when: "crowded", do: "go",   toward: "random" }),
+  (b2:Rule { when: "always",  do: "idle"                   })
 ]
 
 (charAttendant)-[:HAS_DIALOG]->(dialog_1)

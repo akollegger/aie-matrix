@@ -2,7 +2,7 @@
 
 (charCollector:Character { id: "collector", name: "The Collector",
   background: "An enthusiastic attendee who roams the fair looking for interesting items to add to their collection.",
-  enabled: true, defaultAction: "random-move" })
+  enabled: true, defaultAction: "go-random" })
 
 (idle:DialogNode    { responses: ["Oh, hello! I'm always on the lookout for rare finds. Ask me anything.", "Hey there! Have you spotted anything interesting?"] })
 (items:DialogNode   { responses: ["I've found a few things today. The best items are near the demo booths!", "Looking for more. Check near the sponsor area — good finds there."] })
@@ -21,10 +21,10 @@
 ]
 
 [behavior_1:Behaviors |
-  (b1:Rule { when: "item_nearby",     do: "seek-item",   priority: 1 }),
-  (b2:Rule { when: "inventory_empty", do: "seek-item",   priority: 2 }),
-  (b3:Rule { when: "alone",           do: "wander",      priority: 3 }),
-  (b4:Rule { when: "always",          do: "random-move", priority: 4 })
+  (b1:Rule { when: "item_here",     do: "take"                        }),
+  (b2:Rule { when: "item_adjacent", do: "go",   toward: "nearest_item" }),
+  (b3:Rule { when: "alone",         do: "go",   toward: "random"       }),
+  (b4:Rule { when: "always",        do: "go",   toward: "random"       })
 ]
 
 (charCollector)-[:HAS_DIALOG]->(dialog_1)
