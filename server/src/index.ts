@@ -66,6 +66,7 @@ import {
 import { parseMapGram } from "@aie-matrix/map-gram";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
+import { mintGhostToken } from "@aie-matrix/server-auth";
 import {
   ConversationService,
   JsonlStore,
@@ -751,6 +752,7 @@ async function main(): Promise<void> {
           p.startsWith("/threads") ||
           p.startsWith("/ghosts") ||
           p.startsWith("/humans") ||
+          p === "/auth/guest" ||
           p === "/mcp" ||
           p === "/internal/world-fanout" ||
           p.startsWith("/agent-host/")
@@ -878,6 +880,27 @@ async function main(): Promise<void> {
         }
         res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
         res.end(JSON.stringify({ humanId }));
+        return;
+      }
+      if (url.pathname === "/auth/guest" && req.method === "POST") {
+        const buf = await readRequestBody(req);
+        let ghostId: string;
+        try {
+          const body = JSON.parse(buf.toString("utf8") || "{}") as { ghostId?: unknown };
+          if (typeof body.ghostId !== "string" || body.ghostId.trim().length === 0 || body.ghostId.trim().length > 128) {
+            res.writeHead(400, { "Content-Type": "application/json", ...corsHeaders });
+            res.end(JSON.stringify({ error: "BAD_REQUEST", message: "ghostId must be a non-empty string (max 128 chars)" }));
+            return;
+          }
+          ghostId = body.ghostId.trim();
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json", ...corsHeaders });
+          res.end(JSON.stringify({ error: "BAD_JSON", message: "Body must be JSON" }));
+          return;
+        }
+        const token = mintGhostToken({ sub: ghostId, ghostId, role: "human" });
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ token }));
         return;
       }
       if (url.pathname.startsWith("/threads")) {

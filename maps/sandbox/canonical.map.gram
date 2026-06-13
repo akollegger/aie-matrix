@@ -31,7 +31,7 @@
 
 [:Grants { attendee: 1, explorer: 2 } | (brassKey)]
 [:Grants { attendee: 1, explorer: 1 } | (powerBar)]
-[:Grants { broker: 200 } | (brokerCredit)]
+[:Grants { broker: 200, human: 3 } | (brokerCredit)]
 
 [layers:LayerStack | ground, overrides, collectibles]
 

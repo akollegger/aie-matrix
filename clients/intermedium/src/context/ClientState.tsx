@@ -18,7 +18,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
   const pairing = usePairing();
   const { identities, refresh } = useGhostIdentity(import.meta.env.VITE_AGENT_HOST_URL ?? "");
   const { status: mapGramStatus, tiles, tileTypeStyles, error: mapGramError, retry: retryMapLoad } = useMapGram();
-  const { ghosts, connectionState: colyseusLinkState } = useColyseus();
+  const { ghosts, ghostLabels, connectionState: colyseusLinkState } = useColyseus();
   const { activeSession } = useSessionPoller(import.meta.env.VITE_API_BASE_URL ?? "", retryMapLoad);
   const { viewState, nav } = useViewState(pairing);
   const [thread] = useState<ClientState["thread"]>(null);
@@ -29,6 +29,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
       viewState,
       nav,
       ghosts,
+      ghostLabels,
       identities,
       tiles,
       tileTypeStyles,
@@ -45,6 +46,7 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
       viewState,
       nav,
       ghosts,
+      ghostLabels,
       identities,
       tiles,
       tileTypeStyles,

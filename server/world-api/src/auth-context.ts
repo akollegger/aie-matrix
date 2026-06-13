@@ -60,6 +60,7 @@ export function authenticateGhostRequestEffect(
       scopes: [] as string[],
       extra: {
         ghostId: claims.ghostId,
+        role: claims.role,
         caretakerId: claims.caretakerId,
         agentHostId: claims.agentHostId,
         agentId: claims.agentId,

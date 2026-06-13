@@ -796,7 +796,8 @@ function sayEffect(
     // routes verbatim — it expects a ghostId — so unresolved
     // displayNames would never reach an inbox. Resolve here.
     const resolvedTo = to == null ? to : resolveToGhostId(store, to);
-    const result = yield* (conversation.say(ghostId, content, resolvedTo, displayName, intent).pipe(
+    const callerRole = (extra.authInfo?.extra as { role?: string } | undefined)?.role;
+    const result = yield* (conversation.say(ghostId, content, resolvedTo, displayName, intent, callerRole).pipe(
       Effect.mapError((e) => {
         if (e instanceof ConversationGhostNoPosition) {
           return new WorldApiNoPosition({ ghostId: e.ghostId }) as WorldApiError;
@@ -1458,6 +1459,35 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       description: "Who am I? Resolve this ghost's id and caretaker for the current session.",
     },
     async (extra) => runTool("whoami", {}, whoamiEffect(extra), extra),
+  );
+
+  server.registerTool(
+    "ghost_announce",
+    {
+      description:
+        "NPC-only: announce this ghost's character gram labels to the world server. The server stores labels in the Colyseus room state so spectator clients can badge NPC ghosts (e.g. mark broker ghosts). Call once after connecting. Idempotent.",
+      inputSchema: {
+        labels: z.string().min(1).max(256).describe(
+          "Comma-separated character gram labels, e.g. \"Character:Broker\".",
+        ),
+      },
+    },
+    async ({ labels }, extra) =>
+      runTool(
+        "ghost_announce",
+        { labels },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const bridge = yield* WorldBridgeService;
+          const safe = String(labels ?? "").trim().slice(0, 256);
+          if (safe.length > 0) {
+            bridge.setGhostLabels(ghostId, safe);
+          }
+          return { ok: true };
+        }),
+        extra,
+      ),
   );
 
   server.registerTool(

@@ -14,7 +14,7 @@
 
 **Purpose**: No new packages or scaffolding needed — all changes land in existing packages. This phase links the work to the governing proposal record.
 
-- [ ] T001 Add `030-human-ghost-peer` entry to `CLAUDE.md` Recent Changes section as an in-progress stub (update to final description after implementation)
+- [X] T001 Add `030-human-ghost-peer` entry to `CLAUDE.md` Recent Changes section as an in-progress stub (update to final description after implementation)
 
 ---
 
@@ -24,12 +24,12 @@
 
 **⚠️ CRITICAL**: Phases 3–6 (all user stories) depend on this phase.
 
-- [ ] T002 Add `role?: string` to `GhostClaims` interface in `server/world-api/src/jwt.ts`
-- [ ] T003 Extract `claims.role` and add to `auth.extra` object in `server/world-api/src/auth-context.ts`
-- [ ] T004 Create `server/world-api/src/guest-auth-route.ts` — `POST /auth/guest` handler: validate `ghostId`, call `mintGhostToken({ sub, ghostId, role: "human" })`, return `{ token }`
-- [ ] T005 Register `/auth/guest` route in the world-api h3 server entry point (find where other routes are registered and add alongside them)
-- [ ] T006 Add unit tests for `guest-auth-route.ts` in `server/world-api/tests/` — valid ghostId returns token with `role: "human"`; missing ghostId returns 400
-- [ ] T007 [P] Add `human` role to `:Grants` blocks in `maps/*.map.gram` — choose a reasonable starting credit amount for the broker-credit item type
+- [X] T002 Add `role?: string` to `GhostClaims` interface in `server/world-api/src/jwt.ts`
+- [X] T003 Extract `claims.role` and add to `auth.extra` object in `server/world-api/src/auth-context.ts`
+- [X] T004 Create `server/world-api/src/guest-auth-route.ts` — `POST /auth/guest` handler: validate `ghostId`, call `mintGhostToken({ sub, ghostId, role: "human" })`, return `{ token }`
+- [X] T005 Register `/auth/guest` route in the world-api h3 server entry point (find where other routes are registered and add alongside them)
+- [X] T006 Add unit tests for `guest-auth-route.ts` in `server/world-api/tests/` — valid ghostId returns token with `role: "human"`; missing ghostId returns 400
+- [X] T007 [P] Add `human` role to `:Grants` blocks in `maps/*.map.gram` — choose a reasonable starting credit amount for the broker-credit item type
 
 **Checkpoint**: `POST /auth/guest` returns a JWT; `pnpm test` passes in `server/world-api`; spawn-grant code reads role from JWT for next connect.
 
@@ -43,12 +43,12 @@
 
 ### Implementation
 
-- [ ] T008 [US1] Create `clients/intermedium/src/hooks/useIdentity.ts` — generate/persist ULID ghostId and auto-generated displayName in localStorage; fetch `POST /auth/guest` on load; expose `{ ghostId, displayName, token, setDisplayName }`; `setDisplayName` locks after one edit
-- [ ] T009 [US1] Wire `useIdentity` into `clients/intermedium/src/App.tsx` — gate MCP/Colyseus calls until `token` is available; expose identity via React context
-- [ ] T010 [US1] Create `clients/intermedium/src/components/HUD/BalanceDisplay.tsx` — call `inventory` MCP tool on mount and after contract settlement; display broker-credit balance; read token from identity context
-- [ ] T011 [US1] Mount `BalanceDisplay` in the HUD area of `clients/intermedium/src/App.tsx` or the appropriate layout component
-- [ ] T012 [US1] Add display name edit affordance in `clients/intermedium/src/` (small inline edit on the HUD name label; calls `setDisplayName`; hides edit control after save)
-- [ ] T013 [US1] Smoke test: document manual verification steps in `specs/030-human-ghost-peer/quickstart.md` (already drafted — confirm steps match implementation)
+- [X] T008 [US1] Create `clients/intermedium/src/hooks/useIdentity.ts` — generate/persist ULID ghostId and auto-generated displayName in localStorage; fetch `POST /auth/guest` on load; expose `{ ghostId, displayName, token, setDisplayName }`; `setDisplayName` locks after one edit
+- [X] T009 [US1] Wire `useIdentity` into `clients/intermedium/src/App.tsx` — gate MCP/Colyseus calls until `token` is available; expose identity via React context
+- [X] T010 [US1] Create `clients/intermedium/src/components/HUD/BalanceDisplay.tsx` — call `inventory` MCP tool on mount and after contract settlement; display broker-credit balance; read token from identity context
+- [X] T011 [US1] Mount `BalanceDisplay` in the HUD area of `clients/intermedium/src/App.tsx` or the appropriate layout component
+- [X] T012 [US1] Add display name edit affordance in `clients/intermedium/src/` (small inline edit on the HUD name label; calls `setDisplayName`; hides edit control after save)
+- [X] T013 [US1] Smoke test: document manual verification steps in `specs/030-human-ghost-peer/quickstart.md` (already drafted — confirm steps match implementation)
 
 **Checkpoint**: P1 story fully functional; ghost peer identity established; credits visible in HUD.
 
@@ -62,22 +62,22 @@
 
 ### Server: ConversationService proximity exemption
 
-- [ ] T014 [US2] Add `callerRole?: string` parameter to `say()` method signature in `server/conversation/src/ConversationService.ts` (interface + implementation)
-- [ ] T015 [US2] Implement proximity exemption in `server/conversation/src/ConversationServiceLive.ts` — skip position check when `callerRole === "human"` and `to` is specified; broadcast path still requires position for all callers
-- [ ] T016 [US2] Extract `callerRole` from `auth.extra.role` in `sayEffect()` in `server/world-api/src/mcp-server.ts` and pass it through to `conversation.say()`
-- [ ] T017 [US2] Add unit tests in `server/conversation/tests/` — directed say with `callerRole: "human"` and no position succeeds; broadcast say with `callerRole: "human"` and no position fails with `ConversationGhostNoPosition`; existing ghost tests unchanged
+- [X] T014 [US2] Add `callerRole?: string` parameter to `say()` method signature in `server/conversation/src/ConversationService.ts` (interface + implementation)
+- [X] T015 [US2] Implement proximity exemption in `server/conversation/src/ConversationServiceLive.ts` — skip position check when `callerRole === "human"` and `to` is specified; broadcast path still requires position for all callers
+- [X] T016 [US2] Extract `callerRole` from `auth.extra.role` in `sayEffect()` in `server/world-api/src/mcp-server.ts` and pass it through to `conversation.say()`
+- [X] T017 [US2] Add unit tests in `server/conversation/tests/` — directed say with `callerRole: "human"` and no position succeeds; broadcast say with `callerRole: "human"` and no position fails with `ConversationGhostNoPosition`; existing ghost tests unchanged
 
 ### Server: Colyseus ghost labels
 
-- [ ] T018 [P] [US2] Add `ghostLabels: MapSchema<string>` to `WorldSpectatorState` in `server/colyseus/src/room-schema.ts`
-- [ ] T019 [US2] Populate `ghostLabels[ghostId]` on NPC ghost join and clear on leave in `server/colyseus/src/MatrixRoom.ts`
-- [ ] T020 [US2] Send character gram labels when npc-agent ghost joins the Colyseus room (find the join path in `ghosts/npc-agent/src/` and add labels from the character gram, e.g. `"Character:Broker"`)
+- [X] T018 [P] [US2] Add `ghostLabels: MapSchema<string>` to `WorldSpectatorState` in `server/colyseus/src/room-schema.ts`
+- [X] T019 [US2] Populate `ghostLabels[ghostId]` on NPC ghost join and clear on leave in `server/colyseus/src/MatrixRoom.ts`
+- [X] T020 [US2] Send character gram labels when npc-agent ghost joins the Colyseus room (find the join path in `ghosts/npc-agent/src/` and add labels from the character gram, e.g. `"Character:Broker"`)
 
 ### Client: unified messaging + broker badge
 
-- [ ] T021 [US2] Replace `POST /threads/{ghostId}/human-say` with MCP `say` tool call (using guest JWT, `to: ghostId`) in `clients/intermedium/src/hooks/useA2AConversation.ts`
-- [ ] T022 [US2] Expose `ghostLabels` per ghost from Colyseus room state in `clients/intermedium/src/hooks/useColyseus.ts`
-- [ ] T023 [US2] Add "Broker" badge to broker ghosts in `clients/intermedium/src/components/ChatPanel/GhostList.tsx` (or wherever the ghost list renders) — check `ghostLabels` for `"Character:Broker"`
+- [X] T021 [US2] Replace `POST /threads/{ghostId}/human-say` with MCP `say` tool call (using guest JWT, `to: ghostId`) in `clients/intermedium/src/hooks/useA2AConversation.ts`
+- [X] T022 [US2] Expose `ghostLabels` per ghost from Colyseus room state in `clients/intermedium/src/hooks/useColyseus.ts`
+- [X] T023 [US2] Add "Broker" badge to broker ghosts in `clients/intermedium/src/components/ChatPanel/GhostList.tsx` (or wherever the ghost list renders) — check `ghostLabels` for `"Character:Broker"`
 
 **Checkpoint**: P2 story functional; human messages reach broker inbox; broker badge visible; broker responds to "accept".
 
@@ -91,10 +91,10 @@
 
 ### Client: contract polling + inline contract UI
 
-- [ ] T024 [US3] Create `clients/intermedium/src/hooks/useContracts.ts` — poll `eval_contract_list` MCP tool every 5s using guest JWT; return `activeContract: EvalContract | null` (first open/submitted contract where human is contractorId); expose `submitAnswer(contractId, submission)` which calls `eval_contract_submit`
-- [ ] T025 [US3] Modify `clients/intermedium/src/components/ChatPanel/ChatPanel.tsx` — when `activeContract` is non-null and the selected ghost is the contract's `clientId`, replace chat input with submission form (question text + textarea + submit button)
-- [ ] T026 [US3] Handle contract state transitions in the submission form — Submitted state shows "waiting for evaluation"; Settled clears form and restores chat input; Expired shows "challenge expired" and restores input; Declined (fully booked) shows message and restores input
-- [ ] T027 [US3] Trigger balance refresh in `BalanceDisplay` after contract settles — call `inventory` MCP tool again when `activeContract` transitions to Settled
+- [X] T024 [US3] Create `clients/intermedium/src/hooks/useContracts.ts` — poll `eval_contract_list` MCP tool every 5s using guest JWT; return `activeContract: EvalContract | null` (first open/submitted contract where human is contractorId); expose `submitAnswer(contractId, submission)` which calls `eval_contract_submit`
+- [X] T025 [US3] Modify `clients/intermedium/src/components/ChatPanel/ChatPanel.tsx` — when `activeContract` is non-null and the selected ghost is the contract's `clientId`, replace chat input with submission form (question text + textarea + submit button)
+- [X] T026 [US3] Handle contract state transitions in the submission form — Submitted state shows "waiting for evaluation"; Settled clears form and restores chat input; Expired shows "challenge expired" and restores input; Declined (fully booked) shows message and restores input
+- [X] T027 [US3] Trigger balance refresh in `BalanceDisplay` after contract settles — call `inventory` MCP tool again when `activeContract` transitions to Settled
 
 **Checkpoint**: P3 story functional; full challenge loop working end-to-end.
 
@@ -106,8 +106,8 @@
 
 **Independent Test**: With credits earned, open leaderboard panel; human's entry is present and visually distinguished.
 
-- [ ] T028 [US4] Pass `humanGhostId` (from identity context) into `clients/intermedium/src/components/LeaderboardPanel/LeaderboardPanel.tsx`
-- [ ] T029 [US4] Apply a visual distinction (CSS highlight class or "you" label) to the leaderboard entry whose `actorId` matches `humanGhostId`
+- [X] T028 [US4] Pass `humanGhostId` (from identity context) into `clients/intermedium/src/components/LeaderboardPanel/LeaderboardPanel.tsx`
+- [X] T029 [US4] Apply a visual distinction (CSS highlight class or "you" label) to the leaderboard entry whose `actorId` matches `humanGhostId`
 
 **Checkpoint**: P4 story functional; human's row is identifiable on the leaderboard.
 
@@ -116,9 +116,9 @@
 ## Phase 7: Polish & Cross-Cutting Concerns
 
 - [ ] T030 [P] Update `docs/architecture.md` — add human client as a peer actor type; document role-based proximity exemption for `human` role
-- [ ] T031 [P] Verify `pnpm run build` passes cleanly from repo root after all changes
-- [ ] T032 [P] Run `pnpm test` in `server/world-api`, `server/conversation`, `server/colyseus` — confirm all pass
-- [ ] T033 Update `CLAUDE.md` Recent Changes entry for `030-human-ghost-peer` with final description
+- [X] T031 [P] Verify `pnpm run build` passes cleanly from repo root after all changes
+- [X] T032 [P] Run `pnpm test` in `server/world-api`, `server/conversation`, `server/colyseus` — confirm all pass
+- [X] T033 Update `CLAUDE.md` Recent Changes entry for `030-human-ghost-peer` with final description
 - [ ] T034 Run `/speckit-verify` and confirm GO verdict before opening PR
 
 ---

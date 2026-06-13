@@ -1,6 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { ClientStateProvider, useClientState } from "./context/ClientState.js";
+import { IdentityProvider } from "./context/IdentityContext.js";
+import { useHumanIdentity } from "./context/IdentityContext.js";
 import { PairingProvider } from "./context/PairingContext.js";
+import { BalanceDisplay } from "./components/HUD/BalanceDisplay.js";
+import { useContracts } from "./hooks/useContracts.js";
 import { PanelView } from "./components/PanelView/PanelView.js";
 import { PersonalPanel } from "./components/PanelView/PersonalPanel.js";
 import { SceneView } from "./components/SceneView/SceneView.js";
@@ -22,6 +26,7 @@ const FADE_MS = 200;
 function AppInner() {
   const state = useClientState();
   const stop = state.viewState.stop;
+  const identity = useHumanIdentity();
 
   // showPersonal tracks which renderer is mounted (lags behind `stop` by FADE_MS).
   const [showPersonal, setShowPersonal] = useState(stop === "personal");
@@ -29,6 +34,33 @@ function AppInner() {
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [leaderboardIds, setLeaderboardIds] = useState<string[]>([]);
+  const [editingName, setEditingName] = useState(false);
+  const [nameInput, setNameInput] = useState(identity.displayName);
+  const [balanceRefresh, setBalanceRefresh] = useState(0);
+
+  // Watch for contract settlement to refresh the balance display.
+  const worldApiUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+  const { activeContract } = useContracts(worldApiUrl, identity.token, identity.ghostId);
+  const prevContractStateRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevContractStateRef.current;
+    const cur = activeContract?.state ?? null;
+    if (prev === "Submitted" && (cur === "Settled" || cur === "Evaluated" || cur === null)) {
+      setBalanceRefresh((n) => n + 1);
+    }
+    prevContractStateRef.current = cur;
+  }, [activeContract]);
+
+  const handleNameEdit = useCallback(() => {
+    if (identity.displayNameLocked) return;
+    setEditingName(true);
+    setNameInput(identity.displayName);
+  }, [identity.displayName, identity.displayNameLocked]);
+
+  const handleNameSave = useCallback(() => {
+    identity.setDisplayName(nameInput);
+    setEditingName(false);
+  }, [identity, nameInput]);
 
   // Fetch declared leaderboard IDs on mount via MCP `leaderboards` tool.
   useEffect(() => {
@@ -183,7 +215,7 @@ function AppInner() {
             />
             <PanelView viewState={state.viewState} pairing={state.pairing} />
             {(stop === "global" || stop === "regional") && leaderboardIds.length > 0 && (
-              <LeaderboardPanel leaderboardIds={leaderboardIds} />
+              <LeaderboardPanel leaderboardIds={leaderboardIds} humanGhostId={identity.ghostId} />
             )}
           </>
         )}
@@ -197,6 +229,76 @@ function AppInner() {
         )}
 
         <ReconnectingBanner visible={state.colyseusLinkState === "reconnecting"} />
+
+        {/* HUD identity strip — top-left */}
+        <div
+          className="absolute top-3 left-3 z-10 flex flex-row items-center gap-2"
+          style={{ pointerEvents: "auto" }}
+        >
+          {editingName ? (
+            <form
+              onSubmit={(e) => { e.preventDefault(); handleNameSave(); }}
+              style={{ display: "flex", gap: 4 }}
+            >
+              <input
+                autoFocus
+                value={nameInput}
+                onChange={(e) => setNameInput(e.target.value)}
+                maxLength={64}
+                style={{
+                  fontFamily: "system-ui, monospace",
+                  fontSize: 12,
+                  background: "rgba(0,0,0,0.6)",
+                  border: "1px solid rgba(200,230,200,0.5)",
+                  borderRadius: 4,
+                  color: "rgba(200,230,200,0.9)",
+                  padding: "2px 6px",
+                  width: 120,
+                }}
+              />
+              <button
+                type="submit"
+                style={{
+                  fontSize: 11,
+                  background: "rgba(0,0,0,0.5)",
+                  border: "1px solid rgba(200,230,200,0.3)",
+                  borderRadius: 4,
+                  color: "rgba(200,230,200,0.8)",
+                  padding: "2px 6px",
+                  cursor: "pointer",
+                }}
+              >
+                Save
+              </button>
+            </form>
+          ) : (
+            <button
+              type="button"
+              onClick={identity.displayNameLocked ? undefined : handleNameEdit}
+              title={identity.displayNameLocked ? "Display name (locked)" : "Click to set display name"}
+              style={{
+                fontFamily: "system-ui, monospace",
+                fontSize: 12,
+                background: "rgba(0,0,0,0.45)",
+                border: "1px solid rgba(180,200,230,0.25)",
+                borderRadius: 4,
+                color: "rgba(180,200,230,0.75)",
+                padding: "2px 8px",
+                cursor: identity.displayNameLocked ? "default" : "pointer",
+              }}
+            >
+              {identity.displayName}
+              {!identity.displayNameLocked && (
+                <span style={{ opacity: 0.5, marginLeft: 4, fontSize: 10 }}>✎</span>
+              )}
+            </button>
+          )}
+          <BalanceDisplay
+            token={identity.token}
+            worldApiBaseUrl={import.meta.env.VITE_API_BASE_URL ?? ""}
+            refreshTrigger={balanceRefresh}
+          />
+        </div>
 
         {/* Overlay corner — toasts + persistent controls, bottom-right */}
         <div className="absolute bottom-5 right-5 z-10 flex flex-col items-end gap-2">
@@ -227,10 +329,12 @@ function AppInner() {
 
 export function App() {
   return (
-    <PairingProvider>
-      <ClientStateProvider>
-        <AppInner />
-      </ClientStateProvider>
-    </PairingProvider>
+    <IdentityProvider>
+      <PairingProvider>
+        <ClientStateProvider>
+          <AppInner />
+        </ClientStateProvider>
+      </PairingProvider>
+    </IdentityProvider>
   );
 }

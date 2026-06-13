@@ -63,6 +63,14 @@ export class WorldSpectatorState extends Schema {
   @type({ map: "string" })
   declare ghostLastActions: MapSchema<string>;
 
+  /**
+   * ghostId → comma-separated character gram labels for NPC ghosts (e.g. "Character:Broker,Character:Npc").
+   * Set on NPC ghost join; cleared on ghost leave. Absent for human and agent ghosts.
+   * Used by the Intermedium client to badge broker ghosts in the ghost list.
+   */
+  @type({ map: "string" })
+  declare ghostLabels: MapSchema<string>;
+
   constructor() {
     super();
     // Must assign after `super()` so @type accessors run (`$changes.setParent` / root `allChanges`).
@@ -76,6 +84,7 @@ export class WorldSpectatorState extends Schema {
     this.itemGlyphs = new MapSchema<string>();
     this.ghostItemRefs = new MapSchema<string>();
     this.ghostLastActions = new MapSchema<string>();
+    this.ghostLabels = new MapSchema<string>();
   }
 }
 

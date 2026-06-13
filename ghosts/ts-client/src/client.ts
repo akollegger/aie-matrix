@@ -126,6 +126,14 @@ export class GhostMcpClient {
   }
 
   /**
+   * Announce this ghost's character gram labels to the world server so the
+   * Colyseus room can badge this NPC in the spectator state. Idempotent.
+   */
+  async announce(labels: string): Promise<void> {
+    await this.callTool("ghost_announce", { labels });
+  }
+
+  /**
    * List the MCP tools the server actually exposes — the authoritative
    * runtime menu. Used by the agent to discover what's possible without
    * the prompt having to enumerate tools by name.

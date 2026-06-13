@@ -380,6 +380,10 @@ function ghostActionLoop(
             });
             await client.connect();
             mcpByGhostId.set(ctx.ghostId, client);
+            // Announce character gram labels so the Colyseus room can badge this NPC.
+            if (characterDef.gramLabels) {
+              await client.announce(characterDef.gramLabels).catch(() => {});
+            }
             return client;
           },
           catch: (e) => (e instanceof Error ? e : new Error(String(e))),

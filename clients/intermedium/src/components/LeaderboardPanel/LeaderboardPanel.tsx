@@ -4,9 +4,10 @@ import { LeaderboardEntry } from "./LeaderboardEntry.js";
 
 interface SingleLeaderboardProps {
   readonly leaderboardId: string;
+  readonly humanGhostId?: string | null;
 }
 
-function SingleLeaderboard({ leaderboardId }: SingleLeaderboardProps) {
+function SingleLeaderboard({ leaderboardId, humanGhostId }: SingleLeaderboardProps) {
   const { result, loading, sessionComplete } = useLeaderboard(leaderboardId);
 
   return (
@@ -45,7 +46,12 @@ function SingleLeaderboard({ leaderboardId }: SingleLeaderboardProps) {
         </p>
       )}
       {result && result.entries.map((entry, i) => (
-        <LeaderboardEntry key={entry.actorId} rank={i + 1} entry={entry} />
+        <LeaderboardEntry
+          key={entry.actorId}
+          rank={i + 1}
+          entry={entry}
+          isMe={!!humanGhostId && entry.actorId === humanGhostId}
+        />
       ))}
     </div>
   );
@@ -53,12 +59,13 @@ function SingleLeaderboard({ leaderboardId }: SingleLeaderboardProps) {
 
 export interface LeaderboardPanelProps {
   readonly leaderboardIds: string[];
+  readonly humanGhostId?: string | null;
 }
 
 /**
  * Panel showing one or more leaderboards, with tab navigation when multiple exist.
  */
-export function LeaderboardPanel({ leaderboardIds }: LeaderboardPanelProps) {
+export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPanelProps) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   const panelStyle: React.CSSProperties = {
@@ -123,7 +130,7 @@ export function LeaderboardPanel({ leaderboardIds }: LeaderboardPanelProps) {
         </div>
       )}
 
-      <SingleLeaderboard leaderboardId={activeId} />
+      <SingleLeaderboard leaderboardId={activeId} humanGhostId={humanGhostId} />
     </div>
   );
 }

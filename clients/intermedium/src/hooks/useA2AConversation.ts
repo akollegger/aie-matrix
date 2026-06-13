@@ -34,14 +34,27 @@ async function fetchMessages(
 
 async function postMessage(
   worldApiUrl: string,
-  humanId: string,
+  _humanId: string,
   ghostId: string,
   text: string,
+  token?: string | null,
 ): Promise<void> {
-  await fetch(`${worldApiUrl}/threads/${encodeURIComponent(ghostId)}/human-say`, {
+  const base = worldApiUrl.endsWith("/") ? worldApiUrl.slice(0, -1) : worldApiUrl;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  await fetch(`${base}/mcp`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ humanId, text }),
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: { name: "say", arguments: { content: text, to: ghostId, intent: "chat" } },
+    }),
   });
 }
 
@@ -53,6 +66,7 @@ export function useA2AConversation(
   ghostId: string | null,
   worldApiUrl: string,
   humanId: string,
+  token?: string | null,
 ): A2AConversationState {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isAvailable, setIsAvailable] = useState(false);
@@ -95,14 +109,14 @@ export function useA2AConversation(
     async (text: string) => {
       if (!ghostId || !worldApiUrl) return;
       try {
-        await postMessage(worldApiUrl, humanId, ghostId, text);
+        await postMessage(worldApiUrl, humanId, ghostId, text, token);
         // Immediate poll so the sent message appears without waiting for the next interval.
         void pollRef.current?.();
       } catch {
         // Silently ignore; next poll will surface the message if the POST eventually landed.
       }
     },
-    [ghostId, worldApiUrl, humanId],
+    [ghostId, worldApiUrl, humanId, token],
   );
 
   return {

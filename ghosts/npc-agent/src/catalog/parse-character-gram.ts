@@ -374,6 +374,8 @@ export function parseCharacterGramText(
       behaviorRules = rules;
     }
 
+    const gramLabels = allLabels.join(",");
+
     return {
       id,
       name,
@@ -384,6 +386,7 @@ export function parseCharacterGramText(
       dialogTree,
       behaviorKind,
       stakeAmount,
+      gramLabels,
     };
   });
 }

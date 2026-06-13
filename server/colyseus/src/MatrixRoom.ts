@@ -148,6 +148,16 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     this.emitGhostPatch();
   }
 
+  /** Set character gram labels for an NPC ghost (e.g. "Character:Broker,Character:Npc"). */
+  setGhostLabels(ghostId: string, labels: string): void {
+    this.state.ghostLabels.set(String(ghostId).trim(), labels);
+  }
+
+  /** Remove ghost labels on ghost leave. */
+  clearGhostLabels(ghostId: string): void {
+    this.state.ghostLabels.delete(String(ghostId).trim());
+  }
+
   listOccupantsOnCell(cellId: string): string[] {
     const cid = String(cellId).trim();
     const ids: string[] = [];

@@ -21,6 +21,8 @@ export interface ClientState {
   /** US2+ zoom, pick target, Enter/Escape. */
   readonly nav: ViewNavigation;
   readonly ghosts: ReadonlyMap<string, GhostPosition>;
+  /** Comma-separated character gram labels per NPC ghostId (e.g. "Character:Broker"). Absent for human/agent ghosts. */
+  readonly ghostLabels: ReadonlyMap<string, string>;
   /** Catalog-derived public identity, keyed by ghostId. */
   readonly identities: ReadonlyMap<string, GhostIdentity>;
   /** Parsed map cells, keyed by H3 index. */
