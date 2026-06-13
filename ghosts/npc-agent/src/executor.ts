@@ -10,6 +10,7 @@ import type { RosterCredential } from "./roster/spawn-roster.js";
 import { spawnRoster } from "./roster/spawn-roster.js";
 import { evaluateRules, buildSnapshot } from "./behavior/rule-engine.js";
 import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
+import { funderTick, handleContractSubmitted, clearFunderState } from "./behavior/funder-behavior.js";
 
 const ACTION_TICK_MS = 3000;
 
@@ -112,6 +113,23 @@ export class NpcAgentExecutor implements AgentExecutor {
         const sessionId = (ev.payload as { sessionId?: string }).sessionId;
         if (typeof sessionId === "string") {
           await this.triggerRosterSpawn(sessionId);
+        }
+      } else if (ev.kind === "world.contract.submitted") {
+        const pl = ev.payload as { contractId?: string; contractorId?: string };
+        const contractId = typeof pl.contractId === "string" ? pl.contractId : undefined;
+        const contractorId = typeof pl.contractorId === "string" ? pl.contractorId : undefined;
+        if (contractId && contractorId) {
+          void handleContractSubmitted(contractId, contractorId, mcpByGhostId).catch(
+            (e: unknown) => {
+              console.error(
+                JSON.stringify({
+                  kind: "npc-agent.funder.contract-submitted-error",
+                  contractId,
+                  error: e instanceof Error ? e.message : String(e),
+                }),
+              );
+            },
+          );
         }
       } else if (ev.kind === "world.message.new") {
         const pl = ev.payload as {
@@ -340,12 +358,16 @@ function ghostActionLoop(
       const tick = Effect.gen(function* () {
         yield* Effect.tryPromise({
           try: async () => {
-            const whereami = (await mcp.callTool("whereami", {})) as Record<string, unknown>;
-            const exitsRaw = (await mcp.callTool("exits", {})) as Record<string, unknown>;
-            const inventoryRaw = (await mcp.callTool("inventory", {})) as Record<string, unknown>;
-            const lookRaw = (await mcp.callTool("look", {})) as Record<string, unknown>;
-            const snapshot = buildSnapshot(whereami, exitsRaw, inventoryRaw, lookRaw, ctx.ghostId);
-            await evaluateRules(characterDef, snapshot, mcp);
+            if (characterDef.behaviorKind === "funder") {
+              await funderTick(ctx.ghostId, mcp);
+            } else {
+              const whereami = (await mcp.callTool("whereami", {})) as Record<string, unknown>;
+              const exitsRaw = (await mcp.callTool("exits", {})) as Record<string, unknown>;
+              const inventoryRaw = (await mcp.callTool("inventory", {})) as Record<string, unknown>;
+              const lookRaw = (await mcp.callTool("look", {})) as Record<string, unknown>;
+              const snapshot = buildSnapshot(whereami, exitsRaw, inventoryRaw, lookRaw, ctx.ghostId);
+              await evaluateRules(characterDef, snapshot, mcp);
+            }
           },
           catch: (e) => (e instanceof Error ? e : new Error(String(e))),
         }).pipe(
@@ -401,6 +423,10 @@ async function launchGhostLoop(
     );
     await Effect.runPromise(Fiber.interrupt(existing));
     actionFibersByGhostId.delete(ghostId);
+  }
+
+  if (characterDef.behaviorKind === "funder") {
+    clearFunderState(ghostId);
   }
 
   const fiber = Effect.runFork(ghostActionLoop(ctx, characterDef));

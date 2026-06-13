@@ -241,6 +241,18 @@ export function parseCharacterGramText(
     const background = strProp(charProps, "background")?.trim() ?? "";
     const defaultActionRaw = strProp(charProps, "defaultAction") ?? "";
     const enabled = boolProp(charProps, "enabled");
+    const behaviorKindRaw = strProp(charProps, "behaviorKind") ?? "rule-engine";
+
+    const VALID_BEHAVIOR_KINDS = new Set(["rule-engine", "funder"]);
+    if (!VALID_BEHAVIOR_KINDS.has(behaviorKindRaw)) {
+      return yield* Effect.fail(
+        new CharacterParseError(
+          `invalid behaviorKind "${behaviorKindRaw}": must be "rule-engine" or "funder"`,
+          source,
+        ),
+      );
+    }
+    const behaviorKind = behaviorKindRaw as "rule-engine" | "funder";
 
     const missing: string[] = [];
     if (!id) missing.push("id");
@@ -349,6 +361,7 @@ export function parseCharacterGramText(
       defaultAction,
       behaviorRules,
       dialogTree,
+      behaviorKind,
     };
   });
 }

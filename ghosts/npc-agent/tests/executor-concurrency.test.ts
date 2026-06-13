@@ -48,6 +48,7 @@ function makeCharDef(id: string): CharacterDefinition {
       nodes: new Map([["idle", { id: "idle", responses: ["Hello!"] }]]),
       edges: [{ fromId: "idle", toId: "idle", triggers: [] }],
     },
+    behaviorKind: "rule-engine" as const,
   };
 }
 

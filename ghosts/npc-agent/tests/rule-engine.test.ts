@@ -25,6 +25,7 @@ function makeCharacter(overrides: Partial<CharacterDefinition> = {}): CharacterD
     defaultAction: { do: "idle" },
     behaviorRules: [],
     dialogTree: { id: "dialog_1", nodes: new Map(), edges: [], rootId: "" },
+    behaviorKind: "rule-engine" as const,
     ...overrides,
   };
 }

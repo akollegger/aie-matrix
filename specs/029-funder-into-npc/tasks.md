@@ -16,7 +16,7 @@
 
 **Purpose**: No new packages or infrastructure needed — this is a code migration within `ghosts/npc-agent/`.
 
-- [ ] T001 Review `ghosts/funder-agent/src/executor.ts` and `ghosts/funder-agent/src/buildAgentCard.ts` to extract all logic that moves into npc-agent (inbox poll, state maps, contract MCP calls, QUESTIONS bank)
+- [x] T001 Review `ghosts/funder-agent/src/executor.ts` and `ghosts/funder-agent/src/buildAgentCard.ts` to extract all logic that moves into npc-agent (inbox poll, state maps, contract MCP calls, QUESTIONS bank)
 
 ---
 
@@ -26,9 +26,9 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T002 Add `behaviorKind: "rule-engine" | "funder"` to `CharacterDefinition` in `ghosts/npc-agent/src/types.ts` (optional field, default `"rule-engine"`)
-- [ ] T003 Extend `parseCharacterGramText` in `ghosts/npc-agent/src/catalog/parse-character-gram.ts` to read `behaviorKind` via `strProp`, validate against the closed set, and default to `"rule-engine"` when absent
-- [ ] T004 Verify `pnpm typecheck` passes in `ghosts/npc-agent/` after T002 and T003
+- [x] T002 Add `behaviorKind: "rule-engine" | "funder"` to `CharacterDefinition` in `ghosts/npc-agent/src/types.ts` (optional field, default `"rule-engine"`)
+- [x] T003 Extend `parseCharacterGramText` in `ghosts/npc-agent/src/catalog/parse-character-gram.ts` to read `behaviorKind` via `strProp`, validate against the closed set, and default to `"rule-engine"` when absent
+- [x] T004 Verify `pnpm typecheck` passes in `ghosts/npc-agent/` after T002 and T003
 
 **Checkpoint**: Type system and parser ready — all story phases can now begin.
 
@@ -42,13 +42,13 @@
 
 ### Implementation for User Story 1
 
-- [ ] T005 [US1] Create `ghosts/npc-agent/src/behavior/funder-behavior.ts` with module-level state maps (`ghostState`, `contractToFunder`, `openContractCount`), the `QUESTIONS` bank, and exported functions: `funderTick(ghostId, mcp)`, `handleContractSubmitted(contractId, contractorId, mcpByGhostId)`, `clearFunderState(ghostId)`
-- [ ] T006 [US1] Add conditional dispatch inside the tick `tryPromise` in `ghostActionLoop` in `ghosts/npc-agent/src/executor.ts`: when `characterDef.behaviorKind === "funder"` call `funderTick`; otherwise call `buildSnapshot` + `evaluateRules`
-- [ ] T007 [US1] Call `clearFunderState(ghostId)` in `launchGhostLoop` in `ghosts/npc-agent/src/executor.ts` after `Fiber.interrupt(existing)` and before forking the new fiber, guarded by `characterDef.behaviorKind === "funder"`
-- [ ] T008 [US1] Add `world.contract.submitted` routing in the world event dispatch block of `execute()` in `ghosts/npc-agent/src/executor.ts`: extract `contractId` and `contractorId` from `ev.payload`, call `handleContractSubmitted(contractId, contractorId, mcpByGhostId)`
-- [ ] T009 [US1] Create `ghosts/npc-agent/catalog/funder.character.gram` with: character node (`id: "funder"`, `behaviorKind: "funder"`, `enabled: true`, `defaultAction: "go-random"`), minimal stub dialog tree (one idle node with wildcard self-loop), and `HAS_DIALOG` wiring edge
-- [ ] T010 [P] [US1] Write unit tests in `ghosts/npc-agent/tests/funder-behavior.test.ts` covering: `funderTick` sends advertisement on any inbound message; `funderTick` opens a contract when inbox contains "accept"; `handleContractSubmitted` calls `eval_contract_evaluate` and resets state; `clearFunderState` removes all maps for the given ghostId
-- [ ] T011 [US1] Run `pnpm test` in `ghosts/npc-agent/` — all existing tests must continue to pass, new funder tests must pass
+- [x] T005 [US1] Create `ghosts/npc-agent/src/behavior/funder-behavior.ts` with module-level state maps (`ghostState`, `contractToFunder`, `openContractCount`), the `QUESTIONS` bank, and exported functions: `funderTick(ghostId, mcp)`, `handleContractSubmitted(contractId, contractorId, mcpByGhostId)`, `clearFunderState(ghostId)`
+- [x] T006 [US1] Add conditional dispatch inside the tick `tryPromise` in `ghostActionLoop` in `ghosts/npc-agent/src/executor.ts`: when `characterDef.behaviorKind === "funder"` call `funderTick`; otherwise call `buildSnapshot` + `evaluateRules`
+- [x] T007 [US1] Call `clearFunderState(ghostId)` in `launchGhostLoop` in `ghosts/npc-agent/src/executor.ts` after `Fiber.interrupt(existing)` and before forking the new fiber, guarded by `characterDef.behaviorKind === "funder"`
+- [x] T008 [US1] Add `world.contract.submitted` routing in the world event dispatch block of `execute()` in `ghosts/npc-agent/src/executor.ts`: extract `contractId` and `contractorId` from `ev.payload`, call `handleContractSubmitted(contractId, contractorId, mcpByGhostId)`
+- [x] T009 [US1] Create `ghosts/npc-agent/catalog/funder.character.gram` with: character node (`id: "funder"`, `behaviorKind: "funder"`, `enabled: true`, `defaultAction: "go-random"`), minimal stub dialog tree (one idle node with wildcard self-loop), and `HAS_DIALOG` wiring edge
+- [x] T010 [P] [US1] Write unit tests in `ghosts/npc-agent/tests/funder-behavior.test.ts` covering: `funderTick` sends advertisement on any inbound message; `funderTick` opens a contract when inbox contains "accept"; `handleContractSubmitted` calls `eval_contract_evaluate` and resets state; `clearFunderState` removes all maps for the given ghostId
+- [x] T011 [US1] Run `pnpm test` in `ghosts/npc-agent/` — all existing tests must continue to pass, new funder tests must pass
 
 **Checkpoint**: Funder character runs inside npc-agent and is fully testable.
 
@@ -62,9 +62,9 @@
 
 ### Implementation for User Story 2
 
-- [ ] T012 [US2] Remove the `funder-agent` service block (build, environment, ports, networks, depends_on, healthcheck) from `deploy/staging/docker-compose.yml`
-- [ ] T013 [US2] Verify `docker-compose config` (or `podman-compose config`) on `deploy/staging/docker-compose.yml` shows no reference to `funder-agent`
-- [ ] T014 [P] [US2] Update `CLAUDE.md`: remove the `funder-agent` technology stack entry and add a `029-funder-into-npc` entry noting that the funder character now runs inside npc-agent
+- [x] T012 [US2] Remove the `funder-agent` service block (build, environment, ports, networks, depends_on, healthcheck) from `deploy/staging/docker-compose.yml`
+- [x] T013 [US2] Verify `docker-compose config` (or `podman-compose config`) on `deploy/staging/docker-compose.yml` shows no reference to `funder-agent`
+- [x] T014 [P] [US2] Update `CLAUDE.md`: remove the `funder-agent` technology stack entry and add a `029-funder-into-npc` entry noting that the funder character now runs inside npc-agent
 
 **Checkpoint**: Compose stack runs without funder-agent container.
 
@@ -78,8 +78,8 @@
 
 ### Implementation for User Story 3
 
-- [ ] T015 [US3] Verify T007 (clearFunderState call in launchGhostLoop) also clears `contractToFunder` and `openContractCount` for the given ghostId in `ghosts/npc-agent/src/behavior/funder-behavior.ts` — update `clearFunderState` if needed
-- [ ] T016 [P] [US3] Add re-spawn test to `ghosts/npc-agent/tests/funder-behavior.test.ts`: after `clearFunderState`, all three maps return no entry for the cleared ghostId; a subsequent `handleContractSubmitted` for the old contractId returns without calling any MCP tool
+- [x] T015 [US3] Verify T007 (clearFunderState call in launchGhostLoop) also clears `contractToFunder` and `openContractCount` for the given ghostId in `ghosts/npc-agent/src/behavior/funder-behavior.ts` — update `clearFunderState` if needed
+- [x] T016 [P] [US3] Add re-spawn test to `ghosts/npc-agent/tests/funder-behavior.test.ts`: after `clearFunderState`, all three maps return no entry for the cleared ghostId; a subsequent `handleContractSubmitted` for the old contractId returns without calling any MCP tool
 
 **Checkpoint**: Re-spawn is clean — no dangling contract state.
 
@@ -89,11 +89,11 @@
 
 **Purpose**: Documentation, cleanup, and final verification.
 
-- [ ] T017 [P] Update `docs/architecture.md` if it references funder-agent as a separate deployed service
-- [ ] T018 [P] Update `ghosts/npc-agent/README.md` to list the funder character in the catalog description
-- [ ] T019 Run `pnpm run build` from repo root — must pass cleanly (hard gate per constitution)
-- [ ] T020 Run `pnpm test` from repo root — all packages must pass
-- [ ] T021 Run `/speckit-verify` and confirm GO verdict before opening PR
+- [x] T017 [P] Update `docs/architecture.md` if it references funder-agent as a separate deployed service
+- [x] T018 [P] Update `ghosts/npc-agent/README.md` to list the funder character in the catalog description
+- [x] T019 Run `pnpm run build` from repo root — must pass cleanly (hard gate per constitution)
+- [x] T020 Run `pnpm test` from repo root — all packages must pass
+- [x] T021 Run `/speckit-verify` and confirm GO verdict before opening PR
 
 ---
 
