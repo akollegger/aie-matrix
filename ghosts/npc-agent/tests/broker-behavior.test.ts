@@ -16,6 +16,7 @@ type Call = { name: string; args: Record<string, unknown> };
 type McpOverrides = Partial<{
   inboxNotifications: Array<{ thread_id: string; message_id: string }>;
   evalContractOpenResult: unknown;
+  holdings: Array<{ resource: string; qty: number; label: string }>;
 }>;
 
 function makeMcpLayer(overrides: McpOverrides = {}): { layer: Layer.Layer<GhostMcpService>; calls: Call[] } {
@@ -33,7 +34,7 @@ function makeMcpLayer(overrides: McpOverrides = {}): { layer: Layer.Layer<GhostM
     go:                   (args) => track("go", args as Record<string, unknown>, { ok: true, tileId: "" }),
     take:                 (args) => track("take", args as Record<string, unknown>, { ok: true, name: "" }),
     traverse:             (args) => track("traverse", args as Record<string, unknown>, { ok: true, via: "", from: "", to: "", tileClass: "" }),
-    inventory:            Effect.succeed({ ok: true as const, objects: [], holdings: [] }),
+    inventory:            Effect.succeed({ ok: true as const, objects: [], holdings: overrides.holdings ?? [{ resource: "broker-credits", qty: 50, label: "Broker Credits" }] }),
     say:                  (args) => track("say", args as Record<string, unknown>, { message_id: "m1", mx_listeners: [] }),
     inbox:                Effect.sync(() => {
       calls.push({ name: "inbox", args: {} });
@@ -64,7 +65,7 @@ describe("clearBrokerState", () => {
     });
 
     // Open a contract via brokerHandleAccept (inbox just advertises, accept triggers the open)
-    await run(brokerHandleAccept(ghostId, "other-ghost"), layer);
+    await run(brokerHandleAccept(ghostId, "other-ghost", 1), layer);
 
     // Verify contract was registered
     expect(getBrokerGhostIdForContract("contract-clear-test")).toBe(ghostId);
@@ -118,7 +119,7 @@ describe("brokerHandleAccept", () => {
     const { layer, calls } = makeMcpLayer({
       evalContractOpenResult: { contractId: "contract-test-001" },
     });
-    await run(brokerHandleAccept("ghost-broker-1", "ghost-abc"), layer);
+    await run(brokerHandleAccept("ghost-broker-1", "ghost-abc", 1), layer);
     expect(calls.some((c) => c.name === "evalContractOpen")).toBe(true);
     expect(getBrokerGhostIdForContract("contract-test-001")).toBe("ghost-broker-1");
   });
@@ -127,11 +128,33 @@ describe("brokerHandleAccept", () => {
     const { layer, calls } = makeMcpLayer({
       evalContractOpenResult: { code: "LedgerError.InsufficientFunds" },
     });
-    await run(brokerHandleAccept("ghost-broker-1", "ghost-abc"), layer);
+    await run(brokerHandleAccept("ghost-broker-1", "ghost-abc", 1), layer);
     const declineCall = calls.find(
       (c) => c.name === "say" && (c.args as { intent: string }).intent === "decline",
     );
     expect(declineCall).toBeDefined();
+  });
+
+  it("declines without calling evalContractOpen when inventory is empty", async () => {
+    const { layer, calls } = makeMcpLayer({ holdings: [] });
+    await run(brokerHandleAccept("ghost-broker-1", "ghost-abc", 1), layer);
+    expect(calls.some((c) => c.name === "evalContractOpen")).toBe(false);
+    const declineCall = calls.find(
+      (c) => c.name === "say" && (c.args as { intent: string }).intent === "decline",
+    );
+    expect(declineCall).toBeDefined();
+  });
+
+  it("uses stakeAmount from character definition when opening a contract", async () => {
+    const { layer, calls } = makeMcpLayer({
+      holdings: [{ resource: "broker-credits", qty: 10, label: "Broker Credits" }],
+      evalContractOpenResult: { contractId: "contract-stake-3" },
+    });
+    await run(brokerHandleAccept("ghost-broker-1", "ghost-abc", 3), layer);
+    const openCall = calls.find((c) => c.name === "evalContractOpen");
+    expect(openCall).toBeDefined();
+    expect((openCall!.args as { stakeAmount: number }).stakeAmount).toBe(3);
+    expect((openCall!.args as { stakeResource: string }).stakeResource).toBe("broker-credits");
   });
 });
 
@@ -149,7 +172,7 @@ describe("handleContractSubmitted", () => {
     });
 
     // Open a contract first
-    await run(brokerHandleAccept(ghostId, "contractor-ghost"), layer);
+    await run(brokerHandleAccept(ghostId, "contractor-ghost", 1), layer);
 
     // Evaluate it
     await run(handleContractSubmitted("contract-eval-001", "contractor-ghost"), layer);

@@ -62,6 +62,8 @@ export interface CharacterDefinition {
   readonly behaviorRules: readonly BehaviorRule[];
   readonly dialogTree: DialogTree;
   readonly behaviorKind: "rule-engine" | "broker";
+  /** Units paid per completed contract. Only meaningful for broker characters. Defaults to 1. */
+  readonly stakeAmount: number;
 }
 
 export interface NpcAgentCatalog {

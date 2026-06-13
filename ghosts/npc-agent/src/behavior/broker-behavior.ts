@@ -88,6 +88,7 @@ export const brokerTick = Effect.fn("brokerTick")(function* (ghostId: string) {
 export const brokerHandleAccept = Effect.fn("brokerHandleAccept")(function* (
   ghostId: string,
   from: string,
+  stakeAmount: number,
 ) {
   const mcp = yield* GhostMcpService;
   const state = getState(ghostId);
@@ -103,6 +104,21 @@ export const brokerHandleAccept = Effect.fn("brokerHandleAccept")(function* (
     return;
   }
 
+  // Determine the item to stake from current inventory.
+  const inventoryResult = yield* mcp.inventory.pipe(
+    Effect.orElseSucceed(() => ({ ok: false, objects: [], holdings: [] })),
+  );
+  const stakeHolding = inventoryResult.holdings[0];
+  const stakeResource = stakeHolding?.resource;
+  if (!stakeResource || (stakeHolding?.qty ?? 0) < stakeAmount) {
+    yield* mcp.say({
+      intent: "decline",
+      content: "I'm all out — nothing left to offer right now.",
+      to: from,
+    }).pipe(Effect.orElse(() => Effect.void));
+    return;
+  }
+
   const question = QUESTIONS[Math.floor(Math.random() * QUESTIONS.length)]!;
   const deadlineMs = Date.now() + 24 * 60 * 60 * 1000;
 
@@ -110,14 +126,14 @@ export const brokerHandleAccept = Effect.fn("brokerHandleAccept")(function* (
     contractorId: from,
     evaluatorId: ghostId,
     request: JSON.stringify({ question }),
-    stakeResource: "broker-credits",
-    stakeAmount: 1,
+    stakeResource,
+    stakeAmount,
     deadlineMs,
   }).pipe(Effect.orElseSucceed(() => ({ code: "FAILED", message: "unknown" } as const)));
 
   if (!("contractId" in contractResult)) {
     const reason = contractResult.code === "LedgerError.InsufficientFunds"
-      ? "I'm out of broker-credits for this session."
+      ? "I'm all out of credits for this session."
       : `Contract opening failed: ${contractResult.message ?? "unknown error"}`;
     yield* mcp.say({ intent: "decline", content: reason, to: from }).pipe(
       Effect.orElse(() => Effect.void),

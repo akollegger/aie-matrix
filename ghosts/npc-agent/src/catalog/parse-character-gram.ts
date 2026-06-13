@@ -40,6 +40,13 @@ function boolProp(props: HashMap.HashMap<string, Value>, key: string): boolean |
   });
 }
 
+function numProp(props: HashMap.HashMap<string, Value>, key: string): number | undefined {
+  return Option.match(HashMap.get(props, key), {
+    onNone: () => undefined,
+    onSome: (v) => (v._tag === "IntVal" || v._tag === "FloatVal" ? v.value : undefined),
+  });
+}
+
 function strArrayProp(
   props: HashMap.HashMap<string, Value>,
   key: string,
@@ -266,6 +273,7 @@ export function parseCharacterGramText(
     }
     const behaviorKind: "rule-engine" | "broker" =
       extraLabels[0] === "Broker" ? "broker" : "rule-engine";
+    const stakeAmount = numProp(charProps, "stakeAmount") ?? 1;
 
     const missing: string[] = [];
     if (!id) missing.push("id");
@@ -375,6 +383,7 @@ export function parseCharacterGramText(
       behaviorRules,
       dialogTree,
       behaviorKind,
+      stakeAmount,
     };
   });
 }

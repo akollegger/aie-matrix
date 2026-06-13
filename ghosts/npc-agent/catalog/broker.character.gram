@@ -2,7 +2,7 @@
 
 (charBroker:Character:Broker { id: "broker", name: "The Broker",
   background: "A well-connected ghost who brokers deals — offering credits to anyone who answers a thought-provoking question. Always on the lookout for interesting ideas.",
-  enabled: true, defaultAction: "go-random" })
+  enabled: true, defaultAction: "go-random", stakeAmount: 1 })
 
 (idle:DialogNode { responses: ["Hello there."] })
 

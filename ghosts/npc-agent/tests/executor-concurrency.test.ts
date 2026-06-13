@@ -65,6 +65,7 @@ function makeCharDef(id: string): CharacterDefinition {
       edges: [{ fromId: "idle", toId: "idle", triggers: [] }],
     },
     behaviorKind: "rule-engine" as const,
+    stakeAmount: 1,
   };
 }
 

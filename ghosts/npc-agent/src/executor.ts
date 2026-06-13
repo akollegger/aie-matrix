@@ -207,7 +207,7 @@ export class NpcAgentExecutor implements AgentExecutor {
           const brokerMcp = mcpByGhostId.get(e.ghostId);
           if (characterDef?.behaviorKind === "broker" && brokerMcp && /^\s*accept\s*$/i.test(text)) {
             void Effect.runPromise(
-              brokerHandleAccept(e.ghostId, from).pipe(
+              brokerHandleAccept(e.ghostId, from, characterDef.stakeAmount).pipe(
                 Effect.provide(GhostMcpServiceLive(brokerMcp)),
               ),
             ).catch((err: unknown) => {
