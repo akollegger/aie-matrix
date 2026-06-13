@@ -118,3 +118,6 @@ temp/
 # grows unbounded and is per-developer state.
 ghosts/*/ghosts/rdc-orchestrator/.local/
 .local/
+
+# Effect vendored source (bootstrapped by scripts/prepare-effect.sh)
+.repos/

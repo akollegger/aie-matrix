@@ -1,16 +1,22 @@
 import type { Message, Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import { AgentExecutor, type ExecutionEventBus, type RequestContext } from "@a2a-js/sdk/server";
 import { randomUUID } from "node:crypto";
-import { Effect, Fiber, Duration } from "effect";
+import { Effect, Fiber, Duration, Match } from "effect";
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import type { SpawnContext } from "./spawn-types.js";
-import { asWorldEvent } from "./world-event.js";
+import { asWorldEvent, type WorldEvent } from "./world-event.js";
 import type { NpcAgentCatalog, CharacterDefinition, DialogState } from "./types.js";
 import type { RosterCredential } from "./roster/spawn-roster.js";
 import { spawnRoster } from "./roster/spawn-roster.js";
-import { evaluateRules, buildSnapshot } from "./behavior/rule-engine.js";
+import { GhostMcpServiceLive } from "./mcp-effect.js";
+import { ruleEngineTick } from "./behavior/rule-engine.js";
 import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
-import { funderTick, handleContractSubmitted, clearFunderState } from "./behavior/funder-behavior.js";
+import {
+  brokerTick,
+  handleContractSubmitted,
+  clearBrokerState,
+  getBrokerGhostIdForContract,
+} from "./behavior/broker-behavior.js";
 
 const ACTION_TICK_MS = 3000;
 
@@ -85,6 +91,28 @@ export function initExecutor(opts: {
   agentId = opts.agentId;
 }
 
+// ── Incoming message classification ──────────────────────────────────────────
+
+type ParsedMessage =
+  | { readonly _tag: "spawn";       readonly ctx: SpawnContext }
+  | { readonly _tag: "worldEvent";  readonly ev: WorldEvent }
+  | { readonly _tag: "healthcheck" }
+  | { readonly _tag: "noop" };
+
+function classifyMessage(msg: Message | undefined): ParsedMessage {
+  const sp = parseSpawnData(msg);
+  if (sp) return { _tag: "spawn", ctx: sp };
+
+  const ev = asWorldEvent(msg);
+  if (ev !== null) return { _tag: "worldEvent", ev };
+
+  if (msg && userText(msg).toLowerCase() === "healthcheck") return { _tag: "healthcheck" };
+
+  return { _tag: "noop" };
+}
+
+// ── Executor ─────────────────────────────────────────────────────────────────
+
 export class NpcAgentExecutor implements AgentExecutor {
   cancelTask = async (taskId: string, eventBus: ExecutionEventBus): Promise<void> => {
     eventBus.publish({
@@ -100,95 +128,92 @@ export class NpcAgentExecutor implements AgentExecutor {
     const { userMessage, contextId, taskId, task } = requestContext;
     const tid = taskId ?? randomUUID();
 
-    const sp = parseSpawnData(userMessage);
-    if (sp) {
-      await this.handleSpawnContext(sp, tid, contextId, task, eventBus);
-      return;
-    }
+    await Match.value(classifyMessage(userMessage)).pipe(
+      Match.when({ _tag: "spawn" as const },       ({ ctx }) => this.handleSpawnContext(ctx, tid, contextId, task, eventBus)),
+      Match.when({ _tag: "worldEvent" as const },  ({ ev })  => this.handleWorldEvent(ev, tid, contextId, task, eventBus)),
+      Match.when({ _tag: "healthcheck" as const }, ()        => this.handleHealthcheck(tid, contextId, eventBus)),
+      Match.when({ _tag: "noop" as const },        ()        => this.handleNoop(tid, contextId, eventBus)),
+      Match.exhaustive,
+    );
+  }
 
-    const ev = asWorldEvent(userMessage);
-    if (ev !== null) {
-      acknowledgeEvent(tid, contextId, task, eventBus);
-      if (ev.kind === "world.session.start") {
-        const sessionId = (ev.payload as { sessionId?: string }).sessionId;
-        if (typeof sessionId === "string") {
-          await this.triggerRosterSpawn(sessionId);
-        }
-      } else if (ev.kind === "world.contract.submitted") {
-        const pl = ev.payload as { contractId?: string; contractorId?: string };
-        const contractId = typeof pl.contractId === "string" ? pl.contractId : undefined;
-        const contractorId = typeof pl.contractorId === "string" ? pl.contractorId : undefined;
-        if (contractId && contractorId) {
-          void handleContractSubmitted(contractId, contractorId, mcpByGhostId).catch(
-            (e: unknown) => {
-              console.error(
-                JSON.stringify({
-                  kind: "npc-agent.funder.contract-submitted-error",
-                  contractId,
-                  error: e instanceof Error ? e.message : String(e),
-                }),
-              );
-            },
-          );
-        }
-      } else if (ev.kind === "world.message.new") {
-        const pl = ev.payload as {
-          from?: string;
-          priority?: string;
-          text?: string;
-        };
-        const targetGhostId = ev.ghostId;
-        const senderGhostId = typeof pl.from === "string" ? pl.from : null;
-        const inboundText = typeof pl.text === "string" ? pl.text : null;
-        const priority = typeof pl.priority === "string" ? pl.priority : "";
+  private handleHealthcheck(tid: string, contextId: string | undefined, eventBus: ExecutionEventBus): Promise<void> {
+    eventBus.publish({
+      kind: "message",
+      messageId: randomUUID(),
+      role: "agent",
+      contextId,
+      taskId: tid,
+      parts: [{ kind: "text", text: "ok" }],
+    } satisfies Message);
+    eventBus.finished();
+    return Promise.resolve();
+  }
 
-        if (
-          senderGhostId &&
-          inboundText &&
-          (priority === "PARTNER" || priority === "DIRECT") &&
-          isNpcCharacterGhost(targetGhostId) &&
-          !isNpcCharacterGhost(senderGhostId) // FR-009: ignore sibling-NPC senders
-        ) {
-          void handleDialogMessage(targetGhostId, senderGhostId, inboundText).catch(
-            (e: unknown) => {
-              console.error(
-                JSON.stringify({
-                  kind: "npc-agent.dialog.error",
-                  targetGhostId,
-                  error: e instanceof Error ? e.message : String(e),
-                }),
-              );
-            },
-          );
-        }
-      }
-      return;
-    }
-
-    if (userMessage && userText(userMessage).toLowerCase() === "healthcheck") {
-      const reply: Message = {
-        kind: "message",
-        messageId: randomUUID(),
-        role: "agent",
-        contextId,
-        taskId: tid,
-        parts: [{ kind: "text", text: "ok" }],
-      };
-      eventBus.publish(reply);
-      eventBus.finished();
-      return;
-    }
-
-    const reply: Message = {
+  private handleNoop(tid: string, contextId: string | undefined, eventBus: ExecutionEventBus): Promise<void> {
+    eventBus.publish({
       kind: "message",
       messageId: randomUUID(),
       role: "agent",
       contextId,
       taskId: tid,
       parts: [{ kind: "text", text: "noop" }],
-    };
-    eventBus.publish(reply);
+    } satisfies Message);
     eventBus.finished();
+    return Promise.resolve();
+  }
+
+  private async handleWorldEvent(
+    ev: WorldEvent,
+    tid: string,
+    contextId: string | undefined,
+    task: Task | undefined,
+    eventBus: ExecutionEventBus,
+  ): Promise<void> {
+    acknowledgeEvent(tid, contextId, task, eventBus);
+
+    await Match.value(ev).pipe(
+      Match.when({ kind: "world.session.start" as const }, (e) =>
+        this.triggerRosterSpawn(e.payload.sessionId),
+      ),
+      Match.when({ kind: "world.contract.submitted" as const }, (e) => {
+        const { contractId, contractorId } = e.payload;
+        const brokerGhostId = getBrokerGhostIdForContract(contractId);
+        const brokerMcp = brokerGhostId ? mcpByGhostId.get(brokerGhostId) : undefined;
+        if (brokerMcp) {
+          void Effect.runPromise(
+            handleContractSubmitted(contractId, contractorId).pipe(
+              Effect.provide(GhostMcpServiceLive(brokerMcp)),
+            ),
+          ).catch((e: unknown) => {
+            console.error(JSON.stringify({
+              kind: "npc-agent.broker.contract-submitted-error",
+              contractId,
+              error: e instanceof Error ? e.message : String(e),
+            }));
+          });
+        }
+        return Promise.resolve();
+      }),
+      Match.when({ kind: "world.message.new" as const }, (e) => {
+        const { from, text, priority } = e.payload;
+        if (
+          (priority === "PARTNER" || priority === "DIRECT") &&
+          isNpcCharacterGhost(e.ghostId) &&
+          !isNpcCharacterGhost(from) // FR-009: ignore sibling-NPC senders
+        ) {
+          void handleDialogMessage(e.ghostId, from, text).catch((err: unknown) => {
+            console.error(JSON.stringify({
+              kind: "npc-agent.dialog.error",
+              targetGhostId: e.ghostId,
+              error: err instanceof Error ? err.message : String(err),
+            }));
+          });
+        }
+        return Promise.resolve();
+      }),
+      Match.orElse(() => Promise.resolve()),
+    );
   }
 
   private async handleSpawnContext(
@@ -308,7 +333,7 @@ async function handleDialogMessage(
     lastUpdated: new Date().toISOString(),
   });
 
-  await mcp.callTool("say", { intent: DEFAULT_INTENT, content: result.response, to: partnerGhostId });
+  await mcp.say({ intent: DEFAULT_INTENT, content: result.response, to: partnerGhostId });
 }
 
 // ── Per-character action loop (Effect-based) ──────────────────────────────────
@@ -354,31 +379,23 @@ function ghostActionLoop(
           ),
       );
 
-      // Single tick: gather world state, evaluate behavior rules, then sleep.
+      // Single tick: dispatch to behavior-specific Effect, provide the MCP service, then sleep.
+      // Tick failure is non-fatal: logged and skipped (FR-005).
       const tick = Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: async () => {
-            if (characterDef.behaviorKind === "funder") {
-              await funderTick(ctx.ghostId, mcp);
-            } else {
-              const whereami = (await mcp.callTool("whereami", {})) as Record<string, unknown>;
-              const exitsRaw = (await mcp.callTool("exits", {})) as Record<string, unknown>;
-              const inventoryRaw = (await mcp.callTool("inventory", {})) as Record<string, unknown>;
-              const lookRaw = (await mcp.callTool("look", {})) as Record<string, unknown>;
-              const snapshot = buildSnapshot(whereami, exitsRaw, inventoryRaw, lookRaw, ctx.ghostId);
-              await evaluateRules(characterDef, snapshot, mcp);
-            }
-          },
-          catch: (e) => (e instanceof Error ? e : new Error(String(e))),
-        }).pipe(
-          // Tick failure is non-fatal: log and continue (FR-005).
+        const tickEffect = Match.value(characterDef.behaviorKind).pipe(
+          Match.when("broker",      () => brokerTick(ctx.ghostId)),
+          Match.when("rule-engine", () => ruleEngineTick(ctx.ghostId, characterDef)),
+          Match.exhaustive,
+        );
+        yield* tickEffect.pipe(
+          Effect.provide(GhostMcpServiceLive(mcp)),
           Effect.catchAll((e) =>
             Effect.sync(() =>
               console.warn(
                 JSON.stringify({
                   kind: "npc-agent.character.tick-error",
                   ghostId: ctx.ghostId,
-                  error: e instanceof Error ? e.message : String(e),
+                  error: String(e),
                 }),
               ),
             ),
@@ -425,8 +442,8 @@ async function launchGhostLoop(
     actionFibersByGhostId.delete(ghostId);
   }
 
-  if (characterDef.behaviorKind === "funder") {
-    clearFunderState(ghostId);
+  if (characterDef.behaviorKind === "broker") {
+    clearBrokerState(ghostId);
   }
 
   const fiber = Effect.runFork(ghostActionLoop(ctx, characterDef));

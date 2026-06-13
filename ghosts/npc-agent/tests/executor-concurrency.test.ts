@@ -7,12 +7,28 @@ import type { CharacterDefinition } from "../src/types.js";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
-vi.mock("@aie-matrix/ghost-ts-client", () => ({
-  GhostMcpClient: vi.fn().mockImplementation(() => ({
+function makeDefaultMockClient() {
+  return {
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
     callTool: vi.fn().mockResolvedValue({}),
-  })),
+    whoami:    vi.fn().mockResolvedValue({ ghostId: "test" }),
+    whereami:  vi.fn().mockResolvedValue({ h3Index: "abc", tileId: "abc", col: 0, row: 0 }),
+    exits:     vi.fn().mockResolvedValue({ exits: [] }),
+    look:      vi.fn().mockResolvedValue({ tiles: [] }),
+    go:        vi.fn().mockResolvedValue({ ok: true, tileId: "abc" }),
+    take:      vi.fn().mockResolvedValue({ ok: true, name: "item" }),
+    drop:      vi.fn().mockResolvedValue({ ok: true }),
+    traverse:  vi.fn().mockResolvedValue({ ok: true, via: "", from: "", to: "", tileClass: "" }),
+    inventory: vi.fn().mockResolvedValue({ ok: true, objects: [], holdings: [] }),
+    say:       vi.fn().mockResolvedValue({ message_id: "m1", mx_listeners: [] }),
+    inbox:     vi.fn().mockResolvedValue({ notifications: [] }),
+    bye:       vi.fn().mockResolvedValue({ previous_mode: "normal" }),
+  };
+}
+
+vi.mock("@aie-matrix/ghost-ts-client", () => ({
+  GhostMcpClient: vi.fn().mockImplementation(makeDefaultMockClient),
 }));
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -57,11 +73,7 @@ function makeCharDef(id: string): CharacterDefinition {
 beforeEach(() => {
   // Clear accumulated call counts and reset GhostMcpClient to happy-path.
   vi.clearAllMocks();
-  vi.mocked(GhostMcpClient).mockImplementation(() => ({
-    connect: vi.fn().mockResolvedValue(undefined),
-    disconnect: vi.fn().mockResolvedValue(undefined),
-    callTool: vi.fn().mockResolvedValue({}),
-  }));
+  vi.mocked(GhostMcpClient).mockImplementation(makeDefaultMockClient);
   _test.resetTickMs();
 });
 
@@ -224,9 +236,8 @@ describe("tick error resilience", () => {
   it("fiber survives multiple consecutive tick failures", async () => {
     let callCount = 0;
     vi.mocked(GhostMcpClient).mockImplementationOnce(() => ({
-      connect: vi.fn().mockResolvedValue(undefined),
-      disconnect: vi.fn().mockResolvedValue(undefined),
-      callTool: vi.fn().mockImplementation(async () => {
+      ...makeDefaultMockClient(),
+      whereami: vi.fn().mockImplementation(async () => {
         callCount++;
         throw new Error("persistent failure");
       }),
@@ -250,9 +261,9 @@ describe("tick error resilience", () => {
   it("MCP client is disconnected when fiber is interrupted, even after tick failures", async () => {
     const mockDisconnect = vi.fn().mockResolvedValue(undefined);
     vi.mocked(GhostMcpClient).mockImplementationOnce(() => ({
-      connect: vi.fn().mockResolvedValue(undefined),
+      ...makeDefaultMockClient(),
       disconnect: mockDisconnect,
-      callTool: vi.fn().mockRejectedValue(new Error("tool error")),
+      whereami: vi.fn().mockRejectedValue(new Error("tool error")),
     }));
 
     _test.setTickMs(50);

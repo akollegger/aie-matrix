@@ -61,7 +61,7 @@ export interface CharacterDefinition {
   readonly defaultAction: WorldAction;
   readonly behaviorRules: readonly BehaviorRule[];
   readonly dialogTree: DialogTree;
-  readonly behaviorKind: "rule-engine" | "funder";
+  readonly behaviorKind: "rule-engine" | "broker";
 }
 
 export interface NpcAgentCatalog {

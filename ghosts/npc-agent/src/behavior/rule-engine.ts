@@ -1,6 +1,7 @@
-import { Match } from "effect";
-import type { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
+import { Effect, Match } from "effect";
 import type { CharacterDefinition, WorldAction, CompassDirection } from "../types.js";
+import { GhostMcpService } from "../mcp-effect.js";
+import type { McpCallError } from "../errors.js";
 
 // ── World snapshot ────────────────────────────────────────────────────────────
 
@@ -14,51 +15,24 @@ export interface ExitSummary {
   readonly toward: string;
 }
 
-/** Point-in-time world state assembled from MCP calls before rule evaluation. */
 export interface WorldSnapshot {
   readonly h3Index: string;
-  /** Ghost ids on the current tile, excluding self. */
   readonly occupants: readonly string[];
   readonly exits: readonly ExitSummary[];
   readonly inventory: readonly { itemRef: string; name: string }[];
-  /** Items visible from `look` on current cell and adjacent cells. */
   readonly nearbyItems: readonly ItemSummary[];
 }
 
 // ── Condition evaluators ──────────────────────────────────────────────────────
 
-function evalInventoryEmpty(snapshot: WorldSnapshot): boolean {
-  return snapshot.inventory.length === 0;
-}
-
-function evalCrowded(snapshot: WorldSnapshot): boolean {
-  return snapshot.occupants.length >= 2;
-}
-
-function evalItemNearby(snapshot: WorldSnapshot): boolean {
-  return snapshot.nearbyItems.length > 0;
-}
-
-function evalItemHere(snapshot: WorldSnapshot): boolean {
-  return snapshot.nearbyItems.some((i) => i.at === "here");
-}
-
-function evalItemAdjacent(snapshot: WorldSnapshot): boolean {
-  return snapshot.nearbyItems.some((i) => i.at !== "here");
-}
-
-function evalAlone(snapshot: WorldSnapshot): boolean {
-  return snapshot.occupants.length === 0;
-}
-
 function evaluateCondition(condition: string, snapshot: WorldSnapshot): boolean {
   switch (condition) {
-    case "inventory_empty": return evalInventoryEmpty(snapshot);
-    case "crowded":         return evalCrowded(snapshot);
-    case "item_nearby":     return evalItemNearby(snapshot);
-    case "item_here":       return evalItemHere(snapshot);
-    case "item_adjacent":   return evalItemAdjacent(snapshot);
-    case "alone":           return evalAlone(snapshot);
+    case "inventory_empty": return snapshot.inventory.length === 0;
+    case "crowded":         return snapshot.occupants.length >= 2;
+    case "item_nearby":     return snapshot.nearbyItems.length > 0;
+    case "item_here":       return snapshot.nearbyItems.some((i) => i.at === "here");
+    case "item_adjacent":   return snapshot.nearbyItems.some((i) => i.at !== "here");
+    case "alone":           return snapshot.occupants.length === 0;
     case "always":          return true;
     default:                return false;
   }
@@ -89,81 +63,78 @@ function resolveItem(_item: "nearest", snapshot: WorldSnapshot): string {
 
 // ── Action dispatch ───────────────────────────────────────────────────────────
 
-async function executeAction(
+function executeAction(
   action: WorldAction,
   snapshot: WorldSnapshot,
-  mcp: GhostMcpClient,
-): Promise<void> {
-  const dispatched = Match.value(action).pipe(
-    Match.when({ do: "go" as const },       (a) => mcp.callTool("go",       { toward: resolveToward(a.toward, snapshot) })),
-    Match.when({ do: "take" as const },     (a) => mcp.callTool("take",     { itemRef: resolveItem(a.item, snapshot) })),
-    Match.when({ do: "traverse" as const }, (a) => mcp.callTool("traverse", { via: a.via })),
-    Match.when({ do: "idle" as const },     ()  => Promise.resolve()),
-    Match.exhaustive,
-  );
-  await dispatched;
+): Effect.Effect<unknown, McpCallError, GhostMcpService> {
+  return Effect.gen(function* () {
+    const mcp = yield* GhostMcpService;
+    return yield* Match.value(action).pipe(
+      Match.when({ do: "go" as const },       (a) => mcp.go({ toward: resolveToward(a.toward, snapshot) as never })),
+      Match.when({ do: "take" as const },     (a) => mcp.take({ itemRef: resolveItem(a.item, snapshot) })),
+      Match.when({ do: "traverse" as const }, (a) => mcp.traverse({ via: a.via })),
+      Match.when({ do: "idle" as const },     ()  => Effect.void),
+      Match.exhaustive,
+    );
+  });
 }
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/**
- * Evaluate behavior rules for a character in declaration order.
- * Returns on the first matching rule whose action succeeds.
- * If an MCP action throws, the rule is skipped and evaluation continues.
- * Falls back to `character.defaultAction` when no rule fires or all fire with MCP errors.
- */
-export async function evaluateRules(
+export const evaluateRules = Effect.fn("evaluateRules")(function* (
   character: CharacterDefinition,
   snapshot: WorldSnapshot,
-  mcp: GhostMcpClient,
-): Promise<void> {
+) {
   for (const rule of character.behaviorRules) {
     if (!evaluateCondition(rule.condition, snapshot)) continue;
-    try {
-      await executeAction(rule.action, snapshot, mcp);
-      return;
-    } catch {
-      // MCP call failed — skip this rule, try next (FR-005 degradation).
-    }
+    const succeeded = yield* executeAction(rule.action, snapshot).pipe(
+      Effect.as(true),
+      Effect.orElseSucceed(() => false as boolean),
+    );
+    if (succeeded) return;
   }
-  // No rule fired (or all errored): use defaultAction.
-  try {
-    await executeAction(character.defaultAction, snapshot, mcp);
-  } catch {
-    // Fallback also failed — silent, outer loop still alive.
-  }
-}
+  yield* executeAction(character.defaultAction, snapshot).pipe(
+    Effect.orElse(() => Effect.void),
+  );
+});
+
+export const ruleEngineTick = Effect.fn("ruleEngineTick")(function* (
+  ghostId: string,
+  character: CharacterDefinition,
+) {
+  const mcp = yield* GhostMcpService;
+  const whereami  = yield* mcp.whereami;
+  const exits     = yield* mcp.exits;
+  const inventory = yield* mcp.inventory;
+  const look      = yield* mcp.look();
+
+  const snapshot = buildSnapshot(whereami, exits, inventory, look, ghostId);
+  yield* evaluateRules(character, snapshot);
+});
 
 // ── Snapshot builder ──────────────────────────────────────────────────────────
 
-/** Build a WorldSnapshot from raw MCP call results. All fields are optional
- *  in the raw responses so we default safely. */
 export function buildSnapshot(
-  whereami: Record<string, unknown>,
-  exits: Record<string, unknown>,
-  inventory: Record<string, unknown>,
-  look: Record<string, unknown>,
+  whereami: { h3Index?: string; tileId?: string; occupants?: unknown[] },
+  exits: { exits?: unknown[] },
+  inventory: { objects?: unknown[] },
+  look: { tiles?: unknown[] },
   selfGhostId: string,
 ): WorldSnapshot {
-  const h3Index =
-    typeof whereami["h3Index"] === "string" ? whereami["h3Index"]
-    : typeof whereami["tileId"] === "string" ? whereami["tileId"]
-    : "";
+  const h3Index = whereami.h3Index ?? whereami.tileId ?? "";
 
-  const rawOccupants = Array.isArray(whereami["occupants"]) ? whereami["occupants"] : [];
-  const occupants = (rawOccupants as unknown[])
-    .filter((o): o is string => typeof o === "string" && o !== selfGhostId);
+  const occupants = (whereami.occupants ?? []).filter(
+    (o): o is string => typeof o === "string" && o !== selfGhostId,
+  );
 
-  const rawExits = Array.isArray(exits["exits"]) ? exits["exits"] : [];
-  const exitList = (rawExits as unknown[]).flatMap((e) => {
-    if (e && typeof e === "object" && "toward" in e && typeof (e as Record<string, unknown>)["toward"] === "string") {
-      return [{ toward: (e as Record<string, unknown>)["toward"] as string }];
+  const exitList = (exits.exits ?? []).flatMap((ex) => {
+    if (ex && typeof ex === "object" && "toward" in ex && typeof (ex as { toward: unknown }).toward === "string") {
+      return [{ toward: (ex as { toward: string }).toward }];
     }
     return [];
   });
 
-  const rawInventory = Array.isArray(inventory["objects"]) ? inventory["objects"] : [];
-  const invItems = (rawInventory as unknown[]).flatMap((o) => {
+  const invItems = (inventory.objects ?? []).flatMap((o) => {
     if (o && typeof o === "object") {
       const obj = o as Record<string, unknown>;
       if (typeof obj["itemRef"] === "string" && typeof obj["name"] === "string") {
@@ -173,20 +144,17 @@ export function buildSnapshot(
     return [];
   });
 
-  // Extract nearby items from look result. The look tool returns per-tile info.
-  const rawTiles = Array.isArray(look["tiles"]) ? look["tiles"] : [];
+  const VALID_AT = new Set(["here", "n", "s", "ne", "nw", "se", "sw"]);
   const nearbyItems: ItemSummary[] = [];
-  for (const tile of rawTiles as unknown[]) {
+  for (const tile of look.tiles ?? []) {
     if (!tile || typeof tile !== "object") continue;
-    const t = tile as Record<string, unknown>;
-    const at = typeof t["at"] === "string" ? t["at"] : "here";
-    const objects = Array.isArray(t["objects"]) ? t["objects"] : [];
-    for (const obj of objects as unknown[]) {
+    const t = tile as { at?: unknown; objects?: unknown[] };
+    const at = typeof t.at === "string" && VALID_AT.has(t.at) ? t.at : "here";
+    for (const obj of t.objects ?? []) {
       if (!obj || typeof obj !== "object") continue;
       const o = obj as Record<string, unknown>;
       if (typeof o["id"] === "string" && typeof o["name"] === "string") {
-        const validAt = ["here", "n", "s", "ne", "nw", "se", "sw"].includes(at) ? at : "here";
-        nearbyItems.push({ id: o["id"], name: o["name"], at: validAt as ItemSummary["at"] });
+        nearbyItems.push({ id: o["id"], name: o["name"], at: at as ItemSummary["at"] });
       }
     }
   }

@@ -1,19 +1,25 @@
-/** Subset of IC-004 / IC-007 for parsing world events in the executor. */
-export type WorldEvent = {
-  readonly schema: "aie-matrix.world-event.v1";
-  readonly kind: WorldEventKind;
-  readonly payload: Record<string, unknown>;
-  readonly ghostId: string;
-  readonly eventId: string;
-  readonly sentAt: string;
-};
+/** Typed payloads for each known world event kind. */
+export interface SessionStartPayload {
+  readonly sessionId: string;
+}
 
-export type WorldEventKind =
-  | "world.session.start"
-  | "world.message.new"
-  | "world.contract.submitted"
-  | "world.leaderboard.updated"
-  | (string & {});
+export interface ContractSubmittedPayload {
+  readonly contractId: string;
+  readonly contractorId: string;
+}
+
+export interface MessageNewPayload {
+  readonly from: string;
+  readonly text: string;
+  readonly priority: string;
+}
+
+/** Typed world event discriminated union. Unknown kinds carry `Record<string, unknown>`. */
+export type WorldEvent =
+  | { readonly schema: "aie-matrix.world-event.v1"; readonly kind: "world.session.start";      readonly payload: SessionStartPayload;      readonly ghostId: string; readonly eventId: string; readonly sentAt: string }
+  | { readonly schema: "aie-matrix.world-event.v1"; readonly kind: "world.contract.submitted"; readonly payload: ContractSubmittedPayload; readonly ghostId: string; readonly eventId: string; readonly sentAt: string }
+  | { readonly schema: "aie-matrix.world-event.v1"; readonly kind: "world.message.new";        readonly payload: MessageNewPayload;        readonly ghostId: string; readonly eventId: string; readonly sentAt: string }
+  | { readonly schema: "aie-matrix.world-event.v1"; readonly kind: "world.leaderboard.updated" | (string & {}); readonly payload: Record<string, unknown>; readonly ghostId: string; readonly eventId: string; readonly sentAt: string };
 
 export function asWorldEvent(msg: { parts?: unknown[] } | undefined): WorldEvent | null {
   for (const p of msg?.parts ?? []) {

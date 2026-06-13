@@ -241,18 +241,31 @@ export function parseCharacterGramText(
     const background = strProp(charProps, "background")?.trim() ?? "";
     const defaultActionRaw = strProp(charProps, "defaultAction") ?? "";
     const enabled = boolProp(charProps, "enabled");
-    const behaviorKindRaw = strProp(charProps, "behaviorKind") ?? "rule-engine";
 
-    const VALID_BEHAVIOR_KINDS = new Set(["rule-engine", "funder"]);
-    if (!VALID_BEHAVIOR_KINDS.has(behaviorKindRaw)) {
+    // Derive behavior kind from secondary labels on the Character node.
+    // Known behavior labels map to a behaviorKind; unknown labels are an error.
+    const KNOWN_BEHAVIOR_LABELS = new Set(["Broker", "Novice"]);
+    const allLabels = Array.from(characterSubject.labels as Iterable<string>);
+    const extraLabels = allLabels.filter(l => l !== "Character");
+    const unknownLabels = extraLabels.filter(l => !KNOWN_BEHAVIOR_LABELS.has(l));
+    if (unknownLabels.length > 0) {
       return yield* Effect.fail(
         new CharacterParseError(
-          `invalid behaviorKind "${behaviorKindRaw}": must be "rule-engine" or "funder"`,
+          `Character node has unrecognized label(s) "${unknownLabels.join('", "')}" — known behavior labels: Broker, Novice`,
           source,
         ),
       );
     }
-    const behaviorKind = behaviorKindRaw as "rule-engine" | "funder";
+    if (extraLabels.length > 1) {
+      return yield* Effect.fail(
+        new CharacterParseError(
+          `Character node has multiple behavior labels "${extraLabels.join('", "')}" — only one is allowed`,
+          source,
+        ),
+      );
+    }
+    const behaviorKind: "rule-engine" | "broker" =
+      extraLabels[0] === "Broker" ? "broker" : "rule-engine";
 
     const missing: string[] = [];
     if (!id) missing.push("id");
