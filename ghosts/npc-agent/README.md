@@ -2,6 +2,8 @@
 
 Rule-based NPC character roster for the aie-matrix. Reads characters from `.character.gram` catalog files, spawns one ghost per enabled character when a session starts, and drives each ghost through a priority-ordered behavior rule table and a scripted dialog tree — with zero LLM dependency.
 
+**Built-in characters**: `collector` (item hunter), `hermit` (wanderer), `info-attendant` (greeter), `broker` (brokers deals — offers credits for answering questions, stateful contract-negotiation loop).
+
 ## Quick start
 
 ```bash
@@ -63,6 +65,7 @@ The format is gram — the same syntax used for `.map.gram` and `.calendar.gram`
 | `background` | string | One-line character background, surfaced in `whereami` (IC-008). |
 | `enabled` | boolean | `false` → character is never spawned. |
 | `defaultAction` | `idle` \| `go-random` | Action taken when no behavior rule matches. (Legacy aliases `stay`/`random-move` also accepted.) |
+| *(label)* | `Character:Broker` | Behavior dispatch strategy. Absence of a behavior label defaults to rule-engine. Add `:Broker` for the broker character (stateful contract-negotiation loop). |
 
 ### Dialog tree
 

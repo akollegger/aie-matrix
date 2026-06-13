@@ -1,5 +1,6 @@
 # aie-matrix staging stack — Tier 2 (ADR-0007)
-# Runs 4 containers: neo4j, redis, server (combined), agent-host
+# Runs containers: neo4j, redis, server (combined), agent-host, random-agent, npc-agent
+# The funder character runs inside npc-agent (029-funder-into-npc)
 #
 # Usage:
 #   cp deploy/staging/.env.staging.example deploy/staging/.env.staging
@@ -137,33 +138,6 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:4001/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(d.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-
-  funder-agent:
-    build:
-      context: ../..      # repo root
-      dockerfile: ghosts/funder-agent/Dockerfile
-    environment:
-      NODE_ENV: "${NODE_ENV:-production}"
-      # Agent-host connection — uses Docker service name, not localhost
-      AGENT_HOST_URL: "http://agent-host:4000"
-      AGENT_HOST_TOKEN: "${AGENT_HOST_TOKEN}"
-      # Public URL for this agent — used in A2A agent card and catalog registration
-      # In compose, agent-host reaches funder-agent via the shared network
-      FUNDER_AGENT_PUBLIC_BASE_URL: "${FUNDER_AGENT_PUBLIC_BASE_URL:-http://funder-agent:4002}"
-      AGENT_PORT: "4002"
-    ports:
-      - "4002:4002"
-    networks:
-      - aie-matrix
-    depends_on:
-      agent-host:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4002/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(d.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -2,8 +2,9 @@
 
 **Status:** accepted  
 **Date:** 2026-06-10  
+**Updated:** 2026-06-13 — added broker (incorporated from funder-agent, spec 029; renamed funder→broker) and novice (proposed)  
 **Authors:** @akollegger  
-**Related:** [ADR-0012](../adr/0012-ghost-self-spawn-lifecycle.md) (Ghost Self-Spawn Lifecycle — the architectural decision this feature is the first consumer of), [RFC-0007](0007-agent-host-architecture.md) (Agent Host Architecture — adds an agent-initiated spawn capability and per-ghost background), [RFC-0005](0005-ghost-conversation-model.md) (Ghost Conversation Model — dialog replies use the existing `say`/world-event path), [RFC-0009](0009-map-format-pipeline.md) (Map Format Pipeline — reuses the `.gram` format for a new `.character.gram` catalog), [RFC-0002](0002-rule-based-movement.md) (Rule-Based Movement — the deterministic decision model this generalizes)
+**Related:** [ADR-0012](../adr/0012-ghost-self-spawn-lifecycle.md) (Ghost Self-Spawn Lifecycle — the architectural decision this feature is the first consumer of), [RFC-0007](0007-agent-host-architecture.md) (Agent Host Architecture — adds an agent-initiated spawn capability and per-ghost background), [RFC-0005](0005-ghost-conversation-model.md) (Ghost Conversation Model — dialog replies use the existing `say`/world-event path), [RFC-0009](0009-map-format-pipeline.md) (Map Format Pipeline — reuses the `.gram` format for a new `.character.gram` catalog), [RFC-0002](0002-rule-based-movement.md) (Rule-Based Movement — the deterministic decision model this generalizes), [RFC-0022](0022-eval-contract-protocol.md) (Eval Contract Protocol — the contract lifecycle the funder and novice characters participate in)
 
 ## Summary
 
@@ -93,14 +94,60 @@ Per [ADR-0012](../adr/0012-ghost-self-spawn-lifecycle.md), the npc-agent **disco
 
 The npc-agent's AgentCard declares `pushNotifications: true`, `llmProvider: "none"`, and consumes `aie-matrix.world-event.v1` for both `world.session.start` (spawn) and `world.message.new` (dialog).
 
-### 5. Package & deployment
+### 5. Extended behavior kinds — gram label dispatch
+
+The initial design assumed all characters share the same rule-engine tick: gather world state → evaluate rules → execute action. Two characters require richer, stateful behavior that the rule table cannot express: the **broker** (incorporated from the retired standalone `funder-agent` package, spec 029) and the proposed **novice**. Rather than force either into the rule-engine mold, behavior kind is expressed as a secondary gram label on the `Character` node (e.g. `(charBroker:Character:Broker {...})`). The parser maps known labels to an internal `behaviorKind` discriminator and errors on unrecognized labels.
+
+Known behavior labels: `Broker`, `Novice`. Absence of a behavior label → `"rule-engine"` (default).
+
+#### `Character:Broker` — `behaviorKind: "broker"` (shipped, spec 029)
+
+The broker runs a **question-for-credit contract loop**. On each tick it polls its inbox rather than querying world state, and drives a two-phase state machine:
+
+```
+idle ──[inbox: "accept"]──> awaiting_submission
+awaiting_submission ──[world.contract.submitted event]──> idle
+```
+
+- **idle**: replies to every inbound message with an advertisement offering 1 broker-credit for answering a question; on `"accept"` calls `eval_contract_open` (stakeResource: `"broker-credits"`, stakeAmount: 1, 24 h deadline), picks a random question from a 10-entry bank, transitions to `awaiting_submission`.
+- **awaiting_submission**: passive in the inbox tick; waits for a `world.contract.submitted` world event, then calls `eval_contract_evaluate` with `verdict: 1.0` (always pays full), notifies the contractor, and resets to idle.
+- **Cap**: `MAX_OPEN = 5` concurrent contracts per ghost; declines further accepts when at capacity.
+- **State**: per-ghost maps (`ghostState`, `contractToBroker`, `openContractCount`) live in `src/behavior/broker-behavior.ts` and are cleared on ghost re-spawn.
+- **Gram note**: the broker gram file uses `(charBroker:Character:Broker {...})` — no `behaviorKind` property — with a minimal stub dialog tree (one idle node with wildcard self-loop) that satisfies the parser invariant but is never reachable at runtime.
+
+#### `Character:Novice` — `behaviorKind: "novice"` (proposed)
+
+The novice is the **contractor-side counterpart** to the broker: a character that seeks out and completes eval contracts rather than issuing them. Its goal is to exercise the full eval protocol from the contractor's perspective without an LLM.
+
+State machine:
+
+```
+idle ──[inbox: broker advertisement]──> awaiting_contract
+awaiting_contract ──[inbox: contract opened + question received]──> composing
+composing ──[submit]──> idle
+```
+
+- **idle**: on receiving a broker advertisement, replies `"accept"`.
+- **awaiting_contract**: waits for the broker's follow-up message containing the contractId and question; calls `eval_contract_accept`.
+- **composing**: submits a fixed template answer (`"I'm a novice — here's my best attempt: [question echoed back]"` or similar); calls `eval_contract_submit`. Transitions to idle on completion.
+- **Cooldown**: waits a configurable number of ticks (`NOVICE_COOLDOWN_TICKS`, default 5) before seeking the next contract, to avoid immediately re-engaging the same broker.
+- **Rationale for template answer**: the broker always grants `verdict: 1.0` regardless of content; a deterministic answer is sufficient to exercise the full protocol end-to-end, consistent with the rule-based / no-LLM tier.
+- **State**: per-ghost maps (`noviceState`, `noviceCooldown`) in a new `src/behavior/novice-behavior.ts`, cleared on re-spawn.
+- **Gram**: `(charNovice:Character:Novice {...})`; stub dialog tree as per broker pattern.
+
+---
+
+### 6. Package & deployment
 
 `ghosts/npc-agent/` mirrors `ghosts/random-agent/` (express A2A server, `buildAgentCard`, executor, `spawn-types`, `world-event`), adds `@relateby/pattern` for catalog parsing, a `schema/character.gram.md` contract, and a `README.md`. Deployed via the same Dockerfile/compose pattern; self-registers in the host catalog at runtime.
 
-### 6. Testing
+### 7. Testing
 
 - **Unit** (vitest, mocking `GhostMcpClient`): rule evaluation order, dialog-tree traversal, per-partner state isolation, sibling-NPC ignore, catalog load/skip-on-error.
+- **Broker unit tests** (`tests/broker-behavior.test.ts`): advertisement fires on any inbound message; contract opens on "accept"; insufficient-funds decline path; `eval_contract_evaluate` called with `verdict: 1.0` on submission; no-op on stale contractId; `clearBrokerState` resets all maps.
+- **Novice unit tests** (`tests/novice-behavior.test.ts`, proposed): "accept" sent on receiving advertisement; `eval_contract_accept` called after contract message; `eval_contract_submit` called with template answer; cooldown respected between contracts; state cleared on re-spawn.
 - **Integration** (extend `ghosts/tck/`, mirroring `social.ts`): an external ghost drives a scripted multi-turn dialog and asserts replies; a second test drives two external ghosts in interleaved conversations and asserts zero cross-contamination.
+- **Broker↔novice integration** (proposed, requires live stack): spawn both characters into a session, assert a full contract lifecycle (open → accept → submit → evaluate → payment) completes end-to-end without manual intervention.
 
 ---
 
@@ -111,6 +158,8 @@ The npc-agent's AgentCard declares `pushNotifications: true`, `llmProvider: "non
 3. **Roster spawn idempotency / restart.** On agent restart mid-session, how are already-spawned character ghosts re-attached vs. re-spawned (avoid duplicates)? Reuse the host's existing duplicate-`ghostId` rejection, or a re-attach path?
 4. **Condition/action vocabulary.** The initial closed set of rule conditions and actions — which entries ship in v1?
 5. **Catalog gram package home.** New `shared/character-gram` workspace package (like `shared/map-gram`) vs. a server-/agent-local parser module.
+6. **Novice answer strategy.** The template-echo answer is sufficient to exercise the protocol, but even a small keyed response bank (topic keywords → canned one-liner) would make the novice feel less mechanical in the world. Decision deferred to implementation; either is acceptable for the first version.
+7. **Behavior label extensibility.** The known label set in the parser (`Broker`, `Novice`) will need to grow with each new behavior kind. Consider whether a plugin/registry pattern is warranted once a third stateful kind is added, or whether the closed set remains preferable for its explicitness.
 
 ## Alternatives
 

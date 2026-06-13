@@ -40,6 +40,13 @@ function boolProp(props: HashMap.HashMap<string, Value>, key: string): boolean |
   });
 }
 
+function numProp(props: HashMap.HashMap<string, Value>, key: string): number | undefined {
+  return Option.match(HashMap.get(props, key), {
+    onNone: () => undefined,
+    onSome: (v) => (v._tag === "IntVal" || v._tag === "FloatVal" ? v.value : undefined),
+  });
+}
+
 function strArrayProp(
   props: HashMap.HashMap<string, Value>,
   key: string,
@@ -242,6 +249,32 @@ export function parseCharacterGramText(
     const defaultActionRaw = strProp(charProps, "defaultAction") ?? "";
     const enabled = boolProp(charProps, "enabled");
 
+    // Derive behavior kind from secondary labels on the Character node.
+    // Known behavior labels map to a behaviorKind; unknown labels are an error.
+    const KNOWN_BEHAVIOR_LABELS = new Set(["Broker"]);
+    const allLabels = Array.from(characterSubject.labels as Iterable<string>);
+    const extraLabels = allLabels.filter(l => l !== "Character");
+    const unknownLabels = extraLabels.filter(l => !KNOWN_BEHAVIOR_LABELS.has(l));
+    if (unknownLabels.length > 0) {
+      return yield* Effect.fail(
+        new CharacterParseError(
+          `Character node has unrecognized label(s) "${unknownLabels.join('", "')}" — known behavior labels: Broker`,
+          source,
+        ),
+      );
+    }
+    if (extraLabels.length > 1) {
+      return yield* Effect.fail(
+        new CharacterParseError(
+          `Character node has multiple behavior labels "${extraLabels.join('", "')}" — only one is allowed`,
+          source,
+        ),
+      );
+    }
+    const behaviorKind: "rule-engine" | "broker" =
+      extraLabels[0] === "Broker" ? "broker" : "rule-engine";
+    const stakeAmount = numProp(charProps, "stakeAmount") ?? 1;
+
     const missing: string[] = [];
     if (!id) missing.push("id");
     if (!name) missing.push("name");
@@ -349,6 +382,8 @@ export function parseCharacterGramText(
       defaultAction,
       behaviorRules,
       dialogTree,
+      behaviorKind,
+      stakeAmount,
     };
   });
 }

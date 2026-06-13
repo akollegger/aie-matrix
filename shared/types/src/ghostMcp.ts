@@ -149,8 +149,25 @@ export interface GoFailure {
 
 export type GoResult = GoSuccess | GoFailure;
 
+export interface ExitsResult {
+  exits: ExitInfo[];
+}
+
+export interface LookTile {
+  /** "here" for current tile, compass face for adjacent tiles. */
+  at: "here" | Compass;
+  objects: TileItemSummary[];
+  occupants?: string[];
+}
+
+export interface LookResult {
+  tiles: LookTile[];
+}
+
 export interface SayArgs {
   content: string;
+  /** Speech-act intent (greet, propose, agree, decline, etc.). */
+  intent?: string;
   /** Ghost-id for directed delivery. When omitted, broadcasts to all nearby ghosts. */
   to?: string;
 }
