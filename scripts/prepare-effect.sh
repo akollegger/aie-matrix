@@ -10,4 +10,4 @@ if [ -d "$repo_dir/.git" ]; then
 fi
 
 mkdir -p ".repos"
-git clone "$repo_url" "$repo_dir"
+git clone --depth=1 "$repo_url" "$repo_dir"

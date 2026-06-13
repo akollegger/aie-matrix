@@ -65,7 +65,7 @@ The format is gram — the same syntax used for `.map.gram` and `.calendar.gram`
 | `background` | string | One-line character background, surfaced in `whereami` (IC-008). |
 | `enabled` | boolean | `false` → character is never spawned. |
 | `defaultAction` | `idle` \| `go-random` | Action taken when no behavior rule matches. (Legacy aliases `stay`/`random-move` also accepted.) |
-| *(label)* | `Character:Broker` \| `Character:Novice` | Behavior dispatch strategy. Absence of a behavior label defaults to rule-engine. Add `:Broker` for the broker character (stateful contract-negotiation loop). |
+| *(label)* | `Character:Broker` | Behavior dispatch strategy. Absence of a behavior label defaults to rule-engine. Add `:Broker` for the broker character (stateful contract-negotiation loop). |
 
 ### Dialog tree
 

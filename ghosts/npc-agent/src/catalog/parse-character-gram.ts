@@ -244,14 +244,14 @@ export function parseCharacterGramText(
 
     // Derive behavior kind from secondary labels on the Character node.
     // Known behavior labels map to a behaviorKind; unknown labels are an error.
-    const KNOWN_BEHAVIOR_LABELS = new Set(["Broker", "Novice"]);
+    const KNOWN_BEHAVIOR_LABELS = new Set(["Broker"]);
     const allLabels = Array.from(characterSubject.labels as Iterable<string>);
     const extraLabels = allLabels.filter(l => l !== "Character");
     const unknownLabels = extraLabels.filter(l => !KNOWN_BEHAVIOR_LABELS.has(l));
     if (unknownLabels.length > 0) {
       return yield* Effect.fail(
         new CharacterParseError(
-          `Character node has unrecognized label(s) "${unknownLabels.join('", "')}" — known behavior labels: Broker, Novice`,
+          `Character node has unrecognized label(s) "${unknownLabels.join('", "')}" — known behavior labels: Broker`,
           source,
         ),
       );

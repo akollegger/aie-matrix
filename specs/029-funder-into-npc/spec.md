@@ -71,27 +71,27 @@ If a funder character ghost is re-spawned (e.g., session restart), its contract 
 
 ### Functional Requirements
 
-- **FR-001**: The `CharacterDefinition` type MUST support a `behaviorKind` discriminator field with at least the values `"rule-engine"` and `"funder"`.
-- **FR-002**: The `ghostActionLoop` in npc-agent MUST dispatch to a `funderTick` function when `behaviorKind` is `"funder"`, and to `evaluateRules` when it is `"rule-engine"`.
-- **FR-003**: The `funderTick` function MUST poll the ghost's inbox and execute the contract-negotiation state machine (idle / awaiting_submission) on each tick.
-- **FR-004**: Per-funder-ghost state (`ghostState`, `contractToFunder`, `openContractCount`) MUST be stored in module-level maps in `funder-behavior.ts`, keyed by ghostId.
-- **FR-005**: npc-agent's executor MUST route `world.contract.submitted` events to the funder behavior handler, using the same `contractToFunder` reverse-lookup already used in funder-agent.
-- **FR-006**: A `funder.character.gram` file MUST exist in npc-agent's catalog, declaring the character id, name, background, enabled flag, and defaultAction.
-- **FR-007**: When a funder ghost is re-spawned, its prior per-ghost state MUST be cleared (maps reset for that ghostId) before the new loop starts.
+- **FR-001**: The `CharacterDefinition` type MUST support a `behaviorKind` discriminator field with at least the values `"rule-engine"` and `"broker"`.
+- **FR-002**: Behavior dispatch MUST use the secondary gram label on the `Character` node (`Character:Broker` → `brokerTick`; no label → `ruleEngineTick`). The `behaviorKind` field in `CharacterDefinition` is derived from these labels by `parse-character-gram.ts`.
+- **FR-003**: `brokerTick` MUST poll the ghost's inbox and execute the contract-negotiation state machine (idle / awaiting_submission) on each tick.
+- **FR-004**: Per-broker-ghost state (`ghostState`, `contractToBroker`, `openContractCount`) MUST be stored in module-level maps in `broker-behavior.ts`, keyed by ghostId.
+- **FR-005**: npc-agent's executor MUST route `world.contract.submitted` events to the broker behavior handler, using the `contractToBroker` reverse-lookup in `broker-behavior.ts`.
+- **FR-006**: A `broker.character.gram` file MUST exist in npc-agent's catalog, declaring the character id, name, background, enabled flag, and defaultAction, with the `Character:Broker` label.
+- **FR-007**: When a broker ghost is re-spawned, its prior per-ghost state MUST be cleared (maps reset for that ghostId) before the new loop starts.
 - **FR-008**: Existing NPC character behaviors (rule-engine path) MUST be unaffected by this change.
 - **FR-009**: The `ghosts/funder-agent` package MUST be removed from the Docker Compose stack; the package may be archived or deleted from the repo.
 
 ### Key Entities
 
-- **CharacterDefinition**: Extended with `behaviorKind: "rule-engine" | "funder"` discriminator.
-- **FunderState**: Per-ghost state machine — `{ phase: "idle" }` or `{ phase: "awaiting_submission", contractId, contractorId, question }`. Lives in `funder-behavior.ts`.
-- **funder.character.gram**: Catalog entry declaring the funder character, parsed by the existing catalog loader.
+- **CharacterDefinition**: Extended with `behaviorKind: "rule-engine" | "broker"` discriminator, derived from the `Character:Broker` gram label.
+- **BrokerState**: Per-ghost state machine — `{ phase: "idle" }` or `{ phase: "awaiting_submission", contractId, contractorId, question }`. Lives in `broker-behavior.ts`.
+- **broker.character.gram**: Catalog entry declaring the broker character with the `Character:Broker` label, parsed by the existing catalog loader.
 
 ### Interface Contracts
 
-- **IC-001**: The `funder.character.gram` file MUST be parseable by npc-agent's existing `parse-character-gram.ts` catalog loader. The gram file MUST declare `behaviorKind: "funder"` as a character property.
-- **IC-002**: The `funderTick` function MUST accept `(ghostId: string, mcp: GhostMcpClient)` and return `Promise<void>`, matching the call-site shape expected by `ghostActionLoop`.
-- **IC-003**: The `world.contract.submitted` event routing in executor.ts MUST call into `funder-behavior.ts` via an exported `handleContractSubmitted(ghostId, contractId, contractorId)` function, keeping executor.ts free of funder state.
+- **IC-001**: The `broker.character.gram` file MUST be parseable by npc-agent's existing `parse-character-gram.ts` catalog loader. The gram node MUST carry the secondary label `Character:Broker`; `behaviorKind` is derived from labels, not a property field.
+- **IC-002**: `brokerTick` and `brokerHandleAccept` MUST be Effect functions that yield `GhostMcpService` from context, consistent with the Effect service layer pattern used throughout npc-agent.
+- **IC-003**: The `world.contract.submitted` event routing in executor.ts MUST call into `broker-behavior.ts` via the exported `handleContractSubmitted(contractId, contractorId)` Effect function, keeping executor.ts free of broker state.
 
 ## Success Criteria *(mandatory)*
 

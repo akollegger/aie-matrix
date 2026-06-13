@@ -13,6 +13,7 @@ import { ruleEngineTick } from "./behavior/rule-engine.js";
 import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
 import {
   brokerTick,
+  brokerHandleAccept,
   handleContractSubmitted,
   clearBrokerState,
   getBrokerGhostIdForContract,
@@ -202,13 +203,29 @@ export class NpcAgentExecutor implements AgentExecutor {
           isNpcCharacterGhost(e.ghostId) &&
           !isNpcCharacterGhost(from) // FR-009: ignore sibling-NPC senders
         ) {
-          void handleDialogMessage(e.ghostId, from, text).catch((err: unknown) => {
-            console.error(JSON.stringify({
-              kind: "npc-agent.dialog.error",
-              targetGhostId: e.ghostId,
-              error: err instanceof Error ? err.message : String(err),
-            }));
-          });
+          const characterDef = characterForGhostId(e.ghostId);
+          const brokerMcp = mcpByGhostId.get(e.ghostId);
+          if (characterDef?.behaviorKind === "broker" && brokerMcp && /^\s*accept\s*$/i.test(text)) {
+            void Effect.runPromise(
+              brokerHandleAccept(e.ghostId, from).pipe(
+                Effect.provide(GhostMcpServiceLive(brokerMcp)),
+              ),
+            ).catch((err: unknown) => {
+              console.error(JSON.stringify({
+                kind: "npc-agent.broker.accept-error",
+                targetGhostId: e.ghostId,
+                error: err instanceof Error ? err.message : String(err),
+              }));
+            });
+          } else {
+            void handleDialogMessage(e.ghostId, from, text).catch((err: unknown) => {
+              console.error(JSON.stringify({
+                kind: "npc-agent.dialog.error",
+                targetGhostId: e.ghostId,
+                error: err instanceof Error ? err.message : String(err),
+              }));
+            });
+          }
         }
         return Promise.resolve();
       }),

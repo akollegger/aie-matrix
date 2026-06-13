@@ -1,19 +1,19 @@
 {
   "agents": {
-    "funder-agent": {
+    "npc-agent": {
       "kind": "agent",
-      "agentId": "funder-agent",
-      "baseUrl": "http://funder-agent:4002",
+      "agentId": "npc-agent",
+      "baseUrl": "http://npc-agent:4003",
       "resourceGrants": [
         {
-          "resourceId": "funder-credits",
-          "label": "Funder Credits",
+          "resourceId": "broker-credits",
+          "label": "Broker Credits",
           "class": "conserved",
           "qty": 50
         }
       ],
       "builtIn": true,
-      "registeredAt": "2026-06-04T00:00:00.000Z",
+      "registeredAt": "2026-06-13T00:00:00.000Z",
       "agentCard": {}
     }
   }
