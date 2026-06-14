@@ -270,7 +270,7 @@ export class NpcAgentExecutor implements AgentExecutor {
     });
 
     // On startup, check if a session is already active (ADR-0012 R3).
-    const worldRootUrl = sp.worldEntryPoint;
+    const worldRootUrl = sp.houseEndpoints.registry;
     const activeSessions = await fetchActiveSessions(worldRootUrl);
     if (activeSessions.length > 0) {
       const sessionId = activeSessions[0]!.id;
