@@ -11,41 +11,39 @@ function SingleLeaderboard({ leaderboardId, humanGhostId }: SingleLeaderboardPro
   const { result, loading, sessionComplete } = useLeaderboard(leaderboardId);
 
   return (
-    <div>
+    <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
       {sessionComplete && (
         <div
+          className="content-panel-dim"
           style={{
             display: "inline-block",
-            marginBottom: 8,
+            marginBottom: 4,
             padding: "2px 8px",
-            background: "rgba(100, 200, 120, 0.15)",
-            border: "1px solid rgba(100, 200, 120, 0.4)",
-            borderRadius: 4,
             fontSize: 11,
             textTransform: "uppercase",
             letterSpacing: "0.08em",
-            color: "rgba(100, 220, 130, 0.9)",
+            color: "var(--color-online)",
           }}
         >
           Session Complete
         </div>
       )}
       {loading && !result && (
-        <p style={{ color: "rgba(180, 200, 220, 0.5)", fontSize: 12, margin: 0 }}>
+        <p style={{ color: "var(--color-text-faint)", fontSize: 12, margin: 0 }}>
           Loading…
         </p>
       )}
-      {result && result.description && (
-        <p style={{ color: "rgba(160, 180, 210, 0.7)", fontSize: 11, margin: "0 0 8px" }}>
+      {result?.description && (
+        <p style={{ color: "var(--color-text-muted)", fontSize: 11, margin: "0 0 8px" }}>
           {result.description}
         </p>
       )}
       {result && result.entries.length === 0 && !loading && (
-        <p style={{ color: "rgba(180, 200, 220, 0.5)", fontSize: 12, margin: 0 }}>
+        <p style={{ color: "var(--color-text-faint)", fontSize: 12, margin: 0 }}>
           No entries yet.
         </p>
       )}
-      {result && result.entries.map((entry, i) => (
+      {result?.entries.map((entry, i) => (
         <LeaderboardEntry
           key={entry.actorId}
           rank={i + 1}
@@ -62,27 +60,28 @@ export interface LeaderboardPanelProps {
   readonly humanGhostId?: string | null;
 }
 
-/**
- * Panel showing one or more leaderboards, with tab navigation when multiple exist.
- */
 export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPanelProps) {
   const [activeIndex, setActiveIndex] = useState(0);
 
-  const panelStyle: React.CSSProperties = {
-    width: "100%",
-    height: "100%",
-    boxSizing: "border-box",
-    padding: "16px 18px 20px",
-    overflowY: "auto",
-  };
-
   if (leaderboardIds.length === 0) {
     return (
-      <div data-panel="leaderboard" style={panelStyle}>
-        <header style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(160, 180, 210, 0.85)", marginBottom: 12 }}>
+      <div
+        data-panel="leaderboard"
+        className="overlay-structure"
+        style={{ width: "100%", height: "100%", padding: "16px 18px 20px", overflowY: "auto" }}
+      >
+        <header
+          style={{
+            fontSize: 12,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "var(--color-text-muted)",
+            marginBottom: 12,
+          }}
+        >
           Leaderboards
         </header>
-        <p style={{ color: "rgba(180, 200, 220, 0.5)", fontSize: 12, margin: 0 }}>
+        <p style={{ color: "var(--color-text-faint)", fontSize: 12, margin: 0 }}>
           No leaderboards declared.
         </p>
       </div>
@@ -93,12 +92,23 @@ export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPa
   const activeId = leaderboardIds[safeIndex]!;
 
   return (
-    <div data-panel="leaderboard" style={panelStyle}>
-      <header style={{ fontSize: 12, textTransform: "uppercase", letterSpacing: "0.06em", color: "rgba(160, 180, 210, 0.85)", marginBottom: 10 }}>
+    <div
+      data-panel="leaderboard"
+      className="overlay-structure"
+      style={{ width: "100%", height: "100%", padding: "16px 18px 20px", overflowY: "auto", boxSizing: "border-box" }}
+    >
+      <header
+        style={{
+          fontSize: 12,
+          textTransform: "uppercase",
+          letterSpacing: "0.06em",
+          color: "var(--color-text-muted)",
+          marginBottom: 10,
+        }}
+      >
         Leaderboards
       </header>
 
-      {/* Tab strip — only shown when multiple leaderboards */}
       {leaderboardIds.length > 1 && (
         <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
           {leaderboardIds.map((id, i) => (
@@ -106,13 +116,11 @@ export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPa
               key={id}
               type="button"
               onClick={() => { setActiveIndex(i); }}
+              className={i === safeIndex ? "content-panel" : "content-panel-dim"}
               style={{
                 fontSize: 11,
                 padding: "2px 8px",
-                border: `1px solid ${i === safeIndex ? "rgba(100, 160, 240, 0.6)" : "rgba(100, 140, 180, 0.3)"}`,
-                borderRadius: 3,
-                background: i === safeIndex ? "rgba(40, 80, 160, 0.25)" : "transparent",
-                color: i === safeIndex ? "rgba(160, 200, 255, 0.95)" : "rgba(140, 170, 210, 0.6)",
+                color: i === safeIndex ? "var(--color-text)" : "var(--color-text-muted)",
                 cursor: "pointer",
                 fontFamily: "inherit",
               }}
@@ -123,7 +131,9 @@ export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPa
         </div>
       )}
 
-      <SingleLeaderboard leaderboardId={activeId} humanGhostId={humanGhostId} />
+      <div className="content-panel" style={{ padding: "8px 12px" }}>
+        <SingleLeaderboard leaderboardId={activeId} humanGhostId={humanGhostId} />
+      </div>
     </div>
   );
 }

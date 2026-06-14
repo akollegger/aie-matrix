@@ -53,6 +53,7 @@ export function ChatPanel() {
     <div
       role="dialog"
       aria-label="Ghost chat"
+      className="overlay-structure"
       style={{ display: "flex", flexDirection: "column", height: "100%", padding: 20, boxSizing: "border-box" }}
     >
       {/* Body: ghost list | chat | detail */}
@@ -75,18 +76,13 @@ export function ChatPanel() {
           {/* Inline contract UI — shown when there is an active contract with the selected ghost */}
           {isContractForSelected && activeContract.state === "Open" && (
             <div
-              style={{
-                marginTop: 12,
-                padding: 12,
-                background: "rgba(200, 150, 0, 0.08)",
-                border: "1px solid rgba(250,210,80,0.3)",
-                borderRadius: 6,
-              }}
+              className="content-panel"
+              style={{ marginTop: 12, padding: 12, borderLeft: "2px solid rgba(250,210,80,0.4)" }}
             >
               <p style={{ margin: "0 0 8px", fontSize: 12, color: "rgba(250,210,120,0.9)", fontWeight: 600 }}>
                 Challenge from {ghostIdentity?.name ?? "broker"}
               </p>
-              <p style={{ margin: "0 0 10px", fontSize: 13, color: "rgba(220,230,240,0.85)" }}>
+              <p style={{ margin: "0 0 10px", fontSize: 13, color: "var(--color-text-dim)" }}>
                 {activeContract.request}
               </p>
               <form
@@ -103,31 +99,27 @@ export function ChatPanel() {
                   onChange={(e) => setSubmissionText(e.target.value)}
                   placeholder="Your answer…"
                   rows={3}
+                  className="content-panel-dim"
                   style={{
                     resize: "vertical",
                     fontFamily: "system-ui, sans-serif",
                     fontSize: 13,
-                    background: "rgba(0,0,0,0.4)",
-                    border: "1px solid rgba(200,200,220,0.25)",
-                    borderRadius: 4,
-                    color: "rgba(220,230,240,0.9)",
+                    color: "var(--color-text)",
                     padding: "6px 8px",
+                    width: "100%",
                   }}
                 />
                 <button
                   type="submit"
                   disabled={!submissionText.trim()}
+                  className="content-panel-dim"
                   style={{
                     alignSelf: "flex-end",
                     fontSize: 12,
                     padding: "4px 14px",
-                    background: submissionText.trim()
-                      ? "rgba(200,150,0,0.3)"
-                      : "rgba(100,100,100,0.2)",
-                    border: "1px solid rgba(250,210,80,0.4)",
-                    borderRadius: 4,
                     color: "rgba(250,220,100,0.9)",
                     cursor: submissionText.trim() ? "pointer" : "default",
+                    opacity: submissionText.trim() ? 1 : 0.4,
                   }}
                 >
                   Submit
@@ -138,14 +130,13 @@ export function ChatPanel() {
 
           {isContractForSelected && activeContract.state === "Submitted" && (
             <div
+              className="content-panel-dim"
               style={{
                 marginTop: 12,
                 padding: 10,
-                background: "rgba(0,100,200,0.07)",
-                border: "1px solid rgba(100,160,250,0.25)",
-                borderRadius: 6,
                 fontSize: 12,
-                color: "rgba(160,200,255,0.8)",
+                color: "var(--color-text-dim)",
+                borderLeft: "2px solid var(--color-border-bright)",
               }}
             >
               Answer submitted — waiting for evaluation…

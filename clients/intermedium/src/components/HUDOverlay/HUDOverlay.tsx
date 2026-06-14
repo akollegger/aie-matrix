@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChatPanel } from "../ChatPanel/ChatPanel.js";
 import { LeaderboardPanel } from "../LeaderboardPanel/LeaderboardPanel.js";
+import { ProfilePanel } from "../ProfilePanel/ProfilePanel.js";
 
-type Tab = "chat" | "leaderboard";
+type Tab = "chat" | "leaderboard" | "profile";
 
 interface HUDOverlayProps {
   readonly leaderboardIds: string[];
   readonly humanGhostId: string | null;
+  readonly worldApiUrl: string;
 }
 
 const TAB_KEYS: Record<string, Tab> = {
@@ -14,6 +16,8 @@ const TAB_KEYS: Record<string, Tab> = {
   C: "chat",
   l: "leaderboard",
   L: "leaderboard",
+  p: "profile",
+  P: "profile",
 };
 
 const TOGGLE_KEYS = new Set(["`", "§", "~"]);
@@ -75,7 +79,7 @@ function TabButton({ label, hint, active, onClick }: TabButtonProps) {
  * Full-screen HUD overlay with a left-edge vertical tab strip.
  * Toggle: ` (backtick) or § key. Direct-open: C for chat, L for leaderboard. Esc closes.
  */
-export function HUDOverlay({ leaderboardIds, humanGhostId }: HUDOverlayProps) {
+export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl }: HUDOverlayProps) {
   const [activeTab, setActiveTab] = useState<Tab | null>(null);
 
   const openTab = useCallback((tab: Tab) => {
@@ -135,9 +139,14 @@ export function HUDOverlay({ leaderboardIds, humanGhostId }: HUDOverlayProps) {
           alignItems: "flex-start",
           justifyContent: "center",
           gap: 2,
-          paddingTop: 60, // clear HUD identity strip
         }}
       >
+        <TabButton
+          label="Profile"
+          hint="P"
+          active={activeTab === "profile"}
+          onClick={() => openTab("profile")}
+        />
         <TabButton
           label="Chat"
           hint="C"
@@ -155,16 +164,19 @@ export function HUDOverlay({ leaderboardIds, humanGhostId }: HUDOverlayProps) {
       {/* Panel — fills remaining space beside the tab strip */}
       {activeTab !== null && (
         <div
+          className="overlay-structure"
           style={{
             pointerEvents: "auto",
             display: "flex",
             flexDirection: "column",
             flex: 1,
             height: "100vh",
-            background: "rgba(7, 13, 24, 0.05)",
             overflow: "hidden",
           }}
         >
+          {activeTab === "profile" && (
+            <ProfilePanel worldApiUrl={worldApiUrl} />
+          )}
           {activeTab === "chat" && (
             <ChatPanel />
           )}

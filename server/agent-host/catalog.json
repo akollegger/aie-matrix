@@ -72,7 +72,7 @@
           ]
         }
       },
-      "registeredAt": "2026-06-14T15:05:10.429Z",
+      "registeredAt": "2026-06-14T15:11:45.433Z",
       "builtIn": false
     },
     "npc-agent-local": {
@@ -135,7 +135,7 @@
           "rosterAgent": true
         }
       },
-      "registeredAt": "2026-06-14T15:05:12.072Z",
+      "registeredAt": "2026-06-14T15:11:47.347Z",
       "builtIn": false
     }
   }

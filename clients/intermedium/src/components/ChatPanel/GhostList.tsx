@@ -30,14 +30,8 @@ export function GhostList({ identities, ghosts, ghostLabels, selectedGhostId, on
 
   return (
     <aside className="w-80 shrink-0 flex flex-col border-r border-border pr-4 overflow-y-auto">
-      <header className="text-base uppercase tracking-[--tracking-label] text-text-muted mb-3 pb-2 border-b border-border">
-        Ghosts
-      </header>
-      {entries.length === 0 ? (
-        <p className="text-base text-text-faint italic">No ghosts active</p>
-      ) : (
-        <ul className="list-none m-0 p-0 flex flex-col gap-1">
-          {entries.map(({ ghostId, name, ghostClass, broker }) => {
+      <ul className="list-none m-0 p-0 flex flex-col gap-1">
+        {entries.map(({ ghostId, name, ghostClass, broker }) => {
             const isOnline = ghosts.has(ghostId);
             const isSelected = ghostId === selectedGhostId;
             return (
@@ -69,15 +63,13 @@ export function GhostList({ identities, ghosts, ghostLabels, selectedGhostId, on
                       {broker && (
                         <span
                           title="Broker — offers challenges"
+                          className="content-panel-dim"
                           style={{
                             marginLeft: 6,
                             fontSize: "0.7em",
                             fontWeight: 600,
                             letterSpacing: "0.04em",
                             color: "rgba(250,210,80,0.9)",
-                            background: "rgba(200,150,0,0.2)",
-                            border: "1px solid rgba(250,210,80,0.35)",
-                            borderRadius: 3,
                             padding: "0 4px",
                             verticalAlign: "middle",
                           }}
@@ -93,9 +85,8 @@ export function GhostList({ identities, ghosts, ghostLabels, selectedGhostId, on
                 </button>
               </li>
             );
-          })}
-        </ul>
-      )}
+        })}
+      </ul>
     </aside>
   );
 }
