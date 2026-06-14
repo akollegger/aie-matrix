@@ -21,7 +21,7 @@ export function ChatInput({ isAvailable, onSend }: ChatInputProps) {
   return (
     <form
       onSubmit={(e) => void handleSubmit(e)}
-      className="flex items-center gap-2 border-t border-border pt-3 mt-1"
+      className="content-panel flex items-center gap-2 px-3 py-2 mt-1"
     >
       <span
         className={[
@@ -37,7 +37,7 @@ export function ChatInput({ isAvailable, onSend }: ChatInputProps) {
         value={value}
         onChange={(e) => setValue(e.target.value)}
         disabled={!isAvailable}
-        placeholder={isAvailable ? "Say something…" : "Select a ghost to chat"}
+        placeholder={isAvailable ? "Say something…" : ""}
         autoComplete="off"
         spellCheck={false}
         className="flex-1 bg-transparent border-none outline-none text-text font-mono text-lg placeholder:text-text-faint caret-human disabled:cursor-not-allowed"

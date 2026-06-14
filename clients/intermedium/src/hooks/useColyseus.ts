@@ -114,6 +114,7 @@ export function useColyseus(): {
         return next;
       });
     });
+
   }, [room]);
 
   return { ghosts, ghostLabels, connectionState };

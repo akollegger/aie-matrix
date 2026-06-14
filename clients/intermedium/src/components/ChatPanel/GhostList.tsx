@@ -22,16 +22,15 @@ export function GhostList({ identities, ghosts, ghostLabels, selectedGhostId, on
       return {
         ghostId,
         name: identity?.name ?? ghostId.slice(0, 12),
-        ghostClass: identity?.ghostClass ?? "unknown",
         broker: isBroker(ghostLabels?.get(ghostId)),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <aside className="w-80 shrink-0 flex flex-col border-r border-border pr-4 overflow-y-auto">
+    <aside className="w-80 shrink-0 flex flex-col overflow-y-auto">
       <ul className="list-none m-0 p-0 flex flex-col gap-1">
-        {entries.map(({ ghostId, name, ghostClass, broker }) => {
+        {entries.map(({ ghostId, name, broker }) => {
             const isOnline = ghosts.has(ghostId);
             const isSelected = ghostId === selectedGhostId;
             return (
@@ -77,9 +76,6 @@ export function GhostList({ identities, ghosts, ghostLabels, selectedGhostId, on
                           BROKER
                         </span>
                       )}
-                    </span>
-                    <span className="block text-base text-text-faint uppercase tracking-[--tracking-label]">
-                      {ghostClass}
                     </span>
                   </span>
                 </button>

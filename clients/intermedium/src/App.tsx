@@ -24,6 +24,10 @@ function AppInner() {
   const identity = useHumanIdentity();
   const worldApiUrl = import.meta.env.VITE_API_BASE_URL ?? "";
 
+  const [chatGhostRequest, setChatGhostRequest] = useState<string | null>(null);
+  // Scene ring tracks the last selected ghost — set on click AND when active chat pill changes.
+  const [selectedSceneGhostId, setSelectedSceneGhostId] = useState<string | null>(null);
+
   // showPersonal tracks which renderer is mounted (lags behind `stop` by FADE_MS).
   const [showPersonal, setShowPersonal] = useState(stop === "personal");
   const [fadeOpacity, setFadeOpacity] = useState(1);
@@ -160,7 +164,13 @@ function AppInner() {
                 className={state.ghosts.size === 0 ? "awaiting-pulse" : undefined}
                 style={{ position: "absolute", inset: 0 }}
               >
-                <SceneView />
+                <SceneView
+                  onGhostSingleClick={(ghostId) => {
+                    setSelectedSceneGhostId(ghostId);
+                    setChatGhostRequest(ghostId);
+                  }}
+                  selectedChatGhostId={selectedSceneGhostId}
+                />
               </div>
             ) : null}
             {state.mapGramStatus === "loading" ? (
@@ -196,7 +206,14 @@ function AppInner() {
         </div>
       </div>
 
-      <HUDOverlay leaderboardIds={leaderboardIds} humanGhostId={identity.ghostId} worldApiUrl={worldApiUrl} />
+      <HUDOverlay
+        leaderboardIds={leaderboardIds}
+        humanGhostId={identity.ghostId}
+        worldApiUrl={worldApiUrl}
+        ghostClickRequest={chatGhostRequest}
+        onGhostClickHandled={() => setChatGhostRequest(null)}
+        onSelectedGhostChange={(ghostId) => { if (ghostId) setSelectedSceneGhostId(ghostId); }}
+      />
     </div>
   );
 }

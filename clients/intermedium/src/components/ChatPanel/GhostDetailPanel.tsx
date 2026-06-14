@@ -31,15 +31,11 @@ function Row({ label, value }: { label: string; value: string }) {
 
 export function GhostDetailPanel({ ghostIdentity, agentCard, inventory, isOnline }: GhostDetailPanelProps) {
   if (!ghostIdentity) {
-    return (
-      <aside className="w-96 shrink-0 flex items-center justify-center border-l border-border pl-5">
-        <p className="text-base text-text-faint italic">Select a ghost</p>
-      </aside>
-    );
+    return <aside className="w-96 shrink-0" />;
   }
 
   return (
-    <aside className="w-96 shrink-0 flex flex-col gap-5 border-l border-border pl-5 overflow-y-auto">
+    <aside className="w-96 shrink-0 flex flex-col gap-5 pl-5 overflow-y-auto">
       {/* Ghost identity */}
       <Section title="Ghost">
         <div className="flex items-center gap-2 mb-1">

@@ -9,6 +9,9 @@ interface HUDOverlayProps {
   readonly leaderboardIds: string[];
   readonly humanGhostId: string | null;
   readonly worldApiUrl: string;
+  readonly ghostClickRequest?: string | null;
+  readonly onGhostClickHandled?: () => void;
+  readonly onSelectedGhostChange?: (ghostId: string | null) => void;
 }
 
 const TAB_KEYS: Record<string, Tab> = {
@@ -79,7 +82,7 @@ function TabButton({ label, hint, active, onClick }: TabButtonProps) {
  * Full-screen HUD overlay with a left-edge vertical tab strip.
  * Toggle: ` (backtick) or § key. Direct-open: C for chat, L for leaderboard. Esc closes.
  */
-export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl }: HUDOverlayProps) {
+export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl, ghostClickRequest, onGhostClickHandled, onSelectedGhostChange }: HUDOverlayProps) {
   const [activeTab, setActiveTab] = useState<Tab | null>(null);
 
   const openTab = useCallback((tab: Tab) => {
@@ -162,11 +165,29 @@ export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl }: HUDOve
       </div>
 
       {/* Panel — fills remaining space beside the tab strip */}
-      {activeTab !== null && (
+      {/* ChatPanel is always mounted to preserve thread state across tab switches */}
+      <div
+        className="overlay-structure"
+        style={{
+          pointerEvents: "none",
+          display: activeTab === "chat" ? "flex" : "none",
+          flexDirection: "column",
+          flex: 1,
+          height: "100vh",
+          overflow: "hidden",
+        }}
+      >
+        <ChatPanel
+          ghostClickRequest={ghostClickRequest}
+          onGhostClickHandled={onGhostClickHandled}
+          onSelectedGhostChange={onSelectedGhostChange}
+        />
+      </div>
+      {activeTab === "profile" && (
         <div
           className="overlay-structure"
           style={{
-            pointerEvents: "auto",
+            pointerEvents: "none",
             display: "flex",
             flexDirection: "column",
             flex: 1,
@@ -174,18 +195,25 @@ export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl }: HUDOve
             overflow: "hidden",
           }}
         >
-          {activeTab === "profile" && (
-            <ProfilePanel worldApiUrl={worldApiUrl} />
-          )}
-          {activeTab === "chat" && (
-            <ChatPanel />
-          )}
-          {activeTab === "leaderboard" && (
-            <LeaderboardPanel
-              leaderboardIds={leaderboardIds}
-              humanGhostId={humanGhostId}
-            />
-          )}
+          <ProfilePanel worldApiUrl={worldApiUrl} />
+        </div>
+      )}
+      {activeTab === "leaderboard" && (
+        <div
+          className="overlay-structure"
+          style={{
+            pointerEvents: "none",
+            display: "flex",
+            flexDirection: "column",
+            flex: 1,
+            height: "100vh",
+            overflow: "hidden",
+          }}
+        >
+          <LeaderboardPanel
+            leaderboardIds={leaderboardIds}
+            humanGhostId={humanGhostId}
+          />
         </div>
       )}
     </div>

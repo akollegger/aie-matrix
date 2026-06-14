@@ -25,7 +25,7 @@ export function ChatThread({ thread, ghostIdentity }: ChatThreadProps) {
   if (!thread.isAvailable && thread.messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-faint text-lg italic">
-        {thread.ghostId ? "Connecting to ghost…" : "Select a ghost to start chatting"}
+        {thread.ghostId ? "Connecting to ghost…" : null}
       </div>
     );
   }
