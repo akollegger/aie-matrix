@@ -2177,6 +2177,31 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   );
 
   server.registerTool(
+    "ghost_announce",
+    {
+      description: "Announce this ghost's character labels and display glyph to the world. Idempotent — call once on connect.",
+      inputSchema: {
+        labels: z.string().optional().describe("Comma-separated character gram labels (e.g. \"Character:Broker\"). Empty string clears labels."),
+        glyph: z.string().optional().describe("Single grapheme/emoji to display for this ghost (e.g. \"👻\"). Empty string clears glyph."),
+      },
+    },
+    async (input, extra) =>
+      runTool(
+        "ghost_announce",
+        input,
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const bridge = yield* WorldBridgeService;
+          bridge.setGhostLabels(ghostId, input.labels ?? "");
+          bridge.setGhostGlyph(ghostId, input.glyph ?? "");
+          return { ok: true };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
     "finalize-leaderboards",
     {
       description: "Freeze all leaderboards. Admin/scheduler only. Idempotent.",

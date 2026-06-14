@@ -61,6 +61,8 @@ export type GhostCard = {
   /** Catalog character ID (IC-008). Used by npc-agent executor to map
    *  a spawned ghost back to its CharacterDefinition. */
   readonly characterId?: string;
+  /** Single grapheme/emoji glyph for this ghost (from agent card profile or character gram). */
+  readonly glyph?: string;
 };
 
 /**

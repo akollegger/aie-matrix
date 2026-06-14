@@ -21,10 +21,12 @@ type LabelsMap = Map<string, string>;
 export function useColyseus(): {
   readonly ghosts: ReadonlyMap<string, GhostPosition>;
   readonly ghostLabels: ReadonlyMap<string, string>;
+  readonly ghostGlyphs: ReadonlyMap<string, string>;
   readonly connectionState: ColyseusLinkState;
 } {
   const [ghosts, setGhosts] = useState<GhostMap>(() => new Map());
   const [ghostLabels, setGhostLabels] = useState<LabelsMap>(() => new Map());
+  const [ghostGlyphs, setGhostGlyphs] = useState<LabelsMap>(() => new Map());
   const [connectionState, setConnectionState] = useState<ColyseusLinkState>(getColyseusLinkState);
   const [room, setRoom] = useState<Room<WorldSpectatorState> | null>(null);
 
@@ -79,6 +81,21 @@ export function useColyseus(): {
       setGhostLabels((prev) => { const next = new Map(prev); next.delete(ghostId); return next; });
     });
 
+    const initialGlyphs: LabelsMap = new Map();
+    room.state.ghostGlyphs.forEach((glyph, ghostId) => {
+      initialGlyphs.set(ghostId, glyph);
+    });
+    setGhostGlyphs(initialGlyphs);
+    room.state.ghostGlyphs.onAdd((glyph, ghostId) => {
+      setGhostGlyphs((prev) => { const next = new Map(prev); next.set(ghostId, glyph); return next; });
+    });
+    room.state.ghostGlyphs.onChange((glyph, ghostId) => {
+      setGhostGlyphs((prev) => { const next = new Map(prev); next.set(ghostId, glyph); return next; });
+    });
+    room.state.ghostGlyphs.onRemove((_glyph, ghostId) => {
+      setGhostGlyphs((prev) => { const next = new Map(prev); next.delete(ghostId); return next; });
+    });
+
     room.state.ghostTiles.onAdd((h3, ghostId) => {
       console.debug("[colyseus] onAdd", ghostId, h3);
       setGhosts((prev) => {
@@ -117,5 +134,5 @@ export function useColyseus(): {
 
   }, [room]);
 
-  return { ghosts, ghostLabels, connectionState };
+  return { ghosts, ghostLabels, ghostGlyphs, connectionState };
 }

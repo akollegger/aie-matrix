@@ -316,6 +316,8 @@ async function main(): Promise<void> {
       colyseusBridge.setGhostLastAction(ghostId, label),
     setGhostLabels: (ghostId: string, labels: string) =>
       colyseusBridge.setGhostLabels(ghostId, labels),
+    setGhostGlyph: (ghostId: string, glyph: string) =>
+      colyseusBridge.setGhostGlyph(ghostId, glyph),
     fanoutWorldV1: (payload: unknown) => colyseusBridge.fanoutWorldV1(payload),
   };
 

@@ -369,6 +369,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
             tier?: string;
             requiredTools?: string[];
             capabilitiesRequired?: string[];
+            profile?: { about?: string; glyph?: string };
           };
         };
         const capReq = ac.matrix?.capabilitiesRequired ?? [];
@@ -419,6 +420,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
             partnerEmail: null,
             ...(input.background !== undefined ? { background: input.background } : {}),
             ...(input.characterId !== undefined ? { characterId: input.characterId } : {}),
+            ...(ac.matrix?.profile?.glyph ? { glyph: ac.matrix.profile.glyph } : {}),
           },
           worldEntryPoint,
           houseEndpoints: {

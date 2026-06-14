@@ -11,11 +11,14 @@ interface ThreadPillsProps {
   readonly activeGhostId: string | null;
   readonly ghosts: ReadonlyMap<string, GhostPosition>;
   readonly identities: ReadonlyMap<string, GhostIdentity>;
+  readonly ghostGlyphs?: ReadonlyMap<string, string>;
+  readonly infoGhostId?: string | null;
   readonly onSelect: (ghostId: string) => void;
   readonly onClose: (ghostId: string) => void;
+  readonly onInfo?: (ghostId: string | null) => void;
 }
 
-export function ThreadPills({ threads, activeGhostId, ghosts, identities, onSelect, onClose }: ThreadPillsProps) {
+export function ThreadPills({ threads, activeGhostId, ghosts, identities, ghostGlyphs, infoGhostId, onSelect, onClose, onInfo }: ThreadPillsProps) {
   if (threads.length === 0) return null;
 
   return (
@@ -24,6 +27,7 @@ export function ThreadPills({ threads, activeGhostId, ghosts, identities, onSele
         const isSelected = ghostId === activeGhostId;
         const isOnline = ghosts.has(ghostId);
         const name = identities.get(ghostId)?.name ?? ghostId.slice(0, 12);
+        const glyph = ghostGlyphs?.get(ghostId);
 
         if (!isPermanent) {
           return (
@@ -52,6 +56,7 @@ export function ThreadPills({ threads, activeGhostId, ghosts, identities, onSele
                   background: "transparent",
                 }}
               />
+              {glyph && <span style={{ marginRight: 1, fontSize: 12, lineHeight: 1 }}>{glyph}</span>}
               <span style={{ fontStyle: "italic", color: "var(--color-text-dim)" }}>{name}</span>
               <span style={{ fontSize: 10, color: "rgba(100,150,220,0.5)", marginLeft: 1, lineHeight: 1 }}>+</span>
             </div>
@@ -82,14 +87,35 @@ export function ThreadPills({ threads, activeGhostId, ghosts, identities, onSele
                 background: isOnline ? "var(--color-online)" : "var(--color-offline)",
               }}
             />
+            {glyph && <span style={{ marginRight: 1, fontSize: 12, lineHeight: 1 }}>{glyph}</span>}
             <span style={{ color: isSelected ? "var(--color-text)" : "var(--color-text-dim)" }}>
               {name}
             </span>
+            {onInfo && (
+              <button
+                type="button"
+                data-ghost-info-toggle
+                onClick={(e) => { e.stopPropagation(); onInfo(infoGhostId === ghostId ? null : ghostId); }}
+                style={{
+                  marginLeft: 2,
+                  background: "none",
+                  border: "none",
+                  color: infoGhostId === ghostId ? "var(--color-text)" : "var(--color-text-dim)",
+                  cursor: "pointer",
+                  padding: "0 1px",
+                  fontSize: 11,
+                  lineHeight: 1,
+                }}
+                title="Ghost info"
+              >
+                ⓘ
+              </button>
+            )}
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); onClose(ghostId); }}
               style={{
-                marginLeft: 2,
+                marginLeft: 1,
                 background: "none",
                 border: "none",
                 color: "var(--color-text-faint)",

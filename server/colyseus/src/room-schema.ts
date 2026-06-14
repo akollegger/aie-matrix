@@ -71,6 +71,14 @@ export class WorldSpectatorState extends Schema {
   @type({ map: "string" })
   declare ghostLabels: MapSchema<string>;
 
+  /**
+   * ghostId → single grapheme/emoji glyph for this ghost.
+   * Source: agent card `matrix.profile.glyph` (default) overridden by character gram `glyph` property.
+   * Set via ghost_announce MCP tool; cleared on ghost leave.
+   */
+  @type({ map: "string" })
+  declare ghostGlyphs: MapSchema<string>;
+
   constructor() {
     super();
     // Must assign after `super()` so @type accessors run (`$changes.setParent` / root `allChanges`).
@@ -85,6 +93,7 @@ export class WorldSpectatorState extends Schema {
     this.ghostItemRefs = new MapSchema<string>();
     this.ghostLastActions = new MapSchema<string>();
     this.ghostLabels = new MapSchema<string>();
+    this.ghostGlyphs = new MapSchema<string>();
   }
 }
 

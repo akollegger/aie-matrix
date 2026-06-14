@@ -76,6 +76,7 @@ async function startMovementFromSpawn(
     token: ctx.token,
   });
   await mcp.connect();
+  await mcp.announce("", ctx.ghostCard?.glyph ?? "👻").catch(() => {});
   mcpByGhostId.set(ghostId, mcp);
   const moveMs = Math.max(200, parseInt(getMoveIntervalMs() ?? "2000", 10) || 2000);
   let go = true;
@@ -310,7 +311,7 @@ export class RandomWandererExecutor implements AgentExecutor {
           const mcp = mcpByGhostId.get(ev.ghostId);
           console.info(JSON.stringify({ kind: "random-agent.message.received", ghostId: ev.ghostId, priority: pl.priority, hasMcp: !!mcp, from: pl.from }));
           if (mcp) {
-            void mcp.callTool("say", { intent: "greet", content: `👻 received: ${pl.text}`, to: pl.from }).catch((e: unknown) => {
+            void mcp.callTool("say", { intent: "greet", content: `received: ${pl.text}`, to: pl.from }).catch((e: unknown) => {
               console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
             });
           } else {

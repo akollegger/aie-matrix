@@ -1,6 +1,6 @@
 { kind: "matrix-character" }
 
-(charAttendant:Character { id: "info-attendant", name: "Info Attendant",
+(charAttendant:Character { id: "info-attendant", name: "Info Attendant", glyph: "ℹ️",
   background: "A friendly conference guide stationed near the entrance.",
   enabled: true, defaultAction: "idle" })
 

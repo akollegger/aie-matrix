@@ -1,6 +1,6 @@
 { kind: "matrix-character" }
 
-(charBroker:Character:Broker { id: "broker", name: "The Broker",
+(charBroker:Character:Broker { id: "broker", name: "The Broker", glyph: "💰",
   background: "A well-connected ghost who brokers deals — offering credits to anyone who answers a thought-provoking question. Always on the lookout for interesting ideas.",
   enabled: true, defaultAction: "go-random", stakeAmount: 1 })
 

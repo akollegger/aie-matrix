@@ -129,8 +129,8 @@ export class GhostMcpClient {
    * Announce this ghost's character gram labels to the world server so the
    * Colyseus room can badge this NPC in the spectator state. Idempotent.
    */
-  async announce(labels: string): Promise<void> {
-    await this.callTool("ghost_announce", { labels });
+  async announce(labels: string, glyph = ""): Promise<void> {
+    await this.callTool("ghost_announce", { labels, glyph });
   }
 
   /**

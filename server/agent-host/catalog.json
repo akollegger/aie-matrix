@@ -59,20 +59,22 @@
             "exits",
             "go",
             "say",
-            "inventory"
+            "inventory",
+            "ghost_announce"
           ],
           "capabilitiesRequired": [],
           "memoryKind": "none",
           "llmProvider": "none",
           "profile": {
-            "about": "Moves at random and echoes messages from human partners."
+            "about": "Moves at random and echoes messages from human partners.",
+            "glyph": "👻"
           },
           "authors": [
             "@akollegger"
           ]
         }
       },
-      "registeredAt": "2026-06-14T18:06:41.809Z",
+      "registeredAt": "2026-06-14T19:40:05.086Z",
       "builtIn": false
     },
     "npc-agent-local": {
@@ -135,7 +137,7 @@
           "rosterAgent": true
         }
       },
-      "registeredAt": "2026-06-14T18:06:43.440Z",
+      "registeredAt": "2026-06-14T19:40:06.737Z",
       "builtIn": false
     }
   }

@@ -1,6 +1,6 @@
 { kind: "matrix-character" }
 
-(charHermit:Character { id: "hermit", name: "The Hermit",
+(charHermit:Character { id: "hermit", name: "The Hermit", glyph: "🧙",
   background: "A reclusive attendee who prefers quiet corners and rarely initiates conversation.",
   enabled: true, defaultAction: "idle" })
 

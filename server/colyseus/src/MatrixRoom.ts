@@ -209,4 +209,13 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     }
     this.state.ghostLabels.set(gid, labels);
   }
+
+  setGhostGlyph(ghostId: string, glyph: string): void {
+    const gid = String(ghostId).trim();
+    if (glyph === "") {
+      this.state.ghostGlyphs.delete(gid);
+      return;
+    }
+    this.state.ghostGlyphs.set(gid, glyph);
+  }
 }

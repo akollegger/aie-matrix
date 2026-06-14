@@ -19,7 +19,7 @@ interface ChatPanelProps {
 }
 
 export function ChatPanel({ ghostClickRequest, onGhostClickHandled, onSelectedGhostChange }: ChatPanelProps) {
-  const { ghosts, identities } = useClientState();
+  const { ghosts, identities, ghostGlyphs } = useClientState();
   const pairing = usePairing();
 
   const [threads, setThreads] = useState<ThreadSlot[]>(() => {
@@ -93,15 +93,17 @@ export function ChatPanel({ ghostClickRequest, onGhostClickHandled, onSelectedGh
     await rawSendMessage(text);
   }, [activeGhostId, promoteThread, rawSendMessage]);
 
+  const [infoGhostId, setInfoGhostId] = useState<string | null>(null);
   const [submissionText, setSubmissionText] = useState("");
   const isContractForSelected =
     activeContract != null && activeContract.clientId === activeGhostId;
   const thread = { ...rawThread, ghostId: rawThread.ghostId ?? "" };
 
   const ghostIdentity = activeGhostId ? (identities.get(activeGhostId) ?? null) : null;
-  const agentCard = useAgentCard(ghostIdentity?.agentId ?? null, ghostHouseUrl);
-  const { items: inventory } = useGhostInventory(activeGhostId, worldApiUrl);
-  const isOnline = activeGhostId != null && ghosts.has(activeGhostId);
+  const infoIdentity = infoGhostId ? (identities.get(infoGhostId) ?? null) : null;
+  const agentCard = useAgentCard((infoIdentity ?? ghostIdentity)?.agentId ?? null, ghostHouseUrl);
+  const { items: inventory } = useGhostInventory(infoGhostId ?? activeGhostId, worldApiUrl);
+  const infoIsOnline = infoGhostId != null && ghosts.has(infoGhostId);
 
   return (
     <div
@@ -110,18 +112,31 @@ export function ChatPanel({ ghostClickRequest, onGhostClickHandled, onSelectedGh
       className="overlay-structure"
       style={{ display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box", pointerEvents: "none" }}
     >
-      <div style={{ pointerEvents: "auto" }}>
-      <ThreadPills
-        threads={threads}
-        activeGhostId={activeGhostId}
-        ghosts={ghosts}
-        identities={identities}
-        onSelect={setActiveGhostId}
-        onClose={closeThread}
-      />
+      <div style={{ pointerEvents: "auto", position: "relative" }}>
+        <ThreadPills
+          threads={threads}
+          activeGhostId={activeGhostId}
+          ghosts={ghosts}
+          identities={identities}
+          ghostGlyphs={ghostGlyphs}
+          infoGhostId={infoGhostId}
+          onSelect={setActiveGhostId}
+          onClose={closeThread}
+          onInfo={setInfoGhostId}
+        />
+        {infoGhostId && infoIdentity && (
+          <GhostDetailPanel
+            ghostIdentity={infoIdentity}
+            agentCard={agentCard}
+            inventory={inventory}
+            isOnline={infoIsOnline}
+            glyph={ghostGlyphs.get(infoGhostId)}
+            onClose={() => setInfoGhostId(null)}
+          />
+        )}
       </div>
 
-      {/* Body: chat | detail — pointer-events: none so transparent areas pass clicks to the scene */}
+      {/* Body: chat — pointer-events: none so transparent areas pass clicks to the scene */}
       <div style={{ flex: 1, display: "flex", gap: 16, minHeight: 0, padding: "12px 20px 0", pointerEvents: "none" }}>
         {/* Chat area — none by default so ghost dots behind transparent space remain clickable */}
         <div className="flex-1 flex flex-col min-w-0" style={{ pointerEvents: "none" }}>
@@ -206,14 +221,6 @@ export function ChatPanel({ ghostClickRequest, onGhostClickHandled, onSelectedGh
           )}
         </div>
 
-        <div style={{ pointerEvents: "auto" }}>
-          <GhostDetailPanel
-            ghostIdentity={ghostIdentity}
-            agentCard={agentCard}
-            inventory={inventory}
-            isOnline={isOnline}
-          />
-        </div>
       </div>
     </div>
   );

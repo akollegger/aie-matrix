@@ -323,6 +323,8 @@ function ghostActionLoop(
               token: ctx.token,
             });
             await client.connect();
+            const glyph = characterDef.glyph || ctx.ghostCard?.glyph || "";
+            await client.announce(characterDef.gramLabels, glyph).catch(() => {});
             mcpByGhostId.set(ctx.ghostId, client);
             return client;
           },

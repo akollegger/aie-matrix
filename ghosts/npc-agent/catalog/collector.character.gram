@@ -1,6 +1,6 @@
 { kind: "matrix-character" }
 
-(charCollector:Character { id: "collector", name: "The Collector",
+(charCollector:Character { id: "collector", name: "The Collector", glyph: "🎒",
   background: "An enthusiastic attendee who roams the fair looking for interesting items to add to their collection.",
   enabled: true, defaultAction: "go-random" })
 

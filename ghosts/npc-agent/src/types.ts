@@ -66,6 +66,8 @@ export interface CharacterDefinition {
   readonly stakeAmount: number;
   /** Comma-joined character gram labels (e.g. "Character:Broker"). Sent to Colyseus on ghost join. */
   readonly gramLabels: string;
+  /** Single grapheme/emoji glyph for this character. Empty string if not set in gram. */
+  readonly glyph: string;
 }
 
 export interface NpcAgentCatalog {

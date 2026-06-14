@@ -14,6 +14,7 @@ export type SpawnContext = {
     partnerEmail: string | null;
     background?: string;
     characterId?: string;
+    glyph?: string;
   };
   readonly expiresAt: string;
 };
