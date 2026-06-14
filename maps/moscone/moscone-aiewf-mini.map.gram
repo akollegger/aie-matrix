@@ -11,3 +11,11 @@
 [layers:LayerStack | ground, lyrc7bzj64, lyrp199dsg, lyrm9xy0ee]
 
 [rules:Rules | (floor)-[:GO]->(floor), (stage)-[:GO]->(stage), (area)-[:GO]->(area)]
+
+(brokerCredit:ItemType:GoldStar {
+    name: "Gold Star",
+    description: "A shiny golden 5-pointed point earned through quests.",
+    glyph: char`⭐️`, takeable: false, capacityCost: 0
+})
+
+[:Grants { broker: 1000, attendee: 1 } | (brokerCredit)]

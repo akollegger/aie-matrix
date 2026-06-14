@@ -94,6 +94,8 @@ export type AgentSession = {
    *  Carried by the Barnacle handoff so the mini-game (and its overlay)
    *  see the same name peppers uses in social mode. */
   readonly displayName?: string;
+  /** Catalog character ID when this session represents a named NPC character (IC-008). */
+  readonly characterId?: string;
   /** A2A base URL of the agent process serving this ghost. Cached at
    *  spawn from the catalog entry so the Barnacle supervisor doesn't
    *  need to re-resolve it per encounter. */

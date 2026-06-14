@@ -1,6 +1,9 @@
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { WorldBridgeService } from "@aie-matrix/server-world-api";
 import { Context, Effect, Layer, PubSub, Queue } from "effect";
+import { createLogger } from "@aie-matrix/logger";
+
+const log = createLogger("transcript");
 
 /** IRL transcript segment (IC-002). */
 export interface TranscriptEvent {
@@ -45,9 +48,7 @@ function notifyGhost(
     if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
       yield* Effect.sync(() => {
         const preview = event.text.length > 80 ? `${event.text.slice(0, 80)}…` : event.text;
-        console.info(
-          `[aie-matrix] transcript ghost=${ghostId} source=${event.source} ts=${event.timestamp} text=${preview}`,
-        );
+        log.info({ kind: "transcript", ghostId, source: event.source, ts: event.timestamp, preview });
       });
     }
   }) as Effect.Effect<void, never, WorldBridgeService>;

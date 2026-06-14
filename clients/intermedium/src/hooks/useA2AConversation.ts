@@ -21,10 +21,10 @@ function toConversationMessage(r: MessageRecord): ConversationMessage {
 async function fetchMessages(
   worldApiUrl: string,
   ghostId: string,
-  since?: string,
+  after?: string,
 ): Promise<ConversationMessage[]> {
   const params = new URLSearchParams();
-  if (since) params.set("since", since);
+  if (after) params.set("after", after);
   const url = `${worldApiUrl}/threads/${encodeURIComponent(ghostId)}?${params.toString()}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -34,27 +34,16 @@ async function fetchMessages(
 
 async function postMessage(
   worldApiUrl: string,
-  _humanId: string,
+  humanId: string,
   ghostId: string,
   text: string,
-  token?: string | null,
+  _token?: string | null,
 ): Promise<void> {
   const base = worldApiUrl.endsWith("/") ? worldApiUrl.slice(0, -1) : worldApiUrl;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  if (token) headers["Authorization"] = `Bearer ${token}`;
-
-  await fetch(`${base}/mcp`, {
+  await fetch(`${base}/threads/${encodeURIComponent(ghostId)}/human-say`, {
     method: "POST",
-    headers,
-    body: JSON.stringify({
-      jsonrpc: "2.0",
-      id: 1,
-      method: "tools/call",
-      params: { name: "say", arguments: { content: text, to: ghostId, intent: "chat" } },
-    }),
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ humanId, text }),
   });
 }
 
@@ -70,10 +59,14 @@ export function useA2AConversation(
 ): A2AConversationState {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isAvailable, setIsAvailable] = useState(false);
-  const sinceRef = useRef<string | undefined>(undefined);
+  const afterRef = useRef<string | undefined>(undefined);
   const pollRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
+    // Reset conversation state whenever the selected ghost changes.
+    setMessages([]);
+    afterRef.current = undefined;
+
     if (!ghostId || !worldApiUrl) {
       setIsAvailable(false);
       return;
@@ -82,11 +75,11 @@ export function useA2AConversation(
 
     const poll = async () => {
       try {
-        const fetched = await fetchMessages(worldApiUrl, ghostId, sinceRef.current);
+        const fetched = await fetchMessages(worldApiUrl, ghostId, afterRef.current);
         if (cancelled) return;
         if (fetched.length > 0) {
           const last = fetched[fetched.length - 1];
-          if (last?.timestamp) sinceRef.current = last.timestamp;
+          if (last?.messageId) afterRef.current = last.messageId;
           setMessages((prev) => [...prev, ...fetched]);
         }
         setIsAvailable(true);

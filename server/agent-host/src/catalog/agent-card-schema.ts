@@ -17,6 +17,7 @@ const IC003_TOOLS = new Set([
   "bye",
   "inbox",
   "request_intent",
+  "ghost_announce",
 ]);
 
 const matrixZ = z.object({

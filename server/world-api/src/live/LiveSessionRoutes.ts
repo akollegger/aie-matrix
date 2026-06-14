@@ -1,5 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect } from "effect";
+import { createLogger } from "@aie-matrix/logger";
+
 import { checkAdminToken } from "../admin-auth.js";
 import type { AdminAuthError } from "../admin-auth.js";
 import { LiveSessionService } from "./LiveSessionService.js";
@@ -17,6 +19,7 @@ import { WorldBridgeService } from "../WorldBridgeService.js";
 import { LedgerService } from "../LedgerService.js";
 import type { ItemSeed } from "../LedgerService.js";
 import type { ParsedItemPlacement } from "@aie-matrix/map-gram";
+const log = createLogger("live-session");
 
 /**
  * Derive ItemSeed[] from ParsedItemPlacement[] by grouping on (itemRef, h3Index)
@@ -209,12 +212,7 @@ export function tryHandleLiveSession(
                 const ledger = yield* LedgerService;
                 const itemSeeds = deriveItemSeeds(newMap.itemPlacements ?? []);
                 yield* ledger.init(itemSeeds).pipe(Effect.catchAll(() => Effect.void));
-                console.info(JSON.stringify({
-                  kind: "live-session.map-reloaded",
-                  sessionId: record.id,
-                  mapId: primaryMap.mapId,
-                  itemSeedCount: itemSeeds.length,
-                }));
+                log.info({ kind: "map-reloaded", sessionId: record.id, mapId: primaryMap.mapId, itemSeedCount: itemSeeds.length });
               }
             }
           }).pipe(Effect.catchAll(() => Effect.void));
@@ -293,13 +291,7 @@ export function tryHandleLiveSession(
                   const ledger = yield* LedgerService;
                   const itemSeeds = deriveItemSeeds(newMap.itemPlacements ?? []);
                   yield* ledger.init(itemSeeds).pipe(Effect.catchAll(() => Effect.void));
-                  console.info(JSON.stringify({
-                    kind: "live-session.map-reloaded",
-                    sessionId: id,
-                    mapId: primaryMap.mapId,
-                    trigger: "map-switch",
-                    itemSeedCount: itemSeeds.length,
-                  }));
+                  log.info({ kind: "map-reloaded", sessionId: id, mapId: primaryMap.mapId, trigger: "map-switch", itemSeedCount: itemSeeds.length });
                 }
               }
             }).pipe(Effect.catchAll(() => Effect.void));

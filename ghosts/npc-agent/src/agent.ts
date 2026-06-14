@@ -1,4 +1,5 @@
 import { loadRootEnv } from "@aie-matrix/root-env";
+import { createLogger } from "@aie-matrix/logger";
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
@@ -9,6 +10,8 @@ import { NpcAgentExecutor, initExecutor, getDialogStateSnapshot } from "./execut
 import { loadCatalog } from "./catalog/catalog-loader.js";
 
 loadRootEnv();
+
+const log = createLogger("npc-agent");
 
 function listenPortFromEnv(fallback: number): number {
   const raw = process.env.AGENT_PORT;
@@ -105,7 +108,7 @@ async function register(): Promise<void> {
         body: JSON.stringify({ agentId, baseUrl: publicBase }),
       });
       if (res.ok || res.status === 201) {
-        console.info(JSON.stringify({ kind: "npc-agent.registered", agentId }));
+        log.info({ kind: "registered", agentId });
         return;
       }
       if (res.status === 409) {
@@ -153,7 +156,7 @@ const catalogDir = process.env.NPC_CATALOG_DIR
   : join(process.cwd(), "catalog");
 
 app.listen(port, "0.0.0.0", () => {
-  console.info(JSON.stringify({ kind: "npc-agent.start", publicBase, port, agentId }));
+  log.info({ kind: "start", publicBase, port, agentId });
   loadCatalog(catalogDir).then((cat) => {
     initExecutor({ catalog: cat, agentHostUrl, agentId });
     register();

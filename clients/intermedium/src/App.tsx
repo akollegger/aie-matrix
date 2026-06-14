@@ -5,16 +5,13 @@ import { useHumanIdentity } from "./context/IdentityContext.js";
 import { PairingProvider } from "./context/PairingContext.js";
 import { BalanceDisplay } from "./components/HUD/BalanceDisplay.js";
 import { useContracts } from "./hooks/useContracts.js";
-import { PanelView } from "./components/PanelView/PanelView.js";
-import { PersonalPanel } from "./components/PanelView/PersonalPanel.js";
+import { HUDOverlay } from "./components/HUDOverlay/HUDOverlay.js";
 import { SceneView } from "./components/SceneView/SceneView.js";
 import { PersonalScene } from "./components/PersonalScene/PersonalScene.js";
 import { FailWhale } from "./components/FailWhale.js";
 import { GhostArrivalOverlay } from "./components/GhostArrivalOverlay.js";
 import { ReconnectingBanner } from "./components/ReconnectingBanner.js";
-import { ChatPanel } from "./components/ChatPanel/ChatPanel.js";
 import { NavHint } from "./components/NavHint.js";
-import { LeaderboardPanel } from "./components/LeaderboardPanel/LeaderboardPanel.js";
 
 /** Fade duration in ms for the deck.gl ↔ R3F renderer swap (FR-028, T090). */
 const FADE_MS = 200;
@@ -32,7 +29,6 @@ function AppInner() {
   const [showPersonal, setShowPersonal] = useState(stop === "personal");
   const [fadeOpacity, setFadeOpacity] = useState(1);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
   const [leaderboardIds, setLeaderboardIds] = useState<string[]>([]);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(identity.displayName);
@@ -115,17 +111,6 @@ function AppInner() {
     };
   }, [stop, showPersonal]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if ((e.key === "c" || e.key === "C") && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        setChatOpen((open) => !open);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   // Find the focused ghost for the Personal scene (FR-029).
   const personalGhostId =
@@ -213,10 +198,6 @@ function AppInner() {
             <GhostArrivalOverlay
               visible={state.mapGramStatus === "ready" && state.ghosts.size === 0}
             />
-            <PanelView viewState={state.viewState} pairing={state.pairing} />
-            {(stop === "global" || stop === "regional") && leaderboardIds.length > 0 && (
-              <LeaderboardPanel leaderboardIds={leaderboardIds} humanGhostId={identity.ghostId} />
-            )}
           </>
         )}
 
@@ -224,7 +205,6 @@ function AppInner() {
         {showPersonal && (
           <>
             <PersonalScene ghost={personalGhost} />
-            <PersonalPanel />
           </>
         )}
 
@@ -300,29 +280,13 @@ function AppInner() {
           />
         </div>
 
-        {/* Overlay corner — toasts + persistent controls, bottom-right */}
+        {/* Bottom-right: nav hint only */}
         <div className="absolute bottom-5 right-5 z-10 flex flex-col items-end gap-2">
           <NavHint visible={stop === "global"} />
-          {/* Chat toggle button */}
-          <button
-            type="button"
-            onClick={() => setChatOpen((o) => !o)}
-            aria-label="Toggle ghost chat (C)"
-            title="Ghost Chat [C]"
-            className={[
-              "font-mono text-sm uppercase tracking-[--tracking-label] px-3 py-1.5 rounded border cursor-pointer transition-colors",
-              chatOpen
-                ? "bg-human-bg border-border-bright text-text"
-                : "bg-surface border-border text-text-dim hover:border-border-bright hover:text-text",
-            ].join(" ")}
-          >
-            Chat [C]
-          </button>
         </div>
       </div>
 
-      {/* Full-screen chat overlay */}
-      {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
+      <HUDOverlay leaderboardIds={leaderboardIds} humanGhostId={identity.ghostId} />
     </div>
   );
 }

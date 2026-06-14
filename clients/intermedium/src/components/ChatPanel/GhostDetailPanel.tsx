@@ -47,7 +47,6 @@ export function GhostDetailPanel({ ghostIdentity, agentCard, inventory, isOnline
           <span className="text-lg text-text font-semibold truncate">{ghostIdentity.name}</span>
         </div>
         <Row label="ghost id" value={ghostIdentity.ghostId.slice(0, 20) + "…"} />
-        <Row label="tier" value={ghostIdentity.ghostClass} />
         {agentCard && <Row label="agent" value={agentCard.name} />}
         {agentCard?.version && <Row label="version" value={agentCard.version} />}
         {agentCard?.llmProvider && <Row label="model" value={agentCard.llmProvider} />}

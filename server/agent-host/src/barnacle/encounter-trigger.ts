@@ -23,6 +23,8 @@
  */
 import { Client } from "colyseus.js";
 import { gridDisk } from "h3-js";
+import { createLogger } from "@aie-matrix/logger";
+
 
 import {
   BARNACLE_HEARTBEAT_SCHEMA, // re-exported pun: silence unused warning
@@ -37,6 +39,7 @@ import type { IAgentSupervisor } from "../supervisor/SupervisorService.js";
 import { Effect } from "effect";
 import { getBarnacleA2AClient, sendDataAndAwaitReply } from "./a2a-client.js";
 import type { IBarnacleSupervisor } from "./BarnacleSupervisorService.js";
+const log = createLogger("barnacle");
 
 // Silence unused — kept in the import surface so the re-export reads
 // as one consolidated list of Barnacle protocol references.
@@ -103,14 +106,14 @@ async function fetchGhostRecord(
 export async function startBarnacleEncounterTrigger(
   opts: EncounterTriggerOptions,
 ): Promise<EncounterTriggerHandle> {
-  console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.boot", phase: "resolving-room" }));
+  log.info({ kind: "encounter-trigger.boot", phase: "resolving-room" });
   const roomId = await resolveMatrixRoomId(opts.worldHttpBase);
-  console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.boot", phase: "joining-room", roomId }));
+  log.info({ kind: "encounter-trigger.boot", phase: "joining-room", roomId });
   const client = new Client(httpBaseToWsBase(opts.worldHttpBase));
   const room = await client.joinById(roomId, {
     name: "ghost-house-barnacle-encounter",
   });
-  console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.boot", phase: "joined-room", roomId }));
+  log.info({ kind: "encounter-trigger.boot", phase: "joined-room", roomId });
 
   // Local mirrors of Colyseus state we care about.
   /** ghostId → current cellId */
@@ -219,14 +222,12 @@ export async function startBarnacleEncounterTrigger(
     // an LLM call and a round-trip. Quietly skip and let the next
     // encounter trigger (when a seat opens) re-evaluate.
     if (seatsOpen === 0) {
-      console.info(
-        JSON.stringify({
-          kind: "barnacle.encounter-trigger.skipped-full",
-          ghostId,
-          platformId: platform.platformId,
-          seatedNames,
-        }),
-      );
+      log.info({
+        kind: "encounter-trigger.skipped-full",
+        ghostId,
+        platformId: platform.platformId,
+        seatedNames,
+      });
       return;
     }
 
@@ -252,15 +253,13 @@ export async function startBarnacleEncounterTrigger(
       const reply = replyData as PlatformEncounterReply | null;
       if (!reply || reply.accept !== true) {
         declinedAt.set(key, Date.now());
-        console.info(
-          JSON.stringify({
-            kind: "barnacle.encounter-declined",
-            ghostId,
-            platformId: platform.platformId,
-            reasoning: reply?.reasoning ?? null,
-            cooldownMs: DECLINE_COOLDOWN_MS,
-          }),
-        );
+        log.info({
+          kind: "encounter-declined",
+          ghostId,
+          platformId: platform.platformId,
+          reasoning: reply?.reasoning ?? null,
+          cooldownMs: DECLINE_COOLDOWN_MS,
+        });
         return;
       }
       // On accept, clear the cooldown — the ghost is going in.
@@ -294,14 +293,12 @@ export async function startBarnacleEncounterTrigger(
           }),
         );
       } else {
-        console.info(
-          JSON.stringify({
-            kind: "barnacle.encounter-accepted-handoff",
-            ghostId,
-            sessionId: result.session.sessionId,
-            platformClass: platform.platformClass,
-          }),
-        );
+        log.info({
+          kind: "encounter-accepted-handoff",
+          ghostId,
+          sessionId: result.session.sessionId,
+          platformClass: platform.platformClass,
+        });
       }
     } catch (err) {
       console.warn(
@@ -404,11 +401,11 @@ export async function startBarnacleEncounterTrigger(
       const sample = payload && typeof payload === "object"
         ? Object.keys(payload as Record<string, unknown>).slice(0, 3)
         : [];
-      console.info(JSON.stringify({
-        kind: "barnacle.encounter-trigger.ghost-patch-received",
+      log.info({
+        kind: "encounter-trigger.ghost-patch-received",
         count: ghostPatchCount,
         sampleGhostIds: sample,
-      }));
+      });
     }
     if (!payload || typeof payload !== "object") return;
     for (const [ghostId, cellId] of Object.entries(payload as Record<string, unknown>)) {
@@ -431,14 +428,14 @@ export async function startBarnacleEncounterTrigger(
       const hasMap = state.tileItemRefs !== undefined;
       const size = state.tileItemRefs?.size ?? -1;
       const hasForEach = typeof state.tileItemRefs?.forEach === "function";
-      console.info(JSON.stringify({
-        kind: "barnacle.encounter-trigger.tile-sync",
+      log.info({
+        kind: "encounter-trigger.tile-sync",
         attempt: tileSyncCount,
         hasMap,
         size,
         hasForEach,
         tileItemsKnown: tileItems.size,
-      }));
+      });
     }
     state.tileItemRefs?.forEach?.((csv, cellId) => maybeFireTile(cellId, csv));
   }
@@ -481,13 +478,11 @@ export async function startBarnacleEncounterTrigger(
       syncTileItemsFromState();
     });
 
-  console.info(
-    JSON.stringify({
-      kind: "barnacle.encounter-trigger.start",
-      roomId,
-      worldHttpBase: opts.worldHttpBase,
-    }),
-  );
+  log.info({
+    kind: "encounter-trigger.start",
+    roomId,
+    worldHttpBase: opts.worldHttpBase,
+  });
 
   return {
     close: async () => {

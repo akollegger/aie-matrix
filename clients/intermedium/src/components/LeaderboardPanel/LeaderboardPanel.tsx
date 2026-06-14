@@ -69,17 +69,10 @@ export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPa
   const [activeIndex, setActiveIndex] = useState(0);
 
   const panelStyle: React.CSSProperties = {
-    position: "absolute",
-    top: 60,
-    left: 0,
-    width: 260,
+    width: "100%",
+    height: "100%",
     boxSizing: "border-box",
-    padding: "12px 14px 16px",
-    background: "linear-gradient(270deg, transparent 0%, rgba(6, 10, 18, 0.88) 12%, rgba(6, 10, 18, 0.92) 100%)",
-    borderRight: "1px solid rgba(100, 140, 180, 0.25)",
-    zIndex: 2,
-    pointerEvents: "auto",
-    maxHeight: "calc(100vh - 80px)",
+    padding: "16px 18px 20px",
     overflowY: "auto",
   };
 

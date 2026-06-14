@@ -2,10 +2,13 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Room } from "@colyseus/core";
+import { createLogger } from "@aie-matrix/logger";
 import type { ItemTypeDef } from "@aie-matrix/map-gram";
 import type { LoadedMap } from "./mapTypes.js";
 import { loadHexMap } from "./mapLoader.js";
 import { TileCoord, WorldSpectatorState } from "./room-schema.js";
+
+const log = createLogger("colyseus");
 
 export interface MatrixRoomOptions {
   mapPath?: string;
@@ -116,7 +119,7 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     this.ghostCellByGhostId.set(gid, cid);
     this.state.ghostTiles.set(gid, cid);
     if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
-      console.info(`[aie-matrix] MatrixRoom.setGhostCell ghost=${gid} cell=${cid}`);
+      log.info({ kind: "set-ghost-cell", ghost: gid, cell: cid });
     }
     this.emitGhostPatch();
   }
@@ -143,19 +146,9 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     this.ghostCellByGhostId.delete(gid);
     this.state.ghostTiles.delete(gid);
     if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
-      console.info(`[aie-matrix] MatrixRoom.removeGhostCell ghost=${gid}`);
+      log.info({ kind: "remove-ghost-cell", ghost: gid });
     }
     this.emitGhostPatch();
-  }
-
-  /** Set character gram labels for an NPC ghost (e.g. "Character:Broker,Character:Npc"). */
-  setGhostLabels(ghostId: string, labels: string): void {
-    this.state.ghostLabels.set(String(ghostId).trim(), labels);
-  }
-
-  /** Remove ghost labels on ghost leave. */
-  clearGhostLabels(ghostId: string): void {
-    this.state.ghostLabels.delete(String(ghostId).trim());
   }
 
   listOccupantsOnCell(cellId: string): string[] {
@@ -206,5 +199,14 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     }
     const clipped = text.length > 200 ? `${text.slice(0, 197)}…` : text;
     this.state.ghostLastActions.set(gid, clipped);
+  }
+
+  setGhostLabels(ghostId: string, labels: string): void {
+    const gid = String(ghostId).trim();
+    if (labels === "") {
+      this.state.ghostLabels.delete(gid);
+      return;
+    }
+    this.state.ghostLabels.set(gid, labels);
   }
 }

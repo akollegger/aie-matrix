@@ -7,8 +7,11 @@ import {
 import { randomUUID } from "node:crypto";
 import { getResolution, isValidCell } from "h3-js";
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
+import { createLogger } from "@aie-matrix/logger";
 import type { SpawnContext } from "./spawn-types.js";
 import type { WorldEvent } from "./world-event.js";
+
+const log = createLogger("random-agent");
 
 type MoveLoop = { cancel: () => void };
 
@@ -56,13 +59,7 @@ function parseSpawnData(msg: Message | undefined): SpawnContext | null {
 function cancelMovementForGhost(ghostId: string, reason: string): void {
   const loop = loopsByGhostId.get(ghostId);
   if (loop) {
-    console.info(
-      JSON.stringify({
-        kind: "random-agent.movement.cancel",
-        ghostId,
-        reason,
-      }),
-    );
+    log.info({ kind: "movement.cancel", ghostId, reason });
     loop.cancel();
   }
 }
@@ -85,13 +82,7 @@ async function startMovementFromSpawn(
   let wakeUp: (() => void) | null = null;
   const handle: MoveLoop = { cancel: () => { go = false; wakeUp?.(); } };
   loopsByGhostId.set(ghostId, handle);
-  console.info(
-    JSON.stringify({
-      kind: "random-agent.movement.start",
-      ghostId,
-      intervalMs: moveMs,
-    }),
-  );
+  log.info({ kind: "movement.start", ghostId, intervalMs: moveMs });
   // Track pending proposals this ghost initiated so we can randomly decline them
   const pendingProposals: string[] = [];
 
@@ -149,7 +140,7 @@ async function startMovementFromSpawn(
       }).catch(() => null) as { ok?: boolean; proposalId?: string } | null;
       if (result?.ok && result.proposalId) {
         pendingProposals.push(result.proposalId);
-        console.info(JSON.stringify({ kind: "random-agent.group.offer", ghostId, to: target }));
+        log.info({ kind: "group.offer", ghostId, to: target });
       }
       return;
     }
@@ -161,7 +152,7 @@ async function startMovementFromSpawn(
       const result = await mcp.callTool("group.leave", { group_id: groupId }).catch(() => null) as { ok?: boolean } | null;
       if (result?.ok) {
         knownGroupIds.delete(groupId);
-        console.info(JSON.stringify({ kind: "random-agent.group.leave", ghostId, groupId }));
+        log.info({ kind: "group.leave", ghostId, groupId });
       }
       return;
     }
@@ -173,10 +164,7 @@ async function startMovementFromSpawn(
     if (typeof toward === "string" && toward.length > 0) {
       const r = await mcp.callTool("go", { toward }).catch((e: unknown) => {
         const msg = e instanceof Error ? e.message : String(e);
-        console.info(JSON.stringify({
-          kind: "random-agent.movement.go-rejected", ghostId, toward,
-          message: msg.length > 200 ? `${msg.slice(0, 197)}...` : msg,
-        }));
+        log.info({ kind: "movement.go-rejected", ghostId, toward, message: msg.length > 200 ? `${msg.slice(0, 197)}...` : msg });
         return null;
       }) as { ok?: boolean; tileId?: string } | null;
       if (r?.ok === true && typeof r.tileId === "string") {
@@ -221,7 +209,7 @@ async function startMovementFromSpawn(
               decision,
             }).catch(() => null) as { ok?: boolean } | null;
             if (voteResult?.ok) {
-              console.info(JSON.stringify({ kind: "random-agent.group.vote", ghostId, groupId: n.thread_id, decision }));
+              log.info({ kind: "group.vote", ghostId, groupId: n.thread_id, decision });
             }
           }
         }
@@ -315,15 +303,18 @@ export class RandomWandererExecutor implements AgentExecutor {
     // so `tid` here is a fresh UUID — the spawn task is not touched.
     const ev = asWorldEvent(userMessage);
     if (ev !== null) {
-      // Only world.message.new with PARTNER priority triggers a say() call.
+      // world.message.new with PARTNER or DIRECT priority triggers a say() call.
       if (ev.kind === "world.message.new") {
         const pl = ev.payload as { text?: string; priority?: string; from?: string; thread_id?: string };
-        if (pl.priority === "PARTNER" && typeof pl.from === "string" && typeof pl.text === "string") {
+        if ((pl.priority === "PARTNER" || pl.priority === "DIRECT") && typeof pl.from === "string" && typeof pl.text === "string") {
           const mcp = mcpByGhostId.get(ev.ghostId);
+          console.info(JSON.stringify({ kind: "random-agent.message.received", ghostId: ev.ghostId, priority: pl.priority, hasMcp: !!mcp, from: pl.from }));
           if (mcp) {
-            void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e: unknown) => {
+            void mcp.callTool("say", { intent: "greet", content: `👻 received: ${pl.text}`, to: pl.from }).catch((e: unknown) => {
               console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
             });
+          } else {
+            console.warn(JSON.stringify({ kind: "random-agent.message.no-mcp", ghostId: ev.ghostId }));
           }
         }
         // GROUP priority messages indicate group events (admit, join, leave) — refresh membership cache
@@ -335,7 +326,7 @@ export class RandomWandererExecutor implements AgentExecutor {
               if (r?.groups) {
                 // Update the knownGroupIds for this ghost — accessed via closure below
                 // Note: the group tracking Map is per-movement-loop; this triggers a re-list next tick
-                console.info(JSON.stringify({ kind: "random-agent.group.event", ghostId: ev.ghostId, groupCount: r.groups.length }));
+                log.info({ kind: "group.event", ghostId: ev.ghostId, groupCount: r.groups.length });
               }
             });
           }

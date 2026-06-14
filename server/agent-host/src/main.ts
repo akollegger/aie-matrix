@@ -1,4 +1,5 @@
 import { loadRootEnv, isEnvTruthy } from "@aie-matrix/root-env";
+import { createLogger } from "@aie-matrix/logger";
 import { Effect, Layer, ManagedRuntime, pipe } from "effect";
 import { A2AHostServiceLive } from "./a2a-host/A2AHostService.js";
 import { McpProxyServiceLive } from "./mcp-proxy/mcp-proxy.layer.js";
@@ -15,6 +16,8 @@ import {
 } from "./barnacle/index.js";
 
 loadRootEnv();
+
+const log = createLogger("agent-host");
 
 const devToken = process.env.AGENT_HOST_TOKEN ?? "";
 const port = (() => {
@@ -79,9 +82,7 @@ let colyseusHandle: ColyseusWorldBridgeHandle | undefined;
 let barnacleEncounterHandle: EncounterTriggerHandle | undefined;
 
 const server = app.listen(port, "0.0.0.0", () => {
-  console.info(
-    JSON.stringify({ kind: "agent-host.start", publicBase, port, catalog: catalogFilePath, worldApiUrl, colyseusUrl }),
-  );
+  log.info({ kind: "start", publicBase, port, catalog: catalogFilePath, worldApiUrl, colyseusUrl });
   if (!isEnvTruthy(process.env.AGENT_HOST_DISABLE_COLYSEUS_BRIDGE)) {
     const roomIdOverride = process.env.GHOST_SPECTATOR_ROOM_ID?.trim() || undefined;
     void (async () => {
@@ -96,13 +97,11 @@ const server = app.listen(port, "0.0.0.0", () => {
             void runtime.runPromise(deliverWorldEvent(ev));
           },
         });
-        console.info(
-          JSON.stringify({
-            kind: "colyseus.world-bridge.started",
-            worldHttpBase,
-            roomIdOverride: roomIdOverride ?? null,
-          }),
-        );
+        log.info({
+          kind: "colyseus.world-bridge.started",
+          worldHttpBase,
+          roomIdOverride: roomIdOverride ?? null,
+        });
       } catch (e) {
         console.error(
           JSON.stringify({
@@ -122,19 +121,19 @@ const server = app.listen(port, "0.0.0.0", () => {
   if (barnacleEncountersEnabled) {
     void (async () => {
       try {
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "resolving-services" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "resolving-services" });
         const catalog = await runtime.runPromise(
           pipe(CatalogService, Effect.map((c) => c)),
         );
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "catalog-resolved" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "catalog-resolved" });
         const agentSupervisor = await runtime.runPromise(
           pipe(AgentSupervisor, Effect.map((s) => s)),
         );
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "agent-supervisor-resolved" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "agent-supervisor-resolved" });
         const barnacleSupervisor = await runtime.runPromise(
           pipe(BarnacleSupervisor, Effect.map((s) => s)),
         );
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "barnacle-supervisor-resolved" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "barnacle-supervisor-resolved" });
         barnacleEncounterHandle = await startBarnacleEncounterTrigger({
           worldHttpBase,
           registryBaseUrl: worldHttpBase,

@@ -11,7 +11,7 @@ interface GhostListProps {
 
 function isBroker(labels: string | undefined): boolean {
   if (!labels) return false;
-  return labels.split(",").some((l) => l.trim() === "Character:Broker");
+  return labels.split(",").some((l) => l.trim() === "Broker" || l.trim() === "Character:Broker");
 }
 
 export function GhostList({ identities, ghosts, ghostLabels, selectedGhostId, onSelect }: GhostListProps) {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Full local stack: world server → agent-host → random-agent → intermedium + map-editor.
+ * Full local stack: world server → agent-host → random-agent + npc-agent → intermedium + map-editor.
  * Ctrl+C stops all child processes.
  *
  * New dev quickstart:
@@ -25,6 +25,7 @@
  * - `AIE_MATRIX_HTTP_PORT` (optional) — world server port, default `8787`.
  * - `AGENT_HOST_PORT` (optional) — agent-host port, default `4000`.
  * - `AGENT_PORT` (optional) — random-agent port, default `4001`.
+ * - `NPC_AGENT_PORT` (optional) — npc-agent port, default `4004`.
  * - `AGENT_HOST_URL` (optional) — override agent-host base URL (e.g. if running
  *   behind a tunnel); default `http://127.0.0.1:<AGENT_HOST_PORT>`.
  *
@@ -34,9 +35,10 @@
  * 2. Wait for server ready, then start in parallel:
  *    - `@aie-matrix/server-agent-host` — A2A catalog + spawn API (port 4000).
  *    - `@aie-matrix/random-agent`      — Wanderer ghost endpoint (port 4001).
+ *    - `@aie-matrix/npc-agent`         — NPC broker ghost endpoint (port 4004).
  *    - `@aie-matrix/intermedium`       — Vite spectator UI (port 5180).
  *    - `@aie-matrix/map-editor`        — Vite admin UI (port 5182).
- * 3. Once agent-host + random-agent respond, auto-bootstrap registers random-agent
+ * 3. Once agent-host + random-agent respond, auto-bootstrap registers random-agent and npc-agent
  *    in the catalog. Ghost spawn only runs if an active live session already exists
  *    (sessions are created by the operator via the map-editor Admin panel).
  *    Set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip bootstrap entirely.
@@ -63,6 +65,7 @@ const readyUrl = `http://127.0.0.1:${httpPort}/spectator/room`;
 
 const housePort = process.env.AGENT_HOST_PORT || "4000";
 const agentPort = process.env.AGENT_PORT || "4001";
+const npcAgentPort = process.env.NPC_AGENT_PORT || "4004";
 const houseBase =
   process.env.AGENT_HOST_URL || `http://127.0.0.1:${housePort}`;
 const token = process.env.AGENT_HOST_TOKEN || "";
@@ -221,6 +224,7 @@ async function waitForHouseAndAgent() {
   while (Date.now() - start < maxMs) {
     let houseOk = false;
     let agentOk = false;
+    let npcAgentOk = false;
     try {
       const c = await fetch(`http://127.0.0.1:${housePort}/v1/catalog`, {
         headers: { ...auth },
@@ -235,14 +239,22 @@ async function waitForHouseAndAgent() {
     } catch {
       /* retry */
     }
-    if (houseOk && agentOk) {
-      console.info(`[demo] agent-host :${housePort} and random-agent :${agentPort} responding.`);
+    try {
+      const n = await fetch(`http://127.0.0.1:${npcAgentPort}/.well-known/agent-card.json`);
+      npcAgentOk = n.ok;
+    } catch {
+      /* retry */
+    }
+    if (houseOk && agentOk && npcAgentOk) {
+      console.info(
+        `[demo] agent-host :${housePort}, random-agent :${agentPort}, npc-agent :${npcAgentPort} responding.`,
+      );
       return;
     }
     await new Promise((r) => setTimeout(r, 400));
   }
   console.warn(
-    "[demo] timeout waiting for agent-host + agent; continue anyway (check AGENT_HOST_TOKEN and root .env).",
+    "[demo] timeout waiting for agent-host + agents; continue anyway (check AGENT_HOST_TOKEN and root .env).",
   );
 }
 
@@ -263,8 +275,6 @@ async function autoBootstrap(ghostCount) {
   }
 
   // Step 1: Check for an active live session. Ghost spawn requires one.
-  // Sessions are created by the operator via the map-editor Admin panel — the
-  // demo script never creates one automatically.
   const liveSessionId = await getActiveLiveSessionId();
   if (!liveSessionId) {
     console.info(
@@ -275,12 +285,12 @@ async function autoBootstrap(ghostCount) {
   }
   console.info(`[demo] found active session: ${liveSessionId}`);
 
-  // Step 2: Register the random-agent with the agent-host catalog.
   const headers = {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
   };
 
+  // Step 2: Register the random-agent with the agent-host catalog.
   const reg = await fetch(`${houseBase}/v1/catalog/register`, {
     method: "POST",
     headers,
@@ -299,58 +309,67 @@ async function autoBootstrap(ghostCount) {
     console.info("[demo] catalog: random-agent registered.");
   }
 
-  // Step 3: For each ghost — create caretaker, adopt, then spawn.
-  const gr = await fetch(`${worldBase}/registry/houses`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ displayName: "demo-house" }),
-  });
-  if (!gr.ok) {
-    console.error("[demo] registry house failed:", gr.status, await gr.text());
-    return;
-  }
-  const { agentHostId } = await gr.json();
-
-  for (let i = 0; i < ghostCount; i++) {
-    const cr = await fetch(`${worldBase}/registry/caretakers`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ label: `demo-${i + 1}` }),
-    });
-    if (!cr.ok) {
-      console.error("[demo] registry caretaker failed:", cr.status, await cr.text());
-      return;
-    }
-    const { caretakerId } = await cr.json();
-
-    const ar = await fetch(`${worldBase}/registry/adopt`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ caretakerId, agentHostId }),
-    });
-    if (!ar.ok) {
-      console.error("[demo] registry adopt failed:", ar.status, await ar.text());
-      return;
-    }
-    const adopt = await ar.json();
-
-    const sp = await fetch(`${houseBase}/v1/sessions/spawn/random-agent`, {
+  // Step 3: Spawn npc-agent via spawn-trusted. npc-agent self-registers with the catalog
+  // on startup; once spawned it automatically triggers its character roster.
+  const npcAgentId = await waitForNpcAgentInCatalog(headers);
+  if (npcAgentId) {
+    const npcSp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/${npcAgentId}`, {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        ghostId: adopt.ghostId,
-        credential: adopt.credential,
-      }),
+      body: JSON.stringify({ displayName: "npc-agent" }),
+    });
+    if (npcSp.ok) {
+      const { sessionId, ghostId } = await npcSp.json();
+      console.info(`[demo] npc-agent spawned: session ${sessionId} (ghostId ${ghostId}) — broker and characters coming up.`);
+    } else {
+      console.warn("[demo] npc-agent spawn failed:", npcSp.status, await npcSp.text());
+    }
+  } else {
+    console.warn("[demo] npc-agent did not appear in catalog within timeout; skipping broker spawn.");
+  }
+
+  // Step 4: Spawn each random wanderer ghost via spawn-trusted.
+  for (let i = 0; i < ghostCount; i++) {
+    const sp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/random-agent`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ displayName: `wanderer-${i + 1}` }),
     });
     if (!sp.ok) {
       console.error("[demo] spawn failed:", sp.status, await sp.text());
       return;
     }
-    const { sessionId } = await sp.json();
+    const { sessionId, ghostId } = await sp.json();
     console.info(
-      `[demo] ghost ${i + 1}/${ghostCount}: session ${sessionId} (ghostId ${adopt.ghostId}) — wanderer active.`,
+      `[demo] ghost ${i + 1}/${ghostCount}: session ${sessionId} (ghostId ${ghostId}) — wanderer active.`,
     );
   }
+}
+
+/**
+ * Poll the agent-host catalog until npc-agent appears (it self-registers on startup).
+ * Returns the agentId string if found, or null on timeout.
+ */
+async function waitForNpcAgentInCatalog(headers, maxMs = 15_000) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    try {
+      const r = await fetch(`${houseBase}/v1/catalog`, { headers });
+      if (r.ok) {
+        const catalog = await r.json();
+        const agents = catalog.agents ?? catalog ?? [];
+        const found = Object.values(agents).find(
+          (a) => typeof a === "object" && a !== null && String(a.baseUrl ?? "").includes(`:${npcAgentPort}`),
+        );
+        if (found) {
+          console.info(`[demo] npc-agent found in catalog: ${found.agentId}`);
+          return found.agentId;
+        }
+      }
+    } catch { /* retry */ }
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return null;
 }
 
 /**
@@ -421,9 +440,13 @@ try {
     ...(token ? { VITE_AGENT_HOST_BEARER: token } : {}),
   };
 
-  console.info("[demo] 3/3 starting agent-host, random-agent, intermedium, map-editor…");
+  console.info("[demo] 3/3 starting agent-host, random-agent, npc-agent, intermedium, map-editor…");
   start("agent-host",  "pnpm", ["--filter", "@aie-matrix/server-agent-host", "dev"]);
   start("random-agent","pnpm", ["--filter", "@aie-matrix/random-agent",      "dev"]);
+  start("npc-agent",   "pnpm", ["--filter", "@aie-matrix/npc-agent",         "dev"], {
+    AGENT_PORT: npcAgentPort,
+    AGENT_HOST_URL: houseBase,
+  });
   start("intermedium", "pnpm", ["--filter", "@aie-matrix/intermedium",        "dev"], viteEnv);
   start("map-editor",  "pnpm", ["--filter", "@aie-matrix/map-editor",         "dev"], viteEnv);
 
@@ -437,9 +460,10 @@ try {
   Admin UI  (Map Editor)   →  http://127.0.0.1:${mapEditorPort}/
   World API                →  http://127.0.0.1:${httpPort}/
   Agent Host               →  http://127.0.0.1:${housePort}/v1/catalog
+  NPC Agent                →  http://127.0.0.1:${npcAgentPort}/
 
   The Vite front-ends compile on first load — allow a few seconds after opening.
-  Switch the Map Editor to Admin mode to spawn and manage ghosts.
+  Switch the Map Editor to Admin mode to spawn and manage ghosts (including the broker NPC).
 `);
 
   const { code, signal } = await waitFirstExit();

@@ -11,11 +11,7 @@ import { ChatThread } from "./ChatThread.js";
 import { ChatInput } from "./ChatInput.js";
 import { GhostDetailPanel } from "./GhostDetailPanel.js";
 
-interface ChatPanelProps {
-  readonly onClose: () => void;
-}
-
-export function ChatPanel({ onClose }: ChatPanelProps) {
+export function ChatPanel() {
   const { ghosts, identities, ghostLabels } = useClientState();
   const pairing = usePairing();
 
@@ -53,41 +49,14 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
   const { items: inventory } = useGhostInventory(selectedGhostId, worldApiUrl);
   const isOnline = selectedGhostId != null && ghosts.has(selectedGhostId);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        e.stopPropagation();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
-
   return (
     <div
       role="dialog"
       aria-label="Ghost chat"
-      className="fixed inset-0 z-30 bg-surface flex flex-col p-6 box-border"
+      style={{ display: "flex", flexDirection: "column", height: "100%", padding: 20, boxSizing: "border-box" }}
     >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-5 pb-3 border-b border-border">
-        <span className="text-xl uppercase tracking-[--tracking-label] text-text-muted">
-          Ghost Chat
-        </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Close chat"
-          className="bg-transparent border border-border rounded text-text-muted text-base px-3 py-1 cursor-pointer font-mono tracking-[--tracking-label] hover:border-border-bright hover:text-text-dim transition-colors"
-        >
-          esc
-        </button>
-      </div>
-
       {/* Body: ghost list | chat | detail */}
-      <div className="flex-1 flex gap-5 min-h-0">
+      <div style={{ flex: 1, display: "flex", gap: 16, minHeight: 0 }}>
         <GhostList
           identities={identities}
           ghosts={ghosts}
@@ -98,7 +67,7 @@ export function ChatPanel({ onClose }: ChatPanelProps) {
 
         {/* Chat area */}
         <div className="flex-1 flex flex-col min-w-0">
-          <div className="text-base uppercase tracking-[--tracking-label] text-text-muted mb-3 pb-2 border-b border-border">
+          <div className="text-base uppercase tracking-[--tracking-label] text-text-muted mb-3 pb-2">
             {ghostIdentity ? `${ghostIdentity.name} / ${ghostIdentity.ghostClass}` : "—"}
           </div>
           <ChatThread thread={thread} ghostIdentity={ghostIdentity} />

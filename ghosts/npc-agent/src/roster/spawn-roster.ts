@@ -1,4 +1,7 @@
+import { createLogger } from "@aie-matrix/logger";
 import type { NpcAgentCatalog } from "../types.js";
+
+const log = createLogger("npc-agent");
 
 export interface RosterCredential {
   /** The npc-agent's own MCP session token (used to authenticate the spawn-roster call). */
@@ -37,7 +40,7 @@ export async function spawnRoster(
 ): Promise<RosterResult> {
   const enabled = catalog.enabled();
   if (enabled.length === 0) {
-    console.info(JSON.stringify({ kind: "npc-agent.roster.empty-catalog", sessionId }));
+    log.info({ kind: "roster.empty-catalog", sessionId });
     return { spawned: [], failed: [], ghostIdByCharacter: new Map() };
   }
 
@@ -110,14 +113,12 @@ export async function spawnRoster(
     );
   }
 
-  console.info(
-    JSON.stringify({
-      kind: "npc-agent.roster.spawned",
-      sessionId,
-      spawnedCount: spawned.length,
-      failedCount: failed.length,
-    }),
-  );
+  log.info({
+    kind: "roster.spawned",
+    sessionId,
+    spawnedCount: spawned.length,
+    failedCount: failed.length,
+  });
 
   return {
     spawned,

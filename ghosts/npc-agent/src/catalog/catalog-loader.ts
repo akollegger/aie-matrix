@@ -1,8 +1,11 @@
+import { createLogger } from "@aie-matrix/logger";
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { Effect } from "effect";
 import { parseCharacterGramFile } from "./parse-character-gram.js";
 import type { CharacterDefinition, NpcAgentCatalog } from "../types.js";
+
+const log = createLogger("npc-agent");
 
 function makeCatalog(characters: CharacterDefinition[]): NpcAgentCatalog {
   const byId = new Map(characters.map((c) => [c.id, c]));
@@ -63,13 +66,11 @@ export async function loadCatalog(dir: string): Promise<NpcAgentCatalog> {
     characters.push(char);
   }
 
-  console.info(
-    JSON.stringify({
-      kind: "npc-agent.catalog.loaded",
-      dir,
-      total: characters.length,
-      enabled: characters.filter((c) => c.enabled).length,
-    }),
-  );
+  log.info({
+    kind: "catalog.loaded",
+    dir,
+    total: characters.length,
+    enabled: characters.filter((c) => c.enabled).length,
+  });
   return makeCatalog(characters);
 }

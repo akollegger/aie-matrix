@@ -1,3 +1,4 @@
+import { createLogger } from "@aie-matrix/logger";
 import type { Message, Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import { AgentExecutor, type ExecutionEventBus, type RequestContext } from "@a2a-js/sdk/server";
 import { randomUUID } from "node:crypto";
@@ -18,6 +19,8 @@ import {
   clearBrokerState,
   getBrokerGhostIdForContract,
 } from "./behavior/broker-behavior.js";
+
+const log = createLogger("npc-agent");
 
 const ACTION_TICK_MS = 3000;
 
@@ -247,13 +250,11 @@ export class NpcAgentExecutor implements AgentExecutor {
     if (sp.ghostCard.characterId && catalog) {
       const characterDef = catalog.byId.get(sp.ghostCard.characterId);
       if (characterDef) {
-        console.info(
-          JSON.stringify({
-            kind: "npc-agent.character.spawn-received",
-            ghostId: sp.ghostId,
-            characterId: sp.ghostCard.characterId,
-          }),
-        );
+        log.info({
+          kind: "character.spawn-received",
+          ghostId: sp.ghostId,
+          characterId: sp.ghostCard.characterId,
+        });
         // launchGhostLoop awaits interrupt of any prior loop, then forks the new fiber.
         await launchGhostLoop(sp, characterDef);
         publishCompleted(taskId, contextId, eventBus);
@@ -263,12 +264,10 @@ export class NpcAgentExecutor implements AgentExecutor {
 
     // NPC-agent's own spawn — store context and trigger roster.
     sharedState.spawnCtx = sp;
-    console.info(
-      JSON.stringify({
-        kind: "npc-agent.spawn-received",
-        ghostId: sp.ghostId,
-      }),
-    );
+    log.info({
+      kind: "spawn-received",
+      ghostId: sp.ghostId,
+    });
 
     // On startup, check if a session is already active (ADR-0012 R3).
     const worldRootUrl = sp.worldEntryPoint;
@@ -277,9 +276,7 @@ export class NpcAgentExecutor implements AgentExecutor {
       const sessionId = activeSessions[0]!.id;
       await this.triggerRosterSpawn(sessionId);
     } else {
-      console.info(
-        JSON.stringify({ kind: "npc-agent.spawn-received.no-active-session", ghostId: sp.ghostId }),
-      );
+      log.info({ kind: "spawn-received.no-active-session", ghostId: sp.ghostId });
     }
 
     publishCompleted(taskId, contextId, eventBus);
@@ -380,10 +377,6 @@ function ghostActionLoop(
             });
             await client.connect();
             mcpByGhostId.set(ctx.ghostId, client);
-            // Announce character gram labels so the Colyseus room can badge this NPC.
-            if (characterDef.gramLabels) {
-              await client.announce(characterDef.gramLabels).catch(() => {});
-            }
             return client;
           },
           catch: (e) => (e instanceof Error ? e : new Error(String(e))),
@@ -456,9 +449,7 @@ async function launchGhostLoop(
 
   const existing = actionFibersByGhostId.get(ghostId);
   if (existing) {
-    console.info(
-      JSON.stringify({ kind: "npc-agent.character.loop-cancel", ghostId, reason: "spawn-replace" }),
-    );
+    log.info({ kind: "character.loop-cancel", ghostId, reason: "spawn-replace" });
     await Effect.runPromise(Fiber.interrupt(existing));
     actionFibersByGhostId.delete(ghostId);
   }
@@ -470,14 +461,12 @@ async function launchGhostLoop(
   const fiber = Effect.runFork(ghostActionLoop(ctx, characterDef));
   actionFibersByGhostId.set(ghostId, fiber);
 
-  console.info(
-    JSON.stringify({
-      kind: "npc-agent.character.loop-start",
-      ghostId,
-      characterId: characterDef.id,
-      tickMs: ACTION_TICK_MS,
-    }),
-  );
+  log.info({
+    kind: "character.loop-start",
+    ghostId,
+    characterId: characterDef.id,
+    tickMs: ACTION_TICK_MS,
+  });
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

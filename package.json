@@ -30,15 +30,20 @@
     "ghost:register": "node scripts/register-ghost.mjs",
     "ghost:cli": "pnpm --filter @aie-matrix/ghost-cli start",
     "demo": "node scripts/demo.mjs",
+    "stop": "node scripts/kill-poc-ports.mjs",
+    "stop:force": "node scripts/kill-poc-ports.mjs --yes --force",
     "ports": "node scripts/kill-poc-ports.mjs",
-    "ports:kill": "node scripts/kill-poc-ports.mjs --kill",
     "test": "pnpm run test:packages",
     "test:packages": "pnpm --filter @aie-matrix/server-world-api test && pnpm --filter @aie-matrix/server-colyseus test && pnpm --filter @aie-matrix/tmj-to-gram test && pnpm --filter @aie-matrix/server-agent-host test && pnpm --filter @aie-matrix/ghost-cli test && pnpm --filter @aie-matrix/random-agent test && pnpm --filter @aie-matrix/npc-agent test && pnpm --filter @aie-matrix/client-map-overlay test",
     "test:e2e": "pnpm --filter @aie-matrix/e2e test",
     "test:tck": "pnpm --filter @aie-matrix/ghost-tck test",
     "tmj-to-gram": "node ./tools/tmj-to-gram/dist/main.js",
     "map:compare-svg": "pnpm --filter @aie-matrix/tmj-to-gram run gallery:parity",
-    "map:editor": "pnpm --filter @aie-matrix/map-editor dev"
+    "map:editor": "pnpm --filter @aie-matrix/map-editor dev",
+    "test:integration": "node scripts/integration-test.mjs",
+    "infra:up": "docker compose -f docker-compose.dev.yml up -d",
+    "infra:down": "docker compose -f docker-compose.dev.yml down",
+    "infra:reset": "docker compose -f docker-compose.dev.yml down -v"
   },
   "dependencies": {
     "@aie-matrix/root-env": "workspace:*"

@@ -115,11 +115,11 @@
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T030 [P] Update `docs/architecture.md` — add human client as a peer actor type; document role-based proximity exemption for `human` role
+- [X] T030 [P] Update `docs/architecture.md` — add human client as a peer actor type; document role-based proximity exemption for `human` role
 - [X] T031 [P] Verify `pnpm run build` passes cleanly from repo root after all changes
 - [X] T032 [P] Run `pnpm test` in `server/world-api`, `server/conversation`, `server/colyseus` — confirm all pass
 - [X] T033 Update `CLAUDE.md` Recent Changes entry for `030-human-ghost-peer` with final description
-- [ ] T034 Run `/speckit-verify` and confirm GO verdict before opening PR
+- [X] T034 Run `/speckit-verify` and confirm GO verdict before opening PR
 
 ---
 

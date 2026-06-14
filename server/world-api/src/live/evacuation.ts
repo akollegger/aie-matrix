@@ -1,5 +1,8 @@
 import neo4j, { type Driver } from "neo4j-driver";
 import type { ColyseusWorldBridge } from "../colyseus-bridge.js";
+import { createLogger } from "@aie-matrix/logger";
+
+const log = createLogger("evacuation");
 
 // TODO RFC-0012: Release speaker room claims for ghosts on removedCells.
 // Call speakerRoomService.releaseClaimsOnRemovedPolygons(removedCells) when RFC-0012 is implemented.
@@ -16,14 +19,7 @@ export async function evacuateGhostsFromRemovedCells(
 ): Promise<void> {
   if (removedCells.length === 0) return;
 
-  console.info(
-    JSON.stringify({
-      kind: "evacuation",
-      op: "start",
-      removedCellCount: removedCells.length,
-      respawnCell: respawnCell ?? null,
-    }),
-  );
+  log.info({ kind: "evacuation", op: "start", removedCellCount: removedCells.length, respawnCell: respawnCell ?? null });
 
   // Query Neo4j for ghosts on removed cells
   const session = driver.session({ defaultAccessMode: neo4j.session.WRITE });
@@ -41,13 +37,11 @@ export async function evacuateGhostsFromRemovedCells(
     }));
 
     if (ghosts.length === 0) {
-      console.info(JSON.stringify({ kind: "evacuation", op: "no-ghosts", removedCells }));
+      log.info({ kind: "evacuation", op: "no-ghosts", removedCells });
       return;
     }
 
-    console.info(
-      JSON.stringify({ kind: "evacuation", op: "evacuating", ghostCount: ghosts.length, respawnCell: respawnCell ?? null }),
-    );
+    log.info({ kind: "evacuation", op: "evacuating", ghostCount: ghosts.length, respawnCell: respawnCell ?? null });
 
     for (const { ghostId } of ghosts) {
       if (respawnCell) {
@@ -64,7 +58,7 @@ export async function evacuateGhostsFromRemovedCells(
           ),
         );
         bridge.setGhostCell(ghostId, respawnCell);
-        console.info(JSON.stringify({ kind: "evacuation", op: "respawned", ghostId, respawnCell }));
+        log.info({ kind: "evacuation", op: "respawned", ghostId, respawnCell });
       } else {
         // Mark ghost as in limbo
         await session.executeWrite((tx) =>
@@ -74,7 +68,7 @@ export async function evacuateGhostsFromRemovedCells(
             { ghostId },
           ),
         );
-        console.info(JSON.stringify({ kind: "evacuation", op: "limbo", ghostId }));
+        log.info({ kind: "evacuation", op: "limbo", ghostId });
       }
     }
   } finally {

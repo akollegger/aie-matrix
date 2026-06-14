@@ -1,5 +1,8 @@
+import { createLogger } from "@aie-matrix/logger";
 import { Effect } from "effect";
 import { GhostMcpService } from "../mcp-effect.js";
+
+const log = createLogger("npc-agent");
 
 // ── Question bank ─────────────────────────────────────────────────────────────
 
@@ -189,5 +192,5 @@ export const handleContractSubmitted = Effect.fn("handleContractSubmitted")(func
   contractToBroker.delete(contractId);
   ghostState.set(brokerGhostId, { phase: "idle" });
 
-  console.info(JSON.stringify({ kind: "npc-agent.broker.contract.settled", brokerGhostId, contractId }));
+  log.info({ kind: "broker.contract.settled", brokerGhostId, contractId });
 });

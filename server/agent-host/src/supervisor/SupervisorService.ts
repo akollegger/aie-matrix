@@ -539,6 +539,8 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         ghostId: s.ghostId,
         agentId: s.agentId,
         status: s.status,
+        displayName: s.displayName,
+        ...(s.characterId !== undefined ? { characterId: s.characterId } : {}),
       })),
 
     deliverWorldEvent: (event) =>
@@ -570,11 +572,24 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
           return;
         }
         const sid = state.byGhostId.get(event.ghostId);
-        if (sid == null) return;
+        if (sid == null) {
+          slog("supervisor.deliver-world-event.no-session", { ghostId: event.ghostId, eventKind: event.kind });
+          return;
+        }
         const s = state.sessions.get(sid);
-        if (s == null || s.status !== "running" || s.spawnClient == null) return;
-        if (!s.usesA2APush) return;
-        if (s.currentTaskId == null || s.currentA2AContextId == null) return;
+        if (s == null || s.status !== "running" || s.spawnClient == null) {
+          slog("supervisor.deliver-world-event.session-not-ready", { ghostId: event.ghostId, status: s?.status });
+          return;
+        }
+        if (!s.usesA2APush) {
+          slog("supervisor.deliver-world-event.no-push", { ghostId: event.ghostId });
+          return;
+        }
+        if (s.currentTaskId == null || s.currentA2AContextId == null) {
+          slog("supervisor.deliver-world-event.no-task", { ghostId: event.ghostId });
+          return;
+        }
+        slog("supervisor.deliver-world-event.sending", { ghostId: event.ghostId, eventKind: event.kind });
         yield* pipe(
           a2a.sendWorldEvent(s.spawnClient, {
             taskId: s.currentTaskId,

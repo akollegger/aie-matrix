@@ -5,7 +5,7 @@
 export type SpawnContext = {
   readonly schema: "aie-matrix.agent-host.spawn-context.v1";
   readonly ghostId: string;
-  readonly houseEndpoints: { readonly mcp: string; readonly a2a: string };
+  readonly houseEndpoints: { readonly mcp: string; readonly a2a: string; readonly registry: string };
   readonly token: string;
   readonly worldEntryPoint: string;
   readonly ghostCard: {

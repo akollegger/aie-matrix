@@ -38,7 +38,7 @@ export function parseServerConfigFromEnv(env: NodeJS.ProcessEnv): ServerConfig {
     );
   }
   const mapPath =
-    env.AIE_MATRIX_MAP ?? join(repoRoot, "maps/sandbox/freeplay.tmj");
+    env.AIE_MATRIX_MAP ?? join(repoRoot, "maps/moscone/moscone-aiewf-mini.map.gram");
   const mapsRoot = normalize(join(repoRoot, "maps"));
 
   const rawItemsPath = env.AIE_MATRIX_ITEMS?.trim();

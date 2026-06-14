@@ -1,19 +1,33 @@
 #!/usr/bin/env node
 /**
- * List (default) or stop processes listening on well-known PoC TCP ports.
- * Uses `lsof` (macOS / Linux) — identify by port, not by matching "node" in argv
- * (avoids killing unrelated tools).
+ * List and interactively stop processes on well-known aie-matrix ports.
+ * Uses `lsof` (macOS / Linux) — identifies by port, not by process name.
  *
  * Usage:
- *   node scripts/kill-poc-ports.mjs           # print listeners on 8787, 5174, 5179
- *   node scripts/kill-poc-ports.mjs --kill   # SIGTERM those listeners
- *   node scripts/kill-poc-ports.mjs --kill --force   # SIGKILL
+ *   node scripts/kill-poc-ports.mjs            # list listeners, prompt to kill
+ *   node scripts/kill-poc-ports.mjs --yes      # skip confirmation (for scripts)
+ *   node scripts/kill-poc-ports.mjs --force    # SIGKILL instead of SIGTERM
+ *   PORTS=3000,9000 node scripts/kill-poc-ports.mjs   # override port list
+ *
+ * Also available as:
+ *   pnpm stop   (from repo root)
  */
 import { execSync } from "node:child_process";
+import * as readline from "node:readline";
 import process from "node:process";
 
-/** Default HTTP + Colyseus; Vite dev; Vite preview (e2e). Override: PORTS=3000,4000 node ... */
-const DEFAULT_PORTS = [8787, 5174, 5179];
+const PORT_LABELS = {
+  8787: "world-server (Colyseus + MCP)",
+  4000: "agent-host",
+  4001: "random-agent",
+  4002: "peppers-agent",
+  4004: "npc-agent",
+  5180: "intermedium (Vite)",
+  5182: "map-editor (Vite)",
+  5183: "map-editor mock (Vite)",
+};
+
+const DEFAULT_PORTS = Object.keys(PORT_LABELS).map(Number);
 
 function parsePorts() {
   const raw = process.env.PORTS?.trim();
@@ -30,62 +44,102 @@ function lsofRows(port) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "pipe"],
     });
-    return out.trim().split("\n").slice(1);
+    return out.trim().split("\n").slice(1).filter(Boolean);
   } catch {
     return [];
   }
 }
 
-function parsePid(line) {
+function parseRow(line) {
   const parts = line.trim().split(/\s+/);
-  const pid = Number.parseInt(parts[1], 10);
-  return Number.isFinite(pid) ? pid : null;
+  return {
+    command: parts[0] ?? "?",
+    pid: Number.parseInt(parts[1] ?? "", 10),
+    user: parts[2] ?? "?",
+    raw: line,
+  };
 }
 
 function collectListeners(ports) {
-  /** @type {Map<number, { port: number; lines: string[] }>} */
+  /** @type {Map<number, { pid: number; command: string; ports: number[] }>} */
   const byPid = new Map();
   for (const port of ports) {
     for (const line of lsofRows(port)) {
-      const pid = parsePid(line);
-      if (pid == null || pid === process.pid) continue;
-      const cur = byPid.get(pid) ?? { port, lines: [] };
-      cur.lines.push(line);
+      const { pid, command } = parseRow(line);
+      if (!Number.isFinite(pid) || pid === process.pid) continue;
+      const cur = byPid.get(pid) ?? { pid, command, ports: [] };
+      cur.ports.push(port);
       byPid.set(pid, cur);
     }
   }
   return byPid;
 }
 
+function prompt(question) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(question, (answer) => { rl.close(); resolve(answer.trim()); });
+  });
+}
+
 const ports = parsePorts();
-const kill = process.argv.includes("--kill");
+const skipConfirm = process.argv.includes("--yes");
 const force = process.argv.includes("--force");
 const byPid = collectListeners(ports);
 
 if (byPid.size === 0) {
-  console.info(`[kill-poc-ports] no listeners on ports: ${ports.join(", ")}`);
+  console.info(`No listeners found on: ${ports.join(", ")}`);
   process.exit(0);
 }
 
-console.info(`[kill-poc-ports] listeners (ports ${ports.join(", ")}):\n`);
-for (const [, { lines }] of byPid) {
-  for (const line of lines) console.info(line);
+console.info("\naie-matrix processes found:\n");
+const colW = [6, 8, 30, 40];
+console.info(
+  "  " +
+  "PORT".padEnd(colW[0]) +
+  "PID".padEnd(colW[1]) +
+  "LABEL".padEnd(colW[2]) +
+  "COMMAND",
+);
+console.info("  " + "-".repeat(colW[0] + colW[1] + colW[2] + colW[3]));
+for (const { pid, command, ports: pids } of byPid.values()) {
+  for (const port of pids) {
+    const label = PORT_LABELS[port] ?? "";
+    console.info(
+      "  " +
+      String(port).padEnd(colW[0]) +
+      String(pid).padEnd(colW[1]) +
+      label.padEnd(colW[2]) +
+      command,
+    );
+  }
+}
+console.info();
+
+let doKill = skipConfirm;
+if (!skipConfirm) {
+  if (!process.stdin.isTTY) {
+    console.info("(Non-interactive stdin — use --yes to kill. Aborting.)");
+    process.exit(0);
+  }
+  const answer = await prompt(`Kill ${byPid.size} process(es) with ${force ? "SIGKILL" : "SIGTERM"}? [y/N] `);
+  doKill = /^y(es)?$/i.test(answer);
 }
 
-if (!kill) {
-  console.info("\n[kill-poc-ports] dry-run. Re-run with --kill to SIGTERM, or add --force for SIGKILL.");
+if (!doKill) {
+  console.info("Aborted.");
   process.exit(0);
 }
 
 const signal = force ? "SIGKILL" : "SIGTERM";
 let n = 0;
-for (const pid of byPid.keys()) {
+for (const { pid, command, ports: pids } of byPid.values()) {
   try {
     process.kill(pid, signal);
     n += 1;
-    console.info(`[kill-poc-ports] sent ${signal} to pid ${pid}`);
+    console.info(`  ${signal} → pid ${pid} (${command} on :${pids.join(",")})`);
   } catch (e) {
-    console.warn(`[kill-poc-ports] pid ${pid}: ${/** @type {Error} */ (e).message}`);
+    console.warn(`  pid ${pid}: ${/** @type {Error} */ (e).message}`);
   }
 }
-console.info(`[kill-poc-ports] done (${n} process(es)).`);
+console.info(`\nDone — sent ${signal} to ${n} process(es).`);

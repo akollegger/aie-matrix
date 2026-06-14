@@ -83,6 +83,8 @@ export function useContracts(
   const submitAnswer = useCallback(
     async (contractId: string, submission: string) => {
       if (!token || !worldApiBaseUrl) return;
+      // Accept first (contract must be in Accepted state before submitting)
+      await mcpCall(worldApiBaseUrl, token, "eval_contract_accept", { contractId });
       await mcpCall(worldApiBaseUrl, token, "eval_contract_submit", {
         contractId,
         submission,
