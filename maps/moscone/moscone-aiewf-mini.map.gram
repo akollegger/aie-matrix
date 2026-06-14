@@ -19,3 +19,14 @@
 })
 
 [:Grants { broker: 1000, attendee: 1 } | (brokerCredit)]
+
+[leaderboards:Leaderboards |
+  (top-stars:Leaderboard {
+    title: "Top Stars",
+    description: "Ghosts with the most stars collected.",
+    resource: "brokerCredit",
+    aggregation: "sum",
+    direction: "distributed",
+    actorKind: "ghost"
+  })
+]

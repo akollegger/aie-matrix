@@ -141,6 +141,23 @@ describe("parseMapGram — error handling", () => {
     await expect(parseMapGram("not valid gram {{ }}")).rejects.toMatchObject({ reason: "gram-syntax" });
   });
 
+  it("gram-syntax detail contains parser diagnostic, not 'An error has occurred'", async () => {
+    // Trailing comma inside a node property block — mimics the real regression.
+    const gramText = `{ kind: "matrix-map", name: "test" }
+[leaderboards:Leaderboards |
+  (top-stars:Leaderboard {
+    title: "Top Stars",
+  }),
+]
+`;
+    const err = await parseMapGram(gramText).catch((e) => e);
+    expect(err).toBeInstanceOf(MapGramParseError);
+    expect(err.reason).toBe("gram-syntax");
+    // detail must come from the parser (position info), not the generic FiberFailure message
+    expect(err.detail).not.toBe("An error has occurred");
+    expect(err.detail).toMatch(/syntax error/i);
+  });
+
   it("throws resources-block-forbidden when [resources:Resources] block present", async () => {
     const gramText = `{ kind: "matrix-map", name: "old-resources", elevation: 0 }
 
