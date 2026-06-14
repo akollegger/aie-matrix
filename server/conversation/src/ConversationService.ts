@@ -81,17 +81,19 @@ function makeConversationService(
         const timestamp = worldNow();
 
         const rawCell = bridge.getGhostCell(ghostId);
+        // Normalize recipient once; use throughout to avoid empty-string listener keys.
+        const recipient = typeof to === "string" && to.trim().length > 0 ? to.trim() : undefined;
         // Human callers with an explicit recipient are exempt from the position check —
         // they have no world position but can still address a specific ghost directly.
-        const humanDirected = callerRole === "human" && typeof to === "string" && to.trim().length > 0;
+        const humanDirected = callerRole === "human" && recipient !== undefined;
         if (!rawCell && !humanDirected) {
           return yield* Effect.fail(new ConversationGhostNoPosition({ ghostId }));
         }
         const ghostCell = rawCell ?? "";
 
         let mx_listeners: string[];
-        if (to != null) {
-          mx_listeners = [to];
+        if (recipient !== undefined) {
+          mx_listeners = [recipient];
         } else {
           const clusterCells = gridDisk(ghostCell, 1);
           const listenerSet = new Set<string>();
