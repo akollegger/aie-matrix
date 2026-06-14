@@ -83,7 +83,7 @@ function makeConversationService(
         const rawCell = bridge.getGhostCell(ghostId);
         // Human callers with an explicit recipient are exempt from the position check —
         // they have no world position but can still address a specific ghost directly.
-        const humanDirected = callerRole === "human" && to != null;
+        const humanDirected = callerRole === "human" && typeof to === "string" && to.trim().length > 0;
         if (!rawCell && !humanDirected) {
           return yield* Effect.fail(new ConversationGhostNoPosition({ ghostId }));
         }

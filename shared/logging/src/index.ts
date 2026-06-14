@@ -10,7 +10,7 @@ const LEVELS: Record<LogLevel, number> = {
 function parseLevel(raw: string | undefined): LogLevel {
   const v = raw?.toLowerCase();
   if (v === "debug" || v === "info" || v === "warn" || v === "error") return v;
-  return "warn";
+  return "info";
 }
 
 export interface LogFields {
