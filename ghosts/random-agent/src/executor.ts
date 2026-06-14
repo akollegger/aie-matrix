@@ -309,13 +309,13 @@ export class RandomWandererExecutor implements AgentExecutor {
         const pl = ev.payload as { text?: string; priority?: string; from?: string; thread_id?: string };
         if ((pl.priority === "PARTNER" || pl.priority === "DIRECT") && typeof pl.from === "string" && typeof pl.text === "string") {
           const mcp = mcpByGhostId.get(ev.ghostId);
-          console.info(JSON.stringify({ kind: "random-agent.message.received", ghostId: ev.ghostId, priority: pl.priority, hasMcp: !!mcp, from: pl.from }));
+          log.info({ kind: "random-agent.message.received", ghostId: ev.ghostId, priority: pl.priority, hasMcp: !!mcp, from: pl.from });
           if (mcp) {
             void mcp.callTool("say", { intent: "greet", content: `received: ${pl.text}`, to: pl.from }).catch((e: unknown) => {
-              console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
+              log.error({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) });
             });
           } else {
-            console.warn(JSON.stringify({ kind: "random-agent.message.no-mcp", ghostId: ev.ghostId }));
+            log.warn({ kind: "random-agent.message.no-mcp", ghostId: ev.ghostId });
           }
         }
         // GROUP priority messages indicate group events (admit, join, leave) — refresh membership cache

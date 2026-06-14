@@ -46,7 +46,7 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - `.character.gram` files on disk under `NPC_CATALOG_DIR` (catalog); in-memory `Map` per-character/per-partner dialog state; Neo4j-backed registry gains a per-ghost `background` property (additive) (028-npc-agent)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@a2a-js/sdk` 0.3.13+, `@aie-matrix/ghost-ts-client` (workspace), `@relateby/pattern` ^0.4.2 (029-funder-into-npc)
 - In-memory `Map` (per-ghost funder state); no new persistence (029-funder-into-npc)
-- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) — server; TypeScript 5.7 (browser target, ESM) — clien + `effect` v3+, `@modelcontextprotocol/sdk` 1.29+, `@colyseus/core` 0.15.57, `colyseus.js` (client), `jsonwebtoken`, `@relateby/pattern`, React 18, Vite 6 (030-human-ghost-peer)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) — server; TypeScript 5.7 (browser target, ESM) — client + `effect` v3+, `@modelcontextprotocol/sdk` 1.29+, `@colyseus/core` 0.15.57, `colyseus.js` (client), `jsonwebtoken`, `@relateby/pattern`, React 18, Vite 6 (030-human-ghost-peer)
 - No new storage; uses existing Neo4j ledger (via LedgerService) and in-memory Colyseus room state (030-human-ghost-peer)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.

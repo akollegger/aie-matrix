@@ -21,7 +21,7 @@ async function fetchBalance(
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Accept: "application/json",
+        Accept: "application/json, text/event-stream",
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify({
@@ -32,7 +32,10 @@ async function fetchBalance(
       }),
     });
     if (!res.ok) return null;
-    const envelope = (await res.json()) as {
+    const raw = await res.text();
+    const dataLine = raw.split("\n").find((l) => l.startsWith("data:"));
+    if (!dataLine) return null;
+    const envelope = JSON.parse(dataLine.slice("data:".length).trim()) as {
       result?: { content?: Array<{ type: string; text?: string }> };
     };
     const text = envelope.result?.content?.find((c) => c.type === "text")?.text;
