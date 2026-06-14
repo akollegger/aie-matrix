@@ -45,10 +45,15 @@ function AppInner() {
     const base = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
 
     const load = async () => {
+      if (!identity.token) return; // wait until we have a JWT
       try {
         const res = await fetch(`${base}/mcp`, {
           method: "POST",
-          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+            Authorization: `Bearer ${identity.token}`,
+          },
           body: JSON.stringify({
             jsonrpc: "2.0",
             id: 1,
@@ -57,7 +62,11 @@ function AppInner() {
           }),
         });
         if (!res.ok) return;
-        const envelope = (await res.json()) as {
+        // MCP returns SSE (text/event-stream). Find the first `data:` line and parse it.
+        const raw = await res.text();
+        const dataLine = raw.split("\n").find((l) => l.startsWith("data:"));
+        if (!dataLine) return;
+        const envelope = JSON.parse(dataLine.slice("data:".length).trim()) as {
           result?: { content?: Array<{ type: string; text?: string }> };
         };
         const textItem = envelope.result?.content?.find((c) => c.type === "text");
@@ -72,7 +81,7 @@ function AppInner() {
     };
 
     void load();
-  }, []);
+  }, [identity.token]);
 
   useEffect(() => {
     const wantPersonal = stop === "personal";
@@ -210,6 +219,7 @@ function AppInner() {
         leaderboardIds={leaderboardIds}
         humanGhostId={identity.ghostId}
         worldApiUrl={worldApiUrl}
+        worldApiToken={identity.token}
         ghostClickRequest={chatGhostRequest}
         onGhostClickHandled={() => setChatGhostRequest(null)}
         onSelectedGhostChange={(ghostId) => { if (ghostId) setSelectedSceneGhostId(ghostId); }}

@@ -73,6 +73,7 @@ import {
   createConversationRouter,
   makeConversationLayer,
 } from "@aie-matrix/server-conversation";
+import { mintGhostToken } from "@aie-matrix/server-auth";
 import { patchMatchmakeCorsForCredentials } from "./colyseus-cors-patch.js";
 import { errorToResponse, type HttpMappingError } from "./errors.js";
 import { makeServerConfigLayer, type ServerConfigService } from "./services/ServerConfigService.js";
@@ -535,12 +536,9 @@ async function main(): Promise<void> {
     try {
       const leaderboardSpecs = await parseLeaderboardGramText(mapGramText);
       if (leaderboardSpecs.length > 0) {
-        const leaderboardInitEffect = LeaderboardService.pipe(
-          Effect.flatMap(svc => svc.init(leaderboardSpecs)),
-          Effect.provide(runtimeLayer as any),
-        ) as unknown as Effect.Effect<void, unknown, never>;
-        await Effect.runPromise(leaderboardInitEffect)
-          .catch((e: unknown) => console.warn("[aie-matrix] Leaderboard init warning:", e));
+        await runtime.runPromise(
+          LeaderboardService.pipe(Effect.flatMap(svc => svc.init(leaderboardSpecs))),
+        ).catch((e: unknown) => console.warn("[aie-matrix] Leaderboard init warning:", e));
         log.info({ kind: "leaderboards", count: leaderboardSpecs.length });
       }
     } catch (e) {
@@ -715,6 +713,7 @@ async function main(): Promise<void> {
           p.startsWith("/ghosts") ||
           p.startsWith("/humans") ||
           p === "/mcp" ||
+          p === "/auth/guest" ||
           p === "/internal/world-fanout" ||
           p.startsWith("/agent-host/")
         ) {
@@ -826,6 +825,22 @@ async function main(): Promise<void> {
         }
       }
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
+        return;
+      }
+      if (url.pathname === "/auth/guest" && req.method === "POST") {
+        const buf = await readRequestBody(req);
+        let ghostId: string;
+        try {
+          const body = JSON.parse(buf.toString("utf8") || "{}") as { ghostId?: string };
+          ghostId = typeof body.ghostId === "string" && body.ghostId.trim().length > 0
+            ? body.ghostId.trim()
+            : randomUUID();
+        } catch {
+          ghostId = randomUUID();
+        }
+        const token = mintGhostToken({ sub: ghostId, ghostId, role: "human" });
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ token, ghostId }));
         return;
       }
       if (url.pathname === "/humans/join" && req.method === "POST") {

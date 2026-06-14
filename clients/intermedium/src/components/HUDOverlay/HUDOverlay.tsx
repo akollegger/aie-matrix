@@ -9,6 +9,7 @@ interface HUDOverlayProps {
   readonly leaderboardIds: string[];
   readonly humanGhostId: string | null;
   readonly worldApiUrl: string;
+  readonly worldApiToken?: string | null;
   readonly ghostClickRequest?: string | null;
   readonly onGhostClickHandled?: () => void;
   readonly onSelectedGhostChange?: (ghostId: string | null) => void;
@@ -82,7 +83,7 @@ function TabButton({ label, hint, active, onClick }: TabButtonProps) {
  * Full-screen HUD overlay with a left-edge vertical tab strip.
  * Toggle: ` (backtick) or § key. Direct-open: C for chat, L for leaderboard. Esc closes.
  */
-export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl, ghostClickRequest, onGhostClickHandled, onSelectedGhostChange }: HUDOverlayProps) {
+export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl, worldApiToken, ghostClickRequest, onGhostClickHandled, onSelectedGhostChange }: HUDOverlayProps) {
   const [activeTab, setActiveTab] = useState<Tab | null>(null);
 
   const openTab = useCallback((tab: Tab) => {
@@ -213,6 +214,7 @@ export function HUDOverlay({ leaderboardIds, humanGhostId, worldApiUrl, ghostCli
           <LeaderboardPanel
             leaderboardIds={leaderboardIds}
             humanGhostId={humanGhostId}
+            token={worldApiToken}
           />
         </div>
       )}

@@ -18,13 +18,18 @@ interface LeaderboardUpdatedEvent {
 async function fetchLeaderboard(
   apiBase: string,
   id: string,
+  token?: string | null,
 ): Promise<LeaderboardResult | null> {
-  if (!apiBase || !id) return null;
+  if (!apiBase || !id || !token) return null;
   const base = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
   try {
     const res = await fetch(`${base}/mcp`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json, text/event-stream",
+        Authorization: `Bearer ${token}`,
+      },
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: 1,
@@ -33,7 +38,10 @@ async function fetchLeaderboard(
       }),
     });
     if (!res.ok) return null;
-    const envelope = (await res.json()) as {
+    const raw = await res.text();
+    const dataLine = raw.split("\n").find((l) => l.startsWith("data:"));
+    if (!dataLine) return null;
+    const envelope = JSON.parse(dataLine.slice("data:".length).trim()) as {
       result?: { content?: Array<{ type: string; text?: string }> };
     };
     const textItem = envelope.result?.content?.find((c) => c.type === "text");
@@ -56,26 +64,28 @@ export interface LeaderboardState {
  * Fetches a leaderboard by ID once on mount, then stays live via
  * Colyseus `"world-v1"` fanout messages (no polling loop).
  */
-export function useLeaderboard(leaderboardId: string): LeaderboardState {
+export function useLeaderboard(leaderboardId: string, token?: string | null): LeaderboardState {
   const [result, setResult] = useState<LeaderboardResult | null>(null);
   const [loading, setLoading] = useState(false);
   const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
 
   const apiBaseRef = useRef(apiBase);
   apiBaseRef.current = apiBase;
+  const tokenRef = useRef(token);
+  tokenRef.current = token;
 
-  // Fetch once on mount (or when leaderboardId changes).
+  // Fetch once on mount (or when leaderboardId / token changes).
   useEffect(() => {
-    if (!leaderboardId) return;
+    if (!leaderboardId || !token) return;
     let cancelled = false;
 
     setLoading(true);
-    fetchLeaderboard(apiBaseRef.current, leaderboardId)
+    fetchLeaderboard(apiBaseRef.current, leaderboardId, tokenRef.current)
       .then((r) => { if (!cancelled && r) setResult(r); })
       .finally(() => { if (!cancelled) setLoading(false); });
 
     return () => { cancelled = true; };
-  }, [leaderboardId]);
+  }, [leaderboardId, token]);
 
   // Subscribe to Colyseus `"world-v1"` fanout for live updates — no polling.
   useEffect(() => {

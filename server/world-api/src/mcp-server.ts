@@ -2345,6 +2345,28 @@ export function handleGhostMcpEffect(
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
+        // Inject CORS headers into every response the MCP transport writes,
+        // since StreamableHTTPServerTransport calls res.writeHead directly.
+        const origWriteHead = res.writeHead.bind(res);
+        (res as ServerResponse).writeHead = function (statusCode: number, ...args: unknown[]) {
+          const corsHeaders: Record<string, string> = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS, DELETE",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, mcp-protocol-version, X-Requested-With, Origin",
+          };
+          if (args.length === 0) {
+            return origWriteHead(statusCode, corsHeaders);
+          }
+          if (typeof args[0] === "string") {
+            // statusMessage, headers?
+            const hdrs = (args[1] ?? {}) as Record<string, string>;
+            return origWriteHead(statusCode, args[0] as string, { ...corsHeaders, ...hdrs });
+          }
+          // headers only (no statusMessage)
+          const hdrs = (args[0] ?? {}) as Record<string, string>;
+          return origWriteHead(statusCode, { ...corsHeaders, ...hdrs });
+        } as typeof res.writeHead;
+
         const mcp = buildGhostMcpServer(servicesLayer);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
         await mcp.connect(transport);

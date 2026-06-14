@@ -5,10 +5,11 @@ import { LeaderboardEntry } from "./LeaderboardEntry.js";
 interface SingleLeaderboardProps {
   readonly leaderboardId: string;
   readonly humanGhostId?: string | null;
+  readonly token?: string | null;
 }
 
-function SingleLeaderboard({ leaderboardId, humanGhostId }: SingleLeaderboardProps) {
-  const { result, loading, sessionComplete } = useLeaderboard(leaderboardId);
+function SingleLeaderboard({ leaderboardId, humanGhostId, token }: SingleLeaderboardProps) {
+  const { result, loading, sessionComplete } = useLeaderboard(leaderboardId, token);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -58,9 +59,10 @@ function SingleLeaderboard({ leaderboardId, humanGhostId }: SingleLeaderboardPro
 export interface LeaderboardPanelProps {
   readonly leaderboardIds: string[];
   readonly humanGhostId?: string | null;
+  readonly token?: string | null;
 }
 
-export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPanelProps) {
+export function LeaderboardPanel({ leaderboardIds, humanGhostId, token }: LeaderboardPanelProps) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   if (leaderboardIds.length === 0) {
@@ -132,7 +134,7 @@ export function LeaderboardPanel({ leaderboardIds, humanGhostId }: LeaderboardPa
       )}
 
       <div className="content-panel" style={{ padding: "8px 12px" }}>
-        <SingleLeaderboard leaderboardId={activeId} humanGhostId={humanGhostId} />
+        <SingleLeaderboard leaderboardId={activeId} humanGhostId={humanGhostId} token={token} />
       </div>
     </div>
   );
