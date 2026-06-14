@@ -4,6 +4,7 @@ import { GhostMcpService } from "../mcp-effect.js";
 
 const log = createLogger("npc-agent");
 
+
 // ── Question bank ─────────────────────────────────────────────────────────────
 
 const QUESTIONS = [
