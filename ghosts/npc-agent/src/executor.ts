@@ -7,8 +7,6 @@ import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import type { SpawnContext } from "./spawn-types.js";
 import { asWorldEvent, type WorldEvent } from "./world-event.js";
 import type { NpcAgentCatalog, CharacterDefinition, DialogState } from "./types.js";
-import type { RosterCredential } from "./roster/spawn-roster.js";
-import { spawnRoster } from "./roster/spawn-roster.js";
 import { GhostMcpServiceLive } from "./mcp-effect.js";
 import { ruleEngineTick } from "./behavior/rule-engine.js";
 import { evaluateDialog, initialDialogState } from "./dialog/dialog-engine.js";
@@ -53,14 +51,11 @@ export function getDialogStateSnapshot(): Record<string, DialogState> {
 
 /** Runtime state shared across all executor invocations (one per agent process). */
 export interface NpcExecutorState {
-  /** Set once on first spawn-context receipt. */
-  spawnCtx: SpawnContext | null;
-  /** Set once after the first roster spawn. characterId → ghostId */
+  /** characterId → ghostId for all spawned character ghosts. */
   ghostIdByCharacter: ReadonlyMap<string, string>;
 }
 
 const sharedState: NpcExecutorState = {
-  spawnCtx: null,
   ghostIdByCharacter: new Map(),
 };
 
@@ -82,8 +77,6 @@ function characterForGhostId(ghostId: string): CharacterDefinition | undefined {
 
 /** Dependency-injected by agent.ts after catalog is loaded. */
 let catalog: NpcAgentCatalog | null = null;
-let agentHostUrl = "";
-let agentId = "";
 
 export function initExecutor(opts: {
   catalog: NpcAgentCatalog;
@@ -91,8 +84,6 @@ export function initExecutor(opts: {
   agentId: string;
 }): void {
   catalog = opts.catalog;
-  agentHostUrl = opts.agentHostUrl;
-  agentId = opts.agentId;
 }
 
 // ── Incoming message classification ──────────────────────────────────────────
@@ -177,8 +168,9 @@ export class NpcAgentExecutor implements AgentExecutor {
     acknowledgeEvent(tid, contextId, task, eventBus);
 
     await Match.value(ev).pipe(
-      Match.when({ kind: "world.session.start" as const }, (e) =>
-        this.triggerRosterSpawn(e.payload.sessionId),
+      Match.when({ kind: "world.session.start" as const }, () =>
+        // Agent-host now handles roster re-spawning on session.start.
+        Promise.resolve(),
       ),
       Match.when({ kind: "world.contract.submitted" as const }, (e) => {
         const { contractId, contractorId } = e.payload;
@@ -246,73 +238,28 @@ export class NpcAgentExecutor implements AgentExecutor {
     publishTask(taskId, contextId, task, eventBus);
     publishWorking(taskId, contextId, eventBus);
 
-    // Character ghost spawn — start the behavior action loop for this character.
-    if (sp.ghostCard.characterId && catalog) {
-      const characterDef = catalog.byId.get(sp.ghostCard.characterId);
-      if (characterDef) {
-        log.info({
-          kind: "character.spawn-received",
-          ghostId: sp.ghostId,
-          characterId: sp.ghostCard.characterId,
-        });
-        // launchGhostLoop awaits interrupt of any prior loop, then forks the new fiber.
-        await launchGhostLoop(sp, characterDef);
-        publishCompleted(taskId, contextId, eventBus);
-        return;
-      }
+    if (!sp.ghostCard.characterId || !catalog) {
+      // Unexpected: npc-agent no longer has an orchestrator ghost.
+      // Log and complete so the A2A context doesn't hang.
+      log.info({ kind: "spawn-received.unexpected-orchestrator", ghostId: sp.ghostId });
+      publishCompleted(taskId, contextId, eventBus);
+      return;
     }
 
-    // NPC-agent's own spawn — store context and trigger roster.
-    sharedState.spawnCtx = sp;
-    log.info({
-      kind: "spawn-received",
-      ghostId: sp.ghostId,
-    });
-
-    // On startup, check if a session is already active (ADR-0012 R3).
-    const worldRootUrl = sp.houseEndpoints.registry;
-    const activeSessions = await fetchActiveSessions(worldRootUrl);
-    if (activeSessions.length > 0) {
-      const sessionId = activeSessions[0]!.id;
-      await this.triggerRosterSpawn(sessionId);
-    } else {
-      log.info({ kind: "spawn-received.no-active-session", ghostId: sp.ghostId });
+    const characterDef = catalog.byId.get(sp.ghostCard.characterId);
+    if (!characterDef) {
+      log.info({ kind: "character.spawn-unknown", ghostId: sp.ghostId, characterId: sp.ghostCard.characterId });
+      publishCompleted(taskId, contextId, eventBus);
+      return;
     }
 
+    log.info({ kind: "character.spawn-received", ghostId: sp.ghostId, characterId: sp.ghostCard.characterId });
+    sharedState.ghostIdByCharacter = new Map([
+      ...sharedState.ghostIdByCharacter,
+      [sp.ghostCard.characterId, sp.ghostId],
+    ]);
+    await launchGhostLoop(sp, characterDef);
     publishCompleted(taskId, contextId, eventBus);
-  }
-
-  private async triggerRosterSpawn(sessionId: string): Promise<void> {
-    const sp = sharedState.spawnCtx;
-    if (!sp) {
-      console.warn(JSON.stringify({ kind: "npc-agent.roster.no-spawn-ctx", sessionId }));
-      return;
-    }
-    if (!catalog) {
-      console.warn(JSON.stringify({ kind: "npc-agent.roster.no-catalog", sessionId }));
-      return;
-    }
-    if (!agentHostUrl) {
-      console.warn(JSON.stringify({ kind: "npc-agent.roster.no-agent-host-url", sessionId }));
-      return;
-    }
-
-    const credential: RosterCredential = {
-      mcpToken: sp.token,
-      worldApiBaseUrl: sp.houseEndpoints.mcp,
-      characterTokens: new Map(catalog.enabled().map((c) => [c.id, sp.token])),
-      agentId,
-    };
-
-    const result = await spawnRoster(
-      agentHostUrl,
-      agentId,
-      sessionId,
-      catalog,
-      credential,
-    );
-
-    sharedState.ghostIdByCharacter = result.ghostIdByCharacter;
   }
 }
 
@@ -580,15 +527,3 @@ export const _test = {
   launchGhostLoop,
 };
 
-/** Fetch active live sessions from the world server. */
-async function fetchActiveSessions(worldRootUrl: string): Promise<Array<{ id: string }>> {
-  try {
-    const res = await fetch(`${worldRootUrl}/live?status=active`);
-    if (!res.ok) return [];
-    const json = (await res.json()) as unknown;
-    if (Array.isArray(json)) return json as Array<{ id: string }>;
-    return [];
-  } catch {
-    return [];
-  }
-}

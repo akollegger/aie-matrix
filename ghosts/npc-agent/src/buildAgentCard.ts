@@ -15,11 +15,6 @@ export function buildNpcAgentCard(publicBase: string): AgentCard {
     url: jsonRpc,
     skills: [
       {
-        id: "roster-spawn",
-        name: "Roster Spawn",
-        description: "Spawns all enabled catalog characters when a session starts",
-      },
-      {
         id: "rule-behavior",
         name: "Rule Behavior",
         description: "Each character follows a priority-ordered behavior rule table",
@@ -46,6 +41,7 @@ export function buildNpcAgentCard(publicBase: string): AgentCard {
         about: "Deterministic NPC characters driven by rule tables and dialog trees.",
       },
       worldEventSubscriptions: ["world.session.start", "world.message.new"],
+      rosterAgent: true,
       authors: ["@akollegger"],
     },
   } as unknown as AgentCard;

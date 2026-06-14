@@ -2,7 +2,7 @@
 
 (charHermit:Character { id: "hermit", name: "The Hermit",
   background: "A reclusive attendee who prefers quiet corners and rarely initiates conversation.",
-  enabled: false, defaultAction: "idle" })
+  enabled: true, defaultAction: "idle" })
 
 (idle:DialogNode { responses: ["Hmph. What do you want?", "Leave me alone...", "..."] })
 

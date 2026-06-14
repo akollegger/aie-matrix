@@ -72,7 +72,7 @@
           ]
         }
       },
-      "registeredAt": "2026-06-14T13:34:50.922Z",
+      "registeredAt": "2026-06-14T14:51:21.826Z",
       "builtIn": false
     },
     "npc-agent-local": {
@@ -90,11 +90,6 @@
           "pushNotifications": true
         },
         "skills": [
-          {
-            "id": "roster-spawn",
-            "name": "Roster Spawn",
-            "description": "Spawns all enabled catalog characters when a session starts"
-          },
           {
             "id": "rule-behavior",
             "name": "Rule Behavior",
@@ -136,10 +131,11 @@
           },
           "authors": [
             "@akollegger"
-          ]
+          ],
+          "rosterAgent": true
         }
       },
-      "registeredAt": "2026-06-14T13:34:52.562Z",
+      "registeredAt": "2026-06-14T14:51:23.357Z",
       "builtIn": false
     }
   }

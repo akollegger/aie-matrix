@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { buildNpcAgentCard } from "./buildAgentCard.js";
 import { NpcAgentExecutor, initExecutor, getDialogStateSnapshot } from "./executor.js";
 import { loadCatalog } from "./catalog/catalog-loader.js";
+import type { NpcAgentCatalog } from "./types.js";
 
 loadRootEnv();
 
@@ -34,6 +35,8 @@ const registerTimeoutMs = (() => {
   return Number.isFinite(n) && n > 0 ? n : 120_000;
 })();
 
+let loadedCatalog: NpcAgentCatalog | null = null;
+
 const agentCard = buildNpcAgentCard(publicBase);
 const requestHandler = new DefaultRequestHandler(
   agentCard,
@@ -54,6 +57,18 @@ app.use(express.json({ limit: "4mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+app.get("/v1/roster", (_req, res) => {
+  if (!loadedCatalog) {
+    res.json([]);
+    return;
+  }
+  res.json(loadedCatalog.enabled().map((c) => ({
+    characterId: c.id,
+    displayName: c.name,
+    ...(c.background ? { background: c.background } : {}),
+  })));
 });
 
 // T030: introspection endpoint for TCK — returns current per-character dialog state.
@@ -158,6 +173,7 @@ const catalogDir = process.env.NPC_CATALOG_DIR
 app.listen(port, "0.0.0.0", () => {
   log.info({ kind: "start", publicBase, port, agentId });
   loadCatalog(catalogDir).then((cat) => {
+    loadedCatalog = cat;
     initExecutor({ catalog: cat, agentHostUrl, agentId });
     register();
   }).catch((e: unknown) => {

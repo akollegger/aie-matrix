@@ -316,11 +316,16 @@ async function autoBootstrap(ghostCount) {
     const npcSp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/${npcAgentId}`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ displayName: "npc-agent" }),
+      body: JSON.stringify({}),
     });
     if (npcSp.ok) {
-      const { sessionId, ghostId } = await npcSp.json();
-      console.info(`[demo] npc-agent spawned: session ${sessionId} (ghostId ${ghostId}) — broker and characters coming up.`);
+      const result = await npcSp.json();
+      const spawnedCount = result.spawned?.length ?? 0;
+      const failedCount = result.failed?.length ?? 0;
+      console.info(`[demo] npc-agent roster: ${spawnedCount} characters spawned, ${failedCount} failed.`);
+      if (failedCount > 0) {
+        console.warn("[demo] npc-agent roster failures:", JSON.stringify(result.failed));
+      }
     } else {
       console.warn("[demo] npc-agent spawn failed:", npcSp.status, await npcSp.text());
     }

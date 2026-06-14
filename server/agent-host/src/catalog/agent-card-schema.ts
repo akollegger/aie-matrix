@@ -30,6 +30,9 @@ const matrixZ = z.object({
   llmProvider: z.string(),
   profile: z.object({ about: z.string().min(1) }),
   authors: z.array(z.string()).min(1),
+  /** When true, spawn-trusted does not create a ghost for the agent process itself.
+   *  Instead it fetches GET /v1/roster and spawns each character directly. */
+  rosterAgent: z.boolean().optional(),
 });
 
 const baseAgentCardZ = z.object({

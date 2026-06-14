@@ -300,6 +300,12 @@ export interface IAgentSupervisor {
   readonly listSessions: () => ReadonlyArray<{ sessionId: string; ghostId: string; agentId: string; status: AgentSessionStatus }>;
   /** Routes IC-004 world events to the A2A push session for the target ghost, if any. */
   readonly deliverWorldEvent: (event: WorldEvent) => Effect.Effect<void>;
+  /** Spawn all characters for a roster agent without creating an orchestrator ghost.
+   *  Fetches GET {agentBaseUrl}/v1/roster, provisions a ghost per character, spawns each. */
+  readonly spawnRosterForAgent: (agentId: string, agentBaseUrl: string) => Effect.Effect<{
+    spawned: Array<{ characterId: string; ghostId: string; ok: true }>;
+    failed: Array<{ characterId: string; reason: string }>;
+  }>;
 }
 
 export class AgentSupervisor extends Context.Tag("agent-host/AgentSupervisor")<
@@ -332,7 +338,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         })
     : fetchWorldH3;
 
-  return {
+  const self: IAgentSupervisor = {
     spawn: (input) =>
       Effect.gen(function* () {
         const existingSid = state.byGhostId.get(input.ghostId);
@@ -543,6 +549,85 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         ...(s.characterId !== undefined ? { characterId: s.characterId } : {}),
       })),
 
+    spawnRosterForAgent: (agentId, agentBaseUrl) =>
+      Effect.gen(function* () {
+        type RosterChar = { characterId: string; displayName: string; background?: string };
+        type SpawnOutcome = { ok: true } | { ok: false; reason: string };
+
+        const roster: RosterChar[] = yield* Effect.promise(async (): Promise<RosterChar[]> => {
+          try {
+            const r = await fetch(`${agentBaseUrl}/v1/roster`);
+            if (!r.ok) return [];
+            const data = await r.json() as unknown;
+            return Array.isArray(data) ? (data as RosterChar[]) : [];
+          } catch {
+            return [];
+          }
+        });
+
+        const spawned: Array<{ characterId: string; ghostId: string; ok: true }> = [];
+        const failed: Array<{ characterId: string; reason: string }> = [];
+
+        for (const char of roster) {
+          type ProvResult = { ok: true; ghostId: string; credential: WorldCredential } | { ok: false; reason: string };
+
+          const prov: ProvResult = yield* Effect.promise(async (): Promise<ProvResult> => {
+            try {
+              const r = await fetch(`${deps.worldHttpBase}/registry/ghosts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ agentId }),
+              });
+              if (!r.ok) {
+                const body = await r.text().catch(() => "");
+                return { ok: false, reason: `provision failed: ${r.status} ${body}` };
+              }
+              const data = await r.json() as { ghostId?: string; credential?: { token?: string; worldApiBaseUrl?: string } };
+              if (!data.ghostId || !data.credential?.token || !data.credential?.worldApiBaseUrl) {
+                return { ok: false, reason: "incomplete provision response" };
+              }
+              return { ok: true, ghostId: data.ghostId, credential: { token: data.credential.token, worldApiBaseUrl: data.credential.worldApiBaseUrl } };
+            } catch (e) {
+              return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+            }
+          });
+
+          if (!prov.ok) {
+            failed.push({ characterId: char.characterId, reason: prov.reason });
+            continue;
+          }
+
+          const spawnOutcome: SpawnOutcome = yield* self.spawn({
+            agentId,
+            ghostId: prov.ghostId,
+            credential: prov.credential,
+            displayName: char.displayName,
+            background: char.background,
+            characterId: char.characterId,
+          }).pipe(
+            Effect.map((): SpawnOutcome => ({ ok: true })),
+            Effect.catchAll((e): Effect.Effect<SpawnOutcome> => {
+              if (e._tag === "SpawnFailed" && e.message.includes("ghostId already has an active session")) {
+                return Effect.succeed({ ok: true });
+              }
+              const reason = e._tag === "CapabilityUnmet"
+                ? `capability unmet: ${e.missing.join(", ")}`
+                : e.message;
+              return Effect.succeed({ ok: false, reason });
+            }),
+          );
+
+          if (spawnOutcome.ok) {
+            spawned.push({ characterId: char.characterId, ghostId: prov.ghostId, ok: true });
+          } else {
+            failed.push({ characterId: char.characterId, reason: (spawnOutcome as { ok: false; reason: string }).reason });
+          }
+        }
+
+        slog("supervisor.roster-spawn-complete", { agentId, spawnedCount: spawned.length, failedCount: failed.length });
+        return { spawned, failed };
+      }),
+
     deliverWorldEvent: (event) =>
       Effect.gen(function* () {
         // world.session.start (IC-007) is broadcast to ALL running push-capable
@@ -565,6 +650,20 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
                     ghostId: s.ghostId,
                     message: String(cause),
                   }),
+                ),
+              ),
+            );
+          }
+          // Re-trigger roster spawning for roster agents so characters appear in new sessions.
+          const catalogFile = yield* catalog.load();
+          for (const [aId, entry] of Object.entries(catalogFile.agents)) {
+            if (entry.kind === "mini-game") continue;
+            const isRoster = (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
+            if (!isRoster) continue;
+            yield* self.spawnRosterForAgent(aId, entry.baseUrl).pipe(
+              Effect.catchAllCause((cause) =>
+                Effect.sync(() =>
+                  slog("supervisor.session-start-roster-spawn-fail", { agentId: aId, message: String(cause) }),
                 ),
               ),
             );
@@ -608,6 +707,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         );
       }),
   };
+  return self;
 }
 
 export const AgentSupervisorLayer = (opts: {

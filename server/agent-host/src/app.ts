@@ -490,7 +490,8 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
   });
 
   // Trusted spawn: collapses registry caretaker→adopt→spawn into one call.
-  // Caller supplies only optional metadata; agent-host provisions ghostId + cell via world-api.
+  // For roster agents (matrix.rosterAgent=true), spawns all characters without an orchestrator ghost.
+  // For regular agents, provisions a single ghost and spawns the agent session.
   app.post("/v1/sessions/spawn-trusted/:agentId", (req, res) => {
     void runtime.runPromise(
       Effect.gen(function* () {
@@ -503,7 +504,25 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           characterId?: string;
         } | null;
 
-        // Step 1: provision ghost (ghostId + credential) via world-api registry/ghosts.
+        const supervisor = yield* AgentSupervisor;
+
+        // Check if this is a roster agent — if so, spawn all characters directly.
+        const catalog = yield* CatalogService;
+        const catalogEntry = yield* catalog.get(agentId).pipe(
+          Effect.map((e) => ({ found: true as const, entry: e })),
+          Effect.catchAll(() => Effect.succeed({ found: false as const, entry: null as never })),
+        );
+        if (
+          catalogEntry.found &&
+          catalogEntry.entry.kind !== "mini-game" &&
+          (catalogEntry.entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true
+        ) {
+          const result = yield* supervisor.spawnRosterForAgent(agentId, catalogEntry.entry.baseUrl);
+          res.status(201).json({ agentId, ...result });
+          return;
+        }
+
+        // Standard single-ghost path: provision ghost + spawn agent session.
         const provisionResult = yield* Effect.promise(() =>
           fetch(`${worldApiUrl}/registry/ghosts`, {
             method: "POST",
@@ -538,8 +557,6 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
         }
         const { ghostId, credential } = provisionResult.data;
 
-        // Step 2: spawn the agent session with the provisioned credential.
-        const supervisor = yield* AgentSupervisor;
         const session = yield* supervisor.spawn({
           agentId,
           ghostId,
