@@ -19,6 +19,8 @@
  */
 import { ulid } from "ulid";
 import { Effect, Layer } from "effect";
+import { createLogger } from "@aie-matrix/logger";
+
 import { LiveSessionService, type SessionRecord } from "./LiveSessionService.js";
 import { MapManagementService } from "../map/MapManagementService.js";
 import { MapService } from "../map/MapService.js";
@@ -27,6 +29,8 @@ import {
   LiveSessionMapNotPublishedError,
   LiveSessionNotFoundError,
 } from "./live-errors.js";
+
+const log = createLogger("live-session");
 
 export function makeLocalLiveSessionLayer(): Layer.Layer<
   LiveSessionService,
@@ -62,17 +66,9 @@ export function makeLocalLiveSessionLayer(): Layer.Layer<
             world: { name: "matrix" },
             maps: [{ mapId: activeMapId, role: "primary", gcsPath: record.gcsPath }],
           };
-          console.info(JSON.stringify({
-            kind: "local-live-session.synthesised",
-            sessionId: currentSession.id,
-            mapId: activeMapId,
-          }));
+          log.info({ kind: "synthesised", sessionId: currentSession.id, mapId: activeMapId });
         } else {
-          console.warn(JSON.stringify({
-            kind: "local-live-session.synthesise-skipped",
-            reason: "activeMapId not resolvable via MapManagementService",
-            mapId: activeMapId,
-          }));
+          log.warn({ kind: "synthesise-skipped", reason: "activeMapId not resolvable via MapManagementService", mapId: activeMapId });
         }
       }
 

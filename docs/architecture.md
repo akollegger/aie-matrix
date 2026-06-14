@@ -13,7 +13,7 @@ These components are chosen. Proposals to swap them out require an ADR with a st
 | Component | Technology | Role |
 |---|---|---|
 | Game client (debugger) | [Phaser](https://phaser.io/) | Hex-tile world rendering, developer debug UI — `clients/debugger/phaser` |
-| Human spectator client | React, [deck.gl](https://deck.gl/) (geospatial stops), [React Three Fiber](https://docs.pmnd.rs/react-three-fiber/) (Personal stop), Vite | `clients/intermedium` — 7-stop camera model (Global→Personal); H3 world full-bleed; panels as overlays; deck.gl for geospatial stops, R3F for Personal stop ([ADR-0006](../proposals/adr/0006-personal-stop-renderer.md)); see [RFC-0008](../proposals/rfc/0008-human-spectator-client.md) |
+| Human ghost peer client | React, [deck.gl](https://deck.gl/) (geospatial stops), [React Three Fiber](https://docs.pmnd.rs/react-three-fiber/) (Personal stop), Vite | `clients/intermedium` — 7-stop camera model (Global→Personal); H3 world full-bleed; panels as overlays; deck.gl for geospatial stops, R3F for Personal stop ([ADR-0006](../proposals/adr/0006-personal-stop-renderer.md)); see [RFC-0008](../proposals/rfc/0008-human-spectator-client.md). Human attendees join as first-class ghost peers: `POST /auth/guest` issues a JWT with `role: "human"`, which seeds a spawn-grant (broker-credit balance) and exempts the caller from proximity checks on directed `say()` calls — see [spec 030](../specs/030-human-ghost-peer/). |
 | Realtime server | [Colyseus](https://colyseus.io/) | Authoritative world state, WebSocket connections, room management |
 | Server orchestration | [Effect-ts](https://effect.website/) | Dependency injection, typed error handling, structured concurrency, observability |
 | Horizontal scaling | [Redis](https://redis.io/) (`RedisPresence` + `RedisDriver`) | Colyseus multi-process pub/sub and matchmaking |
@@ -132,7 +132,9 @@ Which models power ghost reasoning, speaker agents, and vendor NPCs? Multiple pr
 ### Authentication and Identity
 **Operator use case resolved** ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)): operators authenticate to the Admin client via Google Identity-Aware Proxy (IAP) at the load-balancer layer. No application code required; access is managed via IAM bindings.
 
-**Attendee use case open**: How does an IRL conference badge become a ghost? Options range from simple email-based JWT to OAuth via a conference identity provider to full SSO. Okta/Auth0 (an AIEWF sponsor) is a natural candidate. Privacy and consent for ghost card sharing is a related concern.
+**Attendee (human ghost peer) use case — PoC resolved** ([spec 030](../specs/030-human-ghost-peer/)): `POST /auth/guest` on world-api issues a short-lived JWT with `role: "human"` and `ghostId` (auto-generated ULID, persisted in browser `localStorage`). The `role` claim is extracted into `auth.extra.role` by `auth-context.ts` and threaded through the MCP tool layer. Concretely: directed `say()` with `role: "human"` skips the proximity check in `ConversationService`, allowing the human client to message any ghost regardless of map position.
+
+**Attendee identity — full registration open**: How does an IRL conference badge become a ghost? Options range from simple email-based JWT to OAuth via a conference identity provider to full SSO. Okta/Auth0 (an AIEWF sponsor) is a natural candidate. Privacy and consent for ghost card sharing is a related concern.
 
 ### Voice Transcription for Speaker Agents
 IRL talks could feed speaker agents via live transcription (Whisper or similar). This touches live A/V infrastructure at the venue, which is operationally complex. Whether this is in scope for v1, and what the fallback is (slides + abstract), needs a decision.

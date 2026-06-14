@@ -29,7 +29,7 @@ export function useGhostIdentity(ghostHouseUrl: string) {
     setIsLoading(true);
     try {
       const [sessionsData, catalogData] = await Promise.all([
-        fetchJson<{ sessions: { ghostId: string; agentId: string; status: string }[] }>(
+        fetchJson<{ sessions: { ghostId: string; agentId: string; status: string; displayName?: string; characterId?: string }[] }>(
           new URL("v1/sessions", base).toString(),
         ),
         fetchJson<{ agents: { agentId: string; tier: string; about: string }[] }>(
@@ -45,10 +45,15 @@ export function useGhostIdentity(ghostHouseUrl: string) {
       const m = new Map<string, GhostIdentity>();
       for (const s of sessionsData.sessions ?? []) {
         const meta = agentMeta.get(s.agentId);
+        const name = s.displayName?.trim()
+          ? s.displayName.trim()
+          : meta?.about?.trim()
+            ? meta.about.trim().slice(0, 200)
+            : s.ghostId.slice(0, 12);
         m.set(s.ghostId, {
           ghostId: s.ghostId,
           agentId: s.agentId,
-          name: meta?.about?.trim() ? meta.about.trim().slice(0, 200) : s.ghostId.slice(0, 12),
+          name,
           ghostClass: meta?.tier && meta.tier.length > 0 ? meta.tier : "agent",
         });
       }

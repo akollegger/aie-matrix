@@ -11,16 +11,22 @@ import type { GhostPosition } from "../types/ghostPosition.js";
 import type { ColyseusLinkState } from "../types/spectator.js";
 
 type GhostMap = Map<string, GhostPosition>;
+type LabelsMap = Map<string, string>;
 
 /**
  * Live `ghostTiles` from the spectator room; `previousH3Index` is the last cell before the
  * current `h3Index` when the ghost moves (T031, FR-005).
+ * `ghostLabels` maps ghostId → comma-separated character gram labels for NPC ghosts.
  */
 export function useColyseus(): {
   readonly ghosts: ReadonlyMap<string, GhostPosition>;
+  readonly ghostLabels: ReadonlyMap<string, string>;
+  readonly ghostGlyphs: ReadonlyMap<string, string>;
   readonly connectionState: ColyseusLinkState;
 } {
   const [ghosts, setGhosts] = useState<GhostMap>(() => new Map());
+  const [ghostLabels, setGhostLabels] = useState<LabelsMap>(() => new Map());
+  const [ghostGlyphs, setGhostGlyphs] = useState<LabelsMap>(() => new Map());
   const [connectionState, setConnectionState] = useState<ColyseusLinkState>(getColyseusLinkState);
   const [room, setRoom] = useState<Room<WorldSpectatorState> | null>(null);
 
@@ -60,6 +66,36 @@ export function useColyseus(): {
     console.debug("[colyseus] room effect: initial ghosts", Array.from(initial.keys()));
     setGhosts(initial);
 
+    const initialLabels: LabelsMap = new Map();
+    room.state.ghostLabels.forEach((labels, ghostId) => {
+      initialLabels.set(ghostId, labels);
+    });
+    setGhostLabels(initialLabels);
+    room.state.ghostLabels.onAdd((labels, ghostId) => {
+      setGhostLabels((prev) => { const next = new Map(prev); next.set(ghostId, labels); return next; });
+    });
+    room.state.ghostLabels.onChange((labels, ghostId) => {
+      setGhostLabels((prev) => { const next = new Map(prev); next.set(ghostId, labels); return next; });
+    });
+    room.state.ghostLabels.onRemove((_labels, ghostId) => {
+      setGhostLabels((prev) => { const next = new Map(prev); next.delete(ghostId); return next; });
+    });
+
+    const initialGlyphs: LabelsMap = new Map();
+    room.state.ghostGlyphs.forEach((glyph, ghostId) => {
+      initialGlyphs.set(ghostId, glyph);
+    });
+    setGhostGlyphs(initialGlyphs);
+    room.state.ghostGlyphs.onAdd((glyph, ghostId) => {
+      setGhostGlyphs((prev) => { const next = new Map(prev); next.set(ghostId, glyph); return next; });
+    });
+    room.state.ghostGlyphs.onChange((glyph, ghostId) => {
+      setGhostGlyphs((prev) => { const next = new Map(prev); next.set(ghostId, glyph); return next; });
+    });
+    room.state.ghostGlyphs.onRemove((_glyph, ghostId) => {
+      setGhostGlyphs((prev) => { const next = new Map(prev); next.delete(ghostId); return next; });
+    });
+
     room.state.ghostTiles.onAdd((h3, ghostId) => {
       console.debug("[colyseus] onAdd", ghostId, h3);
       setGhosts((prev) => {
@@ -95,7 +131,8 @@ export function useColyseus(): {
         return next;
       });
     });
+
   }, [room]);
 
-  return { ghosts, connectionState };
+  return { ghosts, ghostLabels, ghostGlyphs, connectionState };
 }

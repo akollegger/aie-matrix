@@ -3,6 +3,8 @@ import type { AdoptGhostRequest, AdoptGhostResponse } from "@aie-matrix/shared-t
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Effect } from "effect";
 import { getRequestTraceId } from "@aie-matrix/server-world-api";
+import { createLogger } from "@aie-matrix/logger";
+
 import { mintGhostToken } from "@aie-matrix/server-auth";
 import { WorldBridgeNoNavigableCells, WorldBridgeService } from "@aie-matrix/server-world-api";
 import { assertAdoptionAllowed } from "../session-guard.js";
@@ -11,6 +13,7 @@ import { createGhostId } from "../store.js";
 import type { RegistryBadJson } from "../registry-errors.js";
 import type { RegistryHttpError } from "../registry-errors.js";
 import { readJsonBody, sendJson } from "../utils/http.js";
+const log = createLogger("registry");
 
 export interface AdoptionRuntimeDeps {
   readonly worldApiBaseUrl: string;
@@ -40,15 +43,7 @@ export function handleAdoptGhostEffect(
     }
     const store = yield* RegistryStoreService;
     yield* assertAdoptionAllowed(store, parsed.caretakerId, parsed.agentHostId);
-    console.info(
-      JSON.stringify({
-        kind: "registry.adopt",
-        phase: "start",
-        traceId: getRequestTraceId() ?? null,
-        caretakerId: parsed.caretakerId,
-        agentHostId: parsed.agentHostId,
-      }),
-    );
+    log.info({ kind: "adopt", phase: "start", traceId: getRequestTraceId() ?? null, caretakerId: parsed.caretakerId, agentHostId: parsed.agentHostId });
     const bridge = yield* WorldBridgeService;
     const map = bridge.getLoadedMap();
     const cellIds = [...map.cells.keys()];
@@ -128,15 +123,7 @@ export function handleAdoptGhostEffect(
       },
     };
     yield* sendJson(res, corsHeaders, 201, out);
-    console.info(
-      JSON.stringify({
-        kind: "registry.adopt",
-        phase: "success",
-        traceId: getRequestTraceId() ?? null,
-        caretakerId: parsed.caretakerId,
-        ghostId,
-      }),
-    );
+    log.info({ kind: "adopt", phase: "success", traceId: getRequestTraceId() ?? null, caretakerId: parsed.caretakerId, ghostId });
     deps.forkTranscriptSubscriber?.(ghostId);
   });
 }

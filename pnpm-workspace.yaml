@@ -13,6 +13,7 @@ packages:
   - clients/intermedium
   - shared/types
   - shared/root-env
+  - shared/logging
   - ghosts/ts-client
   - server/agent-host
   - server/agent-host/examples/observer-agent

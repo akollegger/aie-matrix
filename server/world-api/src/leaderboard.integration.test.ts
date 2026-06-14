@@ -28,6 +28,8 @@ const stubBridge: ColyseusWorldBridge = {
   setTileItems: noop,
   setGhostInventory: noop,
   setGhostLastAction: noop,
+  setGhostLabels: noop,
+  setGhostGlyph: noop,
   fanoutWorldV1: noop,
 };
 const stubBridgeLayer = Layer.succeed(WorldBridgeService, stubBridge);

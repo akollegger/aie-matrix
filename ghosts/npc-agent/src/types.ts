@@ -64,6 +64,10 @@ export interface CharacterDefinition {
   readonly behaviorKind: "rule-engine" | "broker";
   /** Units paid per completed contract. Only meaningful for broker characters. Defaults to 1. */
   readonly stakeAmount: number;
+  /** Comma-joined character gram labels (e.g. "Character:Broker"). Sent to Colyseus on ghost join. */
+  readonly gramLabels: string;
+  /** Single grapheme/emoji glyph for this character. Empty string if not set in gram. */
+  readonly glyph: string;
 }
 
 export interface NpcAgentCatalog {

@@ -237,7 +237,12 @@ function computeMapCamera(
  * Personal stop is handled in App.tsx via PersonalScene (ADR-0006).
  * Exterior stop rendering (extruded board) arrives in Phase 11 (T087).
  */
-export function SceneView() {
+interface SceneViewProps {
+  onGhostSingleClick?: (ghostId: string) => void;
+  selectedChatGhostId?: string | null;
+}
+
+export function SceneView({ onGhostSingleClick, selectedChatGhostId }: SceneViewProps = {}) {
   const { tiles, ghosts, viewState, nav, tileTypeStyles } = useClientState();
   const [hover, setHover] = useState<{
     readonly tile: WorldTile;
@@ -996,6 +1001,7 @@ export function SceneView() {
 
     if (s === "plan") {
       const boardLayer = createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: lodExtruded, tileStyles: tileTypeStyles });
+      const planGhostPick = createGhostPickLayer(ghostDataForPick(ghosts), "plan-ghost-pick", true);
 
       // Shared animated plan mesh layer — used both during step-8 sweep and Normal Plan.
       const planMeshLayer = planMeshData.cells.length > 0
@@ -1026,7 +1032,7 @@ export function SceneView() {
           // Camera still settling — keep regional context visible.
           return buildRegionalEndLayers();
         }
-        const layers: Layer[] = [boardLayer, createGhostPointCloudLayer(displayGhosts)];
+        const layers: Layer[] = [boardLayer, ...createGhostPointCloudLayer(displayGhosts, selectedChatGhostId), planGhostPick];
         if (planMeshLayer) layers.unshift(planMeshLayer);
         return layers;
       }
@@ -1067,7 +1073,8 @@ export function SceneView() {
       return [
         ...(normalMesh ? [normalMesh] : []),
         normalBoard,
-        createGhostPointCloudLayer(displayGhosts),
+        ...createGhostPointCloudLayer(displayGhosts, selectedChatGhostId),
+        planGhostPick,
       ];
     }
 
@@ -1091,7 +1098,7 @@ export function SceneView() {
         }),
         createSelectionH3Layer(diskH3s, roomTiles, { id: "room-spotlight" }),
         createTileIconLayer(iconData, "room-icons"),
-        createGhostPointCloudLayer(displayGhosts),
+        ...createGhostPointCloudLayer(displayGhosts, selectedChatGhostId),
         createGhostPickLayer(gpick, "room-ghost-pick", true),
       ];
     }
@@ -1101,7 +1108,7 @@ export function SceneView() {
       if (!g0) {
         return [
           createHexGridLayer(tiles, { pickable: true, id: "plan-hex", tileStyles: tileTypeStyles }),
-          createGhostPointCloudLayer(displayGhosts),
+          ...createGhostPointCloudLayer(displayGhosts, selectedChatGhostId),
         ];
       }
       const disk = cellDisk(g0.h3Index, NEIGHBOR_DISK_K);
@@ -1132,16 +1139,16 @@ export function SceneView() {
         }),
         createSelectionH3Layer([...disk], tiles, { id: "situational-ring" }),
         createTileIconLayer(iconData, "situational-icons"),
-        createGhostPointCloudLayer(displayGhosts),
+        ...createGhostPointCloudLayer(displayGhosts, selectedChatGhostId),
         createGhostPickLayer(gpick, "situational-ghost-pick", true),
       ];
     }
 
     return [
       createHexGridLayer(tiles, { pickable: true, id: "plan-hex", extruded: false, tileStyles: tileTypeStyles }),
-      createGhostPointCloudLayer(displayGhosts),
+      ...createGhostPointCloudLayer(displayGhosts, selectedChatGhostId),
     ];
-  }, [tiles, ghosts, viewState, leavingRoomFocusH3, roomTiles, roomFocusH3, voidH3, iconFilter, lodExtruded, parentCells, venueCellR10, venueCellR12, drillLevel, venueZoomLevel, firstBoardH3, revealRadius, regionalMeshData, sfFillData, planMeshData, planRevealRadius, tileTypeStyles]);
+  }, [tiles, ghosts, viewState, leavingRoomFocusH3, roomTiles, roomFocusH3, voidH3, iconFilter, lodExtruded, parentCells, venueCellR10, venueCellR12, drillLevel, venueZoomLevel, firstBoardH3, revealRadius, regionalMeshData, sfFillData, planMeshData, planRevealRadius, tileTypeStyles, selectedChatGhostId]);
 
   const onHover = useCallback(
     (info: { object?: unknown; x: number; y: number }) => {
@@ -1199,9 +1206,13 @@ export function SceneView() {
         lastClick.current = null;
       } else {
         lastClick.current = { t: now, id };
+        // First click on a ghost — fire scene selection callback
+        if (isGhostPickPoint(o)) {
+          onGhostSingleClick?.(o.ghostId);
+        }
       }
     },
-    [viewState.stop, nav],
+    [viewState.stop, nav, onGhostSingleClick],
   );
 
   if (tiles.size === 0) return null;

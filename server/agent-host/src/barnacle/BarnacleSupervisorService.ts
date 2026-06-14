@@ -11,6 +11,7 @@
  */
 import { Context, Effect, Layer } from "effect";
 import { ulid } from "ulid";
+import { logger } from "@aie-matrix/logger";
 
 import { CatalogService } from "../catalog/CatalogService.js";
 
@@ -43,11 +44,11 @@ const HEARTBEAT_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 5_000;
 
 function slog(kind: string, fields: Record<string, unknown>): void {
-  console.info(JSON.stringify({ kind, ...fields }));
+  logger.info({ kind, ...fields } as Parameters<typeof logger.info>[0]);
 }
 
 function swarn(kind: string, fields: Record<string, unknown>): void {
-  console.warn(JSON.stringify({ kind, ...fields }));
+  logger.warn({ kind, ...fields } as Parameters<typeof logger.warn>[0]);
 }
 
 export interface IBarnacleSupervisor {

@@ -1,5 +1,7 @@
 import { timingSafeEqual, createHash } from "node:crypto";
 import { ulid } from "ulid";
+import { createLogger } from "@aie-matrix/logger";
+
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CellId } from "@aie-matrix/server-colyseus";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -63,6 +65,7 @@ import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
 // ---------------------------------------------------------------------------
 
 import type { SpawnGrant } from "@aie-matrix/map-gram";
+const log = createLogger("mcp");
 
 /** role → grants. Populated when a map is loaded. */
 let _spawnGrants: SpawnGrant[] = [];
@@ -95,7 +98,7 @@ type ToolServices =
   | LeaderboardService;
 
 function logJson(record: Record<string, unknown>): void {
-  console.info(JSON.stringify(record));
+  log.info(record as Parameters<typeof log.info>[0]);
 }
 
 function formatGhostLastAction(toolName: string, input: unknown): string {
@@ -2174,6 +2177,31 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   );
 
   server.registerTool(
+    "ghost_announce",
+    {
+      description: "Announce this ghost's character labels and display glyph to the world. Idempotent — call once on connect.",
+      inputSchema: {
+        labels: z.string().optional().describe("Comma-separated character gram labels (e.g. \"Character:Broker\"). Empty string clears labels."),
+        glyph: z.string().optional().describe("Single grapheme/emoji to display for this ghost (e.g. \"👻\"). Empty string clears glyph."),
+      },
+    },
+    async (input, extra) =>
+      runTool(
+        "ghost_announce",
+        input,
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const bridge = yield* WorldBridgeService;
+          bridge.setGhostLabels(ghostId, input.labels ?? "");
+          bridge.setGhostGlyph(ghostId, input.glyph ?? "");
+          return { ok: true };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
     "finalize-leaderboards",
     {
       description: "Freeze all leaderboards. Admin/scheduler only. Idempotent.",
@@ -2317,6 +2345,28 @@ export function handleGhostMcpEffect(
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
+        // Inject CORS headers into every response the MCP transport writes,
+        // since StreamableHTTPServerTransport calls res.writeHead directly.
+        const origWriteHead = res.writeHead.bind(res);
+        (res as ServerResponse).writeHead = function (statusCode: number, ...args: unknown[]) {
+          const corsHeaders: Record<string, string> = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS, DELETE",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, mcp-protocol-version, X-Requested-With, Origin",
+          };
+          if (args.length === 0) {
+            return origWriteHead(statusCode, corsHeaders);
+          }
+          if (typeof args[0] === "string") {
+            // statusMessage, headers?
+            const hdrs = (args[1] ?? {}) as Record<string, string>;
+            return origWriteHead(statusCode, args[0] as string, { ...corsHeaders, ...hdrs });
+          }
+          // headers only (no statusMessage)
+          const hdrs = (args[0] ?? {}) as Record<string, string>;
+          return origWriteHead(statusCode, { ...corsHeaders, ...hdrs });
+        } as typeof res.writeHead;
+
         const mcp = buildGhostMcpServer(servicesLayer);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
         await mcp.connect(transport);

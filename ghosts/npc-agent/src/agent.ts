@@ -1,4 +1,5 @@
 import { loadRootEnv } from "@aie-matrix/root-env";
+import { createLogger } from "@aie-matrix/logger";
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
@@ -7,8 +8,11 @@ import { join } from "node:path";
 import { buildNpcAgentCard } from "./buildAgentCard.js";
 import { NpcAgentExecutor, initExecutor, getDialogStateSnapshot } from "./executor.js";
 import { loadCatalog } from "./catalog/catalog-loader.js";
+import type { NpcAgentCatalog } from "./types.js";
 
 loadRootEnv();
+
+const log = createLogger("npc-agent");
 
 function listenPortFromEnv(fallback: number): number {
   const raw = process.env.AGENT_PORT;
@@ -31,6 +35,8 @@ const registerTimeoutMs = (() => {
   return Number.isFinite(n) && n > 0 ? n : 120_000;
 })();
 
+let loadedCatalog: NpcAgentCatalog | null = null;
+
 const agentCard = buildNpcAgentCard(publicBase);
 const requestHandler = new DefaultRequestHandler(
   agentCard,
@@ -51,6 +57,18 @@ app.use(express.json({ limit: "4mb" }));
 
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
+});
+
+app.get("/v1/roster", (_req, res) => {
+  if (!loadedCatalog) {
+    res.json([]);
+    return;
+  }
+  res.json(loadedCatalog.enabled().map((c) => ({
+    characterId: c.id,
+    displayName: c.name,
+    ...(c.background ? { background: c.background } : {}),
+  })));
 });
 
 // T030: introspection endpoint for TCK — returns current per-character dialog state.
@@ -105,7 +123,7 @@ async function register(): Promise<void> {
         body: JSON.stringify({ agentId, baseUrl: publicBase }),
       });
       if (res.ok || res.status === 201) {
-        console.info(JSON.stringify({ kind: "npc-agent.registered", agentId }));
+        log.info({ kind: "registered", agentId });
         return;
       }
       if (res.status === 409) {
@@ -153,8 +171,9 @@ const catalogDir = process.env.NPC_CATALOG_DIR
   : join(process.cwd(), "catalog");
 
 app.listen(port, "0.0.0.0", () => {
-  console.info(JSON.stringify({ kind: "npc-agent.start", publicBase, port, agentId }));
+  log.info({ kind: "start", publicBase, port, agentId });
   loadCatalog(catalogDir).then((cat) => {
+    loadedCatalog = cat;
     initExecutor({ catalog: cat, agentHostUrl, agentId });
     register();
   }).catch((e: unknown) => {

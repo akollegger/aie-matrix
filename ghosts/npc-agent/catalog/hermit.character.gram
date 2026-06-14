@@ -1,8 +1,8 @@
 { kind: "matrix-character" }
 
-(charHermit:Character { id: "hermit", name: "The Hermit",
+(charHermit:Character { id: "hermit", name: "The Hermit", glyph: "🧙",
   background: "A reclusive attendee who prefers quiet corners and rarely initiates conversation.",
-  enabled: false, defaultAction: "idle" })
+  enabled: true, defaultAction: "idle" })
 
 (idle:DialogNode { responses: ["Hmph. What do you want?", "Leave me alone...", "..."] })
 

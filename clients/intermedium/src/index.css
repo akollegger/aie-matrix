@@ -31,6 +31,59 @@
 
     /* ── Letter spacing ───────────────────────────────── */
     --tracking-label: 0.07em;
+
+    /* ── Overlay transparency tokens ─────────────────────
+     *
+     *  Three semantic levels for elements that sit over the scene:
+     *
+     *  --surface-overlay     structural containers (tab frames, section
+     *                        dividers). Nearly transparent — provides
+     *                        spatial layout without obscuring the world.
+     *
+     *  --surface-content-dim secondary text areas (sub-panels, muted
+     *                        sections). Readable but recessed.
+     *
+     *  --surface-content     primary text-bearing boxes (chat bubbles,
+     *                        stat rows, name labels, inputs). Must be
+     *                        legible; borderless by convention.
+     *
+     *  Compose with .overlay-structure and .content-panel classes below.
+     * ─────────────────────────────────────────────────── */
+    --surface-overlay:      rgba(7, 13, 24, 0.05);
+    --surface-content-dim:  rgba(7, 13, 24, 0.45);
+    --surface-content:      rgba(7, 13, 24, 0.72);
+}
+
+/* ── Semantic overlay classes ─────────────────────────── */
+
+/* Fullscreen structural frame — nearly transparent, layout only */
+.overlay-structure {
+    background: var(--surface-overlay);
+}
+
+/* Any element that renders text — opaque enough to read */
+.content-panel {
+    background: var(--surface-content);
+    border: none;
+    border-radius: 4px;
+}
+
+/* Subordinate text area — slightly recessed relative to content-panel */
+.content-panel-dim {
+    background: var(--surface-content-dim);
+    border: none;
+    border-radius: 4px;
+}
+
+/* ── Awaiting-ghost dormant-world pulse ───────────────── */
+
+@keyframes awaiting-pulse {
+    0%, 100% { filter: blur(0.5px) saturate(0.35) brightness(0.80); }
+    50%       { filter: blur(1.5px) saturate(0.2)  brightness(0.70); }
+}
+
+.awaiting-pulse {
+    animation: awaiting-pulse 4s ease-in-out infinite;
 }
 
 /* ── Base reset (keep existing layout rules) ──────────── */

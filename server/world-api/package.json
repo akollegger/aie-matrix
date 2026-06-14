@@ -18,6 +18,7 @@
     "test:integration": "node --import tsx --test --test-concurrency=1 \"test/**/*.integration.test.ts\""
   },
   "dependencies": {
+    "@aie-matrix/logger": "workspace:*",
     "@aie-matrix/map-gram": "workspace:*",
     "@aie-matrix/server-auth": "workspace:*",
     "@aie-matrix/server-colyseus": "workspace:*",

@@ -274,6 +274,7 @@ export function parseCharacterGramText(
     const behaviorKind: "rule-engine" | "broker" =
       extraLabels[0] === "Broker" ? "broker" : "rule-engine";
     const stakeAmount = numProp(charProps, "stakeAmount") ?? 1;
+    const glyph = strProp(charProps, "glyph")?.trim() ?? "";
 
     const missing: string[] = [];
     if (!id) missing.push("id");
@@ -374,6 +375,8 @@ export function parseCharacterGramText(
       behaviorRules = rules;
     }
 
+    const gramLabels = allLabels.join(",");
+
     return {
       id,
       name,
@@ -384,6 +387,8 @@ export function parseCharacterGramText(
       dialogTree,
       behaviorKind,
       stakeAmount,
+      gramLabels,
+      glyph,
     };
   });
 }

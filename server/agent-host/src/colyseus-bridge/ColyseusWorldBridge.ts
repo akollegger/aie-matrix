@@ -1,6 +1,7 @@
 import { Client } from "colyseus.js";
 import { translateColyseusWorldV1 } from "./translate-world-v1.js";
 import type { WorldEvent } from "../types.js";
+import { logger } from "@aie-matrix/logger";
 
 export type ColyseusWorldBridgeHandle = {
   /** Stop the client and leave the room. */
@@ -46,6 +47,7 @@ export async function startColyseusWorldBridge(options: {
   const handler = (raw: unknown) => {
     const e = translateColyseusWorldV1(raw);
     if (e) {
+      logger.info({ kind: "colyseus.world-v1.received", eventKind: e.kind, ghostId: e.ghostId });
       options.onEvent(e);
     }
   };

@@ -12,7 +12,6 @@ import {
   BARNACLE_COMPLETE_SCHEMA,
   type BarnacleComplete,
 } from "@aie-matrix/shared-types";
-import { deriveCharacterGhostId } from "./roster-utils.js";
 
 export type AppRuntime = ManagedRuntime.ManagedRuntime<
   CatalogService | AgentSupervisor | McpProxyService | BarnacleSupervisor,
@@ -490,6 +489,105 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
     );
   });
 
+  // Trusted spawn: collapses registry caretaker→adopt→spawn into one call.
+  // For roster agents (matrix.rosterAgent=true), spawns all characters without an orchestrator ghost.
+  // For regular agents, provisions a single ghost and spawns the agent session.
+  app.post("/v1/sessions/spawn-trusted/:agentId", (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        yield* requireBearer(req);
+        const agentId = req.params.agentId!;
+        const b = req.body as {
+          ghostId?: string;
+          displayName?: string;
+          background?: string;
+          characterId?: string;
+        } | null;
+
+        const supervisor = yield* AgentSupervisor;
+
+        // Check if this is a roster agent — if so, spawn all characters directly.
+        const catalog = yield* CatalogService;
+        const catalogEntry = yield* catalog.get(agentId).pipe(
+          Effect.map((e) => ({ found: true as const, entry: e })),
+          Effect.catchAll(() => Effect.succeed({ found: false as const, entry: null as never })),
+        );
+        if (
+          catalogEntry.found &&
+          catalogEntry.entry.kind !== "mini-game" &&
+          (catalogEntry.entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true
+        ) {
+          const result = yield* supervisor.spawnRosterForAgent(agentId, catalogEntry.entry.baseUrl);
+          res.status(201).json({ agentId, ...result });
+          return;
+        }
+
+        // Standard single-ghost path: provision ghost + spawn agent session.
+        const provisionResult = yield* Effect.promise(() =>
+          fetch(`${worldApiUrl}/registry/ghosts`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: req.headers.authorization ?? "",
+            },
+            body: JSON.stringify({
+              agentId,
+              ghostId: b?.ghostId,
+              displayName: b?.displayName,
+              background: b?.background,
+            }),
+          }).then(async (r) => {
+            if (!r.ok) {
+              const detail = await r.text().catch(() => "");
+              return { ok: false as const, status: r.status, detail };
+            }
+            const data = (await r.json()) as {
+              ghostId: string;
+              credential: { token: string; worldApiBaseUrl: string };
+            };
+            return { ok: true as const, data };
+          }).catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { ok: false as const, status: 502, detail: msg };
+          }),
+        );
+        if (!provisionResult.ok) {
+          res.status(provisionResult.status).json({ error: "ghost provision failed", detail: provisionResult.detail, code: "PROVISION_FAILED" });
+          return;
+        }
+        const { ghostId, credential } = provisionResult.data;
+
+        const session = yield* supervisor.spawn({
+          agentId,
+          ghostId,
+          credential: { token: credential.token, worldApiBaseUrl: credential.worldApiBaseUrl },
+          ...(typeof b?.displayName === "string" && b.displayName.trim().length > 0
+            ? { displayName: b.displayName.trim() }
+            : {}),
+          ...(typeof b?.background === "string" && b.background.trim().length > 0
+            ? { background: b.background.trim() }
+            : {}),
+          ...(typeof b?.characterId === "string" && b.characterId.trim().length > 0
+            ? { characterId: b.characterId.trim() }
+            : {}),
+        });
+
+        res.status(201).json({
+          sessionId: session.sessionId,
+          agentId: session.agentId,
+          ghostId: session.ghostId,
+        });
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.sync(() => {
+            const m = mapHouseError(e);
+            res.status(m.status).json(m.body);
+          }),
+        ),
+      ),
+    );
+  });
+
   // IC-006: agent-callable roster spawn endpoint.
   // Authenticated by the calling agent's own MCP session token (not the host dev token).
   app.post("/v1/sessions/spawn-roster/:agentId", (req, res) => {
@@ -538,19 +636,39 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
             failed.push({ characterId: String(characterId ?? ""), reason: "characterId is required" });
             continue;
           }
-          // Use caller-provided ghostId if given; fall back to deterministic derivation
-          const ghostId = (typeof char.ghostId === "string" && char.ghostId.trim().length > 0)
-            ? char.ghostId.trim()
-            : deriveCharacterGhostId(b.sessionId, characterId);
 
-          if (!char.credential?.token || !char.credential?.worldApiBaseUrl) {
-            failed.push({ characterId, reason: "credential.token and credential.worldApiBaseUrl are required" });
+          // Provision a fresh ghost credential from the registry for each character.
+          // This gives each character its own ghostId and world-api JWT so their MCP
+          // calls are routed correctly (not conflated with the npc-agent's own ghost).
+          type ProvResult =
+            | { ok: true; ghostId: string; credential: WorldCredential }
+            | { ok: false; reason: string };
+          const provResult: ProvResult = yield* Effect.tryPromise({
+            try: async () => {
+              const provRes = await fetch(`${worldApiUrl}/registry/ghosts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ agentId }),
+              });
+              if (!provRes.ok) {
+                const body = await provRes.text().catch(() => "");
+                return { ok: false as const, reason: `registry provision failed: ${provRes.status} ${body}` };
+              }
+              const prov = await provRes.json() as { ghostId?: string; credential?: { token?: string; worldApiBaseUrl?: string } };
+              if (!prov.ghostId || !prov.credential?.token || !prov.credential?.worldApiBaseUrl) {
+                return { ok: false as const, reason: "registry provision returned incomplete response" };
+              }
+              return { ok: true as const, ghostId: prov.ghostId, credential: { token: prov.credential.token, worldApiBaseUrl: prov.credential.worldApiBaseUrl } };
+            },
+            catch: (e) => new Error(e instanceof Error ? e.message : String(e)),
+          }).pipe(Effect.catchAll((e) => Effect.succeed({ ok: false as const, reason: e.message })));
+
+          if (!provResult.ok) {
+            failed.push({ characterId, reason: provResult.reason });
             continue;
           }
-          const worldCredential: WorldCredential = {
-            token: char.credential.token,
-            worldApiBaseUrl: char.credential.worldApiBaseUrl,
-          };
+          const ghostId = provResult.ghostId;
+          const worldCredential: WorldCredential = provResult.credential;
 
           const spawnResult: SpawnOutcome = yield* supervisor.spawn({
             agentId,

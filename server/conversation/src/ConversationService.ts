@@ -47,6 +47,8 @@ export interface ConversationServiceShape {
      *  on the conversation record so recipients see WHY they were
      *  spoken to, not just what was said. */
     intent?: string,
+    /** Caller role from JWT — "human" exempts directed (to-specified) messages from the position check. */
+    callerRole?: string,
   ): Effect.Effect<SayResult, ConversationStoreUnavailable | ConversationGhostNoPosition>;
   bye(ghostId: string): Effect.Effect<ByeResult>;
   inbox(ghostId: string): Effect.Effect<InboxResult>;
@@ -73,16 +75,19 @@ function makeConversationService(
   }
 
   return {
-    say(ghostId, content, to?: string, displayName?: string, intent?: string) {
+    say(ghostId, content, to?: string, displayName?: string, intent?: string, callerRole?: string) {
       return Effect.gen(function* () {
         const message_id = ulid();
         const timestamp = worldNow();
 
         const rawCell = bridge.getGhostCell(ghostId);
-        if (!rawCell) {
+        // Human callers with an explicit recipient are exempt from the position check —
+        // they have no world position but can still address a specific ghost directly.
+        const humanDirected = callerRole === "human" && to != null;
+        if (!rawCell && !humanDirected) {
           return yield* Effect.fail(new ConversationGhostNoPosition({ ghostId }));
         }
-        const ghostCell = rawCell;
+        const ghostCell = rawCell ?? "";
 
         let mx_listeners: string[];
         if (to != null) {

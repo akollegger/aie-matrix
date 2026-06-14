@@ -1,5 +1,5 @@
 import { Gram } from "@relateby/pattern";
-import { Effect, HashMap, HashSet, Option } from "effect";
+import { Effect, Either, HashMap, HashSet, Option } from "effect";
 import { isValidCell } from "h3-js";
 import { computeCellsFromVertices } from "./expand-polygon.js";
 import type {
@@ -116,17 +116,21 @@ interface LayerData {
  */
 export async function parseMapGram(gramText: string): Promise<ParsedMap> {
   // Step 1: parse the gram document
-  let parseResult: { header: Record<string, unknown> | null; patterns: Array<unknown> };
-  try {
-    parseResult = await Effect.runPromise(
+  let parseResult: { header: Record<string, unknown> | null; patterns: ReadonlyArray<unknown> };
+  const parseEither = await Effect.runPromise(
+    Effect.either(
       Gram.parseWithHeader(gramText) as Effect.Effect<
-        { header: Record<string, unknown> | null; patterns: Array<unknown> }
+        { header: Record<string, unknown> | null; patterns: ReadonlyArray<unknown> },
+        { _tag: "GramParseError"; cause: unknown }
       >,
-    );
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    throw new MapGramParseError("gram-syntax", msg);
+    ),
+  );
+  if (Either.isLeft(parseEither)) {
+    const gramErr = parseEither.left;
+    const detail = typeof gramErr.cause === "string" ? gramErr.cause : String(gramErr.cause ?? "gram parse failed");
+    throw new MapGramParseError("gram-syntax", detail);
   }
+  parseResult = parseEither.right;
 
   const { header, patterns } = parseResult;
 
