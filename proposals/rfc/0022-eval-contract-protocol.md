@@ -393,17 +393,13 @@ A commit-reveal scheme resolves this: the client (and evaluator) commit to withh
 The `contract.proposed` ledger event (RFC-0023 Verifiable Event Log addendum) carries two artifact commitments:
 
 - **`artifactRef`** — hash of the content shared with the contractor at the outset: the initial prompt(s), visible immediately upon acceptance
-- **`disclosureRefs`** — an ordered list of hash commitments to withheld content, each to be revealed at a later point in the work window
+- **`disclosureRefs`** — an ordered array of hash commitments to withheld content, each to be revealed at a later point in the work window
 
 ```typescript
-disclosureRefs: Array<{
-  id: string;       // stable label referenced at revelation time, e.g. "stage_2", "rubric"
-  holder: string;   // actorId of whoever holds the plaintext and will reveal it
-  hash: string;     // hex(SHA-256(withheld content))
-}>
+disclosureRefs: string[]  // hex(SHA-256(withheld content)), one per withheld block, in revelation order
 ```
 
-The client (and any other holder) commits to all entries at proposal time. The chain records these hashes before the contractor has accepted — the client cannot alter them after `contract.proposed` is appended, even before agreement.
+The client commits to all entries at proposal time. The chain records these hashes before the contractor has accepted — the client cannot alter them after `contract.proposed` is appended, even before agreement. Position in the array is the only identity a disclosure needs: the nth `disclosure.sent` event corresponds to `disclosureRefs[n]`.
 
 ### Disclosure Flow
 
@@ -413,7 +409,7 @@ When a stage is triggered — by the contractor submitting a prior answer, a cal
 SHA-256(received plaintext) == disclosureRefs[n].hash   →   match confirms authenticity
 ```
 
-The ledger records only a receipt (`"disclosure.sent"` event: contractId, disclosureId, holderId, recipientId). The plaintext never appears in the ledger. Future contractors and bystanders see that a disclosure occurred and to whom, but not what was revealed.
+The ledger records only a receipt (`"disclosure.sent"` event: contractId, disclosureIndex, recipientId). The plaintext never appears in the ledger. Future contractors and bystanders see that a disclosure occurred and to whom, but not what was revealed.
 
 ### Post-Settlement Audit
 

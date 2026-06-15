@@ -320,11 +320,7 @@ Four event kinds for the eval contract lifecycle:
   contractorId: string;
   evaluatorId: string;
   artifactRef: string;          // hex(SHA-256(initial prompt artifact))
-  disclosureRefs: Array<{       // ordered; empty if no progressive disclosure
-    id: string;                 // stable label, e.g. "stage_2", "rubric"
-    holder: string;             // actorId who will reveal this
-    hash: string;               // hex(SHA-256(withheld content))
-  }>;
+  disclosureRefs: string[];     // ordered hashes of withheld content; empty if no progressive disclosure
 }
 ```
 
@@ -345,8 +341,7 @@ Four event kinds for the eval contract lifecycle:
 // EventEntry payload
 {
   contractId: string;
-  disclosureId: string;         // references disclosureRefs[n].id
-  holderId: string;
+  disclosureIndex: number;      // 0-based position in disclosureRefs array
   recipientId: string;
 }
 ```
@@ -365,7 +360,7 @@ Four event kinds for the eval contract lifecycle:
 The full chain of entries for a completed single-stage contract:
 
 ```
-EventEntry     kind:"contract.proposed"  payload:{ contractId, artifactRef, disclosureRefs, ... }
+EventEntry     kind:"contract.proposed"  payload:{ contractId, clientId, contractorId, evaluatorId, artifactRef, disclosureRefs }
 TransferEntry  kind:"transfer"           cause:"eval-contract.open"       [client → escrow]
 EventEntry     kind:"contract.agreed"    payload:{ contractId, artifactRef, contractorId }
 EventEntry     kind:"contract.submitted" payload:{ contractId, submissionHash, ... }
