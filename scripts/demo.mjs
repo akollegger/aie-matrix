@@ -50,6 +50,7 @@
  * `pnpm run server` instead of `pnpm run demo`.
  */
 import { execSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
@@ -68,7 +69,11 @@ const agentPort = process.env.AGENT_PORT || "4001";
 const npcAgentPort = process.env.NPC_AGENT_PORT || "4004";
 const houseBase =
   process.env.AGENT_HOST_URL || `http://127.0.0.1:${housePort}`;
-const token = process.env.AGENT_HOST_TOKEN || "";
+if (!process.env.AGENT_HOST_TOKEN) {
+  process.env.AGENT_HOST_TOKEN = randomUUID();
+  console.info("[demo] AGENT_HOST_TOKEN not set — using ephemeral token for this session. Add AGENT_HOST_TOKEN to .env to pin it.");
+}
+const token = process.env.AGENT_HOST_TOKEN;
 const adminToken = process.env.ADMIN_TOKEN || "";
 const worldBase = `http://127.0.0.1:${httpPort}`;
 

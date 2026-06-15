@@ -29,3 +29,13 @@ packages:
   - ghosts/rdc-poker
   - ghosts/rdc-ledger
   - ghosts/rdc-poker-session
+overrides:
+  '@colyseus/core': '0.15.57'
+
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  '@vaadin/vaadin-usage-statistics': true
+  esbuild: true
+  msgpackr-extract: true
+  msw: true
