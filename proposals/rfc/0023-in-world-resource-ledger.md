@@ -260,7 +260,7 @@ type LedgerEntry = TransferEntry | EventEntry;
 interface TransferEntry {
   kind: "transfer";
   id: string;
-  transfers: Movement[];
+  transfers: Transfer[];
   cause: string;           // domain label: "eval-contract.open", "go", "group.form", etc.
   actors: string[];
   ts: number;
@@ -270,9 +270,10 @@ interface TransferEntry {
 
 // New — a named fact appended to the chain without resource movement
 interface EventEntry {
-  kind: string;            // discriminant doubles as the domain label: "contract.agreed", etc.
+  kind: "event";
+  type: string;            // domain event label: "contract.proposed", "contract.agreed", etc.
   id: string;
-  payload: Record<string, unknown>;  // JSON-serializable; key insertion order is fixed at construction
+  payload: Record<string, string | number | boolean | null | string[]>;
   actors: string[];
   ts: number;
   prevHash: string;
@@ -291,10 +292,10 @@ The canonical object fed to SHA-256 is extended to include `kind` explicitly and
 { actors: sorted, cause, id, kind: "transfer", transfers: normalized, prevHash, ts }
 
 // EventEntry canonical
-{ actors: sorted, id, kind, payload, prevHash, ts }
+{ actors: sorted, id, kind: "event", payload, prevHash, ts, type }
 ```
 
-`kind` was already effectively included in the hash via `cause` on transfer entries — this makes it explicit and uniform. `payload` values are JSON-serializable (including nested objects and arrays). Stability is achieved the same way the existing `hashTransaction` does: construct the canonical object with **fixed key insertion order** and sort any array that has no semantic ordering (e.g. `actors`). Payload authors are responsible for deterministic insertion order in nested objects — typically by constructing them from a fixed schema rather than arbitrary runtime state.
+`kind` was already effectively included in the hash via `cause` on transfer entries — this makes it explicit and uniform. Payload values are restricted to scalars and `string[]` (see type definition above), so `JSON.stringify` with **fixed key insertion order** produces a stable canonical form without additional sorting logic. `actors` is sorted before hashing (matching the existing `hashTransaction` pattern); `string[]` payload fields that carry ordered data (e.g. `disclosureRefs`) must not be sorted — their ordering is semantically significant.
 
 ### Content-Addressed Artifacts
 
@@ -308,9 +309,9 @@ Any party in possession of the artifact can independently compute `artifactRef` 
 
 ### Contract Event Kinds
 
-Four event kinds for the eval contract lifecycle:
+Four event types for the eval contract lifecycle (all share `kind: "event"`):
 
-**`"contract.proposed"`** — fired when the client opens a contract. Records the client's unilateral commitment to the artifact and all withheld disclosure commitments before the contractor has accepted.
+**`type: "contract.proposed"`** — fired when the client opens a contract. Records the client's unilateral commitment to the artifact and all withheld disclosure commitments before the contractor has accepted.
 
 ```typescript
 // EventEntry payload
@@ -324,7 +325,7 @@ Four event kinds for the eval contract lifecycle:
 }
 ```
 
-**`"contract.agreed"`** — fired when the contractor accepts. Records the contractor's explicit acknowledgment of the artifact they are committing to work on, making the commitment bilateral.
+**`type: "contract.agreed"`** — fired when the contractor accepts. Records the contractor's explicit acknowledgment of the artifact they are committing to work on, making the commitment bilateral.
 
 ```typescript
 // EventEntry payload
@@ -335,7 +336,7 @@ Four event kinds for the eval contract lifecycle:
 }
 ```
 
-**`"disclosure.sent"`** — fired when a holder reveals withheld content to a recipient through the private conversation channel. Records that revelation occurred and when, without exposing the content itself. The plaintext travels out-of-band via `say()`; the recipient verifies locally that `SHA-256(received plaintext) == disclosureRefs[n].hash`.
+**`type: "disclosure.sent"`** — fired when a holder reveals withheld content to a recipient through the private conversation channel. Records that revelation occurred and when, without exposing the content itself. The plaintext travels out-of-band via `say()`; the recipient verifies locally that `SHA-256(received plaintext) == disclosureRefs[n].hash`.
 
 ```typescript
 // EventEntry payload
@@ -346,7 +347,7 @@ Four event kinds for the eval contract lifecycle:
 }
 ```
 
-**`"contract.submitted"`** — fired when the contractor delivers their submission.
+**`type: "contract.submitted"`** — fired when the contractor delivers a submission. For multi-stage contracts this fires once per stage; `stage` identifies which stage is being submitted (1-based).
 
 ```typescript
 // EventEntry payload
@@ -354,20 +355,31 @@ Four event kinds for the eval contract lifecycle:
   contractId: string;
   submissionHash: string;       // hex(SHA-256(submission artifact))
   contractorId: string;
+  stage: number;                // 1 for single-stage; 1..N for multi-stage
 }
 ```
 
 The full chain of entries for a completed single-stage contract:
 
 ```
-EventEntry     kind:"contract.proposed"  payload:{ contractId, clientId, contractorId, evaluatorId, artifactRef, disclosureRefs }
-TransferEntry  kind:"transfer"           cause:"eval-contract.open"       [client → escrow]
-EventEntry     kind:"contract.agreed"    payload:{ contractId, artifactRef, contractorId }
-EventEntry     kind:"contract.submitted" payload:{ contractId, submissionHash, ... }
-TransferEntry  kind:"transfer"           cause:"eval-contract.settle"     [escrow → parties]
+EventEntry     kind:"event" type:"contract.proposed"  payload:{ contractId, clientId, contractorId, evaluatorId, artifactRef, disclosureRefs }
+TransferEntry  kind:"transfer"                         cause:"eval-contract.open"  [client → escrow]
+EventEntry     kind:"event" type:"contract.agreed"     payload:{ contractId, artifactRef, contractorId }
+EventEntry     kind:"event" type:"contract.submitted"  payload:{ contractId, submissionHash, contractorId, stage: 1 }
+TransferEntry  kind:"transfer"                         cause:"eval-contract.settle" [escrow → parties]
 ```
 
-For a multi-stage contract, `disclosure.sent` entries interleave between `contract.agreed` and `contract.submitted` as each stage is revealed.
+For a multi-stage contract, each stage's submission **must precede** the next disclosure — the chain enforces ordering by append sequence. The pattern is:
+
+```
+EventEntry  type:"contract.agreed"
+EventEntry  type:"contract.submitted"  stage: 1
+EventEntry  type:"disclosure.sent"     disclosureIndex: 0   [stage 2 prompt revealed]
+EventEntry  type:"contract.submitted"  stage: 2
+TransferEntry                          cause:"eval-contract.settle"
+```
+
+A world-API enforcing this sequence rejects a `disclosure.sent` for index `n` until a `contract.submitted` with `stage: n` exists in the chain for that contract.
 
 Declined and expired contracts produce only the proposal event, the opening transfer, and a refund transfer; no further event entries are required for those paths.
 
@@ -385,3 +397,5 @@ record(
 ```
 
 `record()` appends the entry to the chain, computes `prevHash` and `hash`, and persists atomically. Conservation validation does not apply (no transfers). Duplicate ID rejection applies identically to `commit()`.
+
+**Neo4j persistence:** Because payload values are restricted to scalars and `string[]`, each field maps directly to a Neo4j node property with no serialization step. `string[]` fields (e.g. `disclosureRefs`) are stored as Neo4j string arrays. No `payloadJson` blob is needed.
