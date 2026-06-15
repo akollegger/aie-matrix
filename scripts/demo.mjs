@@ -5,7 +5,6 @@
  *
  * New dev quickstart:
  *   git clone … && cd aie-matrix
- *   cp .env.example .env.local   # fill in AGENT_HOST_TOKEN at minimum
  *   pnpm install
  *   pnpm run demo
  *
@@ -13,12 +12,12 @@
  *   http://127.0.0.1:5180/  — Intermedium (spectator view, ghosts moving)
  *   http://127.0.0.1:5182/  — Map Editor  (admin panel to spawn/manage ghosts)
  *
- * ## Required env (repo root `.env` / `.env.local` — loaded via `loadRootEnv()`;
+ * ## Env (repo root `.env` / `.env.local` — loaded via `loadRootEnv()`;
  * all child processes inherit the merged `process.env`.)
  *
- * - `AGENT_HOST_TOKEN` — shared bearer (agent-host + agent A2A). Required for
- *   auto-bootstrap (catalog register, adopt, spawn). Without it the ghost stack
- *   starts but no ghosts will be spawned automatically.
+ * - `AGENT_HOST_TOKEN` — shared bearer (agent-host + agent A2A). Auto-generated
+ *   as a random UUID when absent; set in `.env` to pin a stable value across
+ *   restarts (useful for persistent catalog registrations).
  * - `ADMIN_TOKEN` — world server admin bearer (publish map, start/end live session).
  *   Required for the demo to create a live session in the map-editor admin panel.
  *   Without it the map-editor will show maps (if Neo4j is configured) but no session.
@@ -69,11 +68,11 @@ const agentPort = process.env.AGENT_PORT || "4001";
 const npcAgentPort = process.env.NPC_AGENT_PORT || "4004";
 const houseBase =
   process.env.AGENT_HOST_URL || `http://127.0.0.1:${housePort}`;
-if (!process.env.AGENT_HOST_TOKEN) {
+if (process.env.AGENT_HOST_TOKEN === undefined) {
   process.env.AGENT_HOST_TOKEN = randomUUID();
   console.info("[demo] AGENT_HOST_TOKEN not set — using ephemeral token for this session. Add AGENT_HOST_TOKEN to .env to pin it.");
 }
-const token = process.env.AGENT_HOST_TOKEN;
+const token = /** @type {string} */ (process.env.AGENT_HOST_TOKEN);
 const adminToken = process.env.ADMIN_TOKEN || "";
 const worldBase = `http://127.0.0.1:${httpPort}`;
 
@@ -259,7 +258,7 @@ async function waitForHouseAndAgent() {
     await new Promise((r) => setTimeout(r, 400));
   }
   console.warn(
-    "[demo] timeout waiting for agent-host + agents; continue anyway (check AGENT_HOST_TOKEN and root .env).",
+    "[demo] timeout waiting for agent-host + agents; continue anyway (check AGENT_HOST_PORT / AGENT_PORT / NPC_AGENT_PORT in root .env).",
   );
 }
 
@@ -270,12 +269,6 @@ async function waitForHouseAndAgent() {
 async function autoBootstrap(ghostCount) {
   if (process.env.AIE_MATRIX_DEMO_SKIP_BOOTSTRAP === "1") {
     console.info("[demo] Skipping catalog + registry + spawn (AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1).");
-    return;
-  }
-  if (!token) {
-    console.warn(
-      "[demo] AGENT_HOST_TOKEN not set — skipping ghost bootstrap. Add AGENT_HOST_TOKEN (and ADMIN_TOKEN) to repo root `.env` for a full demo with a wanderer and live session.",
-    );
     return;
   }
 
