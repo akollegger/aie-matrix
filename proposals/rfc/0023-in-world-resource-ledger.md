@@ -232,3 +232,161 @@ Three new `cause` values are introduced by the group formation feature:
 The group bag is identified by `ActorId = "group:{groupId}"` in the existing `BagCache`. No new ledger primitives are required — these transactions use the same `Transaction` / `Transfer` shape as all other ledger commits.
 
 The `shared: true` flag on `ProposeParams` in `ProposalService` triggers the formation path. Same-resource validation (`give.resource === want.resource`) is enforced at propose time (FR-011 in spec-023).
+
+---
+
+## Addendum: Verifiable Event Log (2026-06-15)
+
+### Motivation
+
+RFC-0022 (Eval Contract Protocol) requires the ledger chain to record three contract lifecycle milestones as immutable, verifiable facts:
+
+1. **Agreement** — contractor acceptance, binding both parties to a specific external artifact
+2. **Submission** — contractor delivery, content-addressed so the evaluator operates on a verified artifact
+3. **Settlement** — already recorded as a `"eval-contract.settle"` transfer entry
+
+Currently only settlement has a ledger footprint. Agreement and submission are Neo4j-only state, invisible to the chain. Auditing a contract lifecycle requires reading both stores, and the two cannot cross-verify each other.
+
+The fix is a minimal generalization: the ledger chain records two kinds of entries — **transfer entries** (existing) and **event entries** (new). Both are hash-chained. An event entry carries no resource movements; it records a named fact whose typed payload is part of the hash input.
+
+### Generalized Entry Types
+
+The chain's unit becomes `LedgerEntry`, a discriminated union:
+
+```typescript
+type LedgerEntry = TransferEntry | EventEntry;
+
+// Existing — the current Transaction type, with an explicit kind discriminant added
+interface TransferEntry {
+  kind: "transfer";
+  id: string;
+  movements: Movement[];   // RFC-0023 §1 nomenclature; impl currently calls these "transfers"
+  cause: string;           // domain label: "eval-contract.open", "go", "group.form", etc.
+  actors: string[];
+  ts: number;
+  prevHash: string;
+  hash: string;
+}
+
+// New — a named fact appended to the chain without resource movement
+interface EventEntry {
+  kind: string;            // discriminant doubles as the domain label: "contract.agreed", etc.
+  id: string;
+  payload: Record<string, string | number | boolean | null>;  // primitive values only
+  actors: string[];
+  ts: number;
+  prevHash: string;
+  hash: string;
+}
+```
+
+`TransferEntry` is backward-compatible with the current `Transaction` type: the only additive change is the explicit `kind: "transfer"` discriminant. Existing callers of `LedgerService.commit()` are unaffected.
+
+### Hash Computation (extends Open Question 2)
+
+The canonical object fed to SHA-256 is extended to include `kind` explicitly and `payload` for event entries:
+
+```typescript
+// TransferEntry canonical
+{ actors: sorted, cause, id, kind: "transfer", movements: normalized, prevHash, ts }
+
+// EventEntry canonical
+{ actors: sorted, id, kind, payload, prevHash, ts }
+```
+
+`kind` was already effectively included in the hash via `cause` on transfer entries — this makes it explicit and uniform. `payload` values must be primitives (strings, numbers, booleans, null) so that `JSON.stringify` produces a stable canonical form without key-ordering concerns.
+
+### Content-Addressed Artifacts
+
+An **artifact** is any external document whose identity must be committed to the chain — an exam problem set, a submission, a contract specification. Its reference is a **content hash**:
+
+```
+artifactRef = hex(SHA-256(artifact_bytes))
+```
+
+Any party in possession of the artifact can independently compute `artifactRef` and verify it matches the chain entry. The artifact itself is stored and transmitted out-of-band (conversation thread, file, structured payload); the chain holds only the hash.
+
+### Contract Event Kinds
+
+Four event kinds for the eval contract lifecycle:
+
+**`"contract.proposed"`** — fired when the client opens a contract. Records the client's unilateral commitment to the artifact and all withheld disclosure commitments before the contractor has accepted.
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  clientId: string;
+  contractorId: string;
+  evaluatorId: string;
+  artifactRef: string;          // hex(SHA-256(initial prompt artifact))
+  disclosureRefs: Array<{       // ordered; empty if no progressive disclosure
+    id: string;                 // stable label, e.g. "stage_2", "rubric"
+    holder: string;             // actorId who will reveal this
+    hash: string;               // hex(SHA-256(withheld content))
+  }>;
+}
+```
+
+**`"contract.agreed"`** — fired when the contractor accepts. Records the contractor's explicit acknowledgment of the artifact they are committing to work on, making the commitment bilateral.
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  artifactRef: string;          // contractor's acknowledgment of the committed artifact hash
+  contractorId: string;
+}
+```
+
+**`"disclosure.sent"`** — fired when a holder reveals withheld content to a recipient through the private conversation channel. Records that revelation occurred and when, without exposing the content itself. The plaintext travels out-of-band via `say()`; the recipient verifies locally that `SHA-256(received plaintext) == disclosureRefs[n].hash`.
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  disclosureId: string;         // references disclosureRefs[n].id
+  holderId: string;
+  recipientId: string;
+}
+```
+
+**`"contract.submitted"`** — fired when the contractor delivers their submission.
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  submissionHash: string;       // hex(SHA-256(submission artifact))
+  contractorId: string;
+}
+```
+
+The full chain of entries for a completed single-stage contract:
+
+```
+EventEntry     kind:"contract.proposed"  payload:{ contractId, artifactRef, disclosureRefs, ... }
+TransferEntry  kind:"transfer"           cause:"eval-contract.open"       [client → escrow]
+EventEntry     kind:"contract.agreed"    payload:{ contractId, artifactRef, contractorId }
+EventEntry     kind:"contract.submitted" payload:{ contractId, submissionHash, ... }
+TransferEntry  kind:"transfer"           cause:"eval-contract.settle"     [escrow → parties]
+```
+
+For a multi-stage contract, `disclosure.sent` entries interleave between `contract.agreed` and `contract.submitted` as each stage is revealed.
+
+Declined and expired contracts produce only the proposal event, the opening transfer, and a refund transfer; no further event entries are required for those paths.
+
+### LedgerService Interface Change
+
+A `record()` method is added alongside the existing `commit()`:
+
+```typescript
+record(
+  entry: Omit<EventEntry, "prevHash" | "hash">
+): Effect.Effect<
+  EventEntry,
+  LedgerDuplicateTransaction | LedgerPersistenceError
+>;
+```
+
+`record()` appends the entry to the chain, computes `prevHash` and `hash`, and persists atomically. Conservation validation does not apply (no movements). Duplicate ID rejection applies identically to `commit()`.
