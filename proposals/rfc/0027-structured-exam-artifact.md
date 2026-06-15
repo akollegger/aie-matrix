@@ -606,11 +606,22 @@ Drop the rubric relationships (`r1`…`r4`); keep the problem nodes, the option 
   { "subject": { "identity": "q1", "labels": ["Problem"],
       "properties": { "type": "multiple_choice", "prompt": "Which consensus algorithm is used by Bitcoin?", "weight": 2 } },
     "elements": [] },
+  { "subject": { "identity": "q2", "labels": ["Problem"], "properties": {} }, "elements": [] },
+  { "subject": { "identity": "q3", "labels": ["Problem"], "properties": {} }, "elements": [] },
   { "subject": { "identity": "stage1", "labels": ["Stage"], "properties": { "title": "Fundamentals" } },
-    "elements": [ "…q1, q2, q3 stubs…" ] },
+    "elements": [
+      { "subject": { "identity": "q1", "labels": [], "properties": {} }, "elements": [] },
+      { "subject": { "identity": "q2", "labels": [], "properties": {} }, "elements": [] },
+      { "subject": { "identity": "q3", "labels": [], "properties": {} }, "elements": [] }
+    ] },
+  { "subject": { "identity": "stage2", "labels": ["Stage"], "properties": { "title": "Advanced" } },
+    "elements": [] },
   { "subject": { "identity": "exam", "labels": ["Exam"],
       "properties": { "schema_version": "1", "exam_id": "01JXKP2W4BVKA3MN5QZGR7TDFE" } },
-    "elements": [ "…stage1, stage2 stubs…" ] }
+    "elements": [
+      { "subject": { "identity": "stage1", "labels": [], "properties": {} }, "elements": [] },
+      { "subject": { "identity": "stage2", "labels": [], "properties": {} }, "elements": [] }
+    ] }
 ]
 ```
 

@@ -260,7 +260,7 @@ type LedgerEntry = TransferEntry | EventEntry;
 interface TransferEntry {
   kind: "transfer";
   id: string;
-  movements: Movement[];   // RFC-0023 §1 nomenclature; impl currently calls these "transfers"
+  transfers: Movement[];
   cause: string;           // domain label: "eval-contract.open", "go", "group.form", etc.
   actors: string[];
   ts: number;
@@ -272,7 +272,7 @@ interface TransferEntry {
 interface EventEntry {
   kind: string;            // discriminant doubles as the domain label: "contract.agreed", etc.
   id: string;
-  payload: Record<string, string | number | boolean | null>;  // primitive values only
+  payload: Record<string, unknown>;  // JSON-serializable; key insertion order is fixed at construction
   actors: string[];
   ts: number;
   prevHash: string;
@@ -288,13 +288,13 @@ The canonical object fed to SHA-256 is extended to include `kind` explicitly and
 
 ```typescript
 // TransferEntry canonical
-{ actors: sorted, cause, id, kind: "transfer", movements: normalized, prevHash, ts }
+{ actors: sorted, cause, id, kind: "transfer", transfers: normalized, prevHash, ts }
 
 // EventEntry canonical
 { actors: sorted, id, kind, payload, prevHash, ts }
 ```
 
-`kind` was already effectively included in the hash via `cause` on transfer entries — this makes it explicit and uniform. `payload` values must be primitives (strings, numbers, booleans, null) so that `JSON.stringify` produces a stable canonical form without key-ordering concerns.
+`kind` was already effectively included in the hash via `cause` on transfer entries — this makes it explicit and uniform. `payload` values are JSON-serializable (including nested objects and arrays). Stability is achieved the same way the existing `hashTransaction` does: construct the canonical object with **fixed key insertion order** and sort any array that has no semantic ordering (e.g. `actors`). Payload authors are responsible for deterministic insertion order in nested objects — typically by constructing them from a fixed schema rather than arbitrary runtime state.
 
 ### Content-Addressed Artifacts
 
@@ -389,4 +389,4 @@ record(
 >;
 ```
 
-`record()` appends the entry to the chain, computes `prevHash` and `hash`, and persists atomically. Conservation validation does not apply (no movements). Duplicate ID rejection applies identically to `commit()`.
+`record()` appends the entry to the chain, computes `prevHash` and `hash`, and persists atomically. Conservation validation does not apply (no transfers). Duplicate ID rejection applies identically to `commit()`.

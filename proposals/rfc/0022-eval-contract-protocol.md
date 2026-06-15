@@ -215,7 +215,7 @@ This resolves the initial-resource acquisition problem while keeping resource id
 
 > **Superseded by [RFC-0027](0027-structured-exam-artifact.md) (Structured Exam Artifact Format, 2026-06-15)**
 >
-> The artifact content no longer belongs in the contract. The contract holds `artifactRef` — a SHA-256 hash of the exam artifact — rather than the artifact itself. The schema for problem types, rubric types, answer types, and verdict derivation is now defined in RFC-0027. The canonical serialization rules required for consistent hashing are also specified there.
+> The artifact content no longer belongs in the contract. The contract holds `artifactRef` — a SHA-256 hash of the exam artifact — rather than the artifact itself. The schema for problem types, rubric types, answer types, and verdict derivation is now defined in RFC-0027. Hashing is over the artifact bytes as-is; byte-reproducibility is a generation-time quality attribute rather than a canonicalization problem (see RFC-0027 §R8 note).
 
 ### Motivation
 
