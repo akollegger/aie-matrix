@@ -48,6 +48,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - In-memory `Map` (per-ghost funder state); no new persistence (029-funder-into-npc)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) — server; TypeScript 5.7 (browser target, ESM) — client + `effect` v3+, `@modelcontextprotocol/sdk` 1.29+, `@colyseus/core` 0.15.57, `colyseus.js` (client), `jsonwebtoken`, `@relateby/pattern`, React 18, Vite 6 (030-human-ghost-peer)
 - No new storage; uses existing Neo4j ledger (via LedgerService) and in-memory Colyseus room state (030-human-ghost-peer)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `express` v4, `@a2a-js/sdk` 0.3.13+ (032-ghost-autospawn)
+- None (no new persistence; catalog.json is existing) (032-ghost-autospawn)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -95,7 +97,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 032-ghost-autospawn: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `express` v4, `@a2a-js/sdk` 0.3.13+
 - 030-human-ghost-peer: Intermedium browser client is now a first-class ghost peer. `POST /auth/guest` issues a guest JWT with `role: "human"`. Human callers skip proximity check for directed `say()`. NPC ghosts call `ghost_announce` MCP tool on connect to populate `ghostLabels` in Colyseus room state (used to badge brokers in the ghost list). Client-side: `useIdentity` hook persists ghostId + displayName in localStorage; `BalanceDisplay` shows broker-credit balance; `useContracts` polls for active contracts and renders an inline submission form in `ChatPanel`; leaderboard highlights the human's own entry.
 - 029-funder-into-npc: Migrated funder character into npc-agent as `behaviorKind: "broker"`, dispatched via gram label `Character:Broker`. `funder-agent` container removed from `deploy/staging/docker-compose.yml`. New `broker-behavior.ts` module holds per-ghost state machine; behavior kind is derived from secondary gram labels (not a property field); `broker.character.gram` added to npc-agent catalog.
-- 028-npc-agent: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `@a2a-js/sdk` 0.3.13+, `@modelcontextprotocol/sdk` 1.29+, `@aie-matrix/ghost-ts-client` (workspace), `@aie-matrix/root-env` (workspace), `@relateby/pattern` ^0.4.2 (catalog gram parsing — pin matches `shared/map-gram`), `express` ^4.21, `h3-js` ^4.1, `effect` v3+ (server-side service layers), `ulid`
-- 027-resource-lifecycle: Removed `ResourceType` registry and `[resources:Resources]` map block; items are now the sole conserved resource. `LedgerService.init()` seeds from `ItemSeed[]` (map placements). `take`/`drop` commit `Transfer` with `location: { h3Index }`. Spawn grants use per-item `[:Grants { role: qty } | (itemRef)]` gram blocks. MCP trade fields renamed `*_item`. Monotonic resource class removed throughout.
