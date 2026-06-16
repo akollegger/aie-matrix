@@ -34,6 +34,7 @@ export function buildWandererAgentCard(publicBase: string): AgentCard {
       ghostClasses: ["any"],
       requiredTools: ["whereami", "exits", "go", "say", "inventory", "ghost_announce"],
       capabilitiesRequired: [],
+      rosterAgent: true,
       memoryKind: "none",
       llmProvider: "none",
       profile: {

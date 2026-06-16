@@ -63,6 +63,7 @@
             "ghost_announce"
           ],
           "capabilitiesRequired": [],
+          "rosterAgent": true,
           "memoryKind": "none",
           "llmProvider": "none",
           "profile": {
@@ -74,7 +75,7 @@
           ]
         }
       },
-      "registeredAt": "2026-06-15T10:06:16.353Z",
+      "registeredAt": "2026-06-16T14:33:09.713Z",
       "builtIn": false
     },
     "npc-agent-local": {
@@ -137,7 +138,7 @@
           "rosterAgent": true
         }
       },
-      "registeredAt": "2026-06-15T10:06:17.981Z",
+      "registeredAt": "2026-06-16T14:33:11.387Z",
       "builtIn": false
     }
   }

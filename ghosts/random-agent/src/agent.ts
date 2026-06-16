@@ -59,6 +59,17 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get("/v1/roster", (_req, res) => {
+  const raw = process.env.RANDOM_AGENT_COUNT;
+  const parsed = raw !== undefined && raw.trim() !== "" ? parseInt(raw, 10) : NaN;
+  const count = Math.max(0, Number.isFinite(parsed) ? parsed : 10);
+  const roster = Array.from({ length: count }, (_, i) => ({
+    characterId: `wanderer-${i + 1}`,
+    displayName: `Wanderer ${i + 1}`,
+  }));
+  res.json(roster);
+});
+
 app.use(`/${AGENT_CARD_PATH}`, agentCardHandler({ agentCardProvider: requestHandler }));
 app.use(
   "/a2a/jsonrpc",
