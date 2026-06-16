@@ -29,6 +29,7 @@ vi.mock("@aie-matrix/ghost-ts-client", () => ({
   GhostMcpClient: class {
     connect = vi.fn(async () => {});
     disconnect = vi.fn(async () => {});
+    announce = vi.fn(async () => {});
     callTool = vi.fn(async () => ({
       h3Index: RES15,
       exits: [{ toward: RES15 }],
@@ -106,8 +107,11 @@ describe("RandomWandererExecutor — message priority handling", () => {
       { userMessage: mkSpawnMessage(ghostId), taskId: "t-spawn", contextId: "ctx-1" } as RequestContext,
       mkBus(),
     );
-    // Wait for MCP client to be wired up
+    // Wait for MCP client to be wired up and registered
     await vi.waitFor(() => mcpInstances.length >= 1);
+    await vi.waitFor(() => expect(mcpInstances[0].connect).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mcpInstances[0].announce).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 10));
 
     void ex.execute(
       { userMessage: mkWorldEventMessage(ghostId, "PARTNER"), taskId: "t-msg", contextId: "ctx-2" } as RequestContext,
@@ -132,7 +136,11 @@ describe("RandomWandererExecutor — message priority handling", () => {
       { userMessage: mkSpawnMessage(ghostId), taskId: "t-spawn", contextId: "ctx-3" } as RequestContext,
       mkBus(),
     );
+    // Wait for MCP client to be wired up and registered
     await vi.waitFor(() => mcpInstances.length >= 1);
+    await vi.waitFor(() => expect(mcpInstances[0].connect).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mcpInstances[0].announce).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 10));
 
     void ex.execute(
       { userMessage: mkWorldEventMessage(ghostId, "DIRECT"), taskId: "t-msg2", contextId: "ctx-4" } as RequestContext,
@@ -157,7 +165,12 @@ describe("RandomWandererExecutor — message priority handling", () => {
       { userMessage: mkSpawnMessage(ghostId), taskId: "t-spawn2", contextId: "ctx-5" } as RequestContext,
       mkBus(),
     );
+    // Wait for MCP client to be wired up and registered
     await vi.waitFor(() => mcpInstances.length >= 1);
+    await vi.waitFor(() => expect(mcpInstances[0].connect).toHaveBeenCalled());
+    await vi.waitFor(() => expect(mcpInstances[0].announce).toHaveBeenCalled());
+    await new Promise((r) => setTimeout(r, 10));
+
     const mcp = mcpInstances[0]!;
     // Clear any say calls from the spawn tick
     mcp.callTool.mockClear();

@@ -14,18 +14,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
           run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'pnpm'
 
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
       - name: Build all workspace packages
         run: pnpm -r build
+
+      - name: Run TypeScript typecheck
+        run: pnpm typecheck
+
+      - name: Run linter
+        run: pnpm run lint
+
+      - name: Run unit tests
+        run: pnpm test
