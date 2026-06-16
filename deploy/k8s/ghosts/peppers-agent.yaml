@@ -1,0 +1,89 @@
+# peppers-agent Kubernetes Deployment — ADR-0009, Spec 018
+# Build context: repo root
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: peppers-agent
+  labels:
+    app: peppers-agent
+    tier: ghost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: peppers-agent
+  template:
+    metadata:
+      labels:
+        app: peppers-agent
+        tier: ghost
+    spec:
+      containers:
+        - name: peppers-agent
+          image: us-central1-docker.pkg.dev/aie-matrix/aie-matrix/peppers-agent:${IMAGE_TAG}
+          ports:
+            - containerPort: 4002
+          env:
+            # Agent-host ClusterIP service URL
+            - name: AGENT_HOST_URL
+              value: "http://agent-host:4000"
+            # Token from the shared cluster secret (same value as agent-host's AGENT_HOST_TOKEN)
+            - name: AGENT_HOST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: AGENT_HOST_TOKEN
+            - name: PEPPERS_AGENT_PORT
+              value: "4002"
+            # Pod IP via downward API — each replica gets a unique URL
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: PEPPERS_AGENT_PUBLIC_BASE_URL
+              value: "http://$(MY_POD_IP):4002"
+            # Pod name via downward API — becomes unique agentId suffix
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # OpenAI API key for LLM calls (Id & Surface agents)
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: OPENAI_API_KEY
+                  optional: true
+            # Neo4j and memory settings
+            - name: GHOST_MINDS_NEO4J_URI
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: NEO4J_URI
+            - name: GHOST_MINDS_NEO4J_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: NEO4J_USER
+            - name: GHOST_MINDS_NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: NEO4J_PASSWORD
+          readinessProbe:
+            httpGet:
+              path: /.well-known/agent-card.json
+              port: 4002
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /.well-known/agent-card.json
+              port: 4002
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi

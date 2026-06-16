@@ -7,6 +7,7 @@ on:
         description: "Image tag to deploy (e.g. v1.0.0 or git SHA)"
         required: true
   push:
+    branches: ["main"]
     tags: ["v[0-9]+.[0-9]+.[0-9]+"]
 
 env:
@@ -121,6 +122,30 @@ jobs:
       - name: Push random-agent image
         run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/random-agent:${{ steps.tag.outputs.value }}
 
+      # ── Build & push npc-agent image ───────────────────────────────────────
+
+      - name: Build npc-agent image
+        run: |
+          docker build \
+            -f ghosts/npc-agent/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/npc-agent:${{ steps.tag.outputs.value }} \
+            .
+
+      - name: Push npc-agent image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/npc-agent:${{ steps.tag.outputs.value }}
+
+      # ── Build & push peppers-agent image ───────────────────────────────────
+
+      - name: Build peppers-agent image
+        run: |
+          docker build \
+            -f ghosts/peppers-agent/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/peppers-agent:${{ steps.tag.outputs.value }} \
+            .
+
+      - name: Push peppers-agent image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/peppers-agent:${{ steps.tag.outputs.value }}
+
       # ── Sync secrets into k8s ─────────────────────────────────────────────
       # GitHub Actions secrets are the source of truth. Patch the k8s secret
       # before Helm deploy so the server always uses the same ADMIN_TOKEN that
@@ -215,6 +240,20 @@ jobs:
           envsubst < deploy/k8s/ghosts/random-agent.yaml \
             | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
 
+      - name: Deploy npc-agent
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          envsubst < deploy/k8s/ghosts/npc-agent.yaml \
+            | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
+
+      - name: Deploy peppers-agent
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          envsubst < deploy/k8s/ghosts/peppers-agent.yaml \
+            | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
+
       # ── Build & deploy front-ends ─────────────────────────────────────────
 
       - name: Build workspace deps for Intermedium
@@ -285,6 +324,8 @@ jobs:
           kubectl rollout status deployment/server -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/agent-host -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/random-agent -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/npc-agent -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/peppers-agent -n ${{ env.NAMESPACE }}
 
       - name: Dump logs on failure
         if: failure()
@@ -292,3 +333,5 @@ jobs:
           kubectl logs -l app.kubernetes.io/name=server -n ${{ env.NAMESPACE }} --tail=50 || true
           kubectl logs -l app.kubernetes.io/name=agent-host -n ${{ env.NAMESPACE }} --tail=50 || true
           kubectl logs -l app=random-agent -n ${{ env.NAMESPACE }} --tail=50 || true
+          kubectl logs -l app=npc-agent -n ${{ env.NAMESPACE }} --tail=50 || true
+          kubectl logs -l app=peppers-agent -n ${{ env.NAMESPACE }} --tail=50 || true

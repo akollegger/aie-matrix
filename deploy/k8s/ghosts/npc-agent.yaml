@@ -1,0 +1,66 @@
+# npc-agent Kubernetes Deployment — ADR-0009, Spec 018
+# Build context: repo root
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: npc-agent
+  labels:
+    app: npc-agent
+    tier: ghost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: npc-agent
+  template:
+    metadata:
+      labels:
+        app: npc-agent
+        tier: ghost
+    spec:
+      containers:
+        - name: npc-agent
+          image: us-central1-docker.pkg.dev/aie-matrix/aie-matrix/npc-agent:${IMAGE_TAG}
+          ports:
+            - containerPort: 4004
+          env:
+            # Agent-host ClusterIP service URL
+            - name: AGENT_HOST_URL
+              value: "http://agent-host:4000"
+            # Token from the shared cluster secret (same value as agent-host's AGENT_HOST_TOKEN)
+            - name: AGENT_HOST_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: AGENT_HOST_TOKEN
+            - name: AGENT_PORT
+              value: "4004"
+            # Pod IP via downward API — each replica gets a unique URL
+            - name: MY_POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: NPC_AGENT_PUBLIC_BASE_URL
+              value: "http://$(MY_POD_IP):4004"
+            # Pod name via downward API — becomes unique agentId suffix
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4004
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4004
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
