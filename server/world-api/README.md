@@ -1,6 +1,25 @@
 # server/world-api
 
-MCP `world-api` (ghost tools) lives here. For the PoC it calls Colyseus **in-process** via `colyseus-bridge.ts` (see `specs/001-minimal-poc/research.md`).
+MCP `world-api` (ghost tools) lives here. It calls Colyseus **in-process** via `colyseus-bridge.ts` and owns the in-world resource ledger.
+
+## In-World Resource Ledger — RFC-0023 / spec-022
+
+The ledger tracks resource balances (gold, XP, badges) for all actors (ghosts, world, NPCs) using an append-only, hash-chained transaction log.
+
+**Key services:**
+- `LedgerService` — Effect service Tag + interface (`src/LedgerService.ts`)
+- `LedgerServiceInMemory` — in-memory impl for Tier 1 dev and unit tests
+- `LedgerServiceLive` — Neo4j-backed impl for Tier 2/3 (requires `NEO4J_URI`)
+- `ProposalService` — in-memory pending trade proposals; TTL 5 minutes
+- `mechanics.ts` — `rewardXp`, `awardBadge`, `rewardGold` — authorised minting helpers
+
+**MCP tools added:** `inventory` (extended), `offer`, `request`, `agree`, `decline`, `ledger_verify` (admin-only).
+
+**Local smoke test:**
+```bash
+pnpm --filter @aie-matrix/server-world-api test
+```
+All 119+ unit tests run without live services. See `specs/022-in-world-resource-ledger/quickstart.md` for end-to-end verification.
 
 ## Map Management API (`/maps/` and `/live/`) — RFC-0013
 
@@ -151,3 +170,27 @@ World item definitions load from a `*.items.json` sidecar at startup and live in
 | `inventory` | _(none)_ | `{ ok: true, objects: [{ itemRef, name }] }` | Never fails |
 
 `look` is also extended: `TileInspectResult` always includes `objects: TileItemSummary[]` for the focal tile slice (empty when no items on that slice).
+
+## World Calendar — RFC-0021
+
+The calendar adds a temporal dimension to the world: wall-clock time anchored to US/Pacific, a `timecheck` MCP tool, and a scheduler that fires enter/exit commands at scheduled times.
+
+| Env | Values | Purpose |
+|-----|--------|---------|
+| `CALENDAR_TICK_MS` | Integer ms (default: `30000`) | Scheduler poll interval. Use `5000` locally to see events fire quickly. |
+
+### Calendar Gram format
+
+**Current (transitional)**: events are loaded from a standalone `.calendar.gram` file via `AIE_MATRIX_CALENDAR`. **Target**: events will be embedded in the `.map.gram` file as a `[schedule:Schedule | ...]` block (see `maps/sandbox/canonical.map.gram` for an example). A map with no `[schedule:Schedule | ...]` block runs in timeless mode. `src/calendar/fixtures/sample.calendar.gram` is used by unit tests.
+
+### `timecheck` MCP tool
+
+Returns `{ now, timezone }` — the current Pacific time. Agents are expected to be temporally aware; no event schedule is surfaced by this tool. Available to all adopted ghosts, no parameters required.
+
+### Running calendar tests
+
+```bash
+pnpm test   # from server/world-api/
+# or to run only calendar tests:
+pnpm exec node --import tsx --test "src/calendar/*.test.ts"
+```

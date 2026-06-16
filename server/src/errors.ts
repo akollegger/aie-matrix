@@ -7,6 +7,7 @@ import type {
   AdminAuthError,
   AuthError,
   GcsError,
+  LedgerError,
   LiveSessionAlreadyEndedError,
   LiveSessionMapNotPublishedError,
   LiveSessionNotFoundError,
@@ -58,6 +59,19 @@ export {
   WorldApiTileFull,
   WorldApiUnknownCell,
   type WorldApiError,
+  LedgerInsufficientFunds,
+  LedgerConservationViolation,
+  LedgerDuplicateTransaction,
+  LedgerUnknownResource,
+  LedgerUnknownActor,
+  LedgerPersistenceError,
+  LedgerConsentRequired,
+  LedgerProposalNotFound,
+  LedgerSelfAgreeDenied,
+  LedgerProposalExpired,
+  LedgerMonotonicTradeRejected,
+  LedgerCounterpartyNotNearby,
+  type LedgerError,
 } from "@aie-matrix/server-world-api";
 
 type RegistryErrorUnion = RegistryUnknownCaretaker | RegistryUnknownAgentHost | RegistryCaretakerAlreadyHasGhost;
@@ -80,7 +94,8 @@ export type HttpMappingError =
   | Neo4jNotConfiguredError
   | LiveSessionNotFoundError
   | LiveSessionMapNotPublishedError
-  | LiveSessionAlreadyEndedError;
+  | LiveSessionAlreadyEndedError
+  | LedgerError;
 
 function authErrorBody(error: AuthError): string {
   const variant = error._tag.slice("AuthError.".length);
@@ -296,6 +311,82 @@ export function errorToResponse(error: HttpMappingError): { status: number; body
           ghostId: error.ghostId,
           message: "Ghost is in limbo — the map it was on has been removed. Contact an admin to respawn.",
         }),
+      };
+    case "LedgerError.InsufficientFunds":
+      return {
+        status: 422,
+        body: JSON.stringify({
+          ok: false,
+          code: "INSUFFICIENT_FUNDS",
+          resource: error.resource,
+          required: error.required,
+          available: error.available,
+        }),
+      };
+    case "LedgerError.ConservationViolation":
+      return {
+        status: 500,
+        body: JSON.stringify({
+          error: "CONSERVATION_VIOLATION",
+          resource: error.resource,
+          expected: error.expected,
+          actual: error.actual,
+        }),
+      };
+    case "LedgerError.DuplicateTransaction":
+      return {
+        status: 409,
+        body: JSON.stringify({ ok: false, code: "DUPLICATE_TRANSACTION", id: error.id }),
+      };
+    case "LedgerError.UnknownResource":
+      return {
+        status: 422,
+        body: JSON.stringify({ ok: false, code: "UNKNOWN_RESOURCE", resource: error.resource }),
+      };
+    case "LedgerError.UnknownActor":
+      return {
+        status: 404,
+        body: JSON.stringify({ ok: false, code: "UNKNOWN_ACTOR", actorId: error.actorId }),
+      };
+    case "LedgerError.PersistenceError":
+      return {
+        status: 503,
+        body: JSON.stringify({ error: "LEDGER_PERSISTENCE_ERROR", cause: error.cause }),
+      };
+    case "LedgerError.ConsentRequired":
+      return {
+        status: 402,
+        body: JSON.stringify({
+          ok: false,
+          code: "CONSENT_REQUIRED",
+          transactionId: error.transactionId,
+          costs: error.costs,
+        }),
+      };
+    case "LedgerError.ProposalNotFound":
+      return {
+        status: 404,
+        body: JSON.stringify({ ok: false, code: "PROPOSAL_NOT_FOUND", proposalId: error.proposalId }),
+      };
+    case "LedgerError.SelfAgreeDenied":
+      return {
+        status: 422,
+        body: JSON.stringify({ ok: false, code: "SELF_AGREE_DENIED", proposalId: error.proposalId }),
+      };
+    case "LedgerError.ProposalExpired":
+      return {
+        status: 410,
+        body: JSON.stringify({ ok: false, code: "PROPOSAL_EXPIRED", proposalId: error.proposalId }),
+      };
+    case "LedgerError.MonotonicTradeRejected":
+      return {
+        status: 422,
+        body: JSON.stringify({ ok: false, code: "MONOTONIC_TRADE_REJECTED", resource: error.resource }),
+      };
+    case "LedgerError.CounterpartyNotNearby":
+      return {
+        status: 422,
+        body: JSON.stringify({ ok: false, code: "COUNTERPARTY_NOT_NEARBY", initiatorId: error.initiatorId, counterpartyId: error.counterpartyId }),
       };
     default: {
       // `HttpMappingError` spans multiple workspace packages; `switch (error._tag)` can leave the

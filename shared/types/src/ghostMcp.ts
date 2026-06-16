@@ -5,6 +5,7 @@ export const GHOST_MCP_TOOLS = [
   "whoami",
   "whereami",
   "look",
+  "look_far",
   "exits",
   "go",
   "traverse",
@@ -52,6 +53,13 @@ export interface TileItemSummary {
    * remaining) — no prompt-side cue needed.
    */
   tokens?: number;
+  /**
+   * A hyperlink the object carries (RFC-0031). Present on a description
+   * card beside an artwork: its value is the work's museum object-page URL,
+   * which the ghost can dereference with the `read` tool. The "ahref" the
+   * ghost perceives.
+   */
+  href?: string;
 }
 
 export interface TileInspectResult {
@@ -117,6 +125,10 @@ export type ConsumeResult =
 
 export interface InventoryResult {
   ok: true;
+  /** Carried physical items (from ItemService). The optional `tokens`
+   *  field carries remaining consumable energy on an inventory instance
+   *  (used by the peppers consume mechanic — present only for items
+   *  the carrier picked up that had tokens to begin with). */
   objects: Array<{
     itemRef: string;
     name: string;
@@ -126,6 +138,8 @@ export interface InventoryResult {
      *  what they're carrying is still worth sharing or eating. */
     tokens?: number;
   }>;
+  /** Resource balances from the ledger (gold, XP, etc.). Empty when ledger not initialised. */
+  holdings: Array<{ resource: string; qty: number; label: string }>;
 }
 
 export interface ExitInfo {

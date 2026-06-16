@@ -66,5 +66,15 @@ What other approaches were considered?
 | [RFC-0017](0017-rdc-server-capability-gating.md) | RDC Server Capability Gating | draft |
 | [RFC-0018](0018-rdc-skill-tiers-and-math-schools.md) | RDC Skill Tiers & Mathematical Schools | draft |
 | [RFC-0019](0019-barnacle-protocol.md) | The Barnacle Protocol — mini-game plugin contract | draft |
+| [RFC-0020](0020-platform-links.md) | Platform Links — Pocket World Navigation Protocol | draft |
+| [RFC-0021](0021-world-calendar.md) | World Calendar — Temporal Dimension and Scheduled Events | accepted |
+| [RFC-0022](0022-group-exam-eval-protocol.md) | Group Exam Eval Protocol — Survival-Driven Multi-Agent Evaluation | draft |
+| [RFC-0023](0023-in-world-resource-ledger.md) | In-World Resource Ledger | draft |
+| [RFC-0024](0024-group-formation-and-chat.md) | Group Formation and Group Chat | draft |
 | [RFC-0025](0025-ghost-substrate-extraction.md) | Ghost cognitive substrate extraction — PeppersGhost as the default ghost | draft |
 | [RFC-0026](0026-third-party-mind-modeling.md) | Third-party-mind modeling — predictive peer models in the cascade | draft |
+| [RFC-0027](0027-cosmic-elevators.md) | Cosmic Elevators — birth-only, queued, distributed ghost spawn points | draft |
+| [RFC-0028](0028-in-world-vendors-and-cypher-economy.md) | In-World Vendors & the Cypher Economy — priced foods, droppable vendor props, one-transaction-at-a-time | draft |
+| [RFC-0029](0029-item-ledger-unification-and-dispensers.md) | Item–Ledger Unification & the Dispenser (Vending) Actor — items become ledger resources; purchase = offer/agree trade | draft |
+| [RFC-0030](0030-rdc-onto-the-joint-ledger.md) | RDC onto the Joint Ledger (Cyphers → gold) — fold RDC's parallel ledger onto the world ledger; backlog, not on the vending critical path | draft |
+| [RFC-0031](0031-art-in-world.md) | Art in the World — paintings hung as image prompts + ahref description cards as text prompts; full-pipeline multimodal insert | accepted |

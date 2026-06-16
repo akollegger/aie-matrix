@@ -120,5 +120,8 @@ export type WorldEvent = {
   readonly ghostId: string;
   readonly kind: WorldEventKind;
   readonly payload: Record<string, unknown>;
+  /** @deprecated Use `timestamp` instead. Retained for backwards compatibility. */
   readonly sentAt: string;
+  /** ISO 8601 with Pacific UTC offset. Canonical timestamp for ordering and recency. */
+  readonly timestamp: string;
 };

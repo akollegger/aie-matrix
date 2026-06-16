@@ -1,8 +1,8 @@
-# GKE Ingress + Google-managed TLS for matrix.relateby.dev
+# GKE Ingress + Google-managed TLS for api.matrix.neo4j.gg
 #
 # Apply order matters:
 #   1. Apply this file: kubectl apply -f deploy/k8s/ingress.yaml -n aie-matrix
-#   2. Add DNS A record: matrix.relateby.dev → 8.233.117.99
+#   2. Add DNS A record: api.matrix.neo4j.gg → 8.233.117.99
 #   3. Certificate provisioning takes ~15 min after DNS propagates
 #
 # Check cert status:
@@ -43,10 +43,10 @@ metadata:
   namespace: aie-matrix
 spec:
   domains:
-    - matrix.relateby.dev
+    - api.matrix.neo4j.gg
 
 ---
-# Ingress — routes matrix.relateby.dev to the server service
+# Ingress — routes api.matrix.neo4j.gg to the server service
 # GKE native Ingress handles WebSocket upgrades transparently (no extra annotation needed)
 apiVersion: networking.k8s.io/v1
 kind: Ingress

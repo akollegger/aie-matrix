@@ -30,7 +30,7 @@ async function setupGramFile(name = TEST_MAP_NAME): Promise<MapIndexEntry> {
 function makeStubMapServiceLayer(entries: readonly MapIndexEntry[]): Layer.Layer<MapService> {
   return Layer.succeed(MapService, {
     listEntries: () => Effect.succeed(entries),
-    raw: (_mapId, _format) => Effect.die("not supported in stub"),
+    raw: (_mapId) => Effect.die("not supported in stub"),
     validate: () => Effect.succeed(undefined as void),
     activeMapId: () => undefined,
   });

@@ -1,8 +1,18 @@
+/** A cost attached to a :GO rule edge. */
+export interface ParsedRuleCost {
+  resource: string;
+  qty: number;
+  /** Defaults to "world" if not declared on the edge. */
+  payee: string;
+}
+
 export interface ParsedMap {
   name: string;
   elevation: number;
   tileTypes: Map<string, TileTypeDef>;
   itemTypes: Map<string, ItemTypeDef>;
+  /** Resource type declarations from the [resources:Resources | ...] block, if present. */
+  resourceTypes: ParsedResourceType[];
   /**
    * All navigable and item-bearing cells after layer merging, keyed by H3 res-15 index.
    * Includes cells expanded from polygon fills. Use for runtime navigation (Colyseus, movement).
@@ -84,6 +94,17 @@ export interface ParsedPortal {
 export interface ParsedRule {
   fromType: string;
   toType: string;
+  /** Cost to pay when traversing this edge. Absent if the edge is free. */
+  cost?: ParsedRuleCost;
+}
+
+export interface ParsedResourceType {
+  id: string;
+  class: "conserved" | "monotonic";
+  /** Seeded quantity in the world bag (conserved only; ignored for monotonic). */
+  qty: number;
+  floor: number;
+  label: string;
 }
 
 /** A single explicit tile placement from a `(:Tile:X { geometry: [h3\`...\`] })` declaration. */

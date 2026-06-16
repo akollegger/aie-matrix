@@ -353,9 +353,13 @@ export class H3HexLayer {
       ;(this.map.getSource(SOURCE.dragCells) as maplibregl.GeoJSONSource | undefined)?.setData({
         type: "FeatureCollection", features: dragCellFeatures,
       })
-      const dragAnchors = polygonAnchorCells(dp.previewCells as string[], dp.sides)
-      const dragBorderCoords = dragAnchors.length >= 2
-        ? [...dragAnchors, dragAnchors[0]!].map(c => { const [la, lo] = cellToLatLng(c); return [lo, la] as [number, number] })
+      // Prefer translated previewVertices (stable, fast); fall back to recomputing
+      // from border cells only when vertices were never stored (legacy polygons).
+      const dragAnchorSrc = dp.previewVertices && dp.previewVertices.length >= 2
+        ? (dp.previewVertices as string[])
+        : polygonAnchorCells(dp.previewCells as string[], dp.sides)
+      const dragBorderCoords = dragAnchorSrc.length >= 2
+        ? [...dragAnchorSrc, dragAnchorSrc[0]!].map(c => { const [la, lo] = cellToLatLng(c); return [lo, la] as [number, number] })
         : []
       ;(this.map.getSource(SOURCE.dragBorder) as maplibregl.GeoJSONSource | undefined)?.setData({
         type: "FeatureCollection",

@@ -1,5 +1,5 @@
 import { glob, readFile } from "node:fs/promises";
-import { basename, dirname, join, normalize, relative } from "node:path";
+import { basename, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Gram, Pattern, Subject } from "@relateby/pattern";
 import type { GramParseError as RelatebyGramParseError } from "@relateby/pattern";
@@ -14,8 +14,6 @@ import {
 
 export interface MapIndexEntry {
   readonly mapId: string;
-  /** Absent for maps authored natively (no Tiled source). */
-  readonly tmjPath?: string;
   readonly gramPath: string;
 }
 
@@ -27,7 +25,6 @@ export interface MapServiceOps {
   readonly listEntries: () => Effect.Effect<readonly Readonly<MapIndexEntry>[], never>;
   readonly raw: (
     mapId: string,
-    format: "gram" | "tmj",
   ) => Effect.Effect<Buffer, MapNotFoundError | MapFileReadError>;
   readonly validate: () => Effect.Effect<void, GramParseError | MapNameMismatchError | MapIdCollisionError>;
   /** The mapId of the currently active Colyseus game map, or undefined if undetermined. */
@@ -36,23 +33,11 @@ export interface MapServiceOps {
 
 export class MapService extends Context.Tag("aie-matrix/MapService")<MapService, MapServiceOps>() {}
 
-function stemFromTmjFilename(file: string): string | undefined {
-  if (!file.endsWith(".tmj")) {
-    return undefined;
-  }
-  return basename(file, ".tmj");
-}
-
 function stemFromGramFilename(file: string): string | undefined {
   if (!file.endsWith(".map.gram")) {
     return undefined;
   }
   return basename(file, ".map.gram");
-}
-
-function pairingKey(repoRoot: string, absolutePath: string, stem: string): string {
-  const dir = dirname(relative(repoRoot, absolutePath));
-  return `${dir}\0${stem}`;
 }
 
 function hasLayerStack(patterns: ReadonlyArray<Pattern<Subject>>): boolean {
@@ -157,45 +142,18 @@ function scanMapPairs(
   repoRoot: string,
 ): Effect.Effect<Map<string, MapIndexEntry>, MapIdCollisionError> {
   return Effect.gen(function* () {
-    const tmjRelPaths = yield* collectGlob(repoRoot, "maps/**/*.tmj");
     const gramRelPaths = yield* collectGlob(repoRoot, "maps/**/*.map.gram");
 
-    const partial = new Map<
-      string,
-      { stem: string; dirKey: string; tmjAbs?: string; gramAbs?: string }
-    >();
-
-    for (const rel of tmjRelPaths) {
-      const stem = stemFromTmjFilename(rel);
-      if (stem === undefined) {
-        continue;
-      }
-      const abs = join(repoRoot, rel);
-      const key = pairingKey(repoRoot, abs, stem);
-      const cur = partial.get(key) ?? { stem, dirKey: dirname(rel) };
-      cur.tmjAbs = abs;
-      partial.set(key, cur);
-    }
+    const byMapId = new Map<string, MapIndexEntry[]>();
     for (const rel of gramRelPaths) {
       const stem = stemFromGramFilename(rel);
       if (stem === undefined) {
         continue;
       }
       const abs = join(repoRoot, rel);
-      const key = pairingKey(repoRoot, abs, stem);
-      const cur = partial.get(key) ?? { stem, dirKey: dirname(rel) };
-      cur.gramAbs = abs;
-      partial.set(key, cur);
-    }
-
-    const byMapId = new Map<string, MapIndexEntry[]>();
-    for (const v of partial.values()) {
-      if (v.gramAbs === undefined) {
-        continue; // a .tmj with no .map.gram is not yet migrated; skip silently
-      }
-      const list = byMapId.get(v.stem) ?? [];
-      list.push({ mapId: v.stem, tmjPath: v.tmjAbs, gramPath: v.gramAbs });
-      byMapId.set(v.stem, list);
+      const list = byMapId.get(stem) ?? [];
+      list.push({ mapId: stem, gramPath: abs });
+      byMapId.set(stem, list);
     }
 
     const index = new Map<string, MapIndexEntry>();
@@ -204,7 +162,7 @@ function scanMapPairs(
         return yield* Effect.fail(
           new MapIdCollisionError({
             mapId,
-            paths: entries.flatMap((e) => [e.gramPath, ...(e.tmjPath !== undefined ? [e.tmjPath] : [])]),
+            paths: entries.map((e) => e.gramPath),
           }),
         );
       }
@@ -263,21 +221,16 @@ export const makeMapServiceLayer = (
           listEntries: listSorted,
           validate: () => Effect.void,
           activeMapId: () => resolvedActiveId,
-          raw: (mapId, format) => {
+          raw: (mapId) => {
             const entry = index.get(mapId);
             if (entry === undefined) {
               return Effect.fail(new MapNotFoundError({ mapId }));
             }
-            const path = format === "gram" ? entry.gramPath : entry.tmjPath;
-            if (path === undefined) {
-              // gram-only map: TMJ format not available
-              return Effect.fail(new MapNotFoundError({ mapId }));
-            }
             return Effect.tryPromise({
-              try: () => readFile(path),
+              try: () => readFile(entry.gramPath),
               catch: (e) =>
                 new MapFileReadError({
-                  path,
+                  path: entry.gramPath,
                   cause: e instanceof Error ? e.message : String(e),
                 }),
             });

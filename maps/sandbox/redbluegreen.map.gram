@@ -8,4 +8,19 @@
 
 [layers:LayerStack | tiles]
 
-[rules:Rules | (red)-[:GO]->(red), (blue)-[:GO]->(blue), (green)-[:GO]->(green)]
+[resources:Resources { name: "Sandbox Resources" } |
+  (:Resource { id: "gold", class: "conserved", qty: 100,  floor: 0, label: "Gold" }),
+  (:Resource { id: "xp",   class: "monotonic",  qty: 0,   floor: 0, label: "Experience" }),
+  (:Resource { id: "badge", class: "monotonic",  qty: 0,   floor: 0, label: "Badge" })
+]
+
+[rules:Rules |
+  (red)-[:GO]->(red),
+  (blue)-[:GO]->(blue),
+  (green)-[:GO]->(green),
+  (red)-[:GO]->(blue),
+  (blue)-[:GO]->(green),
+  (green)-[:GO { costResource: "gold", costQty: 5 }]->(blue),
+  (blue)-[:GO { costResource: "gold", costQty: 10 }]->(red),
+  (green)-[:GO { costResource: "gold", costQty: 15 }]->(red)
+]

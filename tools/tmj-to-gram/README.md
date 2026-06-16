@@ -1,4 +1,6 @@
-# `@aie-matrix/tmj-to-gram`
+# `@aie-matrix/tmj-to-gram` ⚠️ DEPRECATED
+
+> **This package is deprecated as of spec-020 / ADR-0010.** All `.tmj` source files have been converted and committed as `.map.gram`. The server no longer reads TMJ. This tool is preserved for historical reference only — do not use it for new maps.
 
 Build-time CLI that converts Tiled **`.tmj`** maps (plus referenced **`.tsx`** tilesets and optional **`<stem>.items.json`** sidecars) into committed **`.map.gram`** artifacts per [RFC-0009](../../proposals/rfc/0009-map-format-pipeline.md) and [ADR-0005](../../proposals/adr/0005-h3-native-map-format.md).
 

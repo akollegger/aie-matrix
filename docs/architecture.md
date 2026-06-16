@@ -102,6 +102,8 @@ World items are currently a PoC-layer extension around the existing map + MCP st
 |---|---|
 | `AIE_MATRIX_RULES` | Optional path to a Gram movement rules file. Unset keeps adjacent movement permissive. |
 | `AIE_MATRIX_ITEMS` | Optional path to a `*.items.json` sidecar. Unset falls back to the co-located sidecar next to the active map. |
+| `AIE_MATRIX_CALENDAR` | Path to a standalone `.calendar.gram` file (current transitional loading path). Target: calendar will be loaded from the active map's `[schedule:Schedule | ...]` block; standalone file support will be removed once map-loading integration is complete. |
+| `CALENDAR_TICK_MS` | Scheduler poll interval in milliseconds (default: `30000`). Set lower (e.g. `5000`) for local testing. |
 | `GCS_BUCKET` | GCS bucket name for map artifact storage (e.g. `aie-matrix-maps`). Unset in Tier 1 — `GcsService` uses a local `tmp/gcs/` stub. |
 | `ADMIN_TOKEN` | Static bearer token for admin-only `/maps/` and `/live/` endpoints. Never logged. Required when using map management API. |
 | `LIVE_SESSION_ID` | ULID of the live session this process instance serves. Required in multi-session Tier 2/3 deployments. Unset → auto-discover single active session; fail if multiple exist. |
@@ -125,7 +127,7 @@ Which models power ghost reasoning, speaker agents, and vendor NPCs? Multiple pr
 **Status: Implemented (ADR-0002, branch 002-effect-ts-transition).** The server uses request-scoped trace IDs propagated via `AsyncLocalStorage` and `FiberRef`, with structured JSON log lines tagged by `kind`, `op`, `traceId`, and entity IDs. Tool choice for downstream analytics, APM, and the eval layer remains open.
 
 ### Time-Series / Event Log Backend
-The Matrix generates continuous streams: ghost movements, card exchanges, checkpoint events, quest completions, session attendance. These need to be captured for leaderboards, eval, and post-conference analysis. Options include ClickHouse, TimescaleDB, structured logs to S3 + query layer, or similar. Open.
+**Resolved by [RFC-0023](../proposals/rfc/0023-in-world-resource-ledger.md) and implemented in [spec 022](../specs/022-in-world-resource-ledger/).** Resource transactions are persisted as an append-only, hash-chained `(:LedgerEntry)` chain in Neo4j, scoped to the active session. Each committed `Transaction` is an event record with timestamp, cause, actor list, and transfer details. The ledger is the primary event log for resource-bearing actions. For high-frequency non-resource events (positions, proximity) the open question of a dedicated append store (ClickHouse, TimescaleDB, S3) remains for future evaluation.
 
 ### Authentication and Identity
 **Operator use case resolved** ([ADR-0008](../proposals/adr/0008-frontend-deployment-access-control.md)): operators authenticate to the Admin client via Google Identity-Aware Proxy (IAP) at the load-balancer layer. No application code required; access is managed via IAM bindings.

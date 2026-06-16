@@ -77,6 +77,8 @@ export interface UIState {
     originalCells: H3Index[]
     previewCells: H3Index[]
     sides: number
+    originalVertices?: H3Index[]
+    previewVertices?: H3Index[]
   } | null
   /** Non-null while a polygon is in vertex-edit mode */
   editingPolygon: { layerId: string; polyId: string } | null

@@ -91,43 +91,71 @@ async function startMovementFromSpawn(
       intervalMs: moveMs,
     }),
   );
+  // Track pending proposals this ghost initiated so we can randomly decline them
+  const pendingProposals: string[] = [];
+
+  async function tryAction(exits: ReadonlyArray<{ toward?: string }>, occupants: string[]): Promise<void> {
+    const roll = Math.random();
+
+    // 10% chance: check inventory
+    if (roll < 0.10) {
+      await mcp.callTool("inventory", {}).catch(() => {});
+      return;
+    }
+
+    // 10% chance: offer a trade to a co-occupant if any
+    if (roll < 0.20 && occupants.length > 0) {
+      const target = occupants[Math.floor(Math.random() * occupants.length)]!;
+      const result = await mcp.callTool("offer", {
+        to: target,
+        give_resource: "gold", give_qty: 1,
+        for_resource: "gold",  for_qty: 1,
+      }).catch(() => null) as { proposalId?: string } | null;
+      if (result?.proposalId) pendingProposals.push(result.proposalId);
+      return;
+    }
+
+    // 5% chance: decline a pending proposal
+    if (roll < 0.25 && pendingProposals.length > 0) {
+      const proposalId = pendingProposals.splice(Math.floor(Math.random() * pendingProposals.length), 1)[0]!;
+      await mcp.callTool("decline", { proposalId }).catch(() => {});
+      return;
+    }
+
+    // Otherwise: move
+    if (exits.length === 0) return;
+    const pick = exits[Math.floor(Math.random() * exits.length)]!;
+    const toward = pick.toward;
+    if (typeof toward === "string" && toward.length > 0) {
+      const r = await mcp.callTool("go", { toward }).catch((e: unknown) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.info(JSON.stringify({
+          kind: "random-agent.movement.go-rejected", ghostId, toward,
+          message: msg.length > 200 ? `${msg.slice(0, 197)}...` : msg,
+        }));
+        return null;
+      }) as { ok?: boolean; tileId?: string } | null;
+      if (r?.ok === true && typeof r.tileId === "string") {
+        assertH3Res15(r.tileId, "go", ghostId);
+      }
+    }
+  }
+
   try {
     while (go) {
-      const w = (await mcp.callTool("whereami", {})) as { h3Index?: string; tileId?: string };
+      const w = (await mcp.callTool("whereami", {})) as { h3Index?: string; tileId?: string; occupants?: string[] };
       const cell = w.h3Index && w.h3Index.length > 0 ? w.h3Index : w.tileId;
       if (typeof cell === "string") {
         assertH3Res15(cell, "whereami", ghostId);
       }
+      const occupants = (w.occupants ?? []).filter((id: string) => id !== ghostId);
       const ex = (await mcp.callTool("exits", {})) as { exits?: ReadonlyArray<{ toward?: string }> };
       const exits = ex.exits ?? [];
-      if (exits.length === 0) {
-        // No exits on this cell (e.g. isolated map cell or map switch in progress).
-        // Back off before retrying to avoid a tight spin loop.
+      if (exits.length === 0 && occupants.length === 0) {
         await new Promise((r) => setTimeout(r, moveMs));
         continue;
       }
-      const pick = exits[Math.floor(Math.random() * exits.length)]!;
-      const toward = pick.toward;
-      if (typeof toward === "string" && toward.length > 0) {
-        try {
-          const r = (await mcp.callTool("go", { toward })) as { ok?: boolean; tileId?: string };
-          if (r?.ok === true && typeof r.tileId === "string") {
-            assertH3Res15(r.tileId, "go", ghostId);
-          }
-        } catch (e) {
-          // `GhostMcpClient` throws on MCP `isError` (RULESET_DENY, TILE_FULL, MOVEMENT_BLOCKED, …).
-          // Always taking `exits[0]` used to kill the loop on first denial so only “lucky” ghosts moved.
-          const msg = e instanceof Error ? e.message : String(e);
-          console.info(
-            JSON.stringify({
-              kind: "random-agent.movement.go-rejected",
-              ghostId,
-              toward,
-              message: msg.length > 200 ? `${msg.slice(0, 197)}…` : msg,
-            }),
-          );
-        }
-      }
+      await tryAction(exits, occupants);
       await new Promise((r) => setTimeout(r, moveMs));
     }
   } finally {
@@ -178,7 +206,7 @@ export class RandomWandererExecutor implements AgentExecutor {
       // cancelTask() can cancel it cleanly. The loop exits when:
       //   (a) cancelMovementForGhost sets go=false (via cancelTask), or
       //   (b) the loop throws (unrecoverable error).
-      await startMovementFromSpawn(this.getMoveInterval, sp).catch((e) =>
+      await startMovementFromSpawn(this.getMoveInterval, sp).catch((e: unknown) =>
         console.error(`[random-agent] movement ghostId=${sp.ghostId}`, e),
       );
 
@@ -212,7 +240,7 @@ export class RandomWandererExecutor implements AgentExecutor {
         if (pl.priority === "PARTNER" && typeof pl.from === "string" && typeof pl.text === "string") {
           const mcp = mcpByGhostId.get(ev.ghostId);
           if (mcp) {
-            void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e) => {
+            void mcp.callTool("say", { content: `👻 received: ${pl.text}`, to: pl.from }).catch((e: unknown) => {
               console.error(JSON.stringify({ kind: "random-agent.say-fail", ghostId: ev.ghostId, message: e instanceof Error ? e.message : String(e) }));
             });
           }

@@ -131,6 +131,7 @@ export type EditorAction =
   | { type: "CONFIRM_POLYGON" }
   | { type: "CANCEL_POLYGON" }
   | { type: "DELETE_POLYGON"; layerId: string; id: string }
+  | { type: "DUPLICATE_POLYGON"; layerId: string; id: string }
   | { type: "UPDATE_POLYGON_TYPE"; layerId: string; id: string; typeName: string }
   | { type: "UPDATE_POLYGON_PROPERTIES"; layerId: string; id: string; name: string; description: string }
   // Portals (active tile layer)
@@ -147,8 +148,8 @@ export type EditorAction =
   | { type: "REMOVE_ITEM"; layerId: string; id: string }
   // Polygon move / drag
   | { type: "SET_POLYGON_CELLS"; layerId: string; polyId: string; cells: H3Index[] }
-  | { type: "BEGIN_POLYGON_DRAG"; layerId: string; polyId: string; cells: H3Index[]; sides: number }
-  | { type: "UPDATE_POLYGON_DRAG"; previewCells: H3Index[] }
+  | { type: "BEGIN_POLYGON_DRAG"; layerId: string; polyId: string; cells: H3Index[]; sides: number; vertices?: H3Index[] }
+  | { type: "UPDATE_POLYGON_DRAG"; previewCells: H3Index[]; previewVertices?: H3Index[] }
   | { type: "COMMIT_POLYGON_DRAG" }
   | { type: "CANCEL_POLYGON_DRAG" }
   // Vertex editing
@@ -463,6 +464,26 @@ function editorReducerCore(
         },
       }
 
+    case "DUPLICATE_POLYGON": {
+      const srcLayer = state.layers.find(l => l.id === action.layerId && l.kind === "polygon")
+      if (!srcLayer || srcLayer.kind !== "polygon") return state
+      const original = srcLayer.committed.find(p => p.id === action.id)
+      if (!original) return state
+      const copy: PolygonShape = { ...original, id: `poly-${uid()}` }
+      return {
+        ...state,
+        layers: state.layers.map(l =>
+          l.id === action.layerId && l.kind === "polygon"
+            ? { ...l, committed: [...l.committed, copy] } as PolygonLayerState
+            : l
+        ),
+        ui: {
+          ...state.ui,
+          selectedElement: { type: "polygon", layerId: action.layerId, id: copy.id },
+        },
+      }
+    }
+
     case "UPDATE_POLYGON_TYPE":
       return {
         ...state,
@@ -597,13 +618,25 @@ function editorReducerCore(
             originalCells: action.cells,
             previewCells: action.cells,
             sides: action.sides,
+            originalVertices: action.vertices,
+            previewVertices: action.vertices,
           },
         },
       }
 
     case "UPDATE_POLYGON_DRAG":
       if (!state.ui.draggedPolygon) return state
-      return { ...state, ui: { ...state.ui, draggedPolygon: { ...state.ui.draggedPolygon, previewCells: action.previewCells } } }
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          draggedPolygon: {
+            ...state.ui.draggedPolygon,
+            previewCells: action.previewCells,
+            ...(action.previewVertices !== undefined ? { previewVertices: action.previewVertices } : {}),
+          },
+        },
+      }
 
     case "COMMIT_POLYGON_DRAG": {
       const dp = state.ui.draggedPolygon
@@ -612,7 +645,14 @@ function editorReducerCore(
         ...state,
         layers: state.layers.map(l =>
           l.id === dp.layerId && l.kind === "polygon"
-            ? { ...l, committed: l.committed.map(p => p.id === dp.polyId ? { ...p, cells: dp.previewCells } : p) } as PolygonLayerState
+            ? {
+                ...l,
+                committed: l.committed.map(p =>
+                  p.id === dp.polyId
+                    ? { ...p, cells: dp.previewCells, vertices: dp.previewVertices ?? p.vertices }
+                    : p
+                ),
+              } as PolygonLayerState
             : l
         ),
         ui: { ...state.ui, draggedPolygon: null },

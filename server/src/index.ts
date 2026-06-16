@@ -18,6 +18,11 @@ import {
   getRequestTraceId,
   handleGhostMcpEffect,
   loadMovementRulesFromEnv,
+  rulesetFromParsedMap,
+  LedgerService,
+  LedgerServiceInMemoryLayer,
+  ProposalService,
+  ProposalServiceLayer,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
   makeLocalLiveSessionLayer,
@@ -49,6 +54,7 @@ import {
   type RegistryStoreService,
   type WorldBridgeService,
 } from "@aie-matrix/server-world-api";
+import { parseMapGram } from "@aie-matrix/map-gram";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
 import {
@@ -60,6 +66,11 @@ import {
 import { patchMatchmakeCorsForCredentials } from "./colyseus-cors-patch.js";
 import { errorToResponse, type HttpMappingError } from "./errors.js";
 import { makeServerConfigLayer, type ServerConfigService } from "./services/ServerConfigService.js";
+import {
+  parseCalendarGramFile,
+  makeWorldCalendarLayer,
+  WorldCalendarService,
+} from "@aie-matrix/server-world-api";
 
 loadRootEnv();
 if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
@@ -365,11 +376,48 @@ async function main(): Promise<void> {
   const redisGhostStoreLayer = await makeRedisGhostStoreLayerFromEnv(process.env);
 
   let movementRules;
+  let parsedMapForLedger: Awaited<ReturnType<typeof parseMapGram>> | undefined;
   try {
     movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
+    // Merge rule costs from the map file when one is loaded (costs are declared in the map's
+    // [rules:Rules] block and are not carried by standalone .gram rules files).
+    if (mapPath) {
+      try {
+        const mapText = await readFile(mapPath, "utf8");
+        const parsedMap = await parseMapGram(mapText);
+        parsedMapForLedger = parsedMap;
+        const withCosts = rulesetFromParsedMap(parsedMap);
+        if (withCosts.ruleCosts.size > 0) {
+          movementRules = { ...movementRules, ruleCosts: withCosts.ruleCosts };
+          console.info(`[aie-matrix] Loaded ${withCosts.ruleCosts.size} rule cost(s) from map`);
+        }
+      } catch (e) {
+        console.warn("[aie-matrix] Could not extract rule costs from map file:", e);
+      }
+    }
   } catch (e) {
     console.error("[aie-matrix] Failed to load movement rules (Gram / env):", e);
     process.exit(1);
+  }
+
+  const calendarPath = process.env.AIE_MATRIX_CALENDAR?.trim();
+  let calendarLayer: ReturnType<typeof makeWorldCalendarLayer>;
+  if (calendarPath) {
+    const absoluteCalendarPath = isAbsolute(calendarPath)
+      ? calendarPath
+      : join(repoRoot, calendarPath);
+    let calendarEvents;
+    try {
+      calendarEvents = await Effect.runPromise(parseCalendarGramFile(absoluteCalendarPath));
+      console.info(`[aie-matrix] Loaded ${calendarEvents.length} calendar event(s) from ${absoluteCalendarPath}`);
+    } catch (e) {
+      console.error(`[aie-matrix] Failed to load calendar from ${absoluteCalendarPath}:`, e);
+      process.exit(1);
+    }
+    calendarLayer = makeWorldCalendarLayer(calendarEvents);
+  } else {
+    calendarLayer = makeWorldCalendarLayer([]);
+    console.info("[aie-matrix] No AIE_MATRIX_CALENDAR set — running in timeless mode.");
   }
 
   const conversationStore = new JsonlStore(conversationDataDir);
@@ -495,7 +543,10 @@ async function main(): Promise<void> {
     | RedisPublishService
     | RedisGhostStoreService
     | MapManagementService
-    | LiveSessionService;
+    | LiveSessionService
+    | WorldCalendarService
+    | LedgerService
+    | ProposalService;
 
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
@@ -511,9 +562,23 @@ async function main(): Promise<void> {
     redisGhostStoreLayer,
     mapMgmtLayer,
     liveSessionLayer,
+    calendarLayer,
+    LedgerServiceInMemoryLayer,
+    ProposalServiceLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
+
+  // Seed ledger with resource types from the map (MVP: in-memory only; Neo4j wiring requires session-scoped layer, tracked in ADR-0011 follow-up)
+  if (parsedMapForLedger && parsedMapForLedger.resourceTypes.length > 0) {
+    const resourceTypes = parsedMapForLedger.resourceTypes;
+    const initEffect = LedgerService.pipe(
+      Effect.flatMap(svc => svc.init(resourceTypes)),
+      Effect.provide(runtimeLayer as any),
+    ) as unknown as Effect.Effect<void, unknown, never>;
+    await Effect.runPromise(initEffect)
+      .catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  }
 
   // GitOps startup map sync (staging/production only).
   // Auto-publishes every .map.gram baked into the Docker image to GCS+Neo4j if not already present.
@@ -545,7 +610,7 @@ async function main(): Promise<void> {
           }
 
           // Read file bytes
-          const bytes = yield* mapSvc.raw(entry.mapId, "gram").pipe(
+          const bytes = yield* mapSvc.raw(entry.mapId).pipe(
             Effect.catchAll((e) => {
               console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "read-error", error: String(e) }));
               return Effect.succeed(null as Buffer | null);
@@ -606,6 +671,30 @@ async function main(): Promise<void> {
     if (sessionToBind) {
       console.info(JSON.stringify({ kind: "session-binding", op: "bind", sessionId: sessionToBind }));
     }
+  }
+
+  // ── Calendar scheduler fiber ────────────────────────────────────────────────
+  // Polls for due CalendarEvents and dispatches enterCommands / exitCommands.
+  // Uses CALENDAR_TICK_MS (default 30s); set lower (e.g. 5000) for local testing.
+  const calendarTickMs = Math.max(1000, parseInt(process.env.CALENDAR_TICK_MS ?? "30000", 10) || 30000);
+  const runCalendarTick = () =>
+    runtime.runPromise(
+      Effect.gen(function* () {
+        const calendar = yield* WorldCalendarService;
+        yield* calendar.tick();
+      }),
+    ).catch((e) => console.error("[aie-matrix] calendar scheduler tick error:", e));
+
+  void (async () => {
+    // Tick immediately on startup so past-due events fire without waiting a full interval
+    await runCalendarTick();
+    while (true) {
+      await new Promise<void>((resolve) => setTimeout(resolve, calendarTickMs));
+      await runCalendarTick();
+    }
+  })();
+  if (calendarPath) {
+    console.info(`[aie-matrix] Calendar scheduler running (tick every ${calendarTickMs}ms)`);
   }
 
   process.on("SIGTERM", () => {

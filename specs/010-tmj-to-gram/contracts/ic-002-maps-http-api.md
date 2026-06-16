@@ -1,5 +1,8 @@
 # IC-002: Maps HTTP API Contract
 
+> **STATUS: SUPERSEDED** by `specs/020-map-catalog-standardization/contracts/ic-001-maps-http-api.md` (ADR-0010).
+> `?format=tmj` and `_links.tmj` are removed as of spec-020. This document is preserved for historical reference.
+
 **Contract ID**: IC-002  
 **Feature**: `010-tmj-to-gram`  
 **Related RFC**: `proposals/rfc/0009-map-format-pipeline.md`

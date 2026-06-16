@@ -28,7 +28,7 @@ export function MapView() {
   // Pending drag — stores polygon info between mousedown and first mousemove.
   // BEGIN_POLYGON_DRAG is deferred until movement actually starts so a simple
   // click never puts the polygon into drag state (which hides its fill).
-  const pendingDragRef = useRef<{ layerId: string; polyId: string; cells: H3Index[]; sides: number } | null>(null)
+  const pendingDragRef = useRef<{ layerId: string; polyId: string; cells: H3Index[]; sides: number; vertices?: H3Index[] } | null>(null)
 
   // Vertex drag state
   const vertexDragRef = useRef<{ idx: number } | null>(null)
@@ -93,12 +93,12 @@ export function MapView() {
       // Priority 2: polygon drag
       const activeLayer = s.layers.find(l => l.id === s.ui.activeLayerId)
       if (!activeLayer || activeLayer.kind !== "polygon" || activeLayer.locked) return
-      const poly = activeLayer.committed.find(p => p.cells.includes(h3))
+      const poly = activeLayer.committed.findLast(p => p.cells.includes(h3))
       if (!poly) return
 
       dispatch({ type: "SELECT_ELEMENT", ref: { type: "polygon", layerId: s.ui.activeLayerId, id: poly.id } })
       // Stash drag info but don't enter drag state yet — wait for first mousemove
-      pendingDragRef.current = { layerId: s.ui.activeLayerId, polyId: poly.id, cells: poly.cells as H3Index[], sides: poly.sides }
+      pendingDragRef.current = { layerId: s.ui.activeLayerId, polyId: poly.id, cells: poly.cells as H3Index[], sides: poly.sides, vertices: poly.vertices as H3Index[] | undefined }
       dragStartRef.current = { lat, lng }
       hasDraggedRef.current = false
       map.dragPan.disable()
@@ -139,7 +139,8 @@ export function MapView() {
         const dp = stateRef.current.ui.draggedPolygon
         if (!dp) return
         const newCells = translateCells(dp.originalCells as H3Index[], dLat, dLng)
-        dispatch({ type: "UPDATE_POLYGON_DRAG", previewCells: newCells })
+        const newVertices = dp.originalVertices ? translateCells(dp.originalVertices, dLat, dLng) : undefined
+        dispatch({ type: "UPDATE_POLYGON_DRAG", previewCells: newCells, previewVertices: newVertices })
         hasDraggedRef.current = true
       }
     })
@@ -180,7 +181,7 @@ export function MapView() {
       const h3 = brandH3(latLngToCell(lat, lng, 15))
       const activeLayer = s.layers.find(l => l.id === s.ui.activeLayerId)
       if (!activeLayer || activeLayer.kind !== "polygon" || activeLayer.locked) return
-      const poly = activeLayer.committed.find(p => p.cells.includes(h3))
+      const poly = activeLayer.committed.findLast(p => p.cells.includes(h3))
       if (!poly) {
         if (s.ui.editingPolygon) dispatch({ type: "EXIT_POLYGON_EDIT" })
         return
@@ -207,7 +208,7 @@ export function MapView() {
       if (!activeLayer || activeLayer.locked) return
 
       if (activeTool === "hand" && activeLayer.kind === "polygon") {
-        const poly = activeLayer.committed.find(p => p.cells.includes(h3))
+        const poly = activeLayer.committed.findLast(p => p.cells.includes(h3))
         if (poly) {
           dispatch({ type: "SELECT_ELEMENT", ref: { type: "polygon", layerId: activeLayerId, id: poly.id } })
         } else {
@@ -295,6 +296,15 @@ export function MapView() {
           dispatch({ type: "EXIT_POLYGON_EDIT" })
           dispatch({ type: "DELETE_POLYGON", layerId: sel.layerId, id: sel.id })
           dispatch({ type: "DESELECT" })
+        }
+        return
+      }
+
+      if (e.key === "d" && (e.metaKey || e.ctrlKey)) {
+        const sel = s.ui.selectedElement
+        if (sel?.type === "polygon") {
+          e.preventDefault()
+          dispatch({ type: "DUPLICATE_POLYGON", layerId: sel.layerId, id: sel.id })
         }
         return
       }

@@ -276,7 +276,7 @@ Drop a carried item onto your current tile.
 
 ### `inventory`
 
-List all items currently carried by the ghost.
+List the ghost's current holdings: carried physical items and resource balances (gold, XP, etc.).
 
 **Returns**
 ```json
@@ -284,11 +284,182 @@ List all items currently carried by the ghost.
   "ok": true,
   "objects": [
     { "itemRef": "key-brass", "name": "Brass Key" }
+  ],
+  "holdings": [
+    { "resource": "gold", "qty": 15, "label": "Gold" },
+    { "resource": "xp",   "qty": 240, "label": "Experience" }
   ]
 }
 ```
 
-Always succeeds. Returns an empty `objects` array when the ghost carries nothing.
+Always succeeds. `objects` is empty when carrying no items; `holdings` is empty when no resources have been credited.
+
+---
+
+## Resources and Trading
+
+### `offer`
+
+Propose a resource trade to another ghost. You specify what you give and what you want in return. The counterparty must call `agree` to complete it, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `to` | string | yes | Ghost ID of the counterparty |
+| `give_resource` | string | yes | Resource you are offering |
+| `give_qty` | number | yes | Quantity you are offering |
+| `for_resource` | string | yes | Resource you want in return |
+| `for_qty` | number | yes | Quantity you want in return |
+
+Both ghosts must be on the **same tile** when `offer` is called. This is intentional social friction — moving away is the primary defense against unwanted trades.
+
+**Returns** (success)
+```json
+{ "ok": true, "proposalId": "01JXYZ...", "expiresAt": "2026-06-05T10:00:00.000Z" }
+```
+
+**Errors**
+
+| Code | Meaning |
+|---|---|
+| `COUNTERPARTY_NOT_NEARBY` | The two ghosts are not on the same tile |
+| `MONOTONIC_TRADE_REJECTED` | The given or wanted resource cannot be traded |
+
+---
+
+### `request`
+
+Request a resource from another ghost, offering something in return. Semantically the mirror of `offer` — the same pending proposal is created, roles reversed. Same-tile proximity is required.
+
+**Parameters**
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `from` | string | yes | Ghost ID to request from |
+| `want_resource` | string | yes | Resource you want to receive |
+| `want_qty` | number | yes | Quantity you want to receive |
+| `offering_resource` | string | yes | Resource you are offering |
+| `offering_qty` | number | yes | Quantity you are offering |
+
+**Returns** — same shape as `offer`. Same errors apply (`COUNTERPARTY_NOT_NEARBY`, `MONOTONIC_TRADE_REJECTED`).
+
+---
+
+### `agree`
+
+Accept a pending trade proposal. You must be the counterparty — the initiator cannot agree to their own proposal. Commits both transfers atomically; conservation holds.
+
+**Parameters**
+
+| Parameter | Type | Required |
+|---|---|---|
+| `proposalId` | string | yes |
+
+**Returns** (success)
+```json
+{ "ok": true, "proposalId": "01JXYZ...", "status": "agreed" }
+```
+
+**Errors**
+
+| Code | Meaning |
+|---|---|
+| `SELF_AGREE_DENIED` | You cannot agree to your own proposal |
+| `PROPOSAL_NOT_FOUND` | Proposal ID unknown or already settled |
+| `PROPOSAL_EXPIRED` | Proposal TTL elapsed (5 minutes) |
+| `INSUFFICIENT_FUNDS` | Initiator or counterparty lacks the promised resource |
+
+---
+
+### `decline`
+
+Cancel or reject a pending trade proposal. Either party may call this at any time. No ledger changes occur.
+
+**Parameters**
+
+| Parameter | Type | Required |
+|---|---|---|
+| `proposalId` | string | yes |
+
+**Returns**
+```json
+{ "ok": true, "proposalId": "01JXYZ...", "status": "declined" }
+```
+
+---
+
+## Time
+
+### `timecheck`
+
+Returns the current conference time. Use this to reason about when things are happening — not to discover what is scheduled. Event schedule knowledge comes from your context, not from this tool.
+
+**Returns**
+```json
+{ "now": "2026-06-05T09:30:00-07:00", "timezone": "America/Los_Angeles" }
+```
+
+`now` is always in US/Pacific with an explicit UTC offset. Never fails.
+
+---
+
+## World Broadcast
+
+### `announce` *(designed, not yet implemented — see RFC-0021 Addendum)*
+
+Deliver a message to **all currently adopted ghosts** in the world, regardless of their position. `announce` is a **world event**, not a conversation — it produces no thread, requires no conversational mode, and has no reply surface. Agents receive it as a `world.announcement` A2A event and decide how to react, exactly as they would for `world.proximity.enter` or `world.session.start`.
+
+The grant list is intentionally small: the **calendar scheduler** (via `enterCommands` / `exitCommands`) and the **admin console**. Ordinary ghost agents cannot call this tool.
+
+**Parameters**
+
+| Parameter | Type | Required | Constraints |
+|-----------|------|----------|-------------|
+| `content` | string | yes | 1–2000 characters |
+
+**Returns**
+```json
+{
+  "ok": true,
+  "delivered": 42
+}
+```
+
+`delivered` is the count of ghosts the event was pushed to at the moment of sending.
+
+**A2A event received by each ghost:**
+```json
+{
+  "schema": "aie-matrix.world-event.v1",
+  "kind": "world.announcement",
+  "payload": {
+    "content": "Coffee break starts in 5 minutes — head to the lobby.",
+    "source": "scheduler"
+  },
+  "timestamp": "2026-06-05T09:55:00-07:00"
+}
+```
+
+**Fails if** the caller does not hold the announcer grant, or `content` is blank.
+
+| Failure code | Cause |
+|---|---|
+| `ANNOUNCE_NOT_AUTHORIZED` | Caller is not in the announcer grant list |
+| `ANNOUNCE_CONTENT_EMPTY` | `content` is blank or whitespace only |
+
+**Example calendar usage:**
+```gram
+(coffee-warning:Event {
+  title: "Coffee break in 5 minutes",
+  kind: "break",
+  startsAt: "09:55:00",
+  duration: 0,
+  enterCommands: ["announce Coffee break starts in 5 minutes — head to the lobby."]
+})
+```
+
+> See [RFC-0021 Addendum](../../proposals/rfc/0021-world-calendar.md#addendum-announce-command) for the full design and open questions.
 
 ---
 

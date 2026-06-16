@@ -11,7 +11,9 @@ import type {
   ParsedMap,
   ParsedPolygon,
   ParsedPortal,
+  ParsedResourceType,
   ParsedRule,
+  ParsedRuleCost,
   TileTypeDef,
 } from "./types.js";
 import { MapGramParseError } from "./types.js";
@@ -28,6 +30,8 @@ type PropMap = HashMap.HashMap<
 const CATEGORY_LABELS = new Set([
   "TileType", "ItemType", "Tile", "Polygon", "Item", "Portal",
   "Layer", "LayerStack", "Rules",
+  "Resources", "Resource",            // ledger resource seed declarations
+  "Schedule", "Event", // calendar blocks — parsed by WorldCalendarService, not the map parser
 ]);
 
 function getNonCategoryLabel(labels: HashSet.HashSet<string>): string | undefined {
@@ -148,10 +152,11 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
 
   const tileTypes = new Map<string, TileTypeDef>();
   const itemTypes = new Map<string, ItemTypeDef>();
+  const resourceTypes: ParsedResourceType[] = [];
 
   const layersById = new Map<string, LayerData>();
   const layerOrder: string[] = [];
-  const ruleRefs: Array<{ fromId: string; toId: string }> = [];
+  const ruleRefs: Array<{ fromId: string; toId: string; cost?: ParsedRuleCost }> = [];
 
   // Step 2: walk all top-level patterns
   for (const rawPattern of patterns) {
@@ -211,13 +216,40 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
         if (elemId) layerOrder.push(elemId);
       }
 
-    // Rules — collect (fromTypeId)-[:GO]->(toTypeId) pairs
+    // Resources — collect resource type declarations for the ledger seed
+    } else if (HashSet.has(labels, "Resources")) {
+      for (const elemPattern of pattern.elements) {
+        const elem = elemPattern.value;
+        if (!HashSet.has(elem.labels, "Resource")) continue;
+        const elemProps = elem.properties;
+        const id = strProp(elemProps, "id");
+        const cls = strProp(elemProps, "class");
+        const label = strProp(elemProps, "label");
+        if (!id || !label || (cls !== "conserved" && cls !== "monotonic")) continue;
+        resourceTypes.push({
+          id,
+          class: cls,
+          qty: intProp(elemProps, "qty") ?? 0,
+          floor: intProp(elemProps, "floor") ?? 0,
+          label,
+        });
+      }
+
+    // Rules — collect (fromTypeId)-[:GO { costResource?, costQty? }]->(toTypeId) pairs
     } else if (HashSet.has(labels, "Rules")) {
       for (const elemPattern of pattern.elements) {
         if (elemPattern.elements.length === 2) {
           const fromId = elemPattern.elements[0]?.value.identity ?? "";
           const toId = elemPattern.elements[1]?.value.identity ?? "";
-          if (fromId && toId) ruleRefs.push({ fromId, toId });
+          if (!fromId || !toId) continue;
+          const edgeProps = elemPattern.value.properties;
+          const costResource = strProp(edgeProps, "costResource");
+          const costQty = intProp(edgeProps, "costQty");
+          const cost: ParsedRuleCost | undefined =
+            costResource !== undefined && costQty !== undefined
+              ? { resource: costResource, qty: costQty, payee: strProp(edgeProps, "costPayee") ?? "world" }
+              : undefined;
+          ruleRefs.push({ fromId, toId, cost });
         }
       }
 
@@ -320,11 +352,11 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
 
   // Step 4: resolve movement rules
   const rules: ParsedRule[] = [];
-  for (const { fromId, toId } of ruleRefs) {
+  for (const { fromId, toId, cost } of ruleRefs) {
     const fromType = tileTypes.get(fromId);
     const toType = tileTypes.get(toId);
     if (fromType && toType) {
-      rules.push({ fromType: fromType.identity, toType: toType.identity });
+      rules.push({ fromType: fromType.identity, toType: toType.identity, ...(cost ? { cost } : {}) });
     }
   }
 
@@ -373,5 +405,5 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
     portals.push(...layer.portals);
   }
 
-  return { name, elevation, tileTypes, itemTypes, cells, layers, explicitTiles, polygons, itemPlacements, portals, rules };
+  return { name, elevation, tileTypes, itemTypes, resourceTypes, cells, layers, explicitTiles, polygons, itemPlacements, portals, rules };
 }

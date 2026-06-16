@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { ulid } from "ulid";
 import type { MessageRecord } from "@aie-matrix/shared-types";
+import { worldNow } from "@aie-matrix/shared-types";
 import type { ConversationStore } from "./store.js";
 
 export interface ConversationRouterDeps {
@@ -81,7 +82,7 @@ export function createConversationRouter(
       const record: MessageRecord = {
         thread_id: ghostId,
         message_id: ulid(),
-        timestamp: new Date().toISOString(),
+        timestamp: worldNow(),
         role: "partner",
         name: humanId,
         content: text,
