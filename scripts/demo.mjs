@@ -68,11 +68,11 @@ const agentPort = process.env.AGENT_PORT || "4001";
 const npcAgentPort = process.env.NPC_AGENT_PORT || "4004";
 const houseBase =
   process.env.AGENT_HOST_URL || `http://127.0.0.1:${housePort}`;
-if (process.env.AGENT_HOST_TOKEN === undefined) {
+if (process.env.AGENT_HOST_TOKEN === undefined || process.env.AGENT_HOST_TOKEN.trim() === "") {
   process.env.AGENT_HOST_TOKEN = randomUUID();
   console.info("[demo] AGENT_HOST_TOKEN not set — using ephemeral token for this session. Add AGENT_HOST_TOKEN to .env to pin it.");
 }
-const token = /** @type {string} */ (process.env.AGENT_HOST_TOKEN);
+const token = /** @type {string} */ (process.env.AGENT_HOST_TOKEN).trim();
 const adminToken = process.env.ADMIN_TOKEN || "";
 const worldBase = `http://127.0.0.1:${httpPort}`;
 

@@ -79,6 +79,9 @@ jobs:
       - name: Run TypeScript typecheck
         run: pnpm typecheck
 
+      - name: Run linter
+        run: pnpm run lint
+
       - name: Run unit tests
         run: pnpm test
 
