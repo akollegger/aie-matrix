@@ -232,3 +232,170 @@ Three new `cause` values are introduced by the group formation feature:
 The group bag is identified by `ActorId = "group:{groupId}"` in the existing `BagCache`. No new ledger primitives are required — these transactions use the same `Transaction` / `Transfer` shape as all other ledger commits.
 
 The `shared: true` flag on `ProposeParams` in `ProposalService` triggers the formation path. Same-resource validation (`give.resource === want.resource`) is enforced at propose time (FR-011 in spec-023).
+
+---
+
+## Addendum: Verifiable Event Log (2026-06-15)
+
+### Motivation
+
+RFC-0022 (Eval Contract Protocol) requires the ledger chain to record three contract lifecycle milestones as immutable, verifiable facts:
+
+1. **Agreement** — contractor acceptance, binding both parties to a specific external artifact
+2. **Submission** — contractor delivery, content-addressed so the evaluator operates on a verified artifact
+3. **Settlement** — already recorded as a `"eval-contract.settle"` transfer entry
+
+Currently only settlement has a ledger footprint. Agreement and submission are Neo4j-only state, invisible to the chain. Auditing a contract lifecycle requires reading both stores, and the two cannot cross-verify each other.
+
+The fix is a minimal generalization: the ledger chain records two kinds of entries — **transfer entries** (existing) and **event entries** (new). Both are hash-chained. An event entry carries no resource movements; it records a named fact whose typed payload is part of the hash input.
+
+### Generalized Entry Types
+
+The chain's unit becomes `LedgerEntry`, a discriminated union:
+
+```typescript
+type LedgerEntry = TransferEntry | EventEntry;
+
+// Existing — the current Transaction type, with an explicit kind discriminant added
+interface TransferEntry {
+  kind: "transfer";
+  id: string;
+  transfers: Transfer[];
+  cause: string;           // domain label: "eval-contract.open", "go", "group.form", etc.
+  actors: string[];
+  ts: number;
+  prevHash: string;
+  hash: string;
+}
+
+// New — a named fact appended to the chain without resource movement
+interface EventEntry {
+  kind: "event";
+  type: string;            // domain event label: "contract.proposed", "contract.agreed", etc.
+  id: string;
+  payload: Record<string, string | number | boolean | null | string[]>;
+  actors: string[];
+  ts: number;
+  prevHash: string;
+  hash: string;
+}
+```
+
+`TransferEntry` is backward-compatible with the current `Transaction` type: the only additive change is the explicit `kind: "transfer"` discriminant. Existing callers of `LedgerService.commit()` are unaffected.
+
+### Hash Computation (extends Open Question 2)
+
+The canonical object fed to SHA-256 is extended to include `kind` explicitly and `payload` for event entries:
+
+```typescript
+// TransferEntry canonical
+{ actors: sorted, cause, id, kind: "transfer", transfers: normalized, prevHash, ts }
+
+// EventEntry canonical
+{ actors: sorted, id, kind: "event", payload, prevHash, ts, type }
+```
+
+`kind` was already effectively included in the hash via `cause` on transfer entries — this makes it explicit and uniform. Payload values are restricted to scalars and `string[]` (see type definition above), so `JSON.stringify` with **fixed key insertion order** produces a stable canonical form without additional sorting logic. `actors` is sorted before hashing (matching the existing `hashTransaction` pattern); `string[]` payload fields that carry ordered data (e.g. `disclosureRefs`) must not be sorted — their ordering is semantically significant.
+
+### Content-Addressed Artifacts
+
+An **artifact** is any external document whose identity must be committed to the chain — an exam problem set, a submission, a contract specification. Its reference is a **content hash**:
+
+```
+artifactRef = hex(SHA-256(artifact_bytes))
+```
+
+Any party in possession of the artifact can independently compute `artifactRef` and verify it matches the chain entry. The artifact itself is stored and transmitted out-of-band (conversation thread, file, structured payload); the chain holds only the hash.
+
+### Contract Event Kinds
+
+Four event types for the eval contract lifecycle (all share `kind: "event"`):
+
+**`type: "contract.proposed"`** — fired when the client opens a contract. Records the client's unilateral commitment to the artifact and all withheld disclosure commitments before the contractor has accepted.
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  clientId: string;
+  contractorId: string;
+  evaluatorId: string;
+  artifactRef: string;          // hex(SHA-256(initial prompt artifact))
+  disclosureRefs: string[];     // ordered hashes of withheld content; empty if no progressive disclosure
+}
+```
+
+**`type: "contract.agreed"`** — fired when the contractor accepts. Records the contractor's explicit acknowledgment of the artifact they are committing to work on, making the commitment bilateral.
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  artifactRef: string;          // contractor's acknowledgment of the committed artifact hash
+  contractorId: string;
+}
+```
+
+**`type: "disclosure.sent"`** — fired when a holder reveals withheld content to a recipient through the private conversation channel. Records that revelation occurred and when, without exposing the content itself. The plaintext travels out-of-band via `say()`; the recipient verifies locally that `SHA-256(received plaintext) == disclosureRefs[n].hash`.
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  disclosureIndex: number;      // 0-based position in disclosureRefs array
+  recipientId: string;
+}
+```
+
+**`type: "contract.submitted"`** — fired when the contractor delivers a submission. For multi-stage contracts this fires once per stage; `stage` identifies which stage is being submitted (1-based).
+
+```typescript
+// EventEntry payload
+{
+  contractId: string;
+  submissionHash: string;       // hex(SHA-256(submission artifact))
+  contractorId: string;
+  stage: number;                // 1 for single-stage; 1..N for multi-stage
+}
+```
+
+The full chain of entries for a completed single-stage contract:
+
+```
+EventEntry     kind:"event" type:"contract.proposed"  payload:{ contractId, clientId, contractorId, evaluatorId, artifactRef, disclosureRefs }
+TransferEntry  kind:"transfer"                         cause:"eval-contract.open"  [client → escrow]
+EventEntry     kind:"event" type:"contract.agreed"     payload:{ contractId, artifactRef, contractorId }
+EventEntry     kind:"event" type:"contract.submitted"  payload:{ contractId, submissionHash, contractorId, stage: 1 }
+TransferEntry  kind:"transfer"                         cause:"eval-contract.settle" [escrow → parties]
+```
+
+For a multi-stage contract, each stage's submission **must precede** the next disclosure — the chain enforces ordering by append sequence. The pattern is:
+
+```
+EventEntry  type:"contract.agreed"
+EventEntry  type:"contract.submitted"  stage: 1
+EventEntry  type:"disclosure.sent"     disclosureIndex: 0   [stage 2 prompt revealed]
+EventEntry  type:"contract.submitted"  stage: 2
+TransferEntry                          cause:"eval-contract.settle"
+```
+
+A world-API enforcing this sequence rejects a `disclosure.sent` for index `n` until a `contract.submitted` with `stage: n` exists in the chain for that contract.
+
+Declined and expired contracts produce only the proposal event, the opening transfer, and a refund transfer; no further event entries are required for those paths.
+
+### LedgerService Interface Change
+
+A `record()` method is added alongside the existing `commit()`:
+
+```typescript
+record(
+  entry: Omit<EventEntry, "prevHash" | "hash">
+): Effect.Effect<
+  EventEntry,
+  LedgerDuplicateTransaction | LedgerPersistenceError
+>;
+```
+
+`record()` appends the entry to the chain, computes `prevHash` and `hash`, and persists atomically. Conservation validation does not apply (no transfers). Duplicate ID rejection applies identically to `commit()`.
+
+**Neo4j persistence:** Because payload values are restricted to scalars and `string[]`, each field maps directly to a Neo4j node property with no serialization step. `string[]` fields (e.g. `disclosureRefs`) are stored as Neo4j string arrays. No `payloadJson` blob is needed.
