@@ -25,4 +25,8 @@ export interface EvalContract {
   beneficiaries: string[]; // ActorId[]
   openedAt: number;       // Unix ms
   escrowActorId: string;  // "escrow:<id>"
+  /** SHA-256 hex of prompt-only exam artifact. null for non-exam (broker) contracts. */
+  artifactRef: string | null;
+  /** SHA-256 hex of full exam artifact with answer key. null for non-exam (broker) contracts. */
+  disclosureRef: string | null;
 }

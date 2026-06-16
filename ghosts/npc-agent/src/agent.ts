@@ -174,7 +174,7 @@ app.listen(port, "0.0.0.0", () => {
   log.info({ kind: "start", publicBase, port, agentId });
   loadCatalog(catalogDir).then((cat) => {
     loadedCatalog = cat;
-    initExecutor({ catalog: cat, agentHostUrl, agentId });
+    initExecutor({ catalog: cat, catalogDir, agentHostUrl, agentId });
     register();
   }).catch((e: unknown) => {
     console.error(JSON.stringify({ kind: "npc-agent.catalog-load-failed", error: String(e) }));

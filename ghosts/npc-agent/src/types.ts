@@ -61,9 +61,11 @@ export interface CharacterDefinition {
   readonly defaultAction: WorldAction;
   readonly behaviorRules: readonly BehaviorRule[];
   readonly dialogTree: DialogTree;
-  readonly behaviorKind: "rule-engine" | "broker";
-  /** Units paid per completed contract. Only meaningful for broker characters. Defaults to 1. */
+  readonly behaviorKind: "rule-engine" | "broker" | "quizmaster" | "contestant";
+  /** Units paid per completed contract. Only meaningful for broker/quizmaster characters. Defaults to 1. */
   readonly stakeAmount: number;
+  /** Absolute path to the .exam.gram file. Only meaningful for quizmaster characters. */
+  readonly examPath?: string;
   /** Comma-joined character gram labels (e.g. "Character:Broker"). Sent to Colyseus on ghost join. */
   readonly gramLabels: string;
   /** Single grapheme/emoji glyph for this character. Empty string if not set in gram. */

@@ -430,3 +430,37 @@ Because `contract.proposed` is a public ledger event, any contractor can compare
 Contractors compare only hashes — no content is exposed. The fairness of terms becomes transparent without revealing the work itself. This creates social pressure toward consistency: a client who offers different progressive questions to different contractors for the same base prompt is detectable by any contractor who compares notes on the ledger.
 
 Note that identical `disclosureRefs` hashes across contracts does not prevent holders from revealing disclosures at different times — timing is not committed to in the proposal and is addressed separately in the temporality addendum (forthcoming).
+
+---
+
+## Addendum: EvalContract Schema Extension for Exam Contracts (2026-06-16)
+
+**Feature**: 031-exam-npcs
+
+The `EvalContract` type gains two nullable fields for the commit-reveal exam protocol:
+
+| Field | Type | Description |
+|---|---|---|
+| `artifactRef` | `string \| null` | SHA-256 hex of the prompt-only exam artifact (concatenated markdown+frontmatter snippets, ordered by problem id). Committed at `openContract`. `null` for non-exam (broker) contracts. |
+| `disclosureRef` | `string \| null` | SHA-256 hex of the full exam artifact with answer key. Committed at `openContract`. `null` for non-exam (broker) contracts. |
+
+These fields are committed at `openContract` time, before the contractor accepts, using the RFC-0022 commit-reveal guarantee. The `disclosureRef` content is never written to the ledger — the quizmaster reveals it via `say()` directly to the contractor after settlement.
+
+### Settlement formula
+
+Settlement is proportional to the verdict score, rounded up:
+
+```
+contractorPayment = ceil(verdict × stakeAmount)
+clientRefund = stakeAmount - contractorPayment
+```
+
+The existing `evaluateContract` action handles this. The quizmaster passes `verdict ∈ [0,1]` computed from the per-question rubric.
+
+### Submission field
+
+The existing `submission: string | null` field carries the full exam text — all per-question markdown+frontmatter snippets with both `correct:` and `answer:` fields filled in — when the quizmaster calls `submitContract`. This is the quizmaster's record of contestant answers (MVP trust tier: the quizmaster is assumed honest in recording answers).
+
+### Backward compatibility
+
+Both new fields are nullable and default to `null`. Existing broker contracts pass `openContract` without `artifactRef`/`disclosureRef`; they receive `null` in both fields. No existing contract state machine transitions are affected.
