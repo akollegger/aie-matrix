@@ -59,7 +59,7 @@ function pushSay(text: string) {
       if (!text || text.length === 0) {
         return;
       }
-      await activeMcp.say(text);
+      await activeMcp.say({ content: text });
       tckState.mcpSayTexts.push(text);
     } catch (e) {
       console.error(

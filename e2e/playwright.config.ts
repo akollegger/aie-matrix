@@ -12,10 +12,10 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:8787",
   },
-  webServer: {
+  webServer: process.env.STAGING_STACK === "true" ? undefined : {
     command: "pnpm --filter @aie-matrix/server dev",
     url: "http://127.0.0.1:8787/health",
-    reuseExistingServer: !process.env["CI"],
+    reuseExistingServer: true,
     timeout: 90_000,
     env: {
       AIE_MATRIX_MAP: "maps/sandbox/read-and-collect.map.gram",
