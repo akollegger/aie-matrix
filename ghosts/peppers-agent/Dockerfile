@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# funder-agent image: Funder ghost that offers funder-credits for eval contracts
+# peppers-agent image: LLM-driven Peppers ghost (Id & Surface reasoning)
 # Build context: repo root (required — workspace deps live across packages)
 
 # ─── Stage 1: base — prime pnpm virtual store from lockfile only ──────────────
@@ -17,15 +17,13 @@ ENV CI=true
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
 
-# Build workspace dependencies in explicit topological order.
-# funder-agent depends on: root-env, shared-types, ghost-ts-client
-RUN pnpm --filter @aie-matrix/root-env run build
-RUN pnpm --filter "@aie-matrix/shared-types" run build
-RUN pnpm --filter "@aie-matrix/ghost-ts-client" run build
-RUN pnpm --filter @aie-matrix/funder-agent run build
+# Build peppers-agent and ALL its workspace dependencies in topological order.
+# pnpm's "..." dependency-aware selector builds every transitive workspace dep,
+# so none can be missed by a hand-maintained list.
+RUN pnpm --filter "@aie-matrix/ghost-peppers-agent..." run build
 
 # Produce a self-contained deploy directory (no workspace symlinks, prod deps only).
-RUN pnpm --filter @aie-matrix/funder-agent deploy --prod --legacy /app/deploy
+RUN pnpm --filter @aie-matrix/ghost-peppers-agent deploy --prod --legacy /app/deploy
 
 # ─── Stage 3: runner — minimal image with only the built artifact ─────────────
 FROM node:24-slim AS runner

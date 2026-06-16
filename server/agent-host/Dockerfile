@@ -9,7 +9,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 # Enable corepack and pre-activate the exact pnpm version declared in package.json
 # so the build stage doesn't need a network call when it reads packageManager
-RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 WORKDIR /repo
 # Copy only files needed by pnpm fetch — maximises layer-cache reuse
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -24,12 +24,10 @@ COPY . .
 # Install from virtual store (no network required)
 RUN pnpm install --offline --frozen-lockfile
 
-# Build workspace dependencies in explicit topological order.
-# agent-host depends on: root-env, ghost-ts-client → shared-types
-RUN pnpm --filter @aie-matrix/root-env run build
-RUN pnpm --filter "@aie-matrix/shared-types" run build
-RUN pnpm --filter "@aie-matrix/ghost-ts-client" run build
-RUN pnpm --filter @aie-matrix/server-agent-host run build
+# Build agent-host and ALL its workspace dependencies in topological order.
+# pnpm's "..." dependency-aware selector builds every transitive workspace dep
+# (e.g. @aie-matrix/logger), so none can be missed by a hand-maintained list.
+RUN pnpm --filter "@aie-matrix/server-agent-host..." run build
 
 # Produce a self-contained deploy directory (no workspace symlinks, prod deps only).
 # --legacy: pnpm v10+ requires this flag when workspace packages don't use inject-workspace-packages
