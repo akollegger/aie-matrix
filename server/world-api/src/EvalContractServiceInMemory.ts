@@ -238,13 +238,15 @@ export function makeEvalContractServiceInMemory(
           );
         }
 
-        // Authorization: allow the contractorId, any frozen beneficiary (group member), or both
+        // Authorization: contractor, any frozen beneficiary, or evaluator (trusted exam scenario).
+        // Evaluator submit is intentional: quizmaster collects answers and submits on behalf of the
+        // contestant, maintaining the commit-reveal audit trail without requiring client-side tooling.
         const allowedCallers = contract.beneficiaries.length > 0
-          ? [...contract.beneficiaries, contract.contractorId]
-          : [contract.contractorId];
+          ? [...contract.beneficiaries, contract.contractorId, contract.evaluatorId]
+          : [contract.contractorId, contract.evaluatorId];
         if (!allowedCallers.includes(callerId)) {
           return yield* Effect.fail(
-            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor can submit" }),
+            new EvalContractNotAuthorized({ contractId, callerId, reason: "Only the contractor or evaluator can submit" }),
           );
         }
 

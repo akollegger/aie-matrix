@@ -87,7 +87,15 @@ export function parseExamGramText(
 
       const props = subj.properties;
       const type = strProp(props, "type") as QuestionSnippet["type"] | undefined;
-      if (!type || !["multiple_choice", "short_answer", "numerical"].includes(type)) continue;
+      const validTypes = ["multiple_choice", "short_answer", "numerical"];
+      if (!type || !validTypes.includes(type)) {
+        return yield* Effect.fail(
+          new ExamParseError(
+            `Problem node "${id}" has missing or invalid type "${type ?? "(none)"}". Expected one of: ${validTypes.join(", ")}`,
+            source,
+          ),
+        );
+      }
 
       const weight = numProp(props, "weight") ?? 1;
       const promptText = strProp(props, "prompt") ?? "";
@@ -95,7 +103,11 @@ export function parseExamGramText(
       const correctStr = strProp(props, "correct");
       const correctNum = numProp(props, "correct");
       const correct: string | number | undefined = correctStr ?? correctNum;
-      if (correct === undefined) continue;
+      if (correct === undefined) {
+        return yield* Effect.fail(
+          new ExamParseError(`Problem node "${id}" is missing required "correct" property`, source),
+        );
+      }
 
       const options = mapProp(props, "options");
       const tolerance = numProp(props, "tolerance");

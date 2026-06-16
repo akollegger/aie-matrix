@@ -872,7 +872,7 @@ describe("Exam contract: artifactRef and disclosureRef", () => {
     assert.equal(contract.disclosureRef, null);
   });
 
-  it("proportional settlement: verdict 0.67 on stake 3 yields ceil(0.67 × 3) = 3", async () => {
+  it("proportional settlement: verdict 2/3 on stake 3 yields floor((2/3) × 3) = 2 contractor, 1 refund", async () => {
     const { ledger, svc } = makeSuite();
     await initLedger(ledger);
 

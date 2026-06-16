@@ -25,6 +25,23 @@ export type EvalContractOpenResult =
   | { readonly contractId: string }
   | { readonly code: string; readonly message?: string };
 
+export interface EvalContractAcceptArgs {
+  readonly contractId: string;
+}
+
+export interface EvalContractAcceptResult {
+  readonly ok: boolean;
+}
+
+export interface EvalContractSubmitArgs {
+  readonly contractId: string;
+  readonly submission: string;
+}
+
+export interface EvalContractSubmitResult {
+  readonly ok: boolean;
+}
+
 export interface EvalContractEvaluateArgs {
   readonly contractId: string;
   readonly verdict: number;
@@ -47,6 +64,8 @@ export interface GhostMcpServiceShape {
   readonly say: (args: SayArgs) => Effect.Effect<SayResult, McpCallError>;
   readonly inbox: Effect.Effect<InboxResult, McpCallError>;
   readonly evalContractOpen: (args: EvalContractOpenArgs) => Effect.Effect<EvalContractOpenResult, McpCallError>;
+  readonly evalContractAccept: (args: EvalContractAcceptArgs) => Effect.Effect<EvalContractAcceptResult, McpCallError>;
+  readonly evalContractSubmit: (args: EvalContractSubmitArgs) => Effect.Effect<EvalContractSubmitResult, McpCallError>;
   readonly evalContractEvaluate: (args: EvalContractEvaluateArgs) => Effect.Effect<EvalContractEvaluateResult, McpCallError>;
 }
 
@@ -80,6 +99,14 @@ export const GhostMcpServiceLive = (client: GhostMcpClient): Layer.Layer<GhostMc
     evalContractOpen: (args) => wrap(
       () => client.callTool("eval_contract_open", args as unknown as Record<string, unknown>) as Promise<EvalContractOpenResult>,
       "eval_contract_open",
+    ),
+    evalContractAccept: (args) => wrap(
+      () => client.callTool("eval_contract_accept", args as unknown as Record<string, unknown>) as Promise<EvalContractAcceptResult>,
+      "eval_contract_accept",
+    ),
+    evalContractSubmit: (args) => wrap(
+      () => client.callTool("eval_contract_submit", args as unknown as Record<string, unknown>) as Promise<EvalContractSubmitResult>,
+      "eval_contract_submit",
     ),
     evalContractEvaluate: (args) => wrap(
       () => client.callTool("eval_contract_evaluate", args as unknown as Record<string, unknown>) as Promise<EvalContractEvaluateResult>,

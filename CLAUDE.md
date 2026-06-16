@@ -49,7 +49,7 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) — server; TypeScript 5.7 (browser target, ESM) — client + `effect` v3+, `@modelcontextprotocol/sdk` 1.29+, `@colyseus/core` 0.15.57, `colyseus.js` (client), `jsonwebtoken`, `@relateby/pattern`, React 18, Vite 6 (030-human-ghost-peer)
 - No new storage; uses existing Neo4j ledger (via LedgerService) and in-memory Colyseus room state (030-human-ghost-peer)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@relateby/pattern` ^0.4.2, `@a2a-js/sdk` 0.3.13+, `@modelcontextprotocol/sdk` 1.29+, `node:crypto` (built-in) (031-exam-npcs)
-- Existing Neo4j ledger (EvalContract nodes, additive field additions); in-memory exam state per NPC ghos (031-exam-npcs)
+- Existing Neo4j ledger (EvalContract nodes, additive field additions); in-memory exam state per NPC ghost (031-exam-npcs)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 

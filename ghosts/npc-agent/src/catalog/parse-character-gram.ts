@@ -286,6 +286,7 @@ export function parseCharacterGramText(
     if (!background) missing.push("background");
     if (!defaultActionRaw) missing.push("defaultAction");
     if (enabled === undefined) missing.push("enabled");
+    if (behaviorKind === "quizmaster" && !examPath) missing.push("examPath");
     if (missing.length > 0) {
       return yield* Effect.fail(
         new CharacterParseError(`Character missing required fields: ${missing.join(", ")}`, source),

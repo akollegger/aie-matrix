@@ -26,6 +26,8 @@ function makeMcpLayer(notifications: Array<{ thread_id: string; message_id: stri
     say: (args) => { calls.push({ name: "say", args }); return Effect.succeed({ ok: true } as never); },
     inbox: Effect.succeed({ notifications } as never),
     evalContractOpen: () => Effect.succeed({ contractId: "c1" } as never),
+    evalContractAccept: (args) => { calls.push({ name: "evalContractAccept", args }); return Effect.succeed({ ok: true } as never); },
+    evalContractSubmit: () => Effect.succeed({ ok: true } as never),
     evalContractEvaluate: () => Effect.succeed({ ok: true } as never),
   };
   return { calls, layer: Layer.succeed(GhostMcpService, service) };

@@ -254,6 +254,19 @@ export const quizmasterHandleAnswer = Effect.fn("quizmasterHandleAnswer")(functi
     });
   }
 
+  // Submit collected answers on behalf of contractor (evaluator submit is authorized for exam NPCs)
+  yield* mcp.evalContractSubmit({
+    contractId: state.contractId,
+    submission: submissionText,
+  }).pipe(
+    Effect.tapError((e) =>
+      Effect.sync(() =>
+        log.error({ kind: "quizmaster.submit-fail", ghostId, contractId: state.contractId, error: String(e) }),
+      ),
+    ),
+    Effect.orElse(() => Effect.void),
+  );
+
   yield* mcp.evalContractEvaluate({
     contractId: state.contractId,
     verdict,

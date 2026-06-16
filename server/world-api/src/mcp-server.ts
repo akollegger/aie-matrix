@@ -1896,7 +1896,7 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     async ({ contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs, artifactRef, disclosureRef }, extra) =>
       runTool(
         "eval_contract_open",
-        { contractorId, evaluatorId, stakeResource, stakeAmount, deadlineMs },
+        { contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs, artifactRef, disclosureRef },
         Effect.gen(function* () {
           yield* requireAuthExtra(extra);
           const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);

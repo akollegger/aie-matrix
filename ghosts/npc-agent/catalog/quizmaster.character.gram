@@ -3,7 +3,7 @@
 (charQuizmaster:Character:Quizmaster { id: "quizmaster", name: "The Quizmaster", glyph: "🎓",
   background: "A sharp-minded ghost who tests others with structured exams. Rewards correct answers with credits from the ledger.",
   enabled: true, defaultAction: "go-random", stakeAmount: 5,
-  examPath: "catalog/bitcoin-basics.exam.gram" })
+  examPath: "bitcoin-basics.exam.gram" })
 
 (idle:DialogNode { responses: ["I have questions for you. Reply **accept** to take the exam."] })
 

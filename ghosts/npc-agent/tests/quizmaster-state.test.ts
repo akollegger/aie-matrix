@@ -75,6 +75,14 @@ function makeMcpLayer(overrides: {
       calls.push({ name: "evalContractOpen", args });
       return Effect.succeed(overrides.evalContractOpenResult ?? { contractId: "contract-abc" } as never);
     },
+    evalContractAccept: (args) => {
+      calls.push({ name: "evalContractAccept", args });
+      return Effect.succeed({ ok: true } as never);
+    },
+    evalContractSubmit: (args) => {
+      calls.push({ name: "evalContractSubmit", args });
+      return Effect.succeed({ ok: true } as never);
+    },
     evalContractEvaluate: (args) => {
       calls.push({ name: "evalContractEvaluate", args });
       return Effect.succeed({ ok: true } as never);
