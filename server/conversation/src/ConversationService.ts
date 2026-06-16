@@ -43,9 +43,10 @@ export interface ConversationServiceShape {
     content: string,
     to?: string,
     displayName?: string,
-    /** Speech-act intent — e.g. "greet", "befriend", "propose". Stored
-     *  on the conversation record so recipients see WHY they were
-     *  spoken to, not just what was said. */
+    /** Optional non-verbal/social-register cue — e.g. "greet",
+     *  "befriend". Stored on the conversation record so recipients can
+     *  read the speaker's register, not just the words. Does NOT trigger
+     *  world effects; state-changing acts have dedicated tools. */
     intent?: string,
   ): Effect.Effect<SayResult, ConversationStoreUnavailable | ConversationGhostNoPosition>;
   bye(ghostId: string): Effect.Effect<ByeResult>;

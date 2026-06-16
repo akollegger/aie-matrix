@@ -1,10 +1,11 @@
 /**
  * Unit tests for the primal-needs substrate.
  *
- * Verifies the factory shape, linear depletion math, the asymmetric
- * adjustment helper, and the sweet-spot starting state. Needs use
- * linear (display-space) math, NOT the sigmoid-bounded slider math
- * that personality feelings use.
+ * Fuel is now backed by the generic Slider component in sigmoid mode
+ * with a mobile setpoint. Coherence and Rest stay linear. The tests
+ * below reflect those semantics; the older "1 unit = exactly +1
+ * display" guarantees only hold for Coherence/Rest now, since
+ * sigmoid compression is the whole point on Fuel.
  */
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -14,9 +15,15 @@ import {
   STARTER_NEEDS,
   adjustNeed,
   applyCascadeDepletion,
+  incrementNeedTolerance,
   midpointNeeds,
+  needDistanceFromSetpoint,
+  needSetpointDisplay,
   startingNeeds,
 } from "./needs.js";
+
+const close = (a: number, b: number, eps = 1e-6) =>
+  assert.ok(Math.abs(a - b) < eps, `expected ~${b}, got ${a}`);
 
 test("STARTER_NEEDS lists exactly Fuel, Coherence, Rest in that order", () => {
   assert.deepEqual([...STARTER_NEEDS], ["Fuel", "Coherence", "Rest"]);
@@ -25,7 +32,7 @@ test("STARTER_NEEDS lists exactly Fuel, Coherence, Rest in that order", () => {
 test("midpointNeeds spawns every need at display 5 (satiated)", () => {
   const m = midpointNeeds();
   for (const need of STARTER_NEEDS) {
-    assert.equal(m[need].display, 5, `${need} should start at display 5`);
+    close(m[need].display, 5);
   }
 });
 
@@ -33,89 +40,113 @@ test("startingNeeds (no config) returns the same as midpointNeeds", () => {
   const a = startingNeeds();
   const b = midpointNeeds();
   for (const need of STARTER_NEEDS) {
-    assert.equal(a[need].display, b[need].display);
+    close(a[need].display, b[need].display);
   }
 });
 
-test("applyCascadeDepletion drops every active need's display by exactly its rate", () => {
-  const before = midpointNeeds();
-  const after = applyCascadeDepletion(before);
-  for (const need of STARTER_NEEDS) {
-    const rate = DEFAULT_NEED_DEPLETION[need];
-    const expected = Math.max(0, before[need].display - rate);
-    assert.ok(
-      Math.abs(after[need].display - expected) < 1e-9,
-      `${need}: expected ${expected}, got ${after[need].display}`,
-    );
-  }
-});
-
-test("depletion is linear and respects per-need rates", () => {
+test("Coherence holds at midpoint; Rest depletes (sigmoid)", () => {
   let profile = midpointNeeds();
   for (let i = 0; i < 50; i++) profile = applyCascadeDepletion(profile);
-  // 50 cascades of Fuel at 0.05/cascade = 2.5 (display 5 → 2.5)
-  assert.ok(
-    Math.abs(profile.Fuel.display - 2.5) < 1e-9,
-    `Fuel should be exactly 2.5 after 50 cascades, got ${profile.Fuel.display}`,
-  );
-  // Coherence is at rate 0 → stays at midpoint
-  assert.equal(profile.Coherence.display, 5);
-  // Rest at 0.02/cascade × 50 = 1.0, display 5 → 4.0
-  assert.ok(
-    Math.abs(profile.Rest.display - 4.0) < 1e-9,
-    `Rest should be exactly 4.0 after 50 cascades, got ${profile.Rest.display}`,
-  );
+  // Coherence rate 0 → stays at midpoint
+  close(profile.Coherence.display, 5);
+  // Rest is now a sigmoid slider (same component as Fuel): it drops from
+  // midpoint but asymptotes rather than hitting a linear target.
+  assert.ok(profile.Rest.display < 5, "Rest must drop from midpoint");
+  assert.ok(profile.Rest.display > 0, "Rest must stay strictly above 0");
 });
 
-test("depletion floors at 0 (no negative display)", () => {
+test("Fuel depletion compresses near the floor (sigmoid)", () => {
+  // Linear math at rate 0.05 × 100 = 5 would say display 0. Sigmoid
+  // doesn't reach 0 — it asymptotes. We just verify a meaningful
+  // drop with no overshoot.
   let profile = midpointNeeds();
-  for (let i = 0; i < 1000; i++) profile = applyCascadeDepletion(profile);
-  assert.equal(profile.Fuel.display, 0, "Fuel should floor at exactly 0");
-  assert.equal(profile.Rest.display, 0, "Rest should floor at exactly 0");
+  for (let i = 0; i < 100; i++) profile = applyCascadeDepletion(profile);
+  assert.ok(profile.Fuel.display > 0, "Fuel must stay strictly above 0");
+  assert.ok(
+    profile.Fuel.display < 4,
+    `Fuel should have meaningfully dropped, got ${profile.Fuel.display.toFixed(3)}`,
+  );
 });
 
-test("adjustNeed up adds delta to display linearly", () => {
-  const profile = midpointNeeds();
-  const after = adjustNeed(profile, "Fuel", "up", 1.5);
-  assert.equal(after.Fuel.display, 6.5, "5 + 1.5 = 6.5");
+test("depletion never lets any need reach the bounds exactly", () => {
+  let profile = midpointNeeds();
+  for (let i = 0; i < 10_000; i++) profile = applyCascadeDepletion(profile);
+  for (const need of STARTER_NEEDS) {
+    assert.ok(profile[need].display >= 0);
+    assert.ok(profile[need].display < 10);
+  }
 });
 
-test("adjustNeed up clamps at display 10", () => {
+test("adjustNeed up on Fuel moves toward but never reaches 10 (sigmoid)", () => {
   const profile = midpointNeeds();
   const after = adjustNeed(profile, "Fuel", "up", 100);
-  assert.equal(after.Fuel.display, 10, "should clamp at the max");
+  assert.ok(
+    after.Fuel.display > 5 && after.Fuel.display < 10,
+    `Fuel should asymptote, got ${after.Fuel.display}`,
+  );
 });
 
-test("adjustNeed down subtracts delta from display linearly", () => {
-  const profile = midpointNeeds();
-  const after = adjustNeed(profile, "Fuel", "down", 3);
-  assert.equal(after.Fuel.display, 2, "5 - 3 = 2");
-});
-
-test("adjustNeed down clamps at display 0", () => {
+test("adjustNeed down on Fuel moves toward but never reaches 0 (sigmoid)", () => {
   const profile = midpointNeeds();
   const after = adjustNeed(profile, "Fuel", "down", 100);
-  assert.equal(after.Fuel.display, 0, "should clamp at the min");
+  assert.ok(
+    after.Fuel.display > 0 && after.Fuel.display < 5,
+    `Fuel should asymptote, got ${after.Fuel.display}`,
+  );
 });
 
 test("adjustNeed leaves other needs untouched", () => {
   const profile = midpointNeeds();
   const after = adjustNeed(profile, "Fuel", "down", 1);
-  assert.equal(after.Coherence.display, profile.Coherence.display);
-  assert.equal(after.Rest.display, profile.Rest.display);
+  close(after.Coherence.display, profile.Coherence.display);
+  close(after.Rest.display, profile.Rest.display);
 });
 
-test("eating 1 unit of food on a starving ghost adds exactly 1 to display", () => {
-  // The canonical math the substrate must honour: 1.82 + 1 = 2.82.
-  // Eat 1 unit, display goes up by 1.
-  const profile = midpointNeeds();
-  const depleted = adjustNeed(profile, "Fuel", "down", 3.18); // 5 - 3.18 = 1.82
-  assert.ok(Math.abs(depleted.Fuel.display - 1.82) < 1e-9);
-  const after = adjustNeed(depleted, "Fuel", "up", 1);
+test("sigmoid replenishment: a starving ghost gets more out of a bite than a satiated one", () => {
+  const starving = adjustNeed(midpointNeeds(), "Fuel", "down", 8); // → display ≈ 2.7
+  const satiated = adjustNeed(midpointNeeds(), "Fuel", "up", 6); // → display ≈ 7.3
+  const starvingAfter = adjustNeed(starving, "Fuel", "up", 1).Fuel.display;
+  const satiatedAfter = adjustNeed(satiated, "Fuel", "up", 1).Fuel.display;
+  const starvingGain = starvingAfter - starving.Fuel.display;
+  const satiatedGain = satiatedAfter - satiated.Fuel.display;
   assert.ok(
-    Math.abs(after.Fuel.display - 2.82) < 1e-9,
-    `1.82 + 1 must equal 2.82, got ${after.Fuel.display}`,
+    starvingGain > satiatedGain,
+    `bite at low Fuel (Δ=${starvingGain.toFixed(3)}) should out-gain bite at high Fuel (Δ=${satiatedGain.toFixed(3)})`,
   );
+});
+
+test("Fuel setpoint shifts up after high-side tolerance increments", () => {
+  let profile = midpointNeeds();
+  close(needSetpointDisplay(profile, "Fuel"), 5);
+  profile = incrementNeedTolerance(profile, "Fuel", "high");
+  assert.ok(
+    needSetpointDisplay(profile, "Fuel") > 5,
+    `setpoint should rise after a binge; got ${needSetpointDisplay(profile, "Fuel")}`,
+  );
+});
+
+test("after Fuel tolerance rises, the same Fuel reads as more depleted", () => {
+  let profile = midpointNeeds(); // display 5, setpoint 5 → distance 0
+  close(needDistanceFromSetpoint(profile, "Fuel"), 0);
+  for (let i = 0; i < 3; i++) {
+    profile = incrementNeedTolerance(profile, "Fuel", "high");
+  }
+  // value unchanged, setpoint up → distance negative
+  assert.ok(
+    needDistanceFromSetpoint(profile, "Fuel") < -1,
+    `distance from setpoint should turn meaningfully negative; got ${needDistanceFromSetpoint(
+      profile,
+      "Fuel",
+    ).toFixed(3)}`,
+  );
+});
+
+test("Coherence/Rest tolerance is a no-op (locked setpoint config)", () => {
+  let profile = midpointNeeds();
+  profile = incrementNeedTolerance(profile, "Coherence", "high");
+  profile = incrementNeedTolerance(profile, "Rest", "high");
+  close(needSetpointDisplay(profile, "Coherence"), 5);
+  close(needSetpointDisplay(profile, "Rest"), 5);
 });
 
 test("DEFAULT_NEED_DEPLETION has reasonable magnitudes (Coherence currently disabled)", () => {

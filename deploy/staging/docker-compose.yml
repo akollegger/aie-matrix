@@ -19,6 +19,11 @@ services:
     image: neo4j:5
     environment:
       NEO4J_AUTH: "${NEO4J_AUTH}"
+      # GDS plugin — the peppers-sleep consolidation runs Leiden community
+      # detection + KNN in-DB (PEPPERS_GDS_MODE=in-db, the self-hosted
+      # equivalent of the Aura GDS-Sessions path). Auto-downloaded on boot;
+      # NEO4J_PLUGINS also wires the procedure allow/unrestricted lists.
+      NEO4J_PLUGINS: '["graph-data-science"]'
     volumes:
       - neo4j-data:/data
     networks:
@@ -59,6 +64,13 @@ services:
       # Server config
       AIE_MATRIX_HTTP_PORT: "${AIE_MATRIX_HTTP_PORT:-8787}"
       AIE_MATRIX_DEBUG: "${AIE_MATRIX_DEBUG:-false}"
+      # Start on Moscone so the ledger seeds ITS economy (gold + foods) at
+      # startup — the ledger inits once from the startup map (RFC-0029).
+      AIE_MATRIX_MAP: "${AIE_MATRIX_MAP:-maps/moscone/moscone-west-aiewf.map.gram}"
+      # Economy (RFC-0029). Vending machines are authored in the map gram
+      # (items layer) and registered from it at startup. WORLD_GHOST_STIPEND_GOLD
+      # grants each ghost starting gold so it can buy from them.
+      WORLD_GHOST_STIPEND_GOLD: "${WORLD_GHOST_STIPEND_GOLD:-60}"
       AIE_MATRIX_INTERNAL_FANOUT_TOKEN: "${AIE_MATRIX_INTERNAL_FANOUT_TOKEN:-}"
       ADMIN_TOKEN: "${ADMIN_TOKEN}"
       # IC-002: MCP URL for spawn credentials — must be reachable by agent-host container
@@ -141,6 +153,133 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # ─── Peppers ghost + its memory service (opt-in: --profile peppers) ─────────
+
+  # Shared, multi-tenant agent-memory MCP server over SSE (Neo4j Labs).
+  # k8s-scalable; many ghosts connect by session_id. Backed by the shared
+  # world Neo4j ("context graph in the same instance"). OpenAI-shaped calls
+  # (embeddings + extraction LLM) route via OpenRouter.
+  agent-memory:
+    profiles: ["peppers"]
+    build:
+      context: ../..
+      dockerfile: deploy/agent-memory/Dockerfile
+    # Headroom: under many concurrent ghosts the SSE memory service was
+    # OOM-killed (exit 137) at the default limit. Raise the ceiling.
+    mem_limit: 3g
+    environment:
+      NEO4J_URI: "${NEO4J_URI:-bolt://neo4j:7687}"
+      NEO4J_USER: "${NEO4J_USER:-neo4j}"
+      NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
+      # OpenAI SDK → OpenRouter (one key, one endpoint).
+      OPENAI_API_KEY: "${OPEN_ROUTER_API_KEY}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
+      # Entity-extraction LLM. spaCy/GLiNER extras are absent, so this LLM
+      # does ALL extraction — keep it dirt cheap. The package's --llm parser
+      # requires a NATIVE provider prefix (openai/anthropic/bedrock) and the
+      # openai adapter strips only the leading "openai/", forwarding the rest
+      # to OpenRouter verbatim. So `openai/<vendor>/<model>` routes any
+      # OpenRouter slug through the openai adapter. (True-free spaCy would
+      # need the image reworked from ephemeral uvx to a pip venv + baked
+      # model so the model persists to runtime.)
+      MEMORY_LLM: "${MEMORY_LLM:-openai/inclusionai/ling-2.6-flash}"
+    networks:
+      - aie-matrix
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; socket.create_connection(('localhost',8080),3).close()"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 40s
+
+  # Peppers Social-tier ghost. Lean node image; cognition routes through
+  # OpenRouter (free-first); memory via the agent-memory SSE service.
+  peppers:
+    profiles: ["peppers"]
+    build:
+      context: ../..
+      dockerfile: ghosts/peppers-agent-v2/Dockerfile
+    environment:
+      NODE_ENV: "${NODE_ENV:-production}"
+      AGENT_HOST_URL: "http://agent-host:4000"
+      AGENT_HOST_TOKEN: "${AGENT_HOST_TOKEN}"
+      PEPPERS_AGENT_PUBLIC_BASE_URL: "http://peppers:4002"
+      PEPPERS_AGENT_PORT: "4002"
+      PEPPERS_AGENT_ID: "peppers-agent"
+      # Memory: shared agent-memory SSE service (no in-container Python).
+      PEPPERS_MEMORY_MCP_URL: "http://agent-memory:8080/sse"
+      # Skill-recall + sleep consolidation graph — the ghost "minds" context
+      # graph lives in the same Neo4j instance as world/domain data.
+      GHOST_MINDS_NEO4J_URI: "${NEO4J_URI:-bolt://neo4j:7687}"
+      GHOST_MINDS_NEO4J_USERNAME: "${NEO4J_USER:-neo4j}"
+      GHOST_MINDS_NEO4J_PASSWORD: "${NEO4J_PASSWORD}"
+      # GDS backend for sleep consolidation: "in-db" uses the GDS plugin
+      # loaded into the local Neo4j container (above); "sessions" (default in
+      # code) targets Aura GDS Sessions. Self-hosted Docker → in-db.
+      PEPPERS_GDS_MODE: "${PEPPERS_GDS_MODE:-in-db}"
+      # Structured per-cascade JSONL trace (actions, fork-join delegations,
+      # recalls, personality drift). Observability/dev knob — opt-in; leave
+      # unset in high-scale production (use telemetry instead).
+      PEPPERS_CAPTURE_LOG: "${PEPPERS_CAPTURE_LOG:-}"
+      # Live per-ghost overlay (HTML + SSE): ghost i serves on BASE_PORT+i;
+      # any tab's /all route grids the peer ports. Dev/staging only — does
+      # not scale to k8s-millions. Watch at http://localhost:4100/all
+      PEPPERS_OVERLAY_BASE_PORT: "${PEPPERS_OVERLAY_BASE_PORT:-4100}"
+      PEPPERS_OVERLAY_PEER_PORTS: "${PEPPERS_OVERLAY_PEER_PORTS:-4100,4101,4102,4103,4104,4105,4106,4107}"
+      # LLM + embeddings: OpenRouter, free-first.
+      PEPPERS_ROUTER: "${PEPPERS_ROUTER:-free-first}"
+      PEPPERS_ROUTER_PREFER: "${PEPPERS_ROUTER_PREFER:-nvidia/nemotron-3-super-120b-a12b:free,openai/gpt-oss-120b:free}"
+      # Production Id model (cost-dominant agentic stage), chosen by the
+      # 16-agent coherence eval: cheapest, most behaviourally rich (social +
+      # fork-join delegation), zero hard failures (salvage net catches all
+      # misbehaviour). DEFAULT_MODEL (Haiku) remains the never-hit fallback.
+      PEPPERS_ID_MODEL: "${PEPPERS_ID_MODEL:-inclusionai/ling-2.6-flash}"
+      # Overrides the capable default + final routing fallback. Set to a
+      # cheap model during cost evals so NO chain can escalate to Haiku.
+      PEPPERS_DEFAULT_MODEL: "${PEPPERS_DEFAULT_MODEL:-}"
+      # Spoken-line model — identity-sensitive but low-volume, so a notch up
+      # from the Id (ling). llama-3.1-8b holds names better at ~1.5x ling's
+      # price for the few says per ghost.
+      PEPPERS_SPEECH_MODEL: "${PEPPERS_SPEECH_MODEL:-meta-llama/llama-3.1-8b-instruct}"
+      # Death-reflection (karmic-word) model. High-abstraction distillation;
+      # unset → bulk/ling. Pin a capable model if the word is incoherent.
+      PEPPERS_REFLECTION_MODEL: "${PEPPERS_REFLECTION_MODEL:-}"
+      # Sleep-consolidation "quality" tier (skill distillation + self-narration):
+      # abstraction-grade, schema-following work where cheap models fail. The
+      # in-code default is a bare OpenAI id (invalid on OpenRouter) — pin a
+      # real OpenRouter slug. Low-volume (a few calls per blackout).
+      PEPPERS_ROUTER_QUALITY_MODEL: "${PEPPERS_ROUTER_QUALITY_MODEL:-anthropic/claude-haiku-4.5}"
+      # Need-dynamics tunables (unset → code defaults). NEEDS_RUSH compresses
+      # all depletion for fast demos/tests; the others tune mortality + the
+      # sleep/consolidation drive.
+      PEPPERS_NEEDS_RUSH: "${PEPPERS_NEEDS_RUSH:-}"
+      PEPPERS_STARVATION_DEATH_CASCADES: "${PEPPERS_STARVATION_DEATH_CASCADES:-}"
+      PEPPERS_REST_SLEEP_THRESHOLD: "${PEPPERS_REST_SLEEP_THRESHOLD:-}"
+      PEPPERS_REST_PER_MINUTE: "${PEPPERS_REST_PER_MINUTE:-}"
+      OPEN_ROUTER_API_KEY: "${OPEN_ROUTER_API_KEY}"
+      OPENAI_API_KEY: "${OPEN_ROUTER_API_KEY}"
+      OPENAI_BASE_URL: "${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
+    ports:
+      - "4002:4002"
+      # Per-ghost overlay range (BASE_PORT .. BASE_PORT+7) — watch live
+      - "4100-4107:4100-4107"
+    networks:
+      - aie-matrix
+    depends_on:
+      agent-host:
+        condition: service_healthy
+      agent-memory:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4002/health',(r)=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
 
 # ─── Volumes ────────────────────────────────────────────────────────────────
 

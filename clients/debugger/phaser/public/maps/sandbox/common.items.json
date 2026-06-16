@@ -1,0 +1,146 @@
+{
+  "key-brass": {
+    "name": "Brass Key",
+    "itemClass": "Key",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "🔑",
+    "description": "A small brass key. It might open something nearby."
+  },
+  "container-chest": {
+    "name": "Storage Chest",
+    "itemClass": "Container",
+    "carriable": false,
+    "capacityCost": 2,
+    "glyph": "🪎",
+    "description": "A sturdy chest; too heavy to drag without help."
+  },
+  "info-books": {
+    "name": "Book Stack",
+    "itemClass": "Book",
+    "carriable": false,
+    "capacityCost": 0,
+    "glyph": "📚",
+    "description": "A neat pile of paperbacks and field guides."
+  },
+  "coin-heart": {
+    "name": "Heart Coin",
+    "itemClass": "Coin:Collectible",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "💛",
+    "description": "A shiny heart-shaped, golden token."
+  },
+  "device-light": {
+    "name": "Lamp",
+    "itemClass": "Device",
+    "carriable": false,
+    "capacityCost": 0,
+    "glyph": "💡",
+    "description": "A warm glow for reading the fine print."
+  },
+  "info-book": {
+    "name": "Guide Book",
+    "itemClass": "Book",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "📖",
+    "description": "Marked up with margin notes in two colors of ink."
+  },
+  "device-door": {
+    "name": "Door",
+    "itemClass": "Device:Door",
+    "carriable": false,
+    "capacityCost": 0,
+    "glyph": "🚪",
+    "description": "A door frame and panel; hinges decide who passes."
+  },
+  "info-sign": {
+    "name": "Sign",
+    "itemClass": "Sign",
+    "carriable": false,
+    "capacityCost": 0,
+    "glyph": "🪧",
+    "description": "Short text meant to be read before you move on."
+  },
+  "food-coffee": {
+    "name": "Coffee",
+    "itemClass": "Food",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "☕",
+    "description": "Still warm in a compostable cup."
+  },
+  "device-toggle": {
+    "name": "Toggle Switch",
+    "itemClass": "Device",
+    "carriable": false,
+    "capacityCost": 0,
+    "glyph": "🔘",
+    "description": "Flip it and find out what it is wired to."
+  },
+  "tool-compass": {
+    "name": "Compass",
+    "itemClass": "Tool",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "🧭",
+    "description": "Points north when the world cooperates."
+  },
+  "ride-chair": {
+    "name": "Chair",
+    "itemClass": "Furniture",
+    "carriable": false,
+    "capacityCost": 1,
+    "glyph": "🪑",
+    "description": "A simple seat; good for resting between pickups."
+  },
+  "obstacle-statue": {
+    "name": "Stone Statue",
+    "itemClass": "Obstacle",
+    "carriable": false,
+    "capacityCost": 1,
+    "glyph": "🗿",
+    "description": "A heavy stone statue; it claims space on the tile."
+  },
+  "food-cookie": {
+    "name": "Cookie",
+    "itemClass": "Food",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "🍪",
+    "description": "Chocolate chip, slightly crumbly."
+  },
+  "coin-diamond": {
+    "name": "Diamond Coin",
+    "itemClass": "Coin:Collectible",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "💎",
+    "description": "A rare faceted token for high scores."
+  },
+  "tool-notes": {
+    "name": "Notepad",
+    "itemClass": "Tool",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "📝",
+    "description": "Blank pages ready for a scavenger list."
+  },
+  "coin-coin": {
+    "name": "Gold Coin",
+    "itemClass": "Coin",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "🪙",
+    "description": "A plain round coin—counts toward the tally."
+  },
+  "tool-bag": {
+    "name": "Satchel",
+    "itemClass": "Tool:Container",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "👝",
+    "description": "A small bag for odds and ends."
+  }
+}

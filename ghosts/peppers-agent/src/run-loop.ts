@@ -41,11 +41,24 @@ import {
 } from "@aie-matrix/ghost-peppers-inner";
 
 import {
+  fetchOccupantImpressions,
+  fetchRecentActionDigest,
   fetchRecentCascades,
+  fetchRecentDialogueWith,
   persistCascade,
   persistCommitmentEvaluation,
+  persistImpressions,
+  type ActionDigestEntry,
+  type CascadeReplay,
+  type DialogueTurn,
+  type ImpressionView,
   type MemoryClientHandle,
 } from "@aie-matrix/ghost-peppers-mem";
+
+function formatErr(err: unknown): string {
+  if (err instanceof Error) return `${err.name}: ${err.message}`;
+  return String(err);
+}
 
 import { invokeCommitment, type CommitmentEvaluation } from "./reason-id-commitment.js";
 import { invokeId, type IdReasoning } from "./reason-id.js";
@@ -296,8 +309,63 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
   const driftMultiplier = Math.max(0.1, Math.min(1.0, restDisplay / 5));
   const driftDelta = DEFAULT_DELTA * driftMultiplier;
 
-  // 1. Pull recent reasoning context for the Id.
-  const recentCascades = await fetchRecentCascades(memoryHandle.client, ghostId, effectiveHistoryDepth);
+  // Surface depth: the dialogue / actions / impressions blocks share
+  // Coherence's gate with the Id's cascade history. Low Coherence
+  // shrinks both — distraction reads as a shorter memory horizon
+  // everywhere, not just inside the inner monologue stage.
+  const surfaceDialogueDepth = effectiveHistoryDepth;
+  const surfaceActionDepth = effectiveHistoryDepth + 2;
+  const nearbyForMemory = req.worldContext?.nearbyGhosts ?? [];
+
+  // 1. Pull recent reasoning context for the Id and structured
+  //    timeline context for the Surface in parallel. The Surface
+  //    fetches are cheap (a handful of small Cypher queries) and
+  //    independent of the Id fetch. Each is wrapped in a per-fetch
+  //    catch so a single query failure degrades the cascade to
+  //    "no memory context for this stage" rather than killing the
+  //    cascade entirely — the previous Promise.all-all-or-nothing
+  //    semantics caused the loop to spin at world-MCP latency when
+  //    any one query rejected.
+  const emptyDialogue: ReadonlyMap<string, ReadonlyArray<DialogueTurn>> = new Map();
+  const emptyImpressions: ReadonlyMap<string, ImpressionView> = new Map();
+  const emptyActions: ReadonlyArray<ActionDigestEntry> = [];
+  const [
+    recentCascades,
+    recentDialogue,
+    recentActions,
+    clusterImpressions,
+  ] = await Promise.all([
+    fetchRecentCascades(memoryHandle.client, ghostId, effectiveHistoryDepth).catch(
+      (err) => {
+        console.warn(`[peppers] fetchRecentCascades failed: ${formatErr(err)}`);
+        return [] as readonly CascadeReplay[];
+      },
+    ),
+    nearbyForMemory.length > 0 && surfaceDialogueDepth > 0
+      ? fetchRecentDialogueWith(memoryHandle.client, ghostId, nearbyForMemory, surfaceDialogueDepth).catch(
+          (err) => {
+            console.warn(`[peppers] fetchRecentDialogueWith failed: ${formatErr(err)}`);
+            return emptyDialogue;
+          },
+        )
+      : Promise.resolve(emptyDialogue),
+    surfaceActionDepth > 0
+      ? fetchRecentActionDigest(memoryHandle.client, ghostId, surfaceActionDepth).catch(
+          (err) => {
+            console.warn(`[peppers] fetchRecentActionDigest failed: ${formatErr(err)}`);
+            return emptyActions;
+          },
+        )
+      : Promise.resolve(emptyActions),
+    nearbyForMemory.length > 0
+      ? fetchOccupantImpressions(memoryHandle.client, ghostId, nearbyForMemory).catch(
+          (err) => {
+            console.warn(`[peppers] fetchOccupantImpressions failed: ${formatErr(err)}`);
+            return emptyImpressions;
+          },
+        )
+      : Promise.resolve(emptyImpressions),
+  ]);
 
   // 2. Id composes monologue + adjustments. Pre-cascade needs are
   //    passed so synthesis can scale max_tokens against Fuel — the
@@ -319,7 +387,9 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
   //    tool-calling API. No curated action list — the LLM sees the
   //    actual tools the world exposes. The primal drive (if any) is
   //    computed by the Id pipeline and threaded through so the Surface
-  //    can let a screaming need override the surface objective.
+  //    can let a screaming need override the surface objective. The
+  //    memory timeline blocks pass through verbatim — the Surface
+  //    renderer turns them into gap-aware prompt lines.
   const strainAtCascadeStart = req.metabolicStrain ?? 0;
   const surface = await invokeSurface({
     monologue: id.monologue,
@@ -330,6 +400,10 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
     commitments: ledgerIn,
     primalDrive: id.primalDrive,
     metabolicStrain: strainAtCascadeStart,
+    currentCascadeIndex: cascadeIndex,
+    recentDialogue,
+    recentActions,
+    clusterImpressions,
     ...(req.selfDisplayName ? { selfDisplayName: req.selfDisplayName } : {}),
   });
 
@@ -362,7 +436,23 @@ export async function runOneStimulus(req: RunOneStimulusRequest): Promise<RunRec
   //    UNLESS Rest is critical, in which case the cascade evaporates
   //    and the ghost has no record of having lived this turn.
   if (memoryWritesEnabled) {
-    await persistCascade(memoryHandle.client, trace);
+    await persistCascade(memoryHandle.client, trace, cascadeIndex);
+    // Write this cascade's spatial impressions as Facts so future
+    // cascades can read "I last saw Marmot on a Wall tile N cascades
+    // ago" without re-deriving from the raw look JSON. Failure is
+    // logged and swallowed — perception memory is desirable but never
+    // load-bearing on the cascade running.
+    const impressionsToWrite = req.worldContext?.impressions ?? [];
+    if (impressionsToWrite.length > 0) {
+      await persistImpressions(
+        memoryHandle.client,
+        ghostId,
+        impressionsToWrite,
+        cascadeIndex,
+      ).catch((err) => {
+        console.warn(`[peppers] persistImpressions failed: ${formatErr(err)}`);
+      });
+    }
   }
 
   // 8. Commitment evaluation — runs AFTER the cascade is recorded so

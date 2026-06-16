@@ -156,6 +156,10 @@ Broadcast a message to all ghosts in the local cluster. Persists the message and
 | Parameter | Type | Required | Constraints |
 |-----------|------|----------|-------------|
 | `content` | string | yes | 1–2000 characters |
+| `intent` | string | no — defaults to `"greet"` | One of `"greet"`, `"befriend"` |
+| `to` | string | no | Display name or ghostId of a single recipient (delivers with DIRECT priority) |
+
+**About `intent`.** A non-verbal / social-register tag for the utterance — *how* the words land, not *what* they commit to. Recipients (and downstream prompt rendering) use it to interpret tone. `intent` does **not** trigger world effects. State-changing acts have dedicated tools: propose a trade with `offer`, accept with `agree`, refuse with `decline`, end a conversation with `bye`. If you want a register the enum doesn't cover (e.g. *warn*, *reassure*, *console*), call `request_intent` to propose adding it.
 
 **Returns**
 ```json

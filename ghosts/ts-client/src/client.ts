@@ -64,8 +64,10 @@ export class GhostMcpClient {
     this.client = null;
   }
 
-  async say(content: string): Promise<SayResult> {
-    return (await this.callTool("say", { content })) as SayResult;
+  async say(content: string, intent?: string): Promise<SayResult> {
+    const payload: Record<string, unknown> = { content };
+    if (intent !== undefined) payload["intent"] = intent;
+    return (await this.callTool("say", payload)) as SayResult;
   }
 
   async bye(): Promise<ByeResult> {

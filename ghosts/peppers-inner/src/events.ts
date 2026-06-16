@@ -11,6 +11,7 @@
 import { ulid } from "ulid";
 
 import type { AppliedAdjustment } from "./adjustments.js";
+import type { NeedName, PrimalDirection } from "./needs.js";
 
 /**
  * Compass directions used by the existing world-api for adjacent
@@ -58,6 +59,26 @@ export type Stimulus =
   | {
       readonly kind: "idle";
       /** How long the ghost has had no externally-driven stimulus, in milliseconds. */
+      readonly quietForMs: number;
+    }
+  | {
+      /**
+       * The body asserts itself when no world stimulus has arrived.
+       * Pushed onto the cascade queue by the substrate (not the world)
+       * when a primal drive crosses the urgency threshold AND the
+       * stimulus poll returned nothing. This is how a starving ghost
+       * sitting alone wakes up: their body becomes the trigger.
+       */
+      readonly kind: "primal";
+      /** Which need fired, urgency, drive text — same shape the inner
+       *  pipeline already consumes via `selectPrimalDrive`. */
+      readonly need: NeedName;
+      readonly direction: PrimalDirection;
+      readonly urgency: number;
+      readonly currentDisplay: number;
+      readonly drive: string;
+      /** Quiet time before this fired, in ms — same units as `idle`,
+       *  for debug visibility. */
       readonly quietForMs: number;
     };
 

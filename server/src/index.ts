@@ -43,6 +43,8 @@ import {
   Neo4jGraphService,
   ItemService,
   ItemServiceImpl,
+  registerVendor,
+  registerArtwork,
   LiveSessionService,
   RedisPublishService,
   runWithRequestTrace,
@@ -548,6 +550,12 @@ async function main(): Promise<void> {
     | LedgerService
     | ProposalService;
 
+  // ProposalServiceLayer declares Layer.Layer<ProposalService, never, LedgerService>
+  // — wire LedgerService into it before merging, otherwise the runtime has an
+  // unmet input requirement and every Effect that touches it dies with
+  // "Service not found: world-api/LedgerService".
+  const proposalLayer = ProposalServiceLayer.pipe(Layer.provide(LedgerServiceInMemoryLayer));
+
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
     makeRegistryStoreLayer(store),
@@ -564,7 +572,7 @@ async function main(): Promise<void> {
     liveSessionLayer,
     calendarLayer,
     LedgerServiceInMemoryLayer,
-    ProposalServiceLayer,
+    proposalLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
@@ -578,6 +586,70 @@ async function main(): Promise<void> {
     ) as unknown as Effect.Effect<void, unknown, never>;
     await Effect.runPromise(initEffect)
       .catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  }
+
+  // Vending machines (RFC-0029): registered from the MAP. The gram's items
+  // layer places `VendingMachine` items on cells (the map authors WHERE the
+  // machines are); each placement becomes a functional dispenser actor with
+  // a stocked ledger bag — a co-located ghost buys via `request` (gold→food)
+  // and the machine auto-agrees. The machine type's MENU is server-defined
+  // (the map only places instances). The client draws them from the gram.
+  if (parsedMapForLedger) {
+    const VENDING_MACHINE_REF = "VendingMachine";
+    const MENU: Record<string, number> = {
+      "food-cake": 4, "food-bread": 6, "food-salad": 9, "food-sandwich": 8, "food-coffee": 4, "food-water": 1,
+    };
+    const STOCK_PER_ITEM = 100;
+    const seedTransfers: Array<{ resource: string; qty: number; from: string; to: string }> = [];
+    let placed = 0;
+    for (const [cell, c] of loadedMap.cells) {
+      if (!c.initialItemRefs.includes(VENDING_MACHINE_REF)) continue;
+      registerVendor({ vendorId: `vendor-${cell}`, cell, label: "Vending Machine", prices: MENU });
+      for (const ref of Object.keys(MENU)) {
+        seedTransfers.push({ resource: ref, qty: STOCK_PER_ITEM, from: "world", to: `vendor-${cell}` });
+      }
+      placed += 1;
+    }
+    if (seedTransfers.length > 0) {
+      const seedEffect = LedgerService.pipe(
+        Effect.flatMap((svc) => svc.commit({
+          id: randomUUID(), transfers: seedTransfers, cause: "vendor-stock", actors: [], ts: Date.now(),
+        })),
+        Effect.provide(runtimeLayer as any),
+      ) as unknown as Effect.Effect<unknown, unknown, never>;
+      await Effect.runPromise(seedEffect).then(
+        () => console.info(`[aie-matrix] ${placed} vending machines registered from map`),
+        (e: unknown) => console.warn("[aie-matrix] vendor seed warning:", e),
+      );
+    }
+  }
+
+  // Artworks (RFC-0031): registered from the curated catalog that sits beside
+  // the map (`<map>.artworks.json`). The gram authors WHERE each painting +
+  // card hang (Artwork / ArtCard items); the catalog carries the per-work data
+  // the gram can't (image URL, object-page href, title/artist/date). Looking
+  // at a painting returns its image; reading a card dereferences its href.
+  if (mapPath) {
+    const artPath = mapPath.replace(/\.map\.gram$/, ".artworks.json");
+    if (existsSync(artPath)) {
+      try {
+        const catalog = JSON.parse(await readFile(artPath, "utf8")) as Array<{
+          cell: string; cardCell: string; imageUrl: string; objectUrl: string;
+          title: string; artist: string; date: string;
+        }>;
+        for (const w of catalog) {
+          registerArtwork({
+            artworkId: `artwork-${w.cell}`,
+            cell: w.cell, cardCell: w.cardCell,
+            imageUrl: w.imageUrl, objectUrl: w.objectUrl,
+            title: w.title, artist: w.artist, date: w.date,
+          });
+        }
+        console.info(`[aie-matrix] ${catalog.length} artworks registered from catalog`);
+      } catch (e) {
+        console.warn("[aie-matrix] artwork catalog warning:", e);
+      }
+    }
   }
 
   // GitOps startup map sync (staging/production only).

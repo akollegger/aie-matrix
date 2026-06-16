@@ -794,6 +794,12 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         ));
       } catch (err) {
         warn("cascade failed:", err);
+        // Back off after a failed cascade so a recurring failure can't
+        // pin the world MCP at world-call-latency. Without this, a
+        // pre-LLM failure (e.g. memory retrieval throwing) skips the
+        // LLM call that normally rate-limits the loop, and the loop
+        // hot-spins firing snapshot calls.
+        await delay(idleTickMs);
       }
     }
 
@@ -926,6 +932,14 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Render a list of item names as English: ["A","B","C"] → "A, B and C". */
+function formatItemList(names: ReadonlyArray<string>): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 /**
  * Snapshot what the ghost can act on right now: valid exits, items
  * on the current tile, other ghosts here, and current inventory.
@@ -944,35 +958,56 @@ async function snapshotWorldContext(
     -readonly [K in keyof WorldContext]: WorldContext[K];
   } = ctx as { -readonly [K in keyof WorldContext]: WorldContext[K] };
 
+  // Capture exits with tileId → direction so we can label impressions
+  // ("Yul B-Tree, to the n of you, on a Blue tile") rather than the
+  // fuzzy "nearby". Falls back gracefully if exits fail.
+  const dirByTileId = new Map<string, string>();
   try {
     const exits = (await mcp.callTool("exits", {})) as {
-      exits?: ReadonlyArray<{ toward?: string }>;
+      exits?: ReadonlyArray<{ toward?: string; tileId?: string }>;
     };
     next.availableExits = (exits.exits ?? [])
       .map((e) => e.toward)
       .filter((t): t is string => typeof t === "string");
+    for (const e of exits.exits ?? []) {
+      if (typeof e.tileId === "string" && typeof e.toward === "string") {
+        dirByTileId.set(e.tileId, e.toward);
+      }
+    }
   } catch {
     /* leave undefined */
   }
 
-  // Same-tile occupants and items
+  // Same-tile occupants and items. Keep `lookHere` for the impression pass.
   let hereOccupants: string[] = [];
+  let hereTileClass: string | null = null;
+  const hereItemNames: string[] = [];
   try {
     const look = (await mcp.callTool("look", { at: "here" })) as {
+      tileClass?: string;
       occupants?: ReadonlyArray<string>;
-      objects?: ReadonlyArray<{ id?: string; at?: string }>;
+      objects?: ReadonlyArray<{ id?: string; name?: string; at?: string }>;
     };
+    if (typeof look.tileClass === "string") hereTileClass = look.tileClass;
     if (Array.isArray(look.occupants)) {
       hereOccupants = look.occupants.filter(
         (g): g is string => typeof g === "string" && g !== selfGhostId,
       );
     }
-    const hereItems = (look.objects ?? [])
+    const hereObjs = look.objects ?? [];
+    const hereItems = hereObjs
       .filter((o) => o.at === "here" && typeof o.id === "string")
       .map((o) => o.id as string)
       .filter((ref) => !ignored.has(ref));
     if (hereItems.length > 0) {
       next.takeableItemRefs = hereItems;
+    }
+    // For impressions: collect human-readable names (fall back to id).
+    for (const o of hereObjs) {
+      if (o.at !== "here") continue;
+      const ref = typeof o.id === "string" ? o.id : null;
+      if (ref === null || ignored.has(ref)) continue;
+      hereItemNames.push(typeof o.name === "string" ? o.name : ref);
     }
   } catch {
     /* leave undefined */
@@ -981,16 +1016,46 @@ async function snapshotWorldContext(
   // Cluster occupants = same-tile + each neighbor's occupants.
   // Mirrors `pollNextStimulus`: a ghost on an adjacent tile is in
   // social range and the LLM should know they exist.
+  // We also keep the per-neighbor tileClass + items + occupants so the
+  // impression-building pass below can describe where each cluster
+  // member was without re-calling look.
+  interface NeighborSummary {
+    readonly tileId: string;
+    readonly tileClass: string | null;
+    readonly occupants: ReadonlyArray<string>;
+    readonly itemNames: ReadonlyArray<string>;
+  }
+  const neighborByOccupant = new Map<string, NeighborSummary>();
   let clusterOccupants: Set<string> = new Set(hereOccupants);
   try {
     const around = (await mcp.callTool("look", { at: "around" })) as {
-      neighbors?: ReadonlyArray<{ occupants?: ReadonlyArray<string> }>;
+      neighbors?: ReadonlyArray<{
+        tileId?: string;
+        tileClass?: string;
+        occupants?: ReadonlyArray<string>;
+        objects?: ReadonlyArray<{ id?: string; name?: string; at?: string }>;
+      }>;
     };
     for (const n of around.neighbors ?? []) {
-      for (const g of n.occupants ?? []) {
-        if (typeof g === "string" && g !== selfGhostId) {
-          clusterOccupants.add(g);
-        }
+      if (typeof n.tileId !== "string") continue;
+      const occupants = (n.occupants ?? []).filter(
+        (g): g is string => typeof g === "string" && g !== selfGhostId,
+      );
+      const itemNames: string[] = [];
+      for (const o of n.objects ?? []) {
+        const ref = typeof o.id === "string" ? o.id : null;
+        if (ref === null || ignored.has(ref)) continue;
+        itemNames.push(typeof o.name === "string" ? o.name : ref);
+      }
+      const summary: NeighborSummary = {
+        tileId: n.tileId,
+        tileClass: typeof n.tileClass === "string" ? n.tileClass : null,
+        occupants,
+        itemNames,
+      };
+      for (const g of occupants) {
+        clusterOccupants.add(g);
+        neighborByOccupant.set(g, summary);
       }
     }
   } catch {
@@ -998,9 +1063,46 @@ async function snapshotWorldContext(
   }
   if (clusterOccupants.size > 0 || hereOccupants.length > 0) {
     for (const g of clusterOccupants) void prefetchDisplayName(registryBase, g);
-    next.nearbyGhostIds = [...clusterOccupants].map((g) =>
-      resolveDisplayNameSync(registryBase, g),
-    );
+    const pairs = [...clusterOccupants].map((g) => ({
+      ghostId: g,
+      displayName: resolveDisplayNameSync(registryBase, g),
+    }));
+    next.nearbyGhostIds = pairs.map((p) => p.displayName);
+    next.nearbyGhosts = pairs;
+
+    // Build one impression snippet per cluster occupant. The snippet is
+    // the spatial observation only — relative direction + tile class +
+    // any items visible on their tile. The gap-to-now ("3 cascades
+    // ago") is rendered separately by the Surface prompt's timeline
+    // block from the impression's cascade index.
+    const impressions: NonNullable<WorldContext["impressions"]>[number][] = [];
+    const hereSet = new Set(hereOccupants);
+    for (const p of pairs) {
+      let snippet: string;
+      if (hereSet.has(p.ghostId)) {
+        const tile = hereTileClass ?? "tile";
+        const items = hereItemNames.length > 0
+          ? `, ${formatItemList(hereItemNames)} on the tile`
+          : "";
+        snippet = `here on a ${tile} tile${items}`;
+      } else {
+        const neighbor = neighborByOccupant.get(p.ghostId);
+        const dir = neighbor ? dirByTileId.get(neighbor.tileId) : undefined;
+        const tile = neighbor?.tileClass ?? "tile";
+        const items = neighbor && neighbor.itemNames.length > 0
+          ? `, ${formatItemList(neighbor.itemNames)} on the tile`
+          : "";
+        snippet = dir
+          ? `to the ${dir} of you, on a ${tile} tile${items}`
+          : `nearby on a ${tile} tile${items}`;
+      }
+      impressions.push({
+        observedGhostId: p.ghostId,
+        observedDisplayName: p.displayName,
+        snippet,
+      });
+    }
+    if (impressions.length > 0) next.impressions = impressions;
   }
 
   try {
@@ -1155,6 +1257,8 @@ function describeStimulus(s: Stimulus): string {
       return `entered ${s.tileClass}`;
     case "idle":
       return `idle (${Math.round(s.quietForMs / 1000)}s)`;
+    case "primal":
+      return `primal (${s.need} ${s.direction}, urgency ${s.urgency.toFixed(2)})`;
   }
 }
 

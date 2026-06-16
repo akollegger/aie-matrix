@@ -1,0 +1,14 @@
+{ kind: "matrix-map", name: "canonical", description: "Reference map showing every .map.gram construct", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor", description: "Open walkable area", capacity: 4, style: css`background: #c8b89a` })
+(pillar:TileType:Pillar { name: "Pillar", description: "Impassable column", capacity: 0, style: css`background: #555` })
+
+(brassKey:ItemType:BrassKey { name: "Brass Key", description: "Opens the north door", glyph: char`🔑`, takeable: true, capacityCost: 1 })
+
+[ground:Layer {kind: "polygon", name: "Ground"} | (:Polygon:Floor { geometry: [h3`8f2800000000195`, h3`8f2800000000012`, h3`8f2800000000015`, h3`8f2800000000198`] })]
+[overrides:Layer {kind: "tile", name: "Overrides"} | (:Tile:Pillar { geometry: [h3`8f2800000000012`] }), (:Portal { geometry: [h3`8f2800000000195`, h3`8f2800000000015`], mode: "Door" })]
+[collectibles:Layer {kind: "items", name: "Collectibles"} | (:Item:BrassKey { geometry: [h3`8f2800000000015`] })]
+
+[layers:LayerStack | ground, overrides, collectibles]
+
+[rules:Rules | (floor)-[:GO]->(floor), (floor)-[:GO]->(pillar)]

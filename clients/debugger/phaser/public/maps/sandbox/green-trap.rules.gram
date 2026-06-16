@@ -1,0 +1,6 @@
+(red:Red)-[:GO]->(red)
+(blue:Blue)-[:GO]->(blue)
+(green:Green)-[:GO]->(green)
+(red)-[:GO]->(blue)
+(blue)-[:GO]->(green)
+(red)-[:GO]->(green)

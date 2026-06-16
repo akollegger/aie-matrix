@@ -227,6 +227,116 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(msw@2.14.6(@types/node@24.12.2)(typescript@5.7.3))(tsx@4.21.0)(yaml@2.8.3)
 
+  ghosts/peppers-agent-v1:
+    dependencies:
+      '@a2a-js/sdk':
+        specifier: ^0.3.13
+        version: 0.3.13(express@4.22.1)
+      '@aie-matrix/ghost-peppers-inner':
+        specifier: workspace:*
+        version: link:../peppers-inner
+      '@aie-matrix/ghost-peppers-mem-v1':
+        specifier: workspace:*
+        version: link:../peppers-mem-v1
+      '@aie-matrix/ghost-ts-client':
+        specifier: workspace:*
+        version: link:../ts-client
+      '@aie-matrix/root-env':
+        specifier: workspace:*
+        version: link:../../shared/root-env
+      '@aie-matrix/shared-types':
+        specifier: workspace:*
+        version: link:../../shared/types
+      express:
+        specifier: ^4.21.2
+        version: 4.22.1
+      openai:
+        specifier: ^4.85.0
+        version: 4.104.0(ws@8.20.0)(zod@3.25.76)
+      ulid:
+        specifier: ^2.3.0
+        version: 2.4.0
+      unique-names-generator:
+        specifier: ^4.7.1
+        version: 4.7.1
+    devDependencies:
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      '@types/node':
+        specifier: ^24.12.2
+        version: 24.12.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ~5.7.3
+        version: 5.7.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.4(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(msw@2.14.6(@types/node@24.12.2)(typescript@5.7.3))(tsx@4.21.0)(yaml@2.8.3)
+
+  ghosts/peppers-agent-v2:
+    dependencies:
+      '@a2a-js/sdk':
+        specifier: ^0.3.13
+        version: 0.3.13(express@4.22.1)
+      '@aie-matrix/ghost-peppers-inner':
+        specifier: workspace:*
+        version: link:../peppers-inner
+      '@aie-matrix/ghost-peppers-mem':
+        specifier: workspace:*
+        version: link:../peppers-mem
+      '@aie-matrix/ghost-peppers-router':
+        specifier: workspace:*
+        version: link:../peppers-router
+      '@aie-matrix/ghost-peppers-sleep':
+        specifier: workspace:*
+        version: link:../peppers-sleep
+      '@aie-matrix/ghost-ts-client':
+        specifier: workspace:*
+        version: link:../ts-client
+      '@aie-matrix/root-env':
+        specifier: workspace:*
+        version: link:../../shared/root-env
+      '@aie-matrix/shared-types':
+        specifier: workspace:*
+        version: link:../../shared/types
+      '@openai/agents':
+        specifier: ^0.11.6
+        version: 0.11.6(ws@8.20.0)(zod@4.3.6)
+      express:
+        specifier: ^4.21.2
+        version: 4.22.1
+      openai:
+        specifier: ^4.85.0
+        version: 4.104.0(ws@8.20.0)(zod@4.3.6)
+      ulid:
+        specifier: ^2.3.0
+        version: 2.4.0
+      unique-names-generator:
+        specifier: ^4.7.1
+        version: 4.7.1
+      yaml:
+        specifier: ^2.8.3
+        version: 2.8.3
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
+    devDependencies:
+      '@types/express':
+        specifier: ^4.17.21
+        version: 4.17.25
+      '@types/node':
+        specifier: ^24.12.2
+        version: 24.12.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ~5.7.3
+        version: 5.7.3
+
   ghosts/peppers-inner:
     dependencies:
       ulid:
@@ -254,6 +364,75 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: ^1.29.0
         version: 1.29.0(zod@4.3.6)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.12.2
+        version: 24.12.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ~5.7.3
+        version: 5.7.3
+
+  ghosts/peppers-mem-v1:
+    dependencies:
+      '@aie-matrix/ghost-peppers-inner':
+        specifier: workspace:*
+        version: link:../peppers-inner
+      '@aie-matrix/root-env':
+        specifier: workspace:*
+        version: link:../../shared/root-env
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.3.6)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.12.2
+        version: 24.12.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ~5.7.3
+        version: 5.7.3
+
+  ghosts/peppers-router:
+    dependencies:
+      '@aie-matrix/root-env':
+        specifier: workspace:*
+        version: link:../../shared/root-env
+      openai:
+        specifier: ^4.85.0
+        version: 4.104.0(ws@8.20.0)(zod@3.25.76)
+    devDependencies:
+      '@types/node':
+        specifier: ^24.12.2
+        version: 24.12.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.21.0
+      typescript:
+        specifier: ~5.7.3
+        version: 5.7.3
+
+  ghosts/peppers-sleep:
+    dependencies:
+      '@aie-matrix/ghost-peppers-router':
+        specifier: workspace:*
+        version: link:../peppers-router
+      '@aie-matrix/root-env':
+        specifier: workspace:*
+        version: link:../../shared/root-env
+      neo4j-driver:
+        specifier: ^5.28.3
+        version: 5.28.3
+      openai:
+        specifier: ^4.85.0
+        version: 4.104.0(ws@8.20.0)(zod@3.25.76)
+      yaml:
+        specifier: ^2.8.3
+        version: 2.8.3
     devDependencies:
       '@types/node':
         specifier: ^24.12.2
@@ -1860,6 +2039,29 @@ packages:
   '@open-wc/dedupe-mixin@1.4.0':
     resolution: {integrity: sha512-Sj7gKl1TLcDbF7B6KUhtvr+1UCxdhMbNY5KxdU5IfMFWqL8oy1ZeAcCANjoB1TL0AJTcPmcCFsCbHf8X2jGDUA==}
 
+  '@openai/agents-core@0.11.6':
+    resolution: {integrity: sha512-jWeo4mF+zjp9R80OPg+9prAnwF53dIpok2ymp9OkC3DpK2qcqBO8CfoEgocNp+E5HXXFW4uvCaY0olNCCcmTFw==}
+    peerDependencies:
+      zod: ^4.0.0
+    peerDependenciesMeta:
+      zod:
+        optional: true
+
+  '@openai/agents-openai@0.11.6':
+    resolution: {integrity: sha512-63zXy+EPmg3WErLO12jLEjCTqGBZ/f0ApsW/t5wpccqUYCtImIT6IYZDgGM+zSEafHNGJmNOwGtEqHjz/Pyl+A==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@openai/agents-realtime@0.11.6':
+    resolution: {integrity: sha512-jw4lLO6B2xyCBtgLtAXZmqhjEAqSLO1EtJzfwfrZuzGpPgs4nJBQ+O7ybtdPPKt8iWdIOlrYRDqxhBHv7Qqo7w==}
+    peerDependencies:
+      zod: ^4.0.0
+
+  '@openai/agents@0.11.6':
+    resolution: {integrity: sha512-YLwycYJQ65ETEq1SzjdFO6U9VhWHOKKIVh6wZCd/FmTZoqYq9UF/5uvX+wF8cZ58J+wIyyLynPdCmzEEov2rhw==}
+    peerDependencies:
+      zod: ^4.0.0
+
   '@paralleldrive/cuid2@2.3.1':
     resolution: {integrity: sha512-XO7cAxhnTZl0Yggq6jOgjiOHhbgcO4NqFqwSmQpjK3b6TEE6Uj/jfSk6wzYyemh3+I0sHirKSetjQwn5cZktFw==}
 
@@ -2639,6 +2841,9 @@ packages:
 
   '@types/ws@7.4.7':
     resolution: {integrity: sha512-JQbbmxZTZehdc2iszGKs5oC3NFnjeay7mtAWrdt7qNtAVK0g19muApzAy4bm9byz79xa2ZnO/BOBC2R8RC5Lww==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@vaadin/a11y-base@24.9.14':
     resolution: {integrity: sha512-ropoBCS9H8sobwZneDbQaqOvOB5ZS8Mn7w9j2WMhSgclUaPIZbGOTV6er58DfaEIx0kWfLgN0Lpqu+1Fc0ssbA==}
@@ -4252,6 +4457,17 @@ packages:
     peerDependencies:
       ws: ^8.18.0
       zod: ^3.23.8
+    peerDependenciesMeta:
+      ws:
+        optional: true
+      zod:
+        optional: true
+
+  openai@6.41.0:
+    resolution: {integrity: sha512-IGWPopZq6Rjoynjfb3NSLf/z2MTw7UiOsm9TAjPGAjUESH7Uq41Trg4QWehBEn58p74i+m7uoRPV2vXcpPXhyA==}
+    peerDependencies:
+      ws: ^8.18.0
+      zod: ^3.25 || ^4.0
     peerDependenciesMeta:
       ws:
         optional: true
@@ -6335,6 +6551,57 @@ snapshots:
 
   '@open-wc/dedupe-mixin@1.4.0': {}
 
+  '@openai/agents-core@0.11.6(ws@8.20.0)(zod@4.3.6)':
+    dependencies:
+      debug: 4.4.3
+      openai: 6.41.0(ws@8.20.0)(zod@4.3.6)
+    optionalDependencies:
+      '@modelcontextprotocol/sdk': 1.29.0(zod@4.3.6)
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - ws
+
+  '@openai/agents-openai@0.11.6(ws@8.20.0)(zod@4.3.6)':
+    dependencies:
+      '@openai/agents-core': 0.11.6(ws@8.20.0)(zod@4.3.6)
+      debug: 4.4.3
+      openai: 6.41.0(ws@8.20.0)(zod@4.3.6)
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - supports-color
+      - ws
+
+  '@openai/agents-realtime@0.11.6(zod@4.3.6)':
+    dependencies:
+      '@openai/agents-core': 0.11.6(ws@8.20.0)(zod@4.3.6)
+      '@types/ws': 8.18.1
+      debug: 4.4.3
+      ws: 8.20.0
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
+  '@openai/agents@0.11.6(ws@8.20.0)(zod@4.3.6)':
+    dependencies:
+      '@openai/agents-core': 0.11.6(ws@8.20.0)(zod@4.3.6)
+      '@openai/agents-openai': 0.11.6(ws@8.20.0)(zod@4.3.6)
+      '@openai/agents-realtime': 0.11.6(zod@4.3.6)
+      debug: 4.4.3
+      openai: 6.41.0(ws@8.20.0)(zod@4.3.6)
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - '@cfworker/json-schema'
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+      - ws
+
   '@paralleldrive/cuid2@2.3.1':
     dependencies:
       '@noble/hashes': 1.8.0
@@ -7010,6 +7277,10 @@ snapshots:
   '@types/webxr@0.5.24': {}
 
   '@types/ws@7.4.7':
+    dependencies:
+      '@types/node': 24.12.2
+
+  '@types/ws@8.18.1':
     dependencies:
       '@types/node': 24.12.2
 
@@ -8829,6 +9100,26 @@ snapshots:
       zod: 3.25.76
     transitivePeerDependencies:
       - encoding
+
+  openai@4.104.0(ws@8.20.0)(zod@4.3.6):
+    dependencies:
+      '@types/node': 18.19.130
+      '@types/node-fetch': 2.6.13
+      abort-controller: 3.0.0
+      agentkeepalive: 4.6.0
+      form-data-encoder: 1.7.2
+      formdata-node: 4.4.1
+      node-fetch: 2.7.0
+    optionalDependencies:
+      ws: 8.20.0
+      zod: 4.3.6
+    transitivePeerDependencies:
+      - encoding
+
+  openai@6.41.0(ws@8.20.0)(zod@4.3.6):
+    optionalDependencies:
+      ws: 8.20.0
+      zod: 4.3.6
 
   outvariant@1.4.3: {}
 

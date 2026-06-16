@@ -38,24 +38,37 @@ import type {
  * Throws on the first tool failure rather than partially persisting.
  * Requires the **extended** profile (default in `connectMemory`).
  */
-export async function persistCascade(client: Client, trace: CascadeTrace): Promise<void> {
+export async function persistCascade(
+  client: Client,
+  trace: CascadeTrace,
+  cascadeIndex?: number,
+): Promise<void> {
   const trigger = trace.events[0];
   if (!trigger) {
     throw new Error("persistCascade: cascade has no events");
   }
 
   // 1. The trigger appears in the conversation tier when it's an
-  //    incoming utterance (so it shows up in chat history).
+  //    incoming utterance (so it shows up in chat history). We tag
+  //    the speaker into metadata so dialogue-with-a-specific-ghost
+  //    queries don't have to parse the formatted content string.
   if (trigger.type === "EXTERNAL_STIMULUS" && trigger.stimulus.kind === "utterance") {
     await callOrThrow(client, "memory_store_message", {
       session_id: trace.ghostId,
       role: "user",
       content: `${trigger.stimulus.from}: ${trigger.stimulus.text}`,
-      metadata: { event_id: trigger.id, event_type: trigger.type },
+      metadata: {
+        event_id: trigger.id,
+        event_type: trigger.type,
+        from_display_name: trigger.stimulus.from,
+        cascade_index: cascadeIndex ?? null,
+      },
     });
   }
 
-  // 2. Open a reasoning trace for this cascade.
+  // 2. Open a reasoning trace for this cascade. cascade_index lets
+  //    retrieval compute "X cascades ago" as a hard integer rather
+  //    than inferring from row position.
   const task = describeTriggerAsTask(trigger);
   const startResult = await callOrThrow(client, "memory_start_trace", {
     session_id: trace.ghostId,
@@ -64,6 +77,7 @@ export async function persistCascade(client: Client, trace: CascadeTrace): Promi
       root_event_id: trigger.id,
       started_at: trace.startedAt,
       ghost_id: trace.ghostId,
+      cascade_index: cascadeIndex ?? null,
     },
   });
   const traceId = extractTraceId(startResult);
@@ -71,14 +85,20 @@ export async function persistCascade(client: Client, trace: CascadeTrace): Promi
   // 3. Each non-trigger event becomes a ReasoningStep.
   for (let i = 1; i < trace.events.length; i++) {
     const event = trace.events[i]!;
-    await recordEventAsStep(client, traceId, trace.ghostId, event);
+    await recordEventAsStep(client, traceId, trace.ghostId, event, cascadeIndex);
   }
 
-  // 4. Close out the trace.
+  // 4. Close out the trace. Success is computed from the actual
+  //    action outcomes recorded on this cascade — `true` iff every
+  //    SURFACE_ACTION event landed with `outcome.ok === true`. The
+  //    outcome string describes WHAT was done and which (if any)
+  //    failed, so future consolidation/Skill distillation passes
+  //    can distinguish clean-exit cascades from troubled ones.
+  const { success, outcome } = computeTraceOutcome(trace);
   await callOrThrow(client, "memory_complete_trace", {
     trace_id: traceId,
-    outcome: summarizeOutcome(trace),
-    success: true,
+    outcome,
+    success,
   });
 }
 
@@ -109,15 +129,46 @@ function describeTriggerAsTask(trigger: Event): string {
   }
 }
 
-function summarizeOutcome(trace: CascadeTrace): string {
-  const counts = { thoughts: 0, actions: 0, adjustments: 0, stimuli: 0 };
+/**
+ * Compute the trace's success flag and human-readable outcome string
+ * from the actual action events captured in the cascade. Used by
+ * `persistCascade` to write meaningful `memory_complete_trace` data
+ * — the previous `success: true` hardcoding has been retired.
+ *
+ *   - `success` is `true` iff every SURFACE_ACTION on the cascade
+ *     landed with `outcome.ok === true`. A cascade with zero actions
+ *     (recall-only, pure speech that failed deliver, etc.) is still
+ *     counted as success — there was nothing to fail.
+ *   - `outcome` lists action kinds in order, marking any failed step
+ *     with `(denied)` / `(failed)` so future consolidation passes can
+ *     read the chain at a glance.
+ */
+function computeTraceOutcome(trace: CascadeTrace): {
+  success: boolean;
+  outcome: string;
+} {
+  const parts: string[] = [];
+  let success = true;
   for (const e of trace.events.slice(1)) {
-    if (e.type === "ID_THOUGHT") counts.thoughts++;
-    else if (e.type === "SURFACE_ACTION") counts.actions++;
-    else if (e.type === "ID_ADJUSTMENT") counts.adjustments++;
-    else if (e.type === "EXTERNAL_STIMULUS") counts.stimuli++;
+    if (e.type !== "SURFACE_ACTION") continue;
+    const kind = (e.action as { kind?: unknown }).kind;
+    const name = typeof kind === "string" ? kind : "action";
+    if (e.outcome.ok === true) {
+      parts.push(name);
+    } else {
+      success = false;
+      const code = (e.outcome as { code?: unknown }).code;
+      const marker = typeof code === "string" ? `(${code})` : "(failed)";
+      parts.push(`${name} ${marker}`);
+    }
   }
-  return `cascade closed: ${counts.thoughts} thoughts, ${counts.actions} actions, ${counts.adjustments} adjustments`;
+  if (parts.length === 0) {
+    return { success: true, outcome: "cascade closed: no surface action" };
+  }
+  return {
+    success,
+    outcome: `cascade closed: ${parts.join(", ")}`,
+  };
 }
 
 async function recordEventAsStep(
@@ -125,6 +176,7 @@ async function recordEventAsStep(
   traceId: string,
   ghostId: string,
   event: Event,
+  cascadeIndex?: number,
 ): Promise<void> {
   switch (event.type) {
     case "ID_THOUGHT":
@@ -134,13 +186,15 @@ async function recordEventAsStep(
       });
       return;
     case "SURFACE_ACTION": {
-      const observation = event.outcome.ok
-        ? "completed"
-        : `denied: ${event.outcome.code}${event.outcome.reason ? ` (${event.outcome.reason})` : ""}`;
-      // Split tool name from args — `kind` is the tool name and
-      // shouldn't be duplicated inside `tool_args`. Persisting them as
-      // separate structured fields means Cypher queries can filter by
-      // `tool_name` directly instead of parsing a stringified action.
+      // The Agent-Memory MCP only persists `thought`/`observation` on a step
+      // (NOT tool_name/tool_args/tool_result), so the meaningful record of
+      // what happened — what was bought, for how much, how nourishing, what
+      // was eaten — must live in `observation` or it never reaches memory
+      // (and therefore never reaches consolidation or the death reflection).
+      const observation = describeActionMemory(event.action, event.outcome);
+      // Split tool name from args — `kind` is the tool name and shouldn't be
+      // duplicated inside `tool_args`. (These are dropped by the current MCP
+      // but kept for the capture log + a future tool-aware write surface.)
       const { kind: _kind, ...toolArgs } = event.action;
       await callOrThrow(client, "memory_record_step", {
         trace_id: traceId,
@@ -152,17 +206,25 @@ async function recordEventAsStep(
       // Outgoing speech also goes to the conversation tier. The say
       // tool's MCP input schema names the spoken text `content`; older
       // SurfaceAction shapes used `text`. Accept either so we don't
-      // crash on the shape transition.
+      // crash on the shape transition. We also tag the recipient and
+      // cascade_index into metadata so dialogue retrieval can filter
+      // by who-said-what-to-whom-when without parsing tool_args.
       if (event.action.kind === "say" && event.outcome.ok) {
         const spoken =
           (event.action as { content?: unknown }).content ??
           (event.action as { text?: unknown }).text;
         if (typeof spoken === "string" && spoken.length > 0) {
+          const toGhostId = (event.action as { to?: unknown }).to;
           await callOrThrow(client, "memory_store_message", {
             session_id: ghostId,
             role: "assistant",
             content: spoken,
-            metadata: { event_id: event.id, event_type: event.type },
+            metadata: {
+              event_id: event.id,
+              event_type: event.type,
+              to_ghost_id: typeof toGhostId === "string" ? toGhostId : null,
+              cascade_index: cascadeIndex ?? null,
+            },
           });
         }
       }
@@ -183,6 +245,22 @@ async function recordEventAsStep(
         trace_id: traceId,
         observation: formatStimulus(event.stimulus),
       });
+      // Mid-cascade incoming utterances also go to the conversation
+      // tier, tagged with the speaker, so dialogue history queries
+      // see them symmetrically with trigger-utterances above.
+      if (event.stimulus.kind === "utterance") {
+        await callOrThrow(client, "memory_store_message", {
+          session_id: ghostId,
+          role: "user",
+          content: `${event.stimulus.from}: ${event.stimulus.text}`,
+          metadata: {
+            event_id: event.id,
+            event_type: event.type,
+            from_display_name: event.stimulus.from,
+            cascade_index: cascadeIndex ?? null,
+          },
+        });
+      }
       return;
     }
     default:
@@ -291,6 +369,61 @@ export async function persistCommitmentEvaluation(
   });
 }
 
+/** One spatial observation of another ghost, ready for persistence as a
+ *  Fact triple. The observer / cascade index come from the caller. */
+export interface ImpressionWrite {
+  readonly observedGhostId: string;
+  readonly observedDisplayName: string;
+  readonly snippet: string;
+}
+
+/**
+ * Persist this cascade's per-occupant impressions as `:Fact` nodes via
+ * `memory_add_fact`. Each impression is one fact:
+ *
+ *   subject = observed ghost's display name
+ *   predicate = "was_observed"
+ *   object = the spatial snippet
+ *   metadata = { observer_id, observed_ghost_id, cascade_index }
+ *
+ * Display name is the subject so a future Cypher query reads naturally
+ * ("facts about Romantic Brown Sheep"); ghost id lives in metadata so
+ * retrieval can filter precisely without ambiguity when display names
+ * collide. Each fact carries `valid_from` so chronology survives even
+ * when cascade_index isn't usable.
+ *
+ * Note: Agent Memory's `memory_add_fact` triggers embedding generation
+ * per call. For ~3 impressions per cascade per ghost this is acceptable;
+ * if it ever becomes hot, the right fix is a thin custom node type — but
+ * that requires Agent Memory to expose a write tool that skips
+ * embedding, or APOC, or both.
+ */
+export async function persistImpressions(
+  client: Client,
+  observerGhostId: string,
+  impressions: ReadonlyArray<ImpressionWrite>,
+  cascadeIndex: number,
+): Promise<void> {
+  if (impressions.length === 0) return;
+  const validFrom = new Date().toISOString();
+  for (const imp of impressions) {
+    await callOrThrow(client, "memory_add_fact", {
+      subject: imp.observedDisplayName,
+      predicate: "was_observed",
+      object_value: imp.snippet,
+      confidence: 1.0,
+      valid_from: validFrom,
+      metadata: {
+        kind: "impression",
+        observer_id: observerGhostId,
+        observed_ghost_id: imp.observedGhostId,
+        observed_display_name: imp.observedDisplayName,
+        cascade_index: cascadeIndex,
+      },
+    });
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Event → message mapping
 // ---------------------------------------------------------------------------
@@ -300,7 +433,15 @@ function unreachable(value: never): never {
 }
 
 
-function formatStimulus(s: Stimulus): string {
+/**
+ * Exported as the canonical stimulus→text rendering for anything that
+ * must live in the SAME lexical space as ReasoningTrace.task (which is
+ * built from this function via `describeTriggerAsTask`). The sleep
+ * pipeline's cascade-time skill matching embeds this exact text —
+ * using agent-v2's Id-prompt variant instead cost lab run 4 every
+ * match ("Food appears at here" vs trace "Food in view at here").
+ */
+export function formatStimulus(s: Stimulus): string {
   switch (s.kind) {
     case "utterance":
       return `${s.from}: ${s.text}`;
@@ -314,8 +455,56 @@ function formatStimulus(s: Stimulus): string {
       return `entered ${s.tileClass} at ${s.h3Index}`;
     case "idle":
       return `idle for ${Math.round(s.quietForMs / 1000)}s`;
+    case "primal":
+      return `primal ${s.need} ${s.direction} (urgency ${s.urgency.toFixed(2)})`;
     default:
       return unreachable(s);
+  }
+}
+
+/**
+ * Render one action + its world outcome into a plain-language memory line —
+ * the durable record of what the ghost actually DID and what came of it. The
+ * world result (`paid`, `nourishment`, `consumed`, `itemRef`, …) rides on
+ * `outcome` (the run-loop now passes the structured result through), so the
+ * purchase/consume/energy detail is preserved here. This is what lands in the
+ * `:ReasoningStep.observation` the MCP persists — and what consolidation then
+ * folds into the self-narrative.
+ */
+function describeActionMemory(action: SurfaceAction, outcome: { ok: boolean } & Record<string, unknown>): string {
+  const o = outcome as Record<string, unknown>;
+  const str = (v: unknown): string | null => (typeof v === "string" ? v : null);
+  const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+  const arg = (k: string): unknown => (action as unknown as Record<string, unknown>)[k];
+  if (outcome.ok !== true) {
+    const code = str(o["code"]) ?? "failed";
+    const reason = str(o["reason"]);
+    return `tried to ${formatSurfaceAction(action)} but ${code}${reason ? `: ${reason}` : ""}`;
+  }
+  switch (action.kind) {
+    case "request": {
+      // Buy from a vendor — world returns { purchased, vendor, itemRef, paid, nourishment }.
+      if (o["purchased"] === true) {
+        const item = str(o["itemRef"]) ?? str(arg("want_resource")) ?? "food";
+        const paid = num(o["paid"]);
+        const nour = str(o["nourishment"]);
+        return `bought ${item}${paid !== null ? ` for ${paid} gold` : ""} from ${str(o["vendor"]) ?? "a vendor"}${nour ? ` — ${nour}` : ""}`;
+      }
+      return `requested ${str(arg("want_resource")) ?? "a trade"}`;
+    }
+    case "consume": {
+      const item = str(o["itemRef"]) ?? str(arg("itemRef")) ?? "something";
+      const nour = str(o["nourishment"]);
+      return `ate ${item}${nour ? ` — ${nour}` : ""}`;
+    }
+    case "nearest": {
+      const cls = str(arg("itemClass")) ?? "something";
+      const dir = str(o["bearing"]) ?? str(o["toward"]) ?? str(o["at"]);
+      return dir ? `found nearest ${cls} toward ${dir}` : `looked for the nearest ${cls}`;
+    }
+    default:
+      // go / look / take / drop / inspect / … already render cleanly.
+      return formatSurfaceAction(action);
   }
 }
 

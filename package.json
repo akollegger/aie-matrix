@@ -25,6 +25,8 @@
     "agent:host": "pnpm --filter @aie-matrix/server-agent-host dev",
     "ghost:peppers-agent": "pnpm --filter @aie-matrix/ghost-peppers-agent run start",
     "peppers:demo": "node ghosts/peppers-agent/scripts/peppers-demo.mjs",
+    "peppers:demo:v1": "node ghosts/peppers-agent-v1/scripts/peppers-demo.mjs",
+    "peppers:demo:v2": "node ghosts/peppers-agent-v2/scripts/peppers-demo.mjs",
     "rdc:demo": "node --env-file=.env ghosts/rdc-poker-session/scripts/rdc-demo.mjs",
     "ghost:register": "node scripts/register-ghost.mjs",
     "ghost:cli": "pnpm --filter @aie-matrix/ghost-cli start",

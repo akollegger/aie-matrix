@@ -1,0 +1,51 @@
+{
+  "name": "@aie-matrix/ghost-peppers-sleep",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "description": "Agent-sleep consolidation pipeline. Self-contained \u2014 depends only on neo4j-driver + an LLM provider interface. Designed to be ported to Python as an `agent-sleep` extension to `neo4j-agent-memory`. Reads the agent-memory schema (Message / Observation / Conversation / Entity / Fact / ReasoningTrace / etc.) and produces :Consolidation nodes and AIP-validated :Skill nodes.",
+  "scripts": {
+    "prebuild": "pnpm --filter @aie-matrix/root-env run build",
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "inspect:corpus": "node --import tsx src/scripts/inspect-corpus.ts",
+    "try:aga": "node --import tsx src/scripts/try-aga.ts",
+    "embed:intents": "node --import tsx src/scripts/embed-intents.ts",
+    "embed:experience": "node --import tsx src/scripts/embed-experience.ts",
+    "try:consolidate": "node --import tsx src/scripts/try-consolidate.ts",
+    "try:consolidate:experience": "node --import tsx src/scripts/try-consolidate-experience.ts",
+    "consolidate:many": "node --import tsx src/scripts/consolidate-many.ts",
+    "embed:consolidations": "node --import tsx src/scripts/embed-consolidations.ts",
+    "try:contradict": "node --import tsx src/scripts/try-contradict.ts",
+    "contradict:experience": "node --import tsx src/scripts/contradict-experience.ts",
+    "cut:contradictions": "node --import tsx src/scripts/pagerank-kneedle-cut.ts",
+    "distill:skills": "node --import tsx src/scripts/distill-skills.ts",
+    "narrate:self": "node --import tsx src/scripts/narrate-self.ts",
+    "blackout": "node --import tsx src/scripts/blackout.ts",
+    "measure:entropy": "node --import tsx src/scripts/measure-stimulus-action-entropy.ts",
+    "measure:sleep-effect": "node --import tsx src/scripts/measure-sleep-effect.ts",
+    "rollback": "node --import tsx src/scripts/rollback.ts",
+    "check:state": "node --import tsx src/scripts/check-state.ts",
+    "smoke:graph": "node --import tsx src/scripts/smoke-graph.ts"
+  },
+  "dependencies": {
+    "@aie-matrix/ghost-peppers-router": "workspace:*",
+    "@aie-matrix/root-env": "workspace:*",
+    "neo4j-driver": "^5.28.3",
+    "openai": "^4.85.0",
+    "yaml": "^2.8.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.2",
+    "tsx": "^4.21.0",
+    "typescript": "~5.7.3"
+  }
+}

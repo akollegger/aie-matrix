@@ -102,6 +102,10 @@ Overrides:
   --rain N          uniform-random food rain interval ms (0 = off)
   --targeted N      targeted food rain interval ms (0 = off)
   --fraction F      fraction of ghosts fed in targeted mode (0..1)
+  --variant V       which peppers package to spawn: live | v1 | v2
+                    (default: live — ghosts/peppers-agent. v1 runs the frozen
+                    snapshot at ghosts/peppers-agent-v1; v2 runs the Agents-SDK
+                    refactor at ghosts/peppers-agent-v2 once it exists.)
   --no-clean        skip the kill-existing-processes step
   --quiet           suppress child output
   --help, -h        this help
@@ -111,12 +115,43 @@ Examples:
   pnpm run lab targeted --ghosts 12 --fraction 0.3
   pnpm run lab abundance --ghosts 20
   pnpm run lab baseline --ghosts 6
+  pnpm run lab targeted --variant v1
 `);
 }
+
+/**
+ * Lab variants — pick which peppers package the lab spawns.
+ *   live: ghosts/peppers-agent (the active code path; default — where ongoing
+ *         fixes land)
+ *   v1:   ghosts/peppers-agent-v1 (frozen reference snapshot, captured at the
+ *         decision point to refactor toward the Agents-SDK-based v2)
+ *   v2:   ghosts/peppers-agent-v2 (the Agents-SDK refactor — added when it
+ *         exists; raises a helpful error today)
+ *
+ * Each variant has its own demo script in root package.json and writes its
+ * cascade capture log under its own package's .local/ directory so runs
+ * don't trample each other when you A/B test.
+ */
+const VARIANTS = {
+  live: {
+    script: "peppers:demo",
+    captureDir: "ghosts/peppers-agent",
+  },
+  v1: {
+    script: "peppers:demo:v1",
+    captureDir: "ghosts/peppers-agent-v1",
+  },
+  v2: {
+    script: "peppers:demo:v2",
+    captureDir: "ghosts/peppers-agent-v2",
+  },
+};
+const DEFAULT_VARIANT = "live";
 
 function parseArgs(argv) {
   const args = argv.slice(2);
   let preset = DEFAULT_PRESET;
+  let variant = DEFAULT_VARIANT;
   const overrides = { clean: true, quiet: false };
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
@@ -126,6 +161,20 @@ function parseArgs(argv) {
     }
     if (PRESETS[a] !== undefined) {
       preset = a;
+      continue;
+    }
+    if (a === "--variant") {
+      variant = args[++i];
+      if (!VARIANTS[variant]) {
+        die(`unknown variant: ${variant} (expected one of: ${Object.keys(VARIANTS).join(", ")})`);
+      }
+      continue;
+    }
+    if (a.startsWith("--variant=")) {
+      variant = a.slice("--variant=".length);
+      if (!VARIANTS[variant]) {
+        die(`unknown variant: ${variant} (expected one of: ${Object.keys(VARIANTS).join(", ")})`);
+      }
       continue;
     }
     if (a === "--ghosts") {
@@ -173,7 +222,7 @@ function parseArgs(argv) {
     }
     die(`unknown argument: ${a}\n(run with --help for usage)`);
   }
-  return { preset, ...PRESETS[preset], ...overrides };
+  return { preset, variant, ...PRESETS[preset], ...overrides };
 }
 
 function die(msg) {
@@ -187,7 +236,7 @@ const cfg = parseArgs(process.argv);
 // Run
 // ----------------------------------------------------------------------------
 console.info(`
-[peppers-lab] preset=${cfg.preset}
+[peppers-lab] preset=${cfg.preset} variant=${cfg.variant}
 [peppers-lab]   ghosts             = ${cfg.ghosts}
 [peppers-lab]   PEPPERS_NEEDS_RUSH = ${cfg.needsRush}
 [peppers-lab]   uniform food rain  = ${cfg.rainInterval > 0 ? `every ${cfg.rainInterval}ms (random tile)` : "off"}
@@ -217,7 +266,11 @@ if (cfg.clean) {
 }
 
 // Move any prior capture log aside, timestamped, so each run starts fresh.
-const captureFile = path.join(repoRoot, "ghosts/peppers-agent/.local/peppers-cascades.jsonl");
+const variantSpec = VARIANTS[cfg.variant];
+if (!variantSpec) {
+  die(`internal: variant ${cfg.variant} has no spec`);
+}
+const captureFile = path.join(repoRoot, variantSpec.captureDir, ".local/peppers-cascades.jsonl");
 if (existsSync(captureFile)) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
   const backup = captureFile.replace(".jsonl", `.${stamp}.jsonl`);
@@ -319,7 +372,7 @@ const peppersEnv = {
   PEPPERS_OVERLAY_PEER_PORTS: Array.from({ length: cfg.ghosts }, (_, i) => 4100 + i).join(","),
 };
 console.info("[peppers-lab] starting peppers stack...");
-start("peppers-stack", "pnpm", ["run", "peppers:demo", "--", "--ghosts", String(cfg.ghosts)], peppersEnv);
+start("peppers-stack", "pnpm", ["run", variantSpec.script, "--", "--ghosts", String(cfg.ghosts)], peppersEnv);
 
 // ----------------------------------------------------------------------------
 // Print URLs once everything's settled

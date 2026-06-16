@@ -22,6 +22,14 @@ export interface ItemDefinition {
    * items (most existing world objects).
    */
   tokens?: number;
+  /**
+   * Fixed Fuel delivered when ONE unit of this item is consumed, under
+   * the item→ledger model (RFC-0029): items are stateless quantity-1
+   * ledger resources, so a consumable carries a per-type Fuel value
+   * rather than a depletable token pool. Defaults to `tokens` when
+   * omitted (back-compat). Omit for non-food items.
+   */
+  fuel?: number;
   /** Full text returned by inspect. Omitting means inspect returns name only. */
   description?: string;
   /**

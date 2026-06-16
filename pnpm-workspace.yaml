@@ -22,6 +22,11 @@ packages:
   - ghosts/peppers-inner
   - ghosts/peppers-mem
   - ghosts/peppers-agent
+  - ghosts/peppers-mem-v1
+  - ghosts/peppers-agent-v1
+  - ghosts/peppers-agent-v2
+  - ghosts/peppers-sleep
+  - ghosts/peppers-router
   - ghosts/rdc-poker
   - ghosts/rdc-ledger
   - ghosts/rdc-poker-session
