@@ -66,6 +66,7 @@ const readyUrl = `http://127.0.0.1:${httpPort}/spectator/room`;
 const housePort = process.env.AGENT_HOST_PORT || "4000";
 const agentPort = process.env.AGENT_PORT || "4001";
 const npcAgentPort = process.env.NPC_AGENT_PORT || "4004";
+const peppersAgentPort = process.env.PEPPERS_AGENT_PORT || "4002";
 const houseBase =
   process.env.AGENT_HOST_URL || `http://127.0.0.1:${housePort}`;
 if (process.env.AGENT_HOST_TOKEN === undefined || process.env.AGENT_HOST_TOKEN.trim() === "") {
@@ -229,6 +230,7 @@ async function waitForHouseAndAgent() {
     let houseOk = false;
     let agentOk = false;
     let npcAgentOk = false;
+    let peppersAgentOk = false;
     try {
       const c = await fetch(`http://127.0.0.1:${housePort}/v1/catalog`, {
         headers: { ...auth },
@@ -249,16 +251,22 @@ async function waitForHouseAndAgent() {
     } catch {
       /* retry */
     }
-    if (houseOk && agentOk && npcAgentOk) {
+    try {
+      const p = await fetch(`http://127.0.0.1:${peppersAgentPort}/.well-known/agent-card.json`);
+      peppersAgentOk = p.ok;
+    } catch {
+      /* retry */
+    }
+    if (houseOk && agentOk && npcAgentOk && peppersAgentOk) {
       console.info(
-        `[demo] agent-host :${housePort}, random-agent :${agentPort}, npc-agent :${npcAgentPort} responding.`,
+        `[demo] agent-host :${housePort}, random-agent :${agentPort}, npc-agent :${npcAgentPort}, peppers-agent :${peppersAgentPort} responding.`,
       );
       return;
     }
     await new Promise((r) => setTimeout(r, 400));
   }
   console.warn(
-    "[demo] timeout waiting for agent-host + agents; continue anyway (check AGENT_HOST_PORT / AGENT_PORT / NPC_AGENT_PORT in root .env).",
+    "[demo] timeout waiting for agent-host + agents; continue anyway (check AGENT_HOST_PORT / AGENT_PORT / NPC_AGENT_PORT / PEPPERS_AGENT_PORT in root .env).",
   );
 }
 
@@ -346,6 +354,43 @@ async function autoBootstrap(ghostCount) {
     console.info(
       `[demo] ghost ${i + 1}/${ghostCount}: session ${sessionId} (ghostId ${ghostId}) — wanderer active.`,
     );
+  }
+
+  // Step 5: If OPENAI_API_KEY is present, register and spawn peppers-agent ghosts.
+  if (process.env.OPENAI_API_KEY) {
+    const pepReg = await fetch(`${houseBase}/v1/catalog/register`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        agentId: "peppers-agent",
+        baseUrl: `http://127.0.0.1:${peppersAgentPort}`,
+      }),
+    });
+    if (pepReg.status === 409) {
+      console.info("[demo] catalog: peppers-agent already registered — continuing.");
+    } else if (!pepReg.ok) {
+      const t = await pepReg.text();
+      console.warn("[demo] catalog: peppers-agent register failed:", pepReg.status, t);
+    } else {
+      console.info("[demo] catalog: peppers-agent registered.");
+    }
+
+    const peppersCount = 2;
+    for (let i = 0; i < peppersCount; i++) {
+      const sp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/peppers-agent`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ displayName: `pepper-${i + 1}` }),
+      });
+      if (sp.ok) {
+        const { sessionId, ghostId } = await sp.json();
+        console.info(`[demo] ghost pepper-${i + 1}: session ${sessionId} (ghostId ${ghostId}) — peppers active.`);
+      } else {
+        console.warn(`[demo] spawn pepper-${i + 1} failed:`, sp.status, await sp.text());
+      }
+    }
+  } else {
+    console.info("[demo] OPENAI_API_KEY not set — skipping peppers-agent bootstrap. Set OPENAI_API_KEY in .env to enable Peppers ghosts.");
   }
 }
 
@@ -443,11 +488,15 @@ try {
     ...(token ? { VITE_AGENT_HOST_BEARER: token } : {}),
   };
 
-  console.info("[demo] 3/3 starting agent-host, random-agent, npc-agent, intermedium, map-editor…");
+  console.info("[demo] 3/3 starting agent-host, random-agent, npc-agent, peppers-agent, intermedium, map-editor…");
   start("agent-host",  "pnpm", ["--filter", "@aie-matrix/server-agent-host", "dev"]);
   start("random-agent","pnpm", ["--filter", "@aie-matrix/random-agent",      "dev"]);
   start("npc-agent",   "pnpm", ["--filter", "@aie-matrix/npc-agent",         "dev"], {
     AGENT_PORT: npcAgentPort,
+    AGENT_HOST_URL: houseBase,
+  });
+  start("peppers-agent", "pnpm", ["--filter", "@aie-matrix/ghost-peppers-agent", "dev"], {
+    PEPPERS_AGENT_PORT: peppersAgentPort,
     AGENT_HOST_URL: houseBase,
   });
   start("intermedium", "pnpm", ["--filter", "@aie-matrix/intermedium",        "dev"], viteEnv);
@@ -464,6 +513,7 @@ try {
   World API                →  http://127.0.0.1:${httpPort}/
   Agent Host               →  http://127.0.0.1:${housePort}/v1/catalog
   NPC Agent                →  http://127.0.0.1:${npcAgentPort}/
+  Peppers Agent            →  http://127.0.0.1:${peppersAgentPort}/
 
   The Vite front-ends compile on first load — allow a few seconds after opening.
   Switch the Map Editor to Admin mode to spawn and manage ghosts (including the broker NPC).
