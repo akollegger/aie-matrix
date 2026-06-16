@@ -44,6 +44,8 @@ function rowToContract(r: Neo4jRecord): EvalContract {
     beneficiaries: (r.get("beneficiaries") as string[] | null) ?? [],
     openedAt: toNumber(r.get("openedAt")),
     escrowActorId: r.get("escrowActorId") as string,
+    artifactRef: (r.get("artifactRef") as string | null) ?? null,
+    disclosureRef: (r.get("disclosureRef") as string | null) ?? null,
   };
 }
 
@@ -65,7 +67,9 @@ SET c.clientId = $clientId,
     c.verdict = $verdict,
     c.beneficiaries = $beneficiaries,
     c.openedAt = $openedAt,
-    c.escrowActorId = $escrowActorId
+    c.escrowActorId = $escrowActorId,
+    c.artifactRef = $artifactRef,
+    c.disclosureRef = $disclosureRef
 `;
 
 const SELECT_BY_ID_CYPHER = `
@@ -75,7 +79,8 @@ RETURN c.id AS id, c.clientId AS clientId, c.contractorId AS contractorId,
        c.submission AS submission, c.stakeResource AS stakeResource,
        c.stakeAmount AS stakeAmount, c.deadline AS deadline,
        c.state AS state, c.verdict AS verdict, c.beneficiaries AS beneficiaries,
-       c.openedAt AS openedAt, c.escrowActorId AS escrowActorId
+       c.openedAt AS openedAt, c.escrowActorId AS escrowActorId,
+       c.artifactRef AS artifactRef, c.disclosureRef AS disclosureRef
 `;
 
 function contractParams(c: EvalContract) {
@@ -94,6 +99,8 @@ function contractParams(c: EvalContract) {
     beneficiaries: c.beneficiaries,
     openedAt: c.openedAt,
     escrowActorId: c.escrowActorId,
+    artifactRef: c.artifactRef ?? null,
+    disclosureRef: c.disclosureRef ?? null,
   };
 }
 
@@ -193,7 +200,7 @@ function makeEvalContractServiceLive(
     });
 
   return {
-    openContract({ clientId, contractorId, evaluatorId, request, stakeResource, stakeAmount, deadline }) {
+    openContract({ clientId, contractorId, evaluatorId, request, stakeResource, stakeAmount, deadline, artifactRef, disclosureRef }) {
       return Effect.gen(function* () {
         if (evaluatorId === contractorId) {
           return yield* Effect.fail(
@@ -236,6 +243,8 @@ function makeEvalContractServiceLive(
           beneficiaries: [],
           openedAt,
           escrowActorId,
+          artifactRef: artifactRef ?? null,
+          disclosureRef: disclosureRef ?? null,
         };
 
         yield* persistEff(contract);
@@ -507,7 +516,8 @@ function makeEvalContractServiceLive(
                           c.submission AS submission, c.stakeResource AS stakeResource,
                           c.stakeAmount AS stakeAmount, c.deadline AS deadline,
                           c.state AS state, c.verdict AS verdict, c.beneficiaries AS beneficiaries,
-                          c.openedAt AS openedAt, c.escrowActorId AS escrowActorId`,
+                          c.openedAt AS openedAt, c.escrowActorId AS escrowActorId,
+                          c.artifactRef AS artifactRef, c.disclosureRef AS disclosureRef`,
                   { callerId, callerGroupIds },
                 ),
               );

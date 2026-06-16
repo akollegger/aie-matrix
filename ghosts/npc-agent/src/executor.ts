@@ -17,6 +17,20 @@ import {
   clearBrokerState,
   getBrokerGhostIdForContract,
 } from "./behavior/broker-behavior.js";
+import {
+  loadExam,
+  setExam,
+  clearQuizmasterState,
+  quizmasterTick,
+  quizmasterHandleAccept,
+  quizmasterHandleAnswer,
+} from "./behavior/quizmaster-behavior.js";
+import {
+  clearContestantState,
+  contestantTick,
+  contestantHandleQuestion,
+  contestantHandleResult,
+} from "./behavior/contestant-behavior.js";
 
 const log = createLogger("npc-agent");
 
@@ -77,13 +91,16 @@ function characterForGhostId(ghostId: string): CharacterDefinition | undefined {
 
 /** Dependency-injected by agent.ts after catalog is loaded. */
 let catalog: NpcAgentCatalog | null = null;
+let catalogDir = "";
 
 export function initExecutor(opts: {
   catalog: NpcAgentCatalog;
+  catalogDir: string;
   agentHostUrl: string;
   agentId: string;
 }): void {
   catalog = opts.catalog;
+  catalogDir = opts.catalogDir;
 }
 
 // ── Incoming message classification ──────────────────────────────────────────
@@ -193,17 +210,20 @@ export class NpcAgentExecutor implements AgentExecutor {
       }),
       Match.when({ kind: "world.message.new" as const }, (e) => {
         const { from, text, priority } = e.payload;
+        const characterDef = characterForGhostId(e.ghostId);
+        const examBehavior = characterDef?.behaviorKind === "quizmaster" || characterDef?.behaviorKind === "contestant";
+        // FR-009: ignore sibling-NPC senders, EXCEPT for quizmaster/contestant pair
+        const fromNpc = isNpcCharacterGhost(from);
         if (
           (priority === "PARTNER" || priority === "DIRECT") &&
           isNpcCharacterGhost(e.ghostId) &&
-          !isNpcCharacterGhost(from) // FR-009: ignore sibling-NPC senders
+          (!fromNpc || examBehavior)
         ) {
-          const characterDef = characterForGhostId(e.ghostId);
-          const brokerMcp = mcpByGhostId.get(e.ghostId);
-          if (characterDef?.behaviorKind === "broker" && brokerMcp && /^\s*accept\s*$/i.test(text)) {
+          const mcp = mcpByGhostId.get(e.ghostId);
+          if (characterDef?.behaviorKind === "broker" && mcp && /^\s*accept\s*$/i.test(text)) {
             void Effect.runPromise(
               brokerHandleAccept(e.ghostId, from, characterDef.stakeAmount).pipe(
-                Effect.provide(GhostMcpServiceLive(brokerMcp)),
+                Effect.provide(GhostMcpServiceLive(mcp)),
               ),
             ).catch((err: unknown) => {
               console.error(JSON.stringify({
@@ -212,6 +232,48 @@ export class NpcAgentExecutor implements AgentExecutor {
                 error: err instanceof Error ? err.message : String(err),
               }));
             });
+          } else if (characterDef?.behaviorKind === "quizmaster" && mcp) {
+            if (/^\s*accept\s*$/i.test(text)) {
+              void Effect.runPromise(
+                quizmasterHandleAccept(e.ghostId, from, characterDef.stakeAmount).pipe(
+                  Effect.provide(GhostMcpServiceLive(mcp)),
+                ),
+              ).catch((err: unknown) => {
+                console.error(JSON.stringify({
+                  kind: "npc-agent.quizmaster.accept-error",
+                  targetGhostId: e.ghostId,
+                  error: err instanceof Error ? err.message : String(err),
+                }));
+              });
+            } else {
+              void Effect.runPromise(
+                quizmasterHandleAnswer(e.ghostId, from, text).pipe(
+                  Effect.provide(GhostMcpServiceLive(mcp)),
+                ),
+              ).catch((err: unknown) => {
+                console.error(JSON.stringify({
+                  kind: "npc-agent.quizmaster.answer-error",
+                  targetGhostId: e.ghostId,
+                  error: err instanceof Error ? err.message : String(err),
+                }));
+              });
+            }
+          } else if (characterDef?.behaviorKind === "contestant" && mcp) {
+            if (/^Exam complete!/i.test(text)) {
+              contestantHandleResult(e.ghostId);
+            } else {
+              void Effect.runPromise(
+                contestantHandleQuestion(e.ghostId, from, text).pipe(
+                  Effect.provide(GhostMcpServiceLive(mcp)),
+                ),
+              ).catch((err: unknown) => {
+                console.error(JSON.stringify({
+                  kind: "npc-agent.contestant.question-error",
+                  targetGhostId: e.ghostId,
+                  error: err instanceof Error ? err.message : String(err),
+                }));
+              });
+            }
           } else {
             void handleDialogMessage(e.ghostId, from, text).catch((err: unknown) => {
               console.error(JSON.stringify({
@@ -348,6 +410,8 @@ function ghostActionLoop(
         const tickEffect = Match.value(characterDef.behaviorKind).pipe(
           Match.when("broker",      () => brokerTick(ctx.ghostId)),
           Match.when("rule-engine", () => ruleEngineTick(ctx.ghostId, characterDef)),
+          Match.when("quizmaster",  () => quizmasterTick(ctx.ghostId)),
+          Match.when("contestant",  () => contestantTick(ctx.ghostId)),
           Match.exhaustive,
         );
         yield* tickEffect.pipe(
@@ -405,6 +469,23 @@ async function launchGhostLoop(
 
   if (characterDef.behaviorKind === "broker") {
     clearBrokerState(ghostId);
+  }
+  if (characterDef.behaviorKind === "contestant") {
+    clearContestantState(ghostId);
+  }
+
+  if (characterDef.behaviorKind === "quizmaster" && characterDef.examPath) {
+    clearQuizmasterState(ghostId);
+    loadExam(characterDef.examPath, catalogDir).then((exam) => {
+      setExam(ghostId, exam);
+    }).catch((e) => {
+      log.error({
+        kind: "quizmaster.exam-load-failed",
+        ghostId,
+        examPath: characterDef.examPath,
+        error: e instanceof Error ? e.message : String(e),
+      });
+    });
   }
 
   const fiber = Effect.runFork(ghostActionLoop(ctx, characterDef));

@@ -80,7 +80,7 @@ export function makeEvalContractServiceInMemory(
   const contracts = new Map<EvalContractId, EvalContract>();
 
   return {
-    openContract({ clientId, contractorId, evaluatorId, request, stakeResource, stakeAmount, deadline }) {
+    openContract({ clientId, contractorId, evaluatorId, request, stakeResource, stakeAmount, deadline, artifactRef, disclosureRef }) {
       return Effect.gen(function* () {
         // Validate: evaluator must not be the contractor
         if (evaluatorId === contractorId) {
@@ -124,6 +124,8 @@ export function makeEvalContractServiceInMemory(
           beneficiaries: [],
           openedAt,
           escrowActorId,
+          artifactRef: artifactRef ?? null,
+          disclosureRef: disclosureRef ?? null,
         };
         contracts.set(id, contract);
         return contract;

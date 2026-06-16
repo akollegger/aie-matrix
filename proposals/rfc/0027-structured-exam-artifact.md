@@ -204,6 +204,25 @@ This recommendation is explicitly open. The requirements and scenarios above are
 
 ---
 
+## Resolution
+
+**Status:** Resolved by feature 031-exam-npcs (2026-06-16).
+
+The format debate is closed. The resolution is:
+
+- **Authoring format**: Humans author `.exam.gram` files using the gram syntax defined in Appendix D.
+- **Exchange artifact**: The quizmaster NPC compiles the gram source at startup into per-question **markdown+frontmatter snippets** — one `.md` string per `Problem` node. This is the format described in `specs/031-exam-npcs/contracts/exam-snippet-format.md`.
+- **Hash target**: The artifact hash (`artifactRef`, `disclosureRef`) is computed over the **concatenation of UTF-8 snippet bytes**, ordered lexicographically by problem `id`. This is the canonical computation regardless of which view (prompt-only or full) is being hashed.
+- **Decoupling**: The authoring format (gram) and the hash target (markdown+frontmatter bytes) are deliberately decoupled. Gram is for humans; the snippet bytes are the commitment artifact. An auditor verifying `sha256(bytes) === disclosureRef` needs no gram toolchain — only `shasum`.
+
+**Resolved Open Questions:**
+- **OQ-1** (parser dependency): Resolved. The hash target is markdown+frontmatter bytes, not canonical `Pattern<Subject>` JSON. No gram parser is required at the verification boundary.
+- **OQ-7** (reconcile Appendix G): Resolved. Appendix G described a JSON-based artifact that is superseded by the markdown+frontmatter format. The `@relateby/pattern@0.6.0` migration is deferred (see research.md in 031-exam-npcs).
+
+**Deferred Open Questions (unchanged):** OQ-2, OQ-3, OQ-4, OQ-5, OQ-6, OQ-8.
+
+---
+
 ## Open Questions
 
 1. **Parser dependency for the artifact-of-record — largely resolved.** Earlier drafts framed this as "commit gram source (forces `@relateby/pattern` on everyone) vs. commit lossy JSON." The `@relateby/pattern` **0.6.0** split resolves it: commit the **canonical `Pattern<Subject>` JSON** ([published schema](https://github.com/gram-data/tree-sitter-gram/blob/main/docs/pattern.schema.json)), which is structure-preserving and parseable with stock JSON — no WASM at the verification boundary (see Recommendation and the consumer model). The residual question is only whether to *also* publish the gram source alongside the canonical JSON for human readability, and which of the two (if any) the `artifactRef` should bind — they have different bytes and therefore different hashes.

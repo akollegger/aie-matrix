@@ -1889,9 +1889,11 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
         stakeResource: z.string().describe("Resource type to stake (must match a registered resource)"),
         stakeAmount: z.number().int().nonnegative().describe("Amount to stake from your bag (0 is valid; floor arithmetic may yield zero payout)"),
         deadlineMs: z.number().int().positive().describe("Absolute deadline as Unix milliseconds"),
+        artifactRef: z.string().optional().describe("SHA-256 hex of prompt-only exam artifact (exam contracts only)"),
+        disclosureRef: z.string().optional().describe("SHA-256 hex of full exam artifact with answer key (exam contracts only)"),
       },
     },
-    async ({ contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs }, extra) =>
+    async ({ contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs, artifactRef, disclosureRef }, extra) =>
       runTool(
         "eval_contract_open",
         { contractorId, evaluatorId, stakeResource, stakeAmount, deadlineMs },
@@ -1908,6 +1910,8 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
               stakeResource,
               stakeAmount,
               deadline: deadlineMs,
+              artifactRef,
+              disclosureRef,
             }),
           );
           if (either._tag === "Left") {

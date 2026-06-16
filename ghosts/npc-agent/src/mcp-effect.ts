@@ -17,6 +17,8 @@ export interface EvalContractOpenArgs {
   readonly stakeResource: string;
   readonly stakeAmount: number;
   readonly deadlineMs: number;
+  readonly artifactRef?: string;
+  readonly disclosureRef?: string;
 }
 
 export type EvalContractOpenResult =

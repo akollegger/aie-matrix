@@ -251,14 +251,14 @@ export function parseCharacterGramText(
 
     // Derive behavior kind from secondary labels on the Character node.
     // Known behavior labels map to a behaviorKind; unknown labels are an error.
-    const KNOWN_BEHAVIOR_LABELS = new Set(["Broker"]);
+    const KNOWN_BEHAVIOR_LABELS = new Set(["Broker", "Quizmaster", "Contestant"]);
     const allLabels = Array.from(characterSubject.labels as Iterable<string>);
     const extraLabels = allLabels.filter(l => l !== "Character");
     const unknownLabels = extraLabels.filter(l => !KNOWN_BEHAVIOR_LABELS.has(l));
     if (unknownLabels.length > 0) {
       return yield* Effect.fail(
         new CharacterParseError(
-          `Character node has unrecognized label(s) "${unknownLabels.join('", "')}" — known behavior labels: Broker`,
+          `Character node has unrecognized label(s) "${unknownLabels.join('", "')}" — known behavior labels: Broker, Quizmaster, Contestant`,
           source,
         ),
       );
@@ -271,9 +271,13 @@ export function parseCharacterGramText(
         ),
       );
     }
-    const behaviorKind: "rule-engine" | "broker" =
-      extraLabels[0] === "Broker" ? "broker" : "rule-engine";
+    const behaviorKind: "rule-engine" | "broker" | "quizmaster" | "contestant" =
+      extraLabels[0] === "Broker" ? "broker"
+      : extraLabels[0] === "Quizmaster" ? "quizmaster"
+      : extraLabels[0] === "Contestant" ? "contestant"
+      : "rule-engine";
     const stakeAmount = numProp(charProps, "stakeAmount") ?? 1;
+    const examPath = strProp(charProps, "examPath")?.trim();
     const glyph = strProp(charProps, "glyph")?.trim() ?? "";
 
     const missing: string[] = [];
@@ -387,6 +391,7 @@ export function parseCharacterGramText(
       dialogTree,
       behaviorKind,
       stakeAmount,
+      ...(examPath !== undefined ? { examPath } : {}),
       gramLabels,
       glyph,
     };
