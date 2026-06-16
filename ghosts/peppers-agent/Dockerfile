@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-# npc-agent image: rule-based NPC character roster (Spec 028)
+# peppers-agent image: LLM-driven Peppers ghost (Id & Surface reasoning)
 # Build context: repo root (required — workspace deps live across packages)
 
 # ─── Stage 1: base — prime pnpm virtual store from lockfile only ──────────────
@@ -18,20 +18,22 @@ COPY . .
 RUN pnpm install --offline --frozen-lockfile
 
 # Build workspace dependencies in explicit topological order.
-# npc-agent depends on: root-env, shared-types, ghost-ts-client
-# @relateby/pattern is an external npm package (no build step needed)
+# peppers-agent depends on: root-env, shared-types, ghost-ts-client,
+# ghost-peppers-inner, ghost-peppers-mem
 RUN pnpm --filter @aie-matrix/root-env run build
 RUN pnpm --filter "@aie-matrix/shared-types" run build
 RUN pnpm --filter "@aie-matrix/ghost-ts-client" run build
-RUN pnpm --filter @aie-matrix/npc-agent run build
+RUN pnpm --filter "@aie-matrix/ghost-peppers-inner" run build
+RUN pnpm --filter "@aie-matrix/ghost-peppers-mem" run build
+RUN pnpm --filter @aie-matrix/ghost-peppers-agent run build
 
 # Produce a self-contained deploy directory (no workspace symlinks, prod deps only).
-RUN pnpm --filter @aie-matrix/npc-agent deploy --prod --legacy /app/deploy
+RUN pnpm --filter @aie-matrix/ghost-peppers-agent deploy --prod --legacy /app/deploy
 
 # ─── Stage 3: runner — minimal image with only the built artifact ─────────────
 FROM node:24-slim AS runner
 WORKDIR /app
 COPY --from=build /app/deploy .
 ENV NODE_ENV=production
-EXPOSE 4004
+EXPOSE 4002
 CMD ["node", "dist/agent.js"]

@@ -9,7 +9,7 @@ ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 # Enable corepack and pre-activate the exact pnpm version declared in package.json
 # so the build stage doesn't need a network call when it reads packageManager
-RUN corepack enable && corepack prepare pnpm@10.33.2 --activate
+RUN corepack enable && corepack prepare pnpm@11.6.0 --activate
 WORKDIR /repo
 # Copy only files needed by pnpm fetch — maximises layer-cache reuse
 COPY pnpm-lock.yaml pnpm-workspace.yaml ./
