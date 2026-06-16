@@ -15,7 +15,7 @@
 
 **Purpose**: No new project scaffolding needed — changes are additive to existing packages.
 
-- [ ] T001 Confirm branch `032-ghost-autospawn` is active and `pnpm install` is clean from repo root
+- [x] T001 Confirm branch `032-ghost-autospawn` is active and `pnpm install` is clean from repo root
 
 ---
 
@@ -31,12 +31,12 @@ This feature has no foundational prerequisites beyond the existing codebase. Sli
 
 **Independent Test**: `curl http://127.0.0.1:4001/v1/roster` returns 10 entries. `pnpm --filter @aie-matrix/random-agent test` passes.
 
-- [ ] T002 [P] [US1] Add `rosterAgent: true` to `matrix` block in `ghosts/random-agent/src/buildAgentCard.ts` (inside `buildWandererAgentCard` return value)
-- [ ] T003 [P] [US1] Add `GET /v1/roster` endpoint to `ghosts/random-agent/src/agent.ts` — reads `RANDOM_AGENT_COUNT` env var (default 10, min 0), returns `Array<{characterId: "wanderer-N", displayName: "Wanderer N"}>`
-- [ ] T004 [US1] Add `rosterAgent: true` to the `agentCard.matrix` block in the `random-agent` entry in `server/agent-host/catalog.json` (local dev catalog)
-- [ ] T005 [US2] Add `RANDOM_AGENT_COUNT` env var to `deploy/k8s/ghosts/random-agent.yaml` with value `"10"`
-- [ ] T006 [US1] Write `ghosts/random-agent/tests/roster.test.ts` with unit tests covering: default count (10 entries), `RANDOM_AGENT_COUNT=3` (3 entries), `RANDOM_AGENT_COUNT=0` (empty array), response schema shape (`characterId`, `displayName` present)
-- [ ] T007 [US1] Run `pnpm --filter @aie-matrix/random-agent test` and confirm all tests pass including T006
+- [x] T002 [P] [US1] Add `rosterAgent: true` to `matrix` block in `ghosts/random-agent/src/buildAgentCard.ts` (inside `buildWandererAgentCard` return value)
+- [x] T003 [P] [US1] Add `GET /v1/roster` endpoint to `ghosts/random-agent/src/agent.ts` — reads `RANDOM_AGENT_COUNT` env var (default 10, min 0), returns `Array<{characterId: "wanderer-N", displayName: "Wanderer N"}>`
+- [x] T004 [US1] Add `rosterAgent: true` to the `agentCard.matrix` block in the `random-agent` entry in `server/agent-host/catalog.json` (local dev catalog)
+- [x] T005 [US2] Add `RANDOM_AGENT_COUNT` env var to `deploy/k8s/ghosts/random-agent.yaml` with value `"10"`
+- [x] T006 [US1] Write `ghosts/random-agent/tests/roster.test.ts` with unit tests covering: default count (10 entries), `RANDOM_AGENT_COUNT=3` (3 entries), `RANDOM_AGENT_COUNT=0` (empty array), response schema shape (`characterId`, `displayName` present)
+- [x] T007 [US1] Run `pnpm --filter @aie-matrix/random-agent test` and confirm all tests pass including T006
 
 **Checkpoint**: `GET /v1/roster` works, agent card has `rosterAgent: true`, tests pass.
 
@@ -48,9 +48,9 @@ This feature has no foundational prerequisites beyond the existing codebase. Sli
 
 **Independent Test**: Restart agent-host with an active session running. Logs show `startup-reconciliation.found-session` and `roster-spawn-complete`. Ghosts appear in Intermedium.
 
-- [ ] T008 [US1] Add startup reconciliation async bootstrap to `server/agent-host/src/main.ts` in the `app.listen(...)` callback, after the Barnacle encounter trigger block — fetch `GET ${worldApiUrl}/live?status=active`, iterate `catalogFile.agents` for `rosterAgent: true` entries, call `supervisor.spawnRosterForAgent` for each; guard with `AGENT_HOST_DISABLE_RECONCILIATION !== "1"` env var opt-out; log `agent-host.startup-reconciliation.*` events
-- [ ] T009 [US1] Run `pnpm --filter @aie-matrix/server-agent-host test` and confirm existing tests still pass (no regression)
-- [ ] T010 [US1] Manual smoke test per `specs/032-ghost-autospawn/quickstart.md` restart scenario — confirm ghosts reappear after agent-host restart with active session
+- [x] T008 [US1] Add startup reconciliation async bootstrap to `server/agent-host/src/main.ts` in the `app.listen(...)` callback, after the Barnacle encounter trigger block — fetch `GET ${worldApiUrl}/live?status=active`, iterate `catalogFile.agents` for `rosterAgent: true` entries, call `supervisor.spawnRosterForAgent` for each; guard with `AGENT_HOST_DISABLE_RECONCILIATION !== "1"` env var opt-out; log `agent-host.startup-reconciliation.*` events
+- [x] T009 [US1] Run `pnpm --filter @aie-matrix/server-agent-host test` and confirm existing tests still pass (no regression)
+- [x] T010 [US1] Manual smoke test per `specs/032-ghost-autospawn/quickstart.md` restart scenario — confirm ghosts reappear after agent-host restart with active session
 
 **Checkpoint**: Ghosts auto-spawn after pod restart. Existing tests unaffected.
 
@@ -58,9 +58,9 @@ This feature has no foundational prerequisites beyond the existing codebase. Sli
 
 ## Phase 5: Polish & Docs
 
-- [ ] T011 [P] Update `CLAUDE.md` Recent Changes section with a summary of this feature (ghost autospawn via startup reconciliation + random-agent roster endpoint)
-- [ ] T012 [P] Run full build from repo root: `pnpm run build` — must pass cleanly
-- [ ] T013 Run `pnpm test` from repo root — confirm no regressions across all packages
+- [x] T011 [P] Update `CLAUDE.md` Recent Changes section with a summary of this feature (ghost autospawn via startup reconciliation + random-agent roster endpoint)
+- [x] T012 [P] Run full build from repo root: `pnpm run build` — must pass cleanly
+- [x] T013 Run `pnpm test` from repo root — confirm no regressions across all packages
 
 ---
 

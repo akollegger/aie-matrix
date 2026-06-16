@@ -37,13 +37,13 @@
  *    - `@aie-matrix/npc-agent`         — NPC broker ghost endpoint (port 4004).
  *    - `@aie-matrix/intermedium`       — Vite spectator UI (port 5180).
  *    - `@aie-matrix/map-editor`        — Vite admin UI (port 5182).
- * 3. Once agent-host + random-agent respond, auto-bootstrap registers random-agent and npc-agent
- *    in the catalog. Ghost spawn only runs if an active live session already exists
- *    (sessions are created by the operator via the map-editor Admin panel).
- *    Set `AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1` to skip bootstrap entirely.
+ * 3. Ghosts spawn automatically when a session is activated via the map-editor Admin panel.
+ *    agent-host also reconciles on startup — if a session is already active, ghosts
+ *    spawn without waiting for the `world.session.start` event.
  *
- * **CLI:** `-n` / `--ghosts <n>` — number of caretakers/sessions to spawn
- * (default `1`, max `32`). Example: `pnpm run demo -- --ghosts 5`.
+ * **CLI:** `-n` / `--ghosts <n>` — number of wanderer ghosts to spawn per session
+ * (default `10`, max `32`). Sets `RANDOM_AGENT_COUNT` on the random-agent process.
+ * Example: `pnpm run demo -- --ghosts 5`.
  *
  * **Troubleshooting:** If you never see `[demo]` lines you are probably running
  * `pnpm run server` instead of `pnpm run demo`.
@@ -74,7 +74,6 @@ if (process.env.AGENT_HOST_TOKEN === undefined) {
 }
 const token = /** @type {string} */ (process.env.AGENT_HOST_TOKEN);
 const adminToken = process.env.ADMIN_TOKEN || "";
-const worldBase = `http://127.0.0.1:${httpPort}`;
 
 // Vite front-end ports (fixed in each package's vite.config.ts)
 const intermediumPort = "5180";
@@ -86,10 +85,11 @@ function printDemoHelp() {
   console.log(`Usage: node scripts/demo.mjs [options]
 
 Full local stack: world server, agent-host, random-agent, intermedium, map-editor.
+Ghosts spawn automatically when a session is activated via the map-editor Admin panel.
 
 Options:
   -h, --help              Show this help
-  -n, --ghosts <n>        Registry adoptions + wanderer sessions (1..${MAX_DEMO_GHOSTS}, default 1)
+  -n, --ghosts <n>        Wanderer ghost count per session (0..${MAX_DEMO_GHOSTS}, default 10)
       --ghosts=<n>       Long option with equals
 
 Examples:
@@ -99,22 +99,23 @@ Examples:
 }
 
 /**
+ * @param {string} name
  * @param {string} raw
  */
-function parsePositiveIntArg(name, raw) {
+function parseNonNegativeIntArg(name, raw) {
   const n = Number(raw);
-  if (!Number.isFinite(n) || n < 1) {
-    throw new Error(`${name} expects a positive integer, got: ${String(raw)}`);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error(`${name} expects a non-negative integer, got: ${String(raw)}`);
   }
   return Math.trunc(n);
 }
 
 /**
  * @param {string[]} argv
- * @returns {{ ghostCount: number }}
+ * @returns {{ wandererCount: number }}
  */
 function parseDemoArgv(argv) {
-  let ghostCount = 1;
+  let wandererCount = 10;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--") {
@@ -125,15 +126,15 @@ function parseDemoArgv(argv) {
       process.exit(0);
     }
     if (a.startsWith("--ghosts=")) {
-      ghostCount = Math.min(MAX_DEMO_GHOSTS, parsePositiveIntArg("--ghosts", a.slice("--ghosts=".length)));
+      wandererCount = Math.min(MAX_DEMO_GHOSTS, parseNonNegativeIntArg("--ghosts", a.slice("--ghosts=".length)));
       continue;
     }
     if (a === "--ghosts" || a === "-n") {
       const v = argv[i + 1];
-      if (!v || v.startsWith("-")) {
+      if (v === undefined || v.startsWith("-")) {
         throw new Error("--ghosts / -n requires a number");
       }
-      ghostCount = Math.min(MAX_DEMO_GHOSTS, parsePositiveIntArg("--ghosts", v));
+      wandererCount = Math.min(MAX_DEMO_GHOSTS, parseNonNegativeIntArg("--ghosts", v));
       i++;
       continue;
     }
@@ -142,7 +143,7 @@ function parseDemoArgv(argv) {
     }
     throw new Error(`Unexpected argument: ${a} (try --help)`);
   }
-  return { ghostCount };
+  return { wandererCount };
 }
 
 /** @type {import('node:child_process').ChildProcess[]} */
@@ -262,134 +263,6 @@ async function waitForHouseAndAgent() {
   );
 }
 
-/**
- * @param {number} ghostCount
- * @returns {Promise<void>}
- */
-async function autoBootstrap(ghostCount) {
-  if (process.env.AIE_MATRIX_DEMO_SKIP_BOOTSTRAP === "1") {
-    console.info("[demo] Skipping catalog + registry + spawn (AIE_MATRIX_DEMO_SKIP_BOOTSTRAP=1).");
-    return;
-  }
-
-  // Step 1: Check for an active live session. Ghost spawn requires one.
-  const liveSessionId = await getActiveLiveSessionId();
-  if (!liveSessionId) {
-    console.info(
-      "[demo] no active live session — skipping ghost spawn.\n" +
-      "       Open the map-editor Admin panel, select a map, and start a session.",
-    );
-    return;
-  }
-  console.info(`[demo] found active session: ${liveSessionId}`);
-
-  const headers = {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
-  };
-
-  // Step 2: Register the random-agent with the agent-host catalog.
-  const reg = await fetch(`${houseBase}/v1/catalog/register`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({
-      agentId: "random-agent",
-      baseUrl: `http://127.0.0.1:${agentPort}`,
-    }),
-  });
-  if (reg.status === 409) {
-    console.info("[demo] catalog: random-agent already registered — continuing.");
-  } else if (!reg.ok) {
-    const t = await reg.text();
-    console.error("[demo] catalog register failed:", reg.status, t);
-    return;
-  } else {
-    console.info("[demo] catalog: random-agent registered.");
-  }
-
-  // Step 3: Spawn npc-agent via spawn-trusted. npc-agent self-registers with the catalog
-  // on startup; once spawned it automatically triggers its character roster.
-  const npcAgentId = await waitForNpcAgentInCatalog(headers);
-  if (npcAgentId) {
-    const npcSp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/${npcAgentId}`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({}),
-    });
-    if (npcSp.ok) {
-      const result = await npcSp.json();
-      const spawnedCount = result.spawned?.length ?? 0;
-      const failedCount = result.failed?.length ?? 0;
-      console.info(`[demo] npc-agent roster: ${spawnedCount} characters spawned, ${failedCount} failed.`);
-      if (failedCount > 0) {
-        console.warn("[demo] npc-agent roster failures:", JSON.stringify(result.failed));
-      }
-    } else {
-      console.warn("[demo] npc-agent spawn failed:", npcSp.status, await npcSp.text());
-    }
-  } else {
-    console.warn("[demo] npc-agent did not appear in catalog within timeout; skipping broker spawn.");
-  }
-
-  // Step 4: Spawn each random wanderer ghost via spawn-trusted.
-  for (let i = 0; i < ghostCount; i++) {
-    const sp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/random-agent`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ displayName: `wanderer-${i + 1}` }),
-    });
-    if (!sp.ok) {
-      console.error("[demo] spawn failed:", sp.status, await sp.text());
-      return;
-    }
-    const { sessionId, ghostId } = await sp.json();
-    console.info(
-      `[demo] ghost ${i + 1}/${ghostCount}: session ${sessionId} (ghostId ${ghostId}) — wanderer active.`,
-    );
-  }
-}
-
-/**
- * Poll the agent-host catalog until npc-agent appears (it self-registers on startup).
- * Returns the agentId string if found, or null on timeout.
- */
-async function waitForNpcAgentInCatalog(headers, maxMs = 15_000) {
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    try {
-      const r = await fetch(`${houseBase}/v1/catalog`, { headers });
-      if (r.ok) {
-        const catalog = await r.json();
-        const agents = catalog.agents ?? catalog ?? [];
-        const found = Object.values(agents).find(
-          (a) => typeof a === "object" && a !== null && String(a.baseUrl ?? "").includes(`:${npcAgentPort}`),
-        );
-        if (found) {
-          console.info(`[demo] npc-agent found in catalog: ${found.agentId}`);
-          return found.agentId;
-        }
-      }
-    } catch { /* retry */ }
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return null;
-}
-
-/**
- * Return the ID of the first active live session, or null if none exists.
- * GET /live is public — no auth required.
- */
-async function getActiveLiveSessionId() {
-  try {
-    const r = await fetch(`${worldBase}/live?status=active`);
-    if (!r.ok) return null;
-    const sessions = await r.json();
-    if (!Array.isArray(sessions) || sessions.length === 0) return null;
-    return sessions[0].id ?? null;
-  } catch {
-    return null;
-  }
-}
 
 function waitFirstExit() {
   return Promise.race(
@@ -403,8 +276,8 @@ function waitFirstExit() {
 }
 
 try {
-  const { ghostCount } = parseDemoArgv(process.argv.slice(2));
-  console.info(`[demo] --ghosts ${ghostCount} (registry caretakers + sessions)`);
+  const { wandererCount } = parseDemoArgv(process.argv.slice(2));
+  console.info(`[demo] --ghosts ${wandererCount} (wanderers per session via RANDOM_AGENT_COUNT)`);
   console.info(
     "[demo] --- If you never see [demo] lines you are not running `pnpm run demo` (e.g. you used `pnpm run server` instead). ---",
   );
@@ -445,7 +318,9 @@ try {
 
   console.info("[demo] 3/3 starting agent-host, random-agent, npc-agent, intermedium, map-editor…");
   start("agent-host",  "pnpm", ["--filter", "@aie-matrix/server-agent-host", "dev"]);
-  start("random-agent","pnpm", ["--filter", "@aie-matrix/random-agent",      "dev"]);
+  start("random-agent","pnpm", ["--filter", "@aie-matrix/random-agent",      "dev"], {
+    RANDOM_AGENT_COUNT: String(wandererCount),
+  });
   start("npc-agent",   "pnpm", ["--filter", "@aie-matrix/npc-agent",         "dev"], {
     AGENT_PORT: npcAgentPort,
     AGENT_HOST_URL: houseBase,
@@ -454,7 +329,6 @@ try {
   start("map-editor",  "pnpm", ["--filter", "@aie-matrix/map-editor",         "dev"], viteEnv);
 
   await waitForHouseAndAgent();
-  await autoBootstrap(ghostCount);
 
   console.info(`
 [demo] ✓ Full stack running — Ctrl+C to stop all processes.
@@ -466,7 +340,8 @@ try {
   NPC Agent                →  http://127.0.0.1:${npcAgentPort}/
 
   The Vite front-ends compile on first load — allow a few seconds after opening.
-  Switch the Map Editor to Admin mode to spawn and manage ghosts (including the broker NPC).
+  Open the Map Editor Admin panel, select a map, and activate a session.
+  Ghosts (${wandererCount} wanderers + NPC characters) spawn automatically when the session starts.
 `);
 
   const { code, signal } = await waitFirstExit();

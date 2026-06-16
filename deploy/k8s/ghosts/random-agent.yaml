@@ -57,6 +57,8 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
+            - name: RANDOM_AGENT_COUNT
+              value: "10"
           readinessProbe:
             httpGet:
               path: /health

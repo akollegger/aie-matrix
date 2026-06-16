@@ -63,6 +63,7 @@
             "ghost_announce"
           ],
           "capabilitiesRequired": [],
+          "rosterAgent": true,
           "memoryKind": "none",
           "llmProvider": "none",
           "profile": {

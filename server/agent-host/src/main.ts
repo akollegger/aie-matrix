@@ -152,6 +152,57 @@ const server = app.listen(port, "0.0.0.0", () => {
       }
     })();
   }
+
+  // Startup reconciliation: if a live session is already active (e.g. after a pod
+  // restart), spawn all roster agents' ghosts without waiting for world.session.start.
+  if (process.env.AGENT_HOST_DISABLE_RECONCILIATION !== "1") {
+    void (async () => {
+      try {
+        const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!liveRes.ok) return;
+        const sessions = (await liveRes.json()) as Array<{ id: string }>;
+        if (!Array.isArray(sessions) || sessions.length === 0) {
+          log.info({ kind: "agent-host.startup-reconciliation.no-active-session" });
+          return;
+        }
+        log.info({
+          kind: "agent-host.startup-reconciliation.found-session",
+          sessionId: sessions[0]!.id,
+        });
+        const supervisor = await runtime.runPromise(
+          pipe(AgentSupervisor, Effect.map((s) => s)),
+        );
+        const catalog = await runtime.runPromise(
+          pipe(CatalogService, Effect.map((c) => c)),
+        );
+        const catalogFile = await runtime.runPromise(catalog.load());
+        for (const [agentId, entry] of Object.entries(catalogFile.agents)) {
+          if (entry.kind === "mini-game") continue;
+          const isRoster =
+            (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
+          if (!isRoster) continue;
+          const result = await runtime.runPromise(
+            supervisor.spawnRosterForAgent(agentId, entry.baseUrl),
+          );
+          log.info({
+            kind: "agent-host.startup-reconciliation.roster-spawn-complete",
+            agentId,
+            spawned: result.spawned.length,
+            failed: result.failed.length,
+          });
+        }
+      } catch (e) {
+        console.error(
+          JSON.stringify({
+            kind: "agent-host.startup-reconciliation.failed",
+            message: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      }
+    })();
+  }
 });
 
 const shutdown = async () => {
