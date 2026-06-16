@@ -24,22 +24,11 @@ COPY . .
 # Install from virtual store (no network required)
 RUN pnpm install --offline --frozen-lockfile
 
-# Build workspace dependencies in explicit topological order.
-# Each RUN step is cached separately; a change to one package only invalidates
-# that step and all downstream steps.
-# Layer 1 — leaf packages with no workspace deps
-RUN pnpm --filter @aie-matrix/root-env run build
-RUN pnpm --filter "@aie-matrix/shared-types" run build
-RUN pnpm --filter "@aie-matrix/map-gram" run build
-# Layer 2 — packages that depend only on leaf packages
-RUN pnpm --filter @aie-matrix/server-auth run build
-RUN pnpm --filter @aie-matrix/server-colyseus run build
-# Layer 3 — packages that depend on layer-2 packages
-RUN pnpm --filter @aie-matrix/server-conversation run build
-RUN pnpm --filter @aie-matrix/server-world-api run build
-RUN pnpm --filter @aie-matrix/server-registry run build
-# Layer 4 — the combined server (depends on all above)
-RUN pnpm --filter @aie-matrix/server run build
+# Build the combined server and ALL its workspace dependencies in topological
+# order. pnpm's "..." dependency-aware selector lets pnpm compute the dependency
+# graph, so a newly-added workspace dep (e.g. @aie-matrix/logger) can never be
+# missed by a hand-maintained list.
+RUN pnpm --filter "@aie-matrix/server..." run build
 
 # Produce a self-contained deploy directory (no workspace symlinks, prod deps only).
 # --legacy: pnpm v10+ requires this flag when workspace packages don't use inject-workspace-packages

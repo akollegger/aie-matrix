@@ -17,13 +17,10 @@ ENV CI=true
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
 
-# Build workspace dependencies in explicit topological order.
-# npc-agent depends on: root-env, shared-types, ghost-ts-client
-# @relateby/pattern is an external npm package (no build step needed)
-RUN pnpm --filter @aie-matrix/root-env run build
-RUN pnpm --filter "@aie-matrix/shared-types" run build
-RUN pnpm --filter "@aie-matrix/ghost-ts-client" run build
-RUN pnpm --filter @aie-matrix/npc-agent run build
+# Build npc-agent and ALL its workspace dependencies in topological order.
+# pnpm's "..." dependency-aware selector builds every transitive workspace dep
+# (e.g. @aie-matrix/logger), so none can be missed by a hand-maintained list.
+RUN pnpm --filter "@aie-matrix/npc-agent..." run build
 
 # Produce a self-contained deploy directory (no workspace symlinks, prod deps only).
 RUN pnpm --filter @aie-matrix/npc-agent deploy --prod --legacy /app/deploy

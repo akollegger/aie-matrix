@@ -17,15 +17,10 @@ ENV CI=true
 COPY . .
 RUN pnpm install --offline --frozen-lockfile
 
-# Build workspace dependencies in explicit topological order.
-# peppers-agent depends on: root-env, shared-types, ghost-ts-client,
-# ghost-peppers-inner, ghost-peppers-mem
-RUN pnpm --filter @aie-matrix/root-env run build
-RUN pnpm --filter "@aie-matrix/shared-types" run build
-RUN pnpm --filter "@aie-matrix/ghost-ts-client" run build
-RUN pnpm --filter "@aie-matrix/ghost-peppers-inner" run build
-RUN pnpm --filter "@aie-matrix/ghost-peppers-mem" run build
-RUN pnpm --filter @aie-matrix/ghost-peppers-agent run build
+# Build peppers-agent and ALL its workspace dependencies in topological order.
+# pnpm's "..." dependency-aware selector builds every transitive workspace dep,
+# so none can be missed by a hand-maintained list.
+RUN pnpm --filter "@aie-matrix/ghost-peppers-agent..." run build
 
 # Produce a self-contained deploy directory (no workspace symlinks, prod deps only).
 RUN pnpm --filter @aie-matrix/ghost-peppers-agent deploy --prod --legacy /app/deploy
