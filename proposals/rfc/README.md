@@ -73,3 +73,4 @@ What other approaches were considered?
 | [RFC-0024](0024-group-formation-and-chat.md) | Group Formation and Group Chat | draft |
 | [RFC-0025](0025-session-leaderboards.md) | Session Leaderboards | under review |
 | [RFC-0026](0026-npc-agent.md) | NPC Agent — Rule-Based Character Roster | draft |
+| [RFC-0027](0027-structured-exam-artifact.md) | Structured Exam Artifact Format | draft |

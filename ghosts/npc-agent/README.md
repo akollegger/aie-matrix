@@ -2,7 +2,7 @@
 
 Rule-based NPC character roster for the aie-matrix. Reads characters from `.character.gram` catalog files, spawns one ghost per enabled character when a session starts, and drives each ghost through a priority-ordered behavior rule table and a scripted dialog tree — with zero LLM dependency.
 
-**Built-in characters**: `collector` (item hunter), `hermit` (wanderer), `info-attendant` (greeter), `broker` (brokers deals — offers credits for answering questions, stateful contract-negotiation loop).
+**Built-in characters**: `collector` (item hunter), `hermit` (wanderer), `info-attendant` (greeter), `broker` (brokers deals — offers credits for answering questions, stateful contract-negotiation loop), `quizmaster` (conducts structured exams — loads `.exam.gram` at startup, manages commit-reveal hash protocol, proportional credit payout), `contestant` (auto-accepts exam offers and answers questions).
 
 ## Quick start
 
@@ -65,7 +65,9 @@ The format is gram — the same syntax used for `.map.gram` and `.calendar.gram`
 | `background` | string | One-line character background, surfaced in `whereami` (IC-008). |
 | `enabled` | boolean | `false` → character is never spawned. |
 | `defaultAction` | `idle` \| `go-random` | Action taken when no behavior rule matches. (Legacy aliases `stay`/`random-move` also accepted.) |
-| *(label)* | `Character:Broker` | Behavior dispatch strategy. Absence of a behavior label defaults to rule-engine. Add `:Broker` for the broker character (stateful contract-negotiation loop). |
+| *(label)* | `Character:Broker` `Character:Quizmaster` `Character:Contestant` | Behavior dispatch strategy. Absence of a behavior label defaults to rule-engine. Add `:Broker`, `:Quizmaster`, or `:Contestant` for the corresponding behavior. |
+| `examPath` | string | Relative path (from `NPC_CATALOG_DIR`) to a `.exam.gram` file. Required for Quizmaster characters. |
+| `stakeAmount` | number | Credits staked per exam/contract. Used by Broker and Quizmaster. Defaults to 1. |
 
 ### Dialog tree
 
@@ -146,3 +148,33 @@ pnpm tck:npc
 ```
 
 Covers SC-007 (single multi-turn dialog) and SC-008 (two interleaved conversations with independent state).
+
+## Authoring exams (`.exam.gram`)
+
+Exams are authored in gram format. Each question is a `Problem` node with inline properties:
+
+```gram
+{ kind: "matrix-exam", schema_version: "1" }
+
+(q1:Problem { type: "multiple_choice", weight: 2, correct: "a",
+  prompt: "Which consensus algorithm does Bitcoin use?",
+  options: { a: "Proof of Work", b: "Proof of Stake", c: "DPoS", d: "PBFT" } })
+
+(q2:Problem { type: "short_answer", weight: 1, correct: "Satoshi Nakamoto",
+  prompt: "Name the pseudonymous creator of Bitcoin." })
+
+(q3:Problem { type: "numerical", weight: 1, correct: 21000000, tolerance: 0,
+  prompt: "What is the maximum supply of Bitcoin in whole units?" })
+
+[exam:Exam | q1, q2, q3]
+```
+
+Supported question types: `multiple_choice` (case-insensitive exact match on option key), `short_answer` (case-insensitive exact match), `numerical` (within `tolerance` of `correct`).
+
+The quizmaster loads the exam at spawn time, computes two SHA-256 hashes committed to the EvalContract:
+- `artifactRef` — hash of prompt-only snippets (no answer key)
+- `disclosureRef` — hash of full snippets (with answer key)
+
+After the exam completes the quizmaster reveals the full artifact in a `say()` message so anyone with access to the conversation thread can verify `sha256(bytes) === disclosureRef`.
+
+See `catalog/bitcoin-basics.exam.gram` as a working example.

@@ -824,3 +824,80 @@ describe("US4: group contractor", () => {
     assert.equal(result.contractorPayment + result.clientRefund, 100);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Exam contract path: artifactRef / disclosureRef
+// ---------------------------------------------------------------------------
+
+describe("Exam contract: artifactRef and disclosureRef", () => {
+  it("quizmaster path: artifactRef and disclosureRef are stored on open", async () => {
+    const { ledger, svc } = makeSuite();
+    await initLedger(ledger);
+
+    const contract = await Effect.runPromise(
+      svc.openContract({
+        clientId: "client",
+        contractorId: "contractor",
+        evaluatorId: "client",
+        request: "exam",
+        stakeResource: TEST_RESOURCE,
+        stakeAmount: STAKE,
+        deadline: DEADLINE_FUTURE,
+        artifactRef: "aaaa1111",
+        disclosureRef: "bbbb2222",
+      }),
+    );
+
+    assert.equal(contract.artifactRef, "aaaa1111");
+    assert.equal(contract.disclosureRef, "bbbb2222");
+  });
+
+  it("broker path: artifactRef and disclosureRef default to null when not provided", async () => {
+    const { ledger, svc } = makeSuite();
+    await initLedger(ledger);
+
+    const contract = await Effect.runPromise(
+      svc.openContract({
+        clientId: "client",
+        contractorId: "contractor",
+        evaluatorId: "evaluator",
+        request: "broker question",
+        stakeResource: TEST_RESOURCE,
+        stakeAmount: STAKE,
+        deadline: DEADLINE_FUTURE,
+      }),
+    );
+
+    assert.equal(contract.artifactRef, null);
+    assert.equal(contract.disclosureRef, null);
+  });
+
+  it("proportional settlement: verdict 2/3 on stake 3 yields floor((2/3) × 3) = 2 contractor, 1 refund", async () => {
+    const { ledger, svc } = makeSuite();
+    await initLedger(ledger);
+
+    const contract = await Effect.runPromise(
+      svc.openContract({
+        clientId: "client",
+        contractorId: "contractor",
+        evaluatorId: "client",
+        request: "exam",
+        stakeResource: TEST_RESOURCE,
+        stakeAmount: 3,
+        deadline: DEADLINE_FUTURE,
+        artifactRef: "aaaa1111",
+        disclosureRef: "bbbb2222",
+      }),
+    );
+    await Effect.runPromise(svc.acceptContract({ contractId: contract.id, callerId: "contractor" }));
+    await Effect.runPromise(
+      svc.submitContract({ contractId: contract.id, callerId: "contractor", submission: "answers" }),
+    );
+
+    const result = await Effect.runPromise(
+      svc.evaluateContract({ contractId: contract.id, callerId: "client", verdict: 2 / 3 }),
+    );
+    assert.equal(result.contractorPayment, 2);
+    assert.equal(result.clientRefund, 1);
+  });
+});

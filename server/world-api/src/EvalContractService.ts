@@ -37,6 +37,8 @@ export interface EvalContractServiceOps {
     stakeResource: string;
     stakeAmount: number;
     deadline: number;
+    artifactRef?: string;
+    disclosureRef?: string;
   }): Effect.Effect<
     EvalContract,
     EvalContractInvalidEvaluator | EvalContractPersistenceError | LedgerCommitError

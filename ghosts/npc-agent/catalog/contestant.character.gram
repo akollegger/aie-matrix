@@ -1,0 +1,13 @@
+{ kind: "matrix-character" }
+
+(charContestant:Character:Contestant { id: "contestant", name: "The Contestant", glyph: "🎯",
+  background: "An eager ghost who participates in exams to earn credits. Answers every question it can.",
+  enabled: true, defaultAction: "go-random", stakeAmount: 0 })
+
+(idle:DialogNode { responses: ["Ready to be tested."] })
+
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: [] }]->(idle)
+]
+
+(charContestant)-[:HAS_DIALOG]->(dialog_1)
