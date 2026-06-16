@@ -66,13 +66,14 @@ const readyUrl = `http://127.0.0.1:${httpPort}/spectator/room`;
 const housePort = process.env.AGENT_HOST_PORT || "4000";
 const agentPort = process.env.AGENT_PORT || "4001";
 const npcAgentPort = process.env.NPC_AGENT_PORT || "4004";
+const peppersAgentPort = process.env.PEPPERS_AGENT_PORT || "4002";
 const houseBase =
   process.env.AGENT_HOST_URL || `http://127.0.0.1:${housePort}`;
-if (process.env.AGENT_HOST_TOKEN === undefined) {
+if (process.env.AGENT_HOST_TOKEN === undefined || process.env.AGENT_HOST_TOKEN.trim() === "") {
   process.env.AGENT_HOST_TOKEN = randomUUID();
   console.info("[demo] AGENT_HOST_TOKEN not set — using ephemeral token for this session. Add AGENT_HOST_TOKEN to .env to pin it.");
 }
-const token = /** @type {string} */ (process.env.AGENT_HOST_TOKEN);
+const token = /** @type {string} */ (process.env.AGENT_HOST_TOKEN).trim();
 const adminToken = process.env.ADMIN_TOKEN || "";
 
 // Vite front-end ports (fixed in each package's vite.config.ts)
@@ -230,6 +231,7 @@ async function waitForHouseAndAgent() {
     let houseOk = false;
     let agentOk = false;
     let npcAgentOk = false;
+    let peppersAgentOk = false;
     try {
       const c = await fetch(`http://127.0.0.1:${housePort}/v1/catalog`, {
         headers: { ...auth },
@@ -250,16 +252,22 @@ async function waitForHouseAndAgent() {
     } catch {
       /* retry */
     }
-    if (houseOk && agentOk && npcAgentOk) {
+    try {
+      const p = await fetch(`http://127.0.0.1:${peppersAgentPort}/.well-known/agent-card.json`);
+      peppersAgentOk = p.ok;
+    } catch {
+      /* retry */
+    }
+    if (houseOk && agentOk && npcAgentOk && peppersAgentOk) {
       console.info(
-        `[demo] agent-host :${housePort}, random-agent :${agentPort}, npc-agent :${npcAgentPort} responding.`,
+        `[demo] agent-host :${housePort}, random-agent :${agentPort}, npc-agent :${npcAgentPort}, peppers-agent :${peppersAgentPort} responding.`,
       );
       return;
     }
     await new Promise((r) => setTimeout(r, 400));
   }
   console.warn(
-    "[demo] timeout waiting for agent-host + agents; continue anyway (check AGENT_HOST_PORT / AGENT_PORT / NPC_AGENT_PORT in root .env).",
+    "[demo] timeout waiting for agent-host + agents; continue anyway (check AGENT_HOST_PORT / AGENT_PORT / NPC_AGENT_PORT / PEPPERS_AGENT_PORT in root .env).",
   );
 }
 
@@ -316,13 +324,17 @@ try {
     ...(token ? { VITE_AGENT_HOST_BEARER: token } : {}),
   };
 
-  console.info("[demo] 3/3 starting agent-host, random-agent, npc-agent, intermedium, map-editor…");
+  console.info("[demo] 3/3 starting agent-host, random-agent, npc-agent, peppers-agent, intermedium, map-editor…");
   start("agent-host",  "pnpm", ["--filter", "@aie-matrix/server-agent-host", "dev"]);
   start("random-agent","pnpm", ["--filter", "@aie-matrix/random-agent",      "dev"], {
     RANDOM_AGENT_COUNT: String(wandererCount),
   });
   start("npc-agent",   "pnpm", ["--filter", "@aie-matrix/npc-agent",         "dev"], {
     AGENT_PORT: npcAgentPort,
+    AGENT_HOST_URL: houseBase,
+  });
+  start("peppers-agent", "pnpm", ["--filter", "@aie-matrix/ghost-peppers-agent", "dev"], {
+    PEPPERS_AGENT_PORT: peppersAgentPort,
     AGENT_HOST_URL: houseBase,
   });
   start("intermedium", "pnpm", ["--filter", "@aie-matrix/intermedium",        "dev"], viteEnv);
@@ -338,6 +350,7 @@ try {
   World API                →  http://127.0.0.1:${httpPort}/
   Agent Host               →  http://127.0.0.1:${housePort}/v1/catalog
   NPC Agent                →  http://127.0.0.1:${npcAgentPort}/
+  Peppers Agent            →  http://127.0.0.1:${peppersAgentPort}/
 
   The Vite front-ends compile on first load — allow a few seconds after opening.
   Open the Map Editor Admin panel, select a map, and activate a session.

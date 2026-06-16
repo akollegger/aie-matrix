@@ -19,6 +19,7 @@ vi.mock("@aie-matrix/ghost-ts-client", () => ({
   GhostMcpClient: class {
     connect = vi.fn(async () => {});
     disconnect = vi.fn(async () => {});
+    announce = vi.fn(async () => {});
     callTool = vi.fn(async () => ({
       h3Index: RES15,
       exits: [{ toward: RES15 }],

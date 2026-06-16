@@ -11,6 +11,7 @@ function makeDefaultMockClient() {
   return {
     connect: vi.fn().mockResolvedValue(undefined),
     disconnect: vi.fn().mockResolvedValue(undefined),
+    announce: vi.fn().mockResolvedValue(undefined),
     callTool: vi.fn().mockResolvedValue({}),
     whoami:    vi.fn().mockResolvedValue({ ghostId: "test" }),
     whereami:  vi.fn().mockResolvedValue({ h3Index: "abc", tileId: "abc", col: 0, row: 0 }),
@@ -219,6 +220,7 @@ describe("tick error resilience", () => {
     vi.mocked(GhostMcpClient).mockImplementationOnce(() => ({
       connect: vi.fn().mockResolvedValue(undefined),
       disconnect: vi.fn().mockResolvedValue(undefined),
+      announce: vi.fn().mockResolvedValue(undefined),
       callTool: vi.fn().mockRejectedValue(new Error("tool unavailable")),
     }));
 
