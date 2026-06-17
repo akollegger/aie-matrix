@@ -104,6 +104,7 @@ jobs:
       - name: Run Ghost TCK (Contract Tests)
         env:
           AIE_MATRIX_REGISTRY_BASE: http://localhost:8787
+          AIE_MATRIX_MCP_URL: http://localhost:8787/mcp
           AIE_MATRIX_TCK_MODE: "1"
         run: pnpm test:tck
 
