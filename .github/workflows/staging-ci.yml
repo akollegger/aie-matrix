@@ -115,6 +115,7 @@ jobs:
           NEO4J_USER: neo4j
           NEO4J_PASSWORD: ci-test-pw
           AGENT_HOST_TOKEN: ci-test-token
+          AIE_MATRIX_MCP_URL: http://localhost:8787/mcp
         run: pnpm test:e2e
 
       - name: Dump logs on failure
