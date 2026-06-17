@@ -97,7 +97,8 @@ while (true) {
       headers: { Authorization: `Bearer ${AGENT_HOST_TOKEN}` },
     });
     const sessions = data.sessions ?? [];
-    const active = sessions.filter(s => s.agentId === "random-agent" && s.status !== "terminated");
+    // agentId is "random-agent" in compose (AGENT_ID env) or "random-agent-<pod>" in K8s (HOSTNAME)
+    const active = sessions.filter(s => s.agentId?.startsWith("random-agent") && s.status !== "terminated");
     ghostCount = active.length;
     log(`  random-agent sessions: ${ghostCount}`);
     if (ghostCount >= GHOST_MIN_COUNT) break;
