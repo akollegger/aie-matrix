@@ -19,15 +19,12 @@ let driver: ReturnType<typeof neo4j.driver>;
 
 test.before(async () => {
   const container = await new GenericContainer("neo4j:5")
-    .withEnvironment({
-      NEO4J_AUTH: "neo4j/testpassword",
-      // Required since neo4j:5 community moved to a single licensing model
-      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes",
-    })
+    .withEnvironment({ NEO4J_AUTH: "neo4j/testpassword" })
     .withExposedPorts(7474, 7687)
-    // Defer to neo4j:5's built-in HEALTHCHECK rather than log or port strategies,
-    // which are unreliable because the JVM starts listening before queries are ready.
-    .withWaitStrategy(Wait.forHealthCheck())
+    // Wait for TCP port only — neo4j's built-in HEALTHCHECK exhausts its retry
+    // budget on slow CI runners before the JVM is ready. Bolt readiness is
+    // confirmed by the polling loop below.
+    .withWaitStrategy(Wait.forListeningPorts())
     .withStartupTimeout(CONTAINER_STARTUP_TIMEOUT_MS)
     .start();
 
