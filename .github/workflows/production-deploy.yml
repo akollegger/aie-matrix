@@ -142,17 +142,34 @@ jobs:
       - name: Push npc-agent image
         run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/npc-agent:${{ steps.tag.outputs.value }}
 
-      # ── Build & push peppers-agent image ───────────────────────────────────
+      # ── Build & push peppers-agent image (v2 — the canonical variant) ──────
+      # Builds ghosts/peppers-agent-v2 (Surface+Id cognition, autospawn roster,
+      # OpenRouter + agent-memory). The no-suffix ghosts/peppers-agent is a
+      # graveyard fallback and is no longer deployed. Image name stays
+      # `peppers-agent` so the Deployment + rollout steps are unchanged.
 
       - name: Build peppers-agent image
         run: |
           docker build \
-            -f ghosts/peppers-agent/Dockerfile \
+            -f ghosts/peppers-agent-v2/Dockerfile \
             -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/peppers-agent:${{ steps.tag.outputs.value }} \
             .
 
       - name: Push peppers-agent image
         run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/peppers-agent:${{ steps.tag.outputs.value }}
+
+      # ── Build & push agent-memory image (peppers v2 memory backend) ────────
+      # neo4j-agent-memory SSE service; peppers connects via PEPPERS_MEMORY_MCP_URL.
+
+      - name: Build agent-memory image
+        run: |
+          docker build \
+            -f deploy/agent-memory/Dockerfile \
+            -t ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-memory:${{ steps.tag.outputs.value }} \
+            .
+
+      - name: Push agent-memory image
+        run: docker push ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.REPO }}/agent-memory:${{ steps.tag.outputs.value }}
 
       # ── Sync secrets into k8s ─────────────────────────────────────────────
       # GitHub Actions secrets are the source of truth. Patch the k8s secret
@@ -167,6 +184,22 @@ jobs:
             --namespace ${{ env.NAMESPACE }} \
             --type merge \
             -p "{\"data\":{\"ADMIN_TOKEN\":\"$(echo -n "$VITE_ADMIN_TOKEN" | base64 -w0)\"}}"
+
+      # peppers (v2) + agent-memory route all OpenAI-shaped calls via OpenRouter.
+      # Set the OPEN_ROUTER_API_KEY GitHub Actions secret; it is synced into
+      # aie-matrix-secrets here and consumed by both Deployments.
+      - name: Sync OPEN_ROUTER_API_KEY to k8s secret
+        env:
+          OPEN_ROUTER_API_KEY: ${{ secrets.OPEN_ROUTER_API_KEY }}
+        run: |
+          if [ -z "$OPEN_ROUTER_API_KEY" ]; then
+            echo "ERROR: OPEN_ROUTER_API_KEY GitHub Actions secret is not set — peppers v2 + agent-memory cannot reach OpenRouter."
+            exit 1
+          fi
+          kubectl patch secret aie-matrix-secrets \
+            --namespace ${{ env.NAMESPACE }} \
+            --type merge \
+            -p "{\"data\":{\"OPEN_ROUTER_API_KEY\":\"$(echo -n "$OPEN_ROUTER_API_KEY" | base64 -w0)\"}}"
 
       # The agent-host chart's secretKeys changed from GHOST_HOUSE_DEV_TOKEN
       # (v0.2.7) to AGENT_HOST_TOKEN (018-ghost-agent-deployment). If the k8s
@@ -255,6 +288,13 @@ jobs:
           envsubst < deploy/k8s/ghosts/npc-agent.yaml \
             | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
 
+      - name: Deploy agent-memory
+        env:
+          IMAGE_TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          envsubst < deploy/k8s/ghosts/agent-memory.yaml \
+            | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
+
       - name: Deploy peppers-agent
         env:
           IMAGE_TAG: ${{ steps.tag.outputs.value }}
@@ -333,6 +373,7 @@ jobs:
           kubectl rollout status deployment/agent-host -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/random-agent -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/npc-agent -n ${{ env.NAMESPACE }}
+          kubectl rollout status deployment/agent-memory -n ${{ env.NAMESPACE }}
           kubectl rollout status deployment/peppers-agent -n ${{ env.NAMESPACE }}
 
       - name: Dump logs on failure
@@ -342,4 +383,5 @@ jobs:
           kubectl logs -l app.kubernetes.io/name=agent-host -n ${{ env.NAMESPACE }} --tail=50 || true
           kubectl logs -l app=random-agent -n ${{ env.NAMESPACE }} --tail=50 || true
           kubectl logs -l app=npc-agent -n ${{ env.NAMESPACE }} --tail=50 || true
+          kubectl logs -l app=agent-memory -n ${{ env.NAMESPACE }} --tail=50 || true
           kubectl logs -l app=peppers-agent -n ${{ env.NAMESPACE }} --tail=50 || true

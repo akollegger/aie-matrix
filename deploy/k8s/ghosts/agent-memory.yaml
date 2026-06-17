@@ -1,0 +1,100 @@
+# agent-memory Kubernetes Deployment + Service — peppers v2 memory backend
+#
+# neo4j-agent-memory (Neo4j Labs) run as a shared, multi-tenant SSE service.
+# peppers v2 ghosts connect over SSE via PEPPERS_MEMORY_MCP_URL
+# (http://agent-memory:8080/sse). Backed by the shared world Neo4j
+# ("context graph in the same instance"); all OpenAI-shaped calls
+# (embeddings + extraction LLM) route via OpenRouter.
+#
+# Image build source: deploy/agent-memory/Dockerfile (built + pushed by
+# .github/workflows/production-deploy.yml).
+#   IMAGE_TAG=$(git rev-parse --short HEAD) envsubst < deploy/k8s/ghosts/agent-memory.yaml \
+#     | kubectl apply -n aie-matrix -f -
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-memory
+  labels:
+    app: agent-memory
+    tier: ghost
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-memory
+  template:
+    metadata:
+      labels:
+        app: agent-memory
+        tier: ghost
+    spec:
+      containers:
+        - name: agent-memory
+          image: us-central1-docker.pkg.dev/aie-matrix/aie-matrix/agent-memory:${IMAGE_TAG}
+          ports:
+            - containerPort: 8080
+          env:
+            # Shared world Neo4j (same instance as domain data)
+            - name: NEO4J_URI
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: NEO4J_URI
+            - name: NEO4J_USER
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: NEO4J_USER
+            - name: NEO4J_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: NEO4J_PASSWORD
+            # OpenAI SDK → OpenRouter (one key, one endpoint).
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: OPEN_ROUTER_API_KEY
+            - name: OPENAI_BASE_URL
+              value: "https://openrouter.ai/api/v1"
+            # Entity-extraction LLM. spaCy/GLiNER extras are absent, so this LLM
+            # does ALL extraction — keep it cheap. The openai adapter strips the
+            # leading "openai/" and forwards the rest to OpenRouter verbatim.
+            - name: MEMORY_LLM
+              value: "openai/inclusionai/ling-2.6-flash"
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 40
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            # Headroom: under many concurrent ghosts the SSE memory service was
+            # OOM-killed (exit 137) at lower limits. Mirror the compose 3g ceiling.
+            limits:
+              memory: 3Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-memory
+  labels:
+    app: agent-memory
+    tier: ghost
+spec:
+  selector:
+    app: agent-memory
+  ports:
+    - name: sse
+      port: 8080
+      targetPort: 8080
+  type: ClusterIP

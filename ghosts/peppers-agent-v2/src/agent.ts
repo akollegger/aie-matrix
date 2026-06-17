@@ -49,12 +49,43 @@ const requireToken: RequestHandler = (req: Request, res: Response, next) => {
   return res.status(401).json({ error: "unauthorized" });
 };
 
+// Evocative birth names so autospawned ghosts arrive as individuals rather
+// than "Pepper 1". Stable per index; personality still drifts per ghost.
+const SOUL_NAMES = [
+  "Ash Vale", "Wren Quill", "Cinder Reed", "Dawn Sol", "Echo Tide",
+  "Fable Wisp", "Glint Vesper", "Haze Wren", "Iris Moss", "Juno Lark",
+  "Kestrel Pip", "Lark Onyx", "Moss Nim", "Nim Bow", "Onyx Haze", "Pip Glint",
+];
+function soulName(i: number): string {
+  const base = SOUL_NAMES[i % SOUL_NAMES.length]!;
+  const wrap = Math.floor(i / SOUL_NAMES.length);
+  return wrap === 0 ? base : `${base} ${wrap + 1}`;
+}
+
 const app = express();
 app.use(express.json({ limit: "4mb" }));
 // Health endpoint — required by compose depends_on and K8s probes.
 app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
+
+// Roster for autospawn (spec 032). The agent-host's reconciliation +
+// world.session.start path fetches this and spawns one peppers ghost per
+// entry via spawnRosterForAgent — no manual spawn-trusted call. Count is
+// operator-configurable via PEPPERS_AGENT_COUNT; the default is deliberately
+// conservative because each peppers ghost runs an LLM cascade per tick
+// (OpenRouter cost) — the peppers analogue of RANDOM_AGENT_COUNT.
+app.get("/v1/roster", (_req, res) => {
+  const raw = process.env.PEPPERS_AGENT_COUNT;
+  const parsed = raw !== undefined && raw.trim() !== "" ? parseInt(raw, 10) : NaN;
+  const count = Math.max(0, Number.isFinite(parsed) ? parsed : 3);
+  const roster = Array.from({ length: count }, (_, i) => ({
+    characterId: `peppers-${i + 1}`,
+    displayName: soulName(i),
+  }));
+  res.json(roster);
+});
+
 app.use(`/${AGENT_CARD_PATH}`, agentCardHandler({ agentCardProvider: requestHandler }));
 app.use(
   "/a2a/jsonrpc",

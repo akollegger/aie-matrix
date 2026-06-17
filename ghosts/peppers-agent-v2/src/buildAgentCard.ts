@@ -43,6 +43,10 @@ export function buildPeppersAgentCard(publicBase: string): AgentCard {
         "read",
       ],
       capabilitiesRequired: [],
+      // Autospawn (spec 032): peppers plugs into the agent-host's
+      // reconciliation + world.session.start roster path. The host fetches
+      // GET /v1/roster and spawns each entry — no manual spawn-trusted call.
+      rosterAgent: true,
       memoryKind: "neo4j-agent-memory",
       llmProvider: "openai",
       profile: {

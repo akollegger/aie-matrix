@@ -215,6 +215,11 @@ services:
       PEPPERS_AGENT_PUBLIC_BASE_URL: "http://peppers:4002"
       PEPPERS_AGENT_PORT: "4002"
       PEPPERS_AGENT_ID: "peppers-agent"
+      # Autospawn (spec 032): peppers is a rosterAgent. The agent-host fetches
+      # GET /v1/roster and spawns this many ghosts into the active session.
+      # Conservative default (each ghost runs an LLM cascade per tick) — raise
+      # deliberately. The peppers analogue of RANDOM_AGENT_COUNT.
+      PEPPERS_AGENT_COUNT: "${PEPPERS_AGENT_COUNT:-3}"
       # Memory: shared agent-memory SSE service (no in-container Python).
       PEPPERS_MEMORY_MCP_URL: "http://agent-memory:8080/sse"
       # Skill-recall + sleep consolidation graph — the ghost "minds" context
