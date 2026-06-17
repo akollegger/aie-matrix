@@ -38,6 +38,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "testcontainers": "^12.0.2",
     "tsx": "^4.21.0"
   }
 }

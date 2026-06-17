@@ -1,50 +1,55 @@
 /**
- * Integration timing test for seedPentagonPortals.
- * Skipped when NEO4J_URI is not set — run locally or in CI with a live Neo4j instance.
+ * Integration timing test for seedPentagonPortals using a testcontainer Neo4j instance.
+ * Requires a Docker daemon. Runs anywhere without pre-existing infrastructure.
  *
  * To run:
- *   NEO4J_URI=bolt://localhost:7687 NEO4J_USER=neo4j NEO4J_PASSWORD=devpassword \
- *     pnpm --filter @aie-matrix/server-world-api test:integration
+ *   pnpm --filter @aie-matrix/server-world-api test:integration
  */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { GenericContainer, Wait } from "testcontainers";
 import neo4j from "neo4j-driver";
 import { seedPentagonPortals } from "../src/neo4j-graph-seed.js";
 import { ensureMapManagementConstraints, ensureTileH3UniqueConstraint } from "../src/neo4j-graph-init.js";
 
-const NEO4J_URI = process.env["NEO4J_URI"];
-const NEO4J_USER = process.env["NEO4J_USER"] ?? "neo4j";
-const NEO4J_PASSWORD = process.env["NEO4J_PASSWORD"] ?? "devpassword";
-
 const SEED_TIMEOUT_MS = 60_000;
+const CONTAINER_STARTUP_TIMEOUT_MS = 120_000;
 
-test.skip(!NEO4J_URI, "NEO4J_URI not set — skipping neo4j-graph-seed integration tests");
+let driver: ReturnType<typeof neo4j.driver>;
 
-if (NEO4J_URI) {
-  const driver = neo4j.driver(NEO4J_URI, neo4j.auth.basic(NEO4J_USER, NEO4J_PASSWORD));
+test.before(async () => {
+  const container = await new GenericContainer("neo4j:5")
+    .withEnvironment({ NEO4J_AUTH: "neo4j/testpassword" })
+    .withExposedPorts(7687)
+    .withWaitStrategy(Wait.forLogMessage("Started."))
+    .withStartupTimeout(CONTAINER_STARTUP_TIMEOUT_MS)
+    .start();
 
-  test("seedPentagonPortals completes within 5 seconds (cold)", async () => {
-    // Ensure indexes are in place first, as they would be during real startup
-    await ensureTileH3UniqueConstraint(driver);
-    await ensureMapManagementConstraints(driver);
+  const boltUrl = `bolt://${container.getHost()}:${container.getMappedPort(7687)}`;
+  driver = neo4j.driver(boltUrl, neo4j.auth.basic("neo4j", "testpassword"));
+}, { timeout: CONTAINER_STARTUP_TIMEOUT_MS + 5_000 });
 
-    const start = performance.now();
-    await seedPentagonPortals(driver);
-    const elapsed = performance.now() - start;
+test.after(async () => {
+  await driver?.close();
+});
 
-    console.log(`seedPentagonPortals (cold): ${elapsed.toFixed(0)}ms`);
-    assert.ok(elapsed < SEED_TIMEOUT_MS, `seeding took ${elapsed.toFixed(0)}ms, expected < ${SEED_TIMEOUT_MS}ms`);
-  });
+test("seedPentagonPortals completes within 60s (cold — indexes just created)", async () => {
+  await ensureTileH3UniqueConstraint(driver);
+  await ensureMapManagementConstraints(driver);
 
-  test("seedPentagonPortals completes within 5 seconds (warm — idempotent re-run)", async () => {
-    // Second run exercises the MERGE no-op path — simulates a pod restart
-    const start = performance.now();
-    await seedPentagonPortals(driver);
-    const elapsed = performance.now() - start;
+  const start = performance.now();
+  await seedPentagonPortals(driver);
+  const elapsed = performance.now() - start;
 
-    console.log(`seedPentagonPortals (warm): ${elapsed.toFixed(0)}ms`);
-    assert.ok(elapsed < SEED_TIMEOUT_MS, `seeding took ${elapsed.toFixed(0)}ms, expected < ${SEED_TIMEOUT_MS}ms`);
-  });
+  console.log(`seedPentagonPortals (cold): ${elapsed.toFixed(0)}ms`);
+  assert.ok(elapsed < SEED_TIMEOUT_MS, `seeding took ${elapsed.toFixed(0)}ms, expected < ${SEED_TIMEOUT_MS}ms`);
+}, { timeout: SEED_TIMEOUT_MS + 5_000 });
 
-  test.after(async () => { await driver.close(); });
-}
+test("seedPentagonPortals completes within 60s (warm — idempotent re-run)", async () => {
+  const start = performance.now();
+  await seedPentagonPortals(driver);
+  const elapsed = performance.now() - start;
+
+  console.log(`seedPentagonPortals (warm): ${elapsed.toFixed(0)}ms`);
+  assert.ok(elapsed < SEED_TIMEOUT_MS, `seeding took ${elapsed.toFixed(0)}ms, expected < ${SEED_TIMEOUT_MS}ms`);
+}, { timeout: SEED_TIMEOUT_MS + 5_000 });
