@@ -2,6 +2,7 @@ name: Staging Stack CI
 
 on:
   workflow_dispatch:
+  workflow_call:   # allows production-deploy.yml to gate on this job
   push:
     tags: ["v*"]
 
@@ -32,6 +33,8 @@ jobs:
       AGENT_HOST_PUBLIC_BASE_URL: http://localhost:4000
       WORLD_API_URL: http://server:8787
       COLYSEUS_URL: ws://server:8787
+      # Use file-backed maps so tests work without GCS
+      AIE_MATRIX_MODE: development
 
     steps:
       - uses: actions/checkout@v5
@@ -81,6 +84,14 @@ jobs:
 
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
+
+      - name: Test ghost autospawn (cold-start scenario)
+        env:
+          SERVER_URL: http://localhost:8787
+          AGENT_HOST_URL: http://localhost:4000
+          GHOST_MIN_COUNT: "1"
+          WAIT_TIMEOUT_MS: "90000"
+        run: node scripts/test-ghost-spawn.mjs
 
       - name: Run Ghost TCK (Contract Tests)
         env:
