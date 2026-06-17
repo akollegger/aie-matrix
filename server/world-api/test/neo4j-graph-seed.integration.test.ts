@@ -25,9 +25,9 @@ test.before(async () => {
       NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes",
     })
     .withExposedPorts(7474, 7687)
-    // No log-based wait — Neo4j's startup message varies. Instead we poll
-    // for Bolt connectivity below after the port is open.
-    .withWaitStrategy(Wait.forListeningPorts())
+    // Defer to neo4j:5's built-in HEALTHCHECK rather than log or port strategies,
+    // which are unreliable because the JVM starts listening before queries are ready.
+    .withWaitStrategy(Wait.forHealthCheck())
     .withStartupTimeout(CONTAINER_STARTUP_TIMEOUT_MS)
     .start();
 
