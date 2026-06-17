@@ -26,7 +26,7 @@ const publicBase = (process.env.RANDOM_AGENT_PUBLIC_BASE_URL ?? `http://127.0.0.
   /\/$/,
   "",
 );
-const agentId = process.env.HOSTNAME ?? "random-agent-local";
+const agentId = process.env.AGENT_ID ?? process.env.HOSTNAME ?? "random-agent-local";
 const registerTimeoutMs = (() => {
   const raw = process.env.AGENT_REGISTER_TIMEOUT;
   if (!raw) return 120_000;

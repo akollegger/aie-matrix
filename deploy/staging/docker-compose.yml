@@ -124,6 +124,8 @@ services:
       dockerfile: ghosts/random-agent/Dockerfile
     environment:
       NODE_ENV: "${NODE_ENV:-production}"
+      # Stable agent identity — overrides HOSTNAME (container ID) so /v1/sessions agentId is predictable
+      AGENT_ID: "random-agent"
       # Agent-host connection — uses Docker service name, not localhost
       AGENT_HOST_URL: "http://agent-host:4000"
       AGENT_HOST_TOKEN: "${AGENT_HOST_TOKEN}"
@@ -151,6 +153,8 @@ services:
       dockerfile: ghosts/npc-agent/Dockerfile
     environment:
       NODE_ENV: "${NODE_ENV:-production}"
+      # Stable agent identity — overrides HOSTNAME (container ID) so catalog agentId is predictable
+      AGENT_ID: "npc-agent"
       # Agent-host connection — uses Docker service name, not localhost
       AGENT_HOST_URL: "http://agent-host:4000"
       AGENT_HOST_TOKEN: "${AGENT_HOST_TOKEN}"
