@@ -86,19 +86,19 @@ export function surfaceTokenCap(needs: NeedProfile): number {
 }
 
 /**
- * Surface temperature ramp — rises with Fuel distance. Calm at the
- * setpoint, more erratic the further out the body is. Default
- * temperature in this codebase is 0.7 (set in llm-client); we ramp
- * to 1.5 at the far end of the distance band, which puts word
- * choice in jagged territory without falling off into pure noise.
+ * Surface temperature ramp — temperature IS a Fuel lever. A well-fed ghost
+ * speaks at a NORMAL, grounded temperature; as the body starves (Fuel drifts
+ * from setpoint) speech goes progressively WILD — looser, stranger, more
+ * delirious word choice. The erratic register is the intended expression of a
+ * starving mind, not a defect to suppress.
  *
- *   - distance 0      → 0.7  (matches the codebase default, fully controlled)
- *   - distance 2      → ~1.05
- *   - distance 3.5    → ~1.32
- *   - distance ≥ 4.5  → 1.5  (peak — noticeably erratic word choice)
+ *   - distance 0      → 1.0  (normal / well-fed — coherent, natural)
+ *   - distance ~2     → ~1.36
+ *   - distance ~3.5   → ~1.62
+ *   - distance ≥ 4.5  → 1.8  (peak — starving, genuinely wild)
  */
-export const SURFACE_TEMP_BASELINE = 0.7;
-export const SURFACE_TEMP_PEAK = 1.5;
+export const SURFACE_TEMP_BASELINE = 1.0;
+export const SURFACE_TEMP_PEAK = 1.8;
 
 export function surfaceTemperature(needs: NeedProfile): number {
   const distance = Math.abs(needDistanceFromSetpoint(needs, "Fuel"));
