@@ -61,6 +61,9 @@ export interface RenderViaSdkRequest {
   readonly imageUrl?: string;
   /** Speech model override (else DEFAULT_MODEL; VISION_MODEL when image). */
   readonly speechModel?: string;
+  /** Sampling temperature — the Fuel-scaled surface temperature (normal when
+   *  fed, wild when starving). Omitted → model default. */
+  readonly temperature?: number;
 }
 
 export interface RenderViaSdkResult {
@@ -106,7 +109,10 @@ export async function renderViaSdk(req: RenderViaSdkRequest): Promise<RenderViaS
     instructions: req.instructions,
     model,
     tools: [commitTool],
-    modelSettings: { toolChoice: COMMIT_SPEECH },
+    modelSettings: {
+      toolChoice: COMMIT_SPEECH,
+      ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
+    },
   });
 
   const newItems: ThreadItem[] = [];

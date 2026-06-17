@@ -858,6 +858,10 @@ export async function runHouse(opts: RunHouseOptions): Promise<RunHouseOutcome> 
           surfaceUserPrompt: record.surface.userPrompt,
           surfaceRaw: record.surface.raw,
           action: record.action,
+          // The ghost's spoken utterance this cascade (gated speech, separate
+          // from the representative `action`) — recorded so analysis can join
+          // speech against Fuel/temperature.
+          say: record.say,
           // Step D: skill-recall result for this cascade. Null when no
           // skill cleared the threshold (or the ghost has none). The
           // Step F analysis joins this against `action` to compute

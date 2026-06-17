@@ -483,6 +483,9 @@ export async function renderSurfaceSpeech(
       ...(priorPeerLines !== undefined ? { priorPeerLines } : {}),
       ...(req.imageUrl !== undefined ? { imageUrl: req.imageUrl } : {}),
       ...(SPEECH_MODEL ? { speechModel: SPEECH_MODEL } : {}),
+      // Fuel-scaled temperature — normal when fed, wild when starving. Without
+      // this the SDK route ran at the model default and the lever did nothing.
+      temperature: surfaceTemp,
     });
     // Mirror the exchange into the durable conversation tier is handled by
     // persistCascade (run-loop); the bounded SDK thread is the voice cache.

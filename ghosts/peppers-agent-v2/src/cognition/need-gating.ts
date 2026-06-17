@@ -93,12 +93,13 @@ export function surfaceTokenCap(needs: NeedProfile): number {
  * starving mind, not a defect to suppress.
  *
  *   - distance 0      → 1.0  (normal / well-fed — coherent, natural)
- *   - distance ~2     → ~1.36
- *   - distance ~3.5   → ~1.62
- *   - distance ≥ 4.5  → 1.8  (peak — starving, genuinely wild)
+ *   - distance ~2     → ~1.27
+ *   - distance ~3.5   → ~1.47
+ *   - distance ≥ 4.5  → 1.6  (peak — starving, heavily erratic but not pure
+ *                             token-salad; 1.8 tipped into unreadable gibberish)
  */
 export const SURFACE_TEMP_BASELINE = 1.0;
-export const SURFACE_TEMP_PEAK = 1.8;
+export const SURFACE_TEMP_PEAK = 1.6;
 
 export function surfaceTemperature(needs: NeedProfile): number {
   const distance = Math.abs(needDistanceFromSetpoint(needs, "Fuel"));
