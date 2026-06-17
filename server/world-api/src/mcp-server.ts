@@ -470,7 +470,7 @@ function exitsEffect(
         exits.push({ toward: dir, tileId: nid });
       }
     }
-    const rows = yield* neo.listNonAdjacent(hereId).pipe(Effect.orElseSucceed(() => []));
+    const rows = yield* neo.listNonAdjacent(hereId).pipe(Effect.sandbox, Effect.orElseSucceed(() => []));
     const nonAdjacent: NonAdjacentExitInfo[] = rows.map((r) => {
       const dest = map.cells.get(r.toH3Index);
       const tileClass = dest?.tileClass ?? (r.kind === "PORTAL" ? "Portal" : "Unknown");
