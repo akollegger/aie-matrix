@@ -85,6 +85,13 @@ jobs:
       - name: Install workspace deps
         run: pnpm install --frozen-lockfile
 
+      - name: Build workspace packages required by TCK
+        # shared-types and ghost-ts-client are compiled inside Docker images but not
+        # on the host runner. Build them so the TCK pretest can find their dist/.
+        run: |
+          pnpm --filter @aie-matrix/shared-types run build
+          pnpm --filter @aie-matrix/ghost-ts-client run build
+
       - name: Test ghost autospawn (cold-start scenario)
         env:
           SERVER_URL: http://localhost:8787
