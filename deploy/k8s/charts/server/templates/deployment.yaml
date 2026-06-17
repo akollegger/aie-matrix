@@ -45,10 +45,10 @@ spec:
             failureThreshold: 12
           livenessProbe:
             httpGet:
-              path: /health
+              path: /ping
               port: {{ .Values.service.port }}
-            initialDelaySeconds: 30
-            periodSeconds: 15
-            failureThreshold: 3
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

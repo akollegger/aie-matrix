@@ -212,6 +212,12 @@ async function main(): Promise<void> {
     if (req.method !== "GET") {
       return;
     }
+    if (url.pathname === "/ping") {
+      // Liveness probe — process is alive if it can respond here; no dependency on seeding
+      res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+      res.end(JSON.stringify({ status: "alive" }));
+      return;
+    }
     if (url.pathname === "/health") {
       // IC-001: { status, checks } — HTTP 200 = healthy, 503 = starting/degraded
       if (!spectatorMetaReady) {
