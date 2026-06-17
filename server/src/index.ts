@@ -539,12 +539,6 @@ async function main(): Promise<void> {
 
   const calendarLayerWithLeaderboard = Layer.provide(calendarLayer, leaderboardLayer);
 
-  // ProposalServiceLayer declares Layer.Layer<ProposalService, never, LedgerService>
-  // — wire LedgerService into it before merging, otherwise the runtime has an
-  // unmet input requirement and every Effect that touches it dies with
-  // "Service not found: world-api/LedgerService".
-  const proposalLayer = ProposalServiceLayer.pipe(Layer.provide(LedgerServiceInMemoryLayer));
-
   const runtimeLayer = Layer.mergeAll(
     makeWorldBridgeLayer(bridge),
     makeRegistryStoreLayer(store),
