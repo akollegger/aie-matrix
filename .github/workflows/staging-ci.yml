@@ -94,6 +94,7 @@ jobs:
           pnpm --filter @aie-matrix/shared-types run build
           pnpm --filter @aie-matrix/root-env run build
           pnpm --filter @aie-matrix/ghost-ts-client run build
+          pnpm --filter @aie-matrix/map-gram run build
 
       - name: Test ghost autospawn (cold-start scenario)
         env:
