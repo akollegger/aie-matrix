@@ -14,7 +14,54 @@
       ],
       "builtIn": true,
       "registeredAt": "2026-06-13T00:00:00.000Z",
-      "agentCard": {}
+      "agentCard": {
+        "name": "npc-agent",
+        "description": "Rule-based NPC agent that populates a session with catalog characters. No LLM required.",
+        "protocolVersion": "0.3.0",
+        "version": "0.1.0",
+        "url": "http://npc-agent:4003/a2a/jsonrpc",
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": true
+        },
+        "skills": [
+          {
+            "id": "rule-behavior",
+            "name": "Rule Behavior",
+            "description": "Each character follows a priority-ordered behavior rule table"
+          },
+          {
+            "id": "dialog-tree",
+            "name": "Dialog Tree",
+            "description": "Characters respond to messages via a scripted dialog tree"
+          }
+        ],
+        "defaultInputModes": ["text"],
+        "defaultOutputModes": ["text"],
+        "matrix": {
+          "schemaVersion": 1,
+          "tier": "social",
+          "ghostClasses": ["any"],
+          "requiredTools": [
+            "whereami",
+            "exits",
+            "look",
+            "go",
+            "say",
+            "inventory",
+            "take",
+            "ghost_announce"
+          ],
+          "capabilitiesRequired": [],
+          "rosterAgent": true,
+          "memoryKind": "none",
+          "llmProvider": "none",
+          "profile": {
+            "about": "Deterministic NPC characters driven by rule tables and dialog trees."
+          },
+          "authors": ["@akollegger"]
+        }
+      }
     },
     "random-agent": {
       "kind": "agent",
