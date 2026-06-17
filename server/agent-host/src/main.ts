@@ -4,6 +4,7 @@ import { Effect, Layer, ManagedRuntime, pipe } from "effect";
 import { A2AHostServiceLive } from "./a2a-host/A2AHostService.js";
 import { McpProxyServiceLive } from "./mcp-proxy/mcp-proxy.layer.js";
 import { CatalogService, CatalogServiceLive } from "./catalog/CatalogService.js";
+import type { CatalogEntry } from "./types.js";
 import { readHouseCapabilityManifest } from "./house-capabilities.js";
 import { AgentSupervisorLayer, AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { createApp } from "./app.js";
@@ -155,7 +156,16 @@ const server = app.listen(port, "0.0.0.0", () => {
 
   // Startup reconciliation: if a live session is already active (e.g. after a pod
   // restart), spawn all roster agents' ghosts without waiting for world.session.start.
+  //
+  // In a cold-start (full cluster restart), ghost agents self-register after agent-host
+  // starts. We poll the catalog until rosterAgent entries appear before spawning, so
+  // reconciliation works even when the catalog starts empty.
   if (process.env.AGENT_HOST_DISABLE_RECONCILIATION !== "1") {
+    const reconciliationWaitMs = (() => {
+      const raw = process.env.AGENT_HOST_RECONCILIATION_WAIT_MS;
+      const n = raw !== undefined ? parseInt(raw, 10) : NaN;
+      return Number.isFinite(n) && n >= 0 ? n : 30_000;
+    })();
     void (async () => {
       try {
         const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
@@ -171,18 +181,43 @@ const server = app.listen(port, "0.0.0.0", () => {
           kind: "agent-host.startup-reconciliation.found-session",
           sessionId: sessions[0]!.id,
         });
+
         const supervisor = await runtime.runPromise(
           pipe(AgentSupervisor, Effect.map((s) => s)),
         );
         const catalog = await runtime.runPromise(
           pipe(CatalogService, Effect.map((c) => c)),
         );
-        const catalogFile = await runtime.runPromise(catalog.load());
-        for (const [agentId, entry] of Object.entries(catalogFile.agents)) {
-          if (entry.kind === "mini-game") continue;
-          const isRoster =
-            (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
-          if (!isRoster) continue;
+
+        // Poll until at least one rosterAgent entry is registered, or we time out.
+        // Ghost agents (random-agent, npc-agent) register after agent-host starts, so
+        // on a cold start the catalog is empty at reconciliation time.
+        const rosterPollStart = Date.now();
+        let rosterEntries: Array<[string, CatalogEntry]> = [];
+        while (true) {
+          const catalogFile = await runtime.runPromise(catalog.load());
+          rosterEntries = Object.entries(catalogFile.agents).filter(([, entry]) => {
+            if (entry.kind === "mini-game") return false;
+            return (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
+          });
+          if (rosterEntries.length > 0) break;
+          const elapsed = Date.now() - rosterPollStart;
+          if (elapsed >= reconciliationWaitMs) {
+            log.info({
+              kind: "agent-host.startup-reconciliation.no-roster-agents",
+              note: `timed out after ${elapsed}ms waiting for rosterAgent registrations`,
+            });
+            return;
+          }
+          log.info({
+            kind: "agent-host.startup-reconciliation.waiting-for-roster-agents",
+            elapsedMs: elapsed,
+            waitMs: reconciliationWaitMs,
+          });
+          await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
+        }
+
+        for (const [agentId, entry] of rosterEntries) {
           const result = await runtime.runPromise(
             supervisor.spawnRosterForAgent(agentId, entry.baseUrl),
           );
