@@ -7,14 +7,14 @@ import { makeMapServiceLayer, MapService } from "../src/map/MapService.js";
 
 const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
 
-test("MapService.raw(freeplay) returns gram bytes", async () => {
+test("MapService.raw(moscone-aiewf-mini) returns gram bytes", async () => {
   const layer = makeMapServiceLayer(repoRoot);
   const runtime = ManagedRuntime.make(layer);
   try {
     const buf = await runtime.runPromise(
       Effect.gen(function* () {
         const maps = yield* MapService;
-        return yield* maps.raw("freeplay");
+        return yield* maps.raw("moscone-aiewf-mini");
       }),
     );
     assert.ok(buf.length > 0, "gram response must be non-empty");
