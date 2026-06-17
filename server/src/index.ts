@@ -569,8 +569,8 @@ async function main(): Promise<void> {
     itemServiceImpl.setLedger(ledgerOps);
   }
 
-  // Seed ledger with items from the map placements
-  if (parsedMapForLedger && parsedMapForLedger.itemPlacements.length > 0) {
+  // Seed ledger with items from the map placements + the world economy pool.
+  if (parsedMapForLedger) {
     // Group by (itemRef, h3Index) summing qty → ItemSeed[]
     const seedMap = new Map<string, { itemRef: string; qty: number; h3Index?: string }>();
     for (const p of parsedMapForLedger.itemPlacements) {
@@ -583,6 +583,20 @@ async function main(): Promise<void> {
       }
     }
     const itemSeeds = Array.from(seedMap.values());
+    // World economy pool (RFC-0029): non-spatial seeds (no h3Index → the "world"
+    // bag) for gold + foods. Replaces the former [resources:Resources] map block,
+    // removed when non-spatial resources left the map grammar (027). Stipends,
+    // spawn-grants, and vendor stock all draw from "world". init() mints these
+    // from world.genesis once (idempotent on chain replay).
+    itemSeeds.push(
+      { itemRef: "gold", qty: 1_000_000 },
+      { itemRef: "food-water", qty: 10_000 },
+      { itemRef: "food-bread", qty: 10_000 },
+      { itemRef: "food-salad", qty: 10_000 },
+      { itemRef: "food-sandwich", qty: 10_000 },
+      { itemRef: "food-coffee", qty: 10_000 },
+      { itemRef: "food-cake", qty: 10_000 },
+    );
     const initEffect = LedgerService.pipe(
       Effect.flatMap(svc => svc.init(itemSeeds)),
       Effect.provide(runtimeLayer as any),

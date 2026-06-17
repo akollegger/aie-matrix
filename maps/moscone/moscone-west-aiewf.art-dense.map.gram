@@ -8,16 +8,6 @@
 (artwork:ItemType:Artwork { name: "Painting", glyph: "🖼", takeable: false, capacityCost: 0 })
 (artcard:ItemType:ArtCard { name: "Description card", glyph: "🪧", takeable: false, capacityCost: 0 })
 
-[resources:Resources { name: "World Economy" } |
-    (:Resource { id: "gold", class: "conserved", qty: 1000000, floor: 0, label: "Gold" }),
-    (:Resource { id: "food-water", class: "conserved", qty: 10000, floor: 0, label: "Bottle of Water" }),
-    (:Resource { id: "food-bread", class: "conserved", qty: 10000, floor: 0, label: "Bread Roll" }),
-    (:Resource { id: "food-salad", class: "conserved", qty: 10000, floor: 0, label: "Garden Salad" }),
-    (:Resource { id: "food-sandwich", class: "conserved", qty: 10000, floor: 0, label: "Sandwich" }),
-    (:Resource { id: "food-coffee", class: "conserved", qty: 10000, floor: 0, label: "Coffee" }),
-    (:Resource { id: "food-cake", class: "conserved", qty: 10000, floor: 0, label: "Slice of Cake" })
-]
-
 [ground:Layer {kind: "tile", name: "Ground"}]
 [building-lyro3xkilq:Layer {kind: "polygon", name: "Building"} | (:Polygon:Floor { geometry: [h3`8f283082aa33654`, h3`8f283082ab8dbac`, h3`8f283082ab1838c`, h3`8f283082aa20ce5`], name: "First Floor" })]
 [rooms-lyr6m4dmw7:Layer {kind: "polygon", name: "Rooms"} |
