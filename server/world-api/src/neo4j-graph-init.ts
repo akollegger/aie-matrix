@@ -25,6 +25,9 @@ export const CALENDAR_EVENT_ID_UNIQUE_CONSTRAINT_CYPHER =
 export const GROUP_ID_UNIQUE_CONSTRAINT_CYPHER =
   "CREATE CONSTRAINT group_id_unique IF NOT EXISTS FOR (g:Group) REQUIRE g.group_id IS UNIQUE";
 
+export const PORTAL_H3_UNIQUE_CONSTRAINT_CYPHER =
+  "CREATE CONSTRAINT portal_h3_unique IF NOT EXISTS FOR (p:Portal) REQUIRE p.h3Index IS UNIQUE";
+
 /** @returns A driver if `NEO4J_URI` is set; otherwise `undefined` (Neo4j is optional until graph features land). */
 export function createNeo4jDriverFromEnv(env: NodeJS.ProcessEnv = process.env): Driver | undefined {
   const uri = env.NEO4J_URI?.trim();
@@ -55,6 +58,7 @@ export async function ensureMapManagementConstraints(driver: Driver): Promise<vo
       ITEMTYPE_MAP_IDENTITY_UNIQUE_CONSTRAINT_CYPHER,
       CALENDAR_EVENT_ID_UNIQUE_CONSTRAINT_CYPHER,
       GROUP_ID_UNIQUE_CONSTRAINT_CYPHER,
+      PORTAL_H3_UNIQUE_CONSTRAINT_CYPHER,
     ]) {
       await session.executeWrite((tx) => tx.run(cypher));
     }
