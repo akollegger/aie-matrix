@@ -206,23 +206,22 @@ jobs:
             --wait \
             --timeout 8m
 
+      # Drain agent-host before rebooting the session so:
+      #   1. No in-flight ghost sessions from the old pod interfere with teardown.
+      #   2. The new pod starts clean, sees the freshly-created session, and
+      #      auto-reconciles (spawns all rosterAgent roster entries).
+      #
       # agent-host's pre-ee98b91 code hangs on SIGTERM (server.close() waits
       # for keep-alive connections indefinitely). GKE Autopilot does not appear
       # to honour terminationGracePeriodSeconds reliably for this workload, so
       # the pod can stay Terminating for the entire Helm --wait window.
-      #
-      # Fix: scale to 0 before the upgrade so there is no running pod for the
-      # rolling-update to terminate. Helm then only waits for the new pod to
-      # become Ready — no "Pending termination" possible. Once the new image
-      # (25 s shutdown deadline, ee98b91) is live this step is idempotent:
-      # scale-to-0 will succeed instantly against an already-empty replica set
-      # and the wait command will be a no-op.
-      - name: Deploy agent-host
+      # Scale to 0 first so there is no running pod for the rolling-update to
+      # terminate. Once the new image (25 s shutdown deadline, ee98b91) is live
+      # this step is idempotent: scale-to-0 succeeds instantly.
+      - name: Drain agent-host
         run: |
-          # Drain existing pods so Helm sees no old replica to terminate.
           kubectl scale deployment/agent-host --replicas=0 \
             -n ${{ env.NAMESPACE }} 2>/dev/null || true
-          # Wait up to 60 s; force-kill any pod that refuses to exit cleanly.
           kubectl wait pod \
             -l "app.kubernetes.io/name=agent-host" \
             -n ${{ env.NAMESPACE }} \
@@ -233,7 +232,58 @@ jobs:
                -n ${{ env.NAMESPACE }} \
                --force --grace-period=0 2>/dev/null || true
 
-          # Now upgrade: no old pods → no rolling-update termination wait.
+      # Reboot the live session while agent-host is scaled to zero.
+      # Ending the old session clears stale ghost positions and map state.
+      # The new session starts with the current map so ghosts join a fresh world.
+      # When agent-host comes back up it detects the active session and
+      # auto-spawns all rosterAgent rosters (spec-032 startup reconciliation).
+      - name: Reboot production session
+        env:
+          SERVER_URL: ${{ vars.VITE_API_BASE_URL }}
+          ADMIN_TOKEN: ${{ secrets.VITE_ADMIN_TOKEN }}
+        run: |
+          # End any currently active live session.
+          SESSION_ID=$(curl -sf \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            "$SERVER_URL/live?status=active" \
+            | jq -r '.[0].id // empty' 2>/dev/null || true)
+
+          if [ -n "$SESSION_ID" ]; then
+            echo "Ending active session: $SESSION_ID"
+            curl -sf -X DELETE \
+              -H "Authorization: Bearer $ADMIN_TOKEN" \
+              "$SERVER_URL/live/$SESSION_ID" \
+              && echo "Session ended." || echo "WARNING: DELETE returned non-2xx (continuing)"
+          else
+            echo "No active session found — nothing to end."
+          fi
+
+          # Select the production map (prefer moscone-aiewf-mini, fall back to
+          # any moscone map, then first available).
+          MAPS_JSON=$(curl -sf "$SERVER_URL/maps" || echo '{}')
+          MAP_ID=$(echo "$MAPS_JSON" | jq -r '
+            (if type == "array" then . else (.maps // []) end) |
+            (map(select(.id | strings | contains("moscone-aiewf-mini"))) +
+             map(select(.id | strings | contains("moscone"))) + .) |
+            .[0].id // empty
+          ')
+
+          if [ -z "$MAP_ID" ]; then
+            echo "ERROR: No published map found — cannot start fresh session."
+            exit 1
+          fi
+
+          echo "Starting new live session with map: $MAP_ID"
+          curl -sf -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            "$SERVER_URL/live" \
+            -d "{\"name\":\"deploy-${{ steps.tag.outputs.value }}\",\"maps\":[{\"mapId\":\"$MAP_ID\",\"role\":\"primary\"}]}" \
+            | jq '{id: .id, name: .name, status: .status}'
+
+      - name: Deploy agent-host
+        run: |
+          # No scaling step needed — agent-host was already drained above.
           helm upgrade --install agent-host deploy/k8s/charts/agent-host \
             --namespace ${{ env.NAMESPACE }} \
             --set image.tag=${{ steps.tag.outputs.value }} \
