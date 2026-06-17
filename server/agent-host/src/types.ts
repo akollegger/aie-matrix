@@ -15,6 +15,14 @@ export type CatalogEntry =
       readonly agentCard: AgentCard;
       readonly registeredAt: string;
       readonly builtIn: boolean;
+      /** Resource grants seeded into the agent's ghost bag on first connect.
+       *  Only honoured for built-in catalog entries; ignored on external /register payloads. */
+      readonly resourceGrants?: ReadonlyArray<{
+        readonly resourceId: string;
+        readonly label: string;
+        readonly class: "conserved" | "monotonic";
+        readonly qty: number;
+      }>;
     }
   | {
       readonly kind: "mini-game";
@@ -48,6 +56,13 @@ export type GhostCard = {
   readonly class: string;
   readonly displayName: string;
   readonly partnerEmail: string | null;
+  /** Per-ghost background description (IC-008). Set for NPC catalog characters. */
+  readonly background?: string;
+  /** Catalog character ID (IC-008). Used by npc-agent executor to map
+   *  a spawned ghost back to its CharacterDefinition. */
+  readonly characterId?: string;
+  /** Single grapheme/emoji glyph for this ghost (from agent card profile or character gram). */
+  readonly glyph?: string;
 };
 
 /**
@@ -81,6 +96,8 @@ export type AgentSession = {
    *  Carried by the Barnacle handoff so the mini-game (and its overlay)
    *  see the same name peppers uses in social mode. */
   readonly displayName?: string;
+  /** Catalog character ID when this session represents a named NPC character (IC-008). */
+  readonly characterId?: string;
   /** A2A base URL of the agent process serving this ghost. Cached at
    *  spawn from the catalog entry so the Barnacle supervisor doesn't
    *  need to re-resolve it per encounter. */
@@ -112,7 +129,8 @@ export type WorldEventKind =
   | "world.proximity.exit"
   | "world.quest.trigger"
   | "world.session.start"
-  | "world.session.end";
+  | "world.session.end"
+  | "world.contract.submitted";
 
 export type WorldEvent = {
   readonly schema: "aie-matrix.world-event.v1";

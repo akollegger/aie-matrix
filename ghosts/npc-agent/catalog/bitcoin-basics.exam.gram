@@ -1,0 +1,13 @@
+{ kind: "matrix-exam", schema_version: "1" }
+
+(q1:Problem { type: "multiple_choice", weight: 2, correct: "a",
+  prompt: "Which consensus algorithm does Bitcoin use?",
+  options: { a: "Proof of Work", b: "Proof of Stake", c: "DPoS", d: "PBFT" } })
+
+(q2:Problem { type: "short_answer", weight: 1, correct: "Satoshi Nakamoto",
+  prompt: "Name the pseudonymous creator of Bitcoin." })
+
+(q3:Problem { type: "numerical", weight: 1, correct: 21000000, tolerance: 0,
+  prompt: "What is the maximum supply of Bitcoin in whole units?" })
+
+[exam:Exam | q1, q2, q3]

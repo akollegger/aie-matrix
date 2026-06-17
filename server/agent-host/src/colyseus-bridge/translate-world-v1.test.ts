@@ -36,4 +36,18 @@ describe("translateColyseusWorldV1", () => {
     assert.ok(!isNaN(Date.parse(event!.timestamp)), "timestamp must be parseable");
     assert.ok(!isNaN(Date.parse(event!.sentAt)), "sentAt must be parseable");
   });
+
+  it("translates contract.submitted to world.contract.submitted with contractId and contractorId", () => {
+    const raw = {
+      t: "contract.submitted",
+      targetGhostId: "evaluator-ghost",
+      payload: { contractId: "CONTRACT01", contractorId: "contractor-ghost" },
+    };
+    const event = translateColyseusWorldV1(raw);
+    assert.ok(event !== null, "should produce a WorldEvent");
+    assert.equal(event!.kind, "world.contract.submitted");
+    assert.equal(event!.ghostId, "evaluator-ghost");
+    assert.equal(event!.payload.contractId, "CONTRACT01");
+    assert.equal(event!.payload.contractorId, "contractor-ghost");
+  });
 });

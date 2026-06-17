@@ -3,15 +3,59 @@
 (floor:TileType:Floor { name: "Floor", description: "Open walkable area", capacity: 4, style: css`background: #c8b89a` })
 (pillar:TileType:Pillar { name: "Pillar", description: "Impassable column", capacity: 0, style: css`background: #555` })
 
-(brassKey:ItemType:BrassKey { name: "Brass Key", description: "Opens the north door", glyph: char`🔑`, takeable: true, capacityCost: 1 })
+(brassKey:ItemType:BrassKey {
+    name: "Brass Key",
+    description: "Opens the north door",
+    glyph: char`🔑`, takeable: true, capacityCost: 1
+})
+(powerBar:ItemType:PowerBar {
+    name: "Chocolate Bar",
+    description: "Intense and bitter, with strong cocoa notes. This No. 1 Ecuador bar is single origin dark chocolate, made with cocoa beans sourced from one country, for a distinctive flavour profile.",
+    glyph: char`🍫`, takeable: true, capacityCost: 0
+})
+(water:ItemType:TapWater {
+    name: "Tap Water",
+    description: "Our tap water is clean, smooth, and refreshing.",
+    glyph: char`💧`, takeable: true, capacityCost: 0
+})
 
 [ground:Layer {kind: "polygon", name: "Ground"} | (:Polygon:Floor { geometry: [h3`8f2800000000195`, h3`8f2800000000012`, h3`8f2800000000015`, h3`8f2800000000198`] })]
 [overrides:Layer {kind: "tile", name: "Overrides"} | (:Tile:Pillar { geometry: [h3`8f2800000000012`] }), (:Portal { geometry: [h3`8f2800000000195`, h3`8f2800000000015`], mode: "Door" })]
 [collectibles:Layer {kind: "items", name: "Collectibles"} | (:Item:BrassKey { geometry: [h3`8f2800000000015`] })]
 
+(brokerCredit:ItemType:BrokerCredit {
+    name: "Broker Credit",
+    description: "A credit issued by the broker in exchange for a thoughtful answer.",
+    glyph: char`🪙`, takeable: false, capacityCost: 0
+})
+
+[:Grants { attendee: 1, explorer: 2 } | (brassKey)]
+[:Grants { attendee: 1, explorer: 1 } | (powerBar)]
+[:Grants { broker: 200, human: 3 } | (brokerCredit)]
+
 [layers:LayerStack | ground, overrides, collectibles]
 
 [rules:Rules | (floor)-[:GO]->(floor), (floor)-[:GO]->(pillar)]
+
+[leaderboards:Leaderboards |
+  (top-distributors:Leaderboard {
+    title: "Top Distributors",
+    description: "Ghosts who distributed the most gold during the session.",
+    resource: "gold",
+    aggregation: "sum",
+    direction: "distributed",
+    actorKind: "ghost"
+  }),
+  (eval-champions:Leaderboard {
+    title: "Eval Champions",
+    description: "Ghosts with the most successfully graded eval completions.",
+    resource: "eval-token",
+    aggregation: "count",
+    direction: "received",
+    cause: "eval.completion",
+    actorKind: "ghost"
+  })
+]
 
 [schedule:Schedule |
   (morning-standup:Event {
@@ -44,5 +88,15 @@
     until: "18:00:00",
     enterCommands: [],
     exitCommands: []
+  }),
+  (game-end:CalendarEvent {
+    title: "Game End",
+    kind: "game-end",
+    startsAt: "23:00",
+    enterCommands: ["finalize-leaderboards"]
   })
 ]
+
+[system:GhostSystemPrompt {
+  text: "You are a ghost in the AIE Matrix, a hex-tile virtual world. Explore the map, interact with other ghosts, and collect resources. You are competing on leaderboards. Distribute gold to other ghosts to rank on the 'Top Distributors' board. Complete eval contracts to rank on the 'Eval Champions' board."
+}]

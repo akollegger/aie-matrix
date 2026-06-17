@@ -1,49 +1,9 @@
 /**
- * A stateless item definition loaded from a `*.items.json` sidecar at startup.
- * The `itemRef` (sidecar key) does not appear inside the record.
+ * Item definitions are now sourced from `ItemTypeDef` in `@aie-matrix/map-gram`.
+ * This file is retained for backward-compatibility imports but exports nothing.
+ *
+ * Consumers should import `ItemTypeDef` from `@aie-matrix/map-gram` directly.
+ *
+ * @deprecated Use `ItemTypeDef` from `@aie-matrix/map-gram` instead.
  */
-export interface ItemDefinition {
-  /** Short display name returned by look and inspect. */
-  name: string;
-  /**
-   * Ruleset label for PICK_UP / PUT_DOWN evaluation.
-   * Colon-separated multi-label for compound taxonomy (e.g. "Key" or "Badge:Sponsor").
-   * Each segment becomes a Neo4j node label.
-   */
-  itemClass: string;
-  /** Whether take is permitted for this item. */
-  carriable: boolean;
-  /** Capacity units consumed on the host tile. 0 = no capacity impact. */
-  capacityCost: number;
-  /**
-   * Initial token energy each spawned instance of this item carries.
-   * Tokens are the LLM's literal substrate unit — consuming an item
-   * adds its tokens to the consumer's Fuel. Omit for non-consumable
-   * items (most existing world objects).
-   */
-  tokens?: number;
-  /**
-   * Fixed Fuel delivered when ONE unit of this item is consumed, under
-   * the item→ledger model (RFC-0029): items are stateless quantity-1
-   * ledger resources, so a consumable carries a per-type Fuel value
-   * rather than a depletable token pool. Defaults to `tokens` when
-   * omitted (back-compat). Omit for non-food items.
-   */
-  fuel?: number;
-  /** Full text returned by inspect. Omitting means inspect returns name only. */
-  description?: string;
-  /**
-   * Optional short label for spectator UI (e.g. Phaser canvas text with Noto Color Emoji).
-   * Prefer a single user-visible grapheme; implementations may clip to 8 UTF-16 code units.
-   * Not used for identity or MCP — omit to fall back to `itemRef` in clients.
-   */
-  glyph?: string;
-  /**
-   * Open-ended authoring attributes. Omit when empty.
-   * Neo4j loader maps each key as `attr_<key>` on the ItemInstance node.
-   */
-  attrs?: Record<string, string | number>;
-}
-
-/** Keyed by itemRef. The itemRef does not appear inside the record. */
-export type ItemSidecar = Record<string, ItemDefinition>;
+export {};

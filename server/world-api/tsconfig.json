@@ -6,6 +6,7 @@
     "composite": true
   },
   "references": [
+    { "path": "../../shared/logging" },
     { "path": "../auth" },
     { "path": "../colyseus" },
     { "path": "../conversation" },

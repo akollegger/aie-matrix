@@ -9,12 +9,13 @@ import type {
   PolygonLayerState,
   TileLayerState,
 } from "../state/editor-state"
-import type { ItemType, MovementRule, Portal, TileType } from "../types/map-gram"
+import type { ItemType, LeaderboardSpec, MovementRule, Portal, TileType } from "../types/map-gram"
 import { h3Index } from "../types/map-gram"
 
 export interface ImportResult {
   state: MapEditorState
   warnings: string[]
+  leaderboards: LeaderboardSpec[]
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +107,7 @@ export async function importGram(text: string): Promise<ImportResult> {
     warnings.push("No valid header found")
   }
 
+  const leaderboards: LeaderboardSpec[] = []
   const seenTileTypes = new Map<string, TileType>()
   const itemTypes: ItemType[] = []
   let portalCounter = 0
@@ -162,6 +164,27 @@ export async function importGram(text: string): Promise<ImportResult> {
           const fromId = elemPattern.elements[0]?.value.identity ?? ""
           const toId = elemPattern.elements[1]?.value.identity ?? ""
           if (fromId && toId) collectedRuleIds.push({ fromId, toId })
+        }
+      }
+
+    } else if (HashSet.has(labels, "Leaderboards")) {
+      for (const elemPattern of pattern.elements) {
+        const elem = elemPattern.value
+        if (!HashSet.has(elem.labels, "Leaderboard")) continue
+        const id = elem.identity
+        if (!id) continue
+        const eProps = elem.properties as unknown as Props
+        const title = strProp(eProps, "title")
+        const description = strProp(eProps, "description")
+        const resource = strProp(eProps, "resource")
+        const aggregation = strProp(eProps, "aggregation") as LeaderboardSpec["aggregation"]
+        const direction = strProp(eProps, "direction") as LeaderboardSpec["direction"]
+        const actorKind = strProp(eProps, "actorKind") as LeaderboardSpec["actorKind"]
+        const cause = strProp(eProps, "cause")
+        if (title && description && resource && aggregation && direction && actorKind) {
+          leaderboards.push({ id, title, description, resource, aggregation, direction, actorKind, ...(cause ? { cause } : {}) })
+        } else {
+          warnings.push(`Leaderboard "${id}" missing required fields — skipped`)
         }
       }
 
@@ -280,5 +303,5 @@ export async function importGram(text: string): Promise<ImportResult> {
     }
   }
 
-  return { state: base, warnings }
+  return { state: base, warnings, leaderboards }
 }

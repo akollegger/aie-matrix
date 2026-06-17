@@ -1,6 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { Effect } from "effect";
 import { isEnvTruthy } from "@aie-matrix/root-env";
+import { createLogger } from "@aie-matrix/logger";
+
 import { mintGhostToken } from "@aie-matrix/server-auth";
 import {
   WorldBridgeService,
@@ -13,6 +15,7 @@ import { createGhostId } from "../store.js";
 import type { RegistryBadJson } from "../registry-errors.js";
 import type { RegistryHttpError } from "../registry-errors.js";
 import { readJsonBody, sendJson } from "../utils/http.js";
+const log = createLogger("registry");
 
 export interface SpawnGhostDeps {
   readonly worldApiBaseUrl: string;
@@ -74,13 +77,7 @@ export function handleSpawnGhostEffect(
       ghostId,
     });
 
-    console.info(JSON.stringify({
-      kind: "registry.spawn-ghost",
-      ghostId,
-      agentId: agentId ?? null,
-      h3Index: spawnCell,
-      traceId: getRequestTraceId() ?? null,
-    }));
+    log.info({ kind: "spawn-ghost", ghostId, agentId: agentId ?? null, h3Index: spawnCell, traceId: getRequestTraceId() ?? null });
 
     yield* sendJson(res, corsHeaders, 201, {
       ghostId,

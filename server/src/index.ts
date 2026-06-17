@@ -17,12 +17,21 @@ import {
   GcsService,
   getRequestTraceId,
   handleGhostMcpEffect,
+  setSpawnGrants,
   loadMovementRulesFromEnv,
   rulesetFromParsedMap,
   LedgerService,
   LedgerServiceInMemoryLayer,
   ProposalService,
-  ProposalServiceLayer,
+  ProposalServiceWithGroupLayer,
+  GroupService,
+  GroupServiceInMemoryLayer,
+  EvalContractService,
+  EvalContractServiceInMemoryLayer,
+  LeaderboardService,
+  LeaderboardServiceInMemoryLayer,
+  makeLeaderboardServiceLiveLayer,
+  parseLeaderboardGramText,
   makeLiveNeo4jGraphLayer,
   makeLiveSessionLayer,
   makeLocalLiveSessionLayer,
@@ -59,12 +68,14 @@ import {
 import { parseMapGram } from "@aie-matrix/map-gram";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { isEnvTruthy, loadRootEnv } from "@aie-matrix/root-env";
+import { createLogger } from "@aie-matrix/logger";
 import {
   ConversationService,
   JsonlStore,
   createConversationRouter,
   makeConversationLayer,
 } from "@aie-matrix/server-conversation";
+import { mintGhostToken } from "@aie-matrix/server-auth";
 import { patchMatchmakeCorsForCredentials } from "./colyseus-cors-patch.js";
 import { errorToResponse, type HttpMappingError } from "./errors.js";
 import { makeServerConfigLayer, type ServerConfigService } from "./services/ServerConfigService.js";
@@ -75,10 +86,9 @@ import {
 } from "@aie-matrix/server-world-api";
 
 loadRootEnv();
+const log = createLogger("aie-matrix");
 if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
-  console.info(
-    "[aie-matrix] AIE_MATRIX_DEBUG is on; MatrixRoom logs each setGhostCell when ghosts move",
-  );
+  log.info({ kind: "debug-mode", message: "AIE_MATRIX_DEBUG is on; MatrixRoom logs each setGhostCell when ghosts move" });
 }
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -97,10 +107,10 @@ const matrixMode = (process.env.AIE_MATRIX_MODE ?? "development") as
   | "staging"
   | "production";
 
-console.info(`[aie-matrix] mode: ${matrixMode}`);
+log.info({ kind: "mode", mode: matrixMode });
 
 const mapPathRaw = process.env.AIE_MATRIX_MAP;
-const _mapPathFallback = join(repoRoot, "maps/sandbox/freeplay.map.gram");
+const _mapPathFallback = join(repoRoot, "maps/moscone/moscone-aiewf-mini.map.gram");
 const mapPath: string | undefined = mapPathRaw
   ? (isAbsolute(mapPathRaw) ? mapPathRaw : join(repoRoot, mapPathRaw))
   : (existsSync(_mapPathFallback) ? _mapPathFallback : undefined);
@@ -262,14 +272,7 @@ async function main(): Promise<void> {
       const gid = String(ghostId).trim();
       const traceId = getRequestTraceId();
       if (traceId) {
-        console.info(
-          JSON.stringify({
-            kind: "world-bridge",
-            op: "getGhostCell",
-            traceId,
-            ghostId: gid,
-          }),
-        );
+        log.info({ kind: "world-bridge", op: "getGhostCell", traceId, ghostId: gid });
       }
       const fromRoom = colyseusBridge.getGhostCell(gid);
       if (fromRoom !== undefined && fromRoom !== "") {
@@ -287,27 +290,9 @@ async function main(): Promise<void> {
       const gid = String(ghostId).trim();
       const cid = String(cellId).trim();
       const traceId = getRequestTraceId() ?? null;
-      console.info(
-        JSON.stringify({
-          kind: "world-bridge",
-          op: "setGhostCell",
-          phase: "before-colyseus",
-          traceId,
-          ghostId: gid,
-          cellId: cid,
-        }),
-      );
+      log.info({ kind: "world-bridge", op: "setGhostCell", phase: "before-colyseus", traceId, ghostId: gid, cellId: cid });
       colyseusBridge.setGhostCell(gid, cid);
-      console.info(
-        JSON.stringify({
-          kind: "world-bridge",
-          op: "setGhostCell",
-          phase: "after-colyseus",
-          traceId,
-          ghostId: gid,
-          cellId: cid,
-        }),
-      );
+      log.info({ kind: "world-bridge", op: "setGhostCell", phase: "after-colyseus", traceId, ghostId: gid, cellId: cid });
       ghostAuthority.set(gid, cid);
       const ghost = store.ghosts.get(gid);
       if (ghost) {
@@ -317,25 +302,9 @@ async function main(): Promise<void> {
     removeGhostCell(ghostId: string): void {
       const gid = String(ghostId).trim();
       const traceId = getRequestTraceId() ?? null;
-      console.info(
-        JSON.stringify({
-          kind: "world-bridge",
-          op: "removeGhostCell",
-          phase: "before-colyseus",
-          traceId,
-          ghostId: gid,
-        }),
-      );
+      log.info({ kind: "world-bridge", op: "removeGhostCell", phase: "before-colyseus", traceId, ghostId: gid });
       colyseusBridge.removeGhostCell(gid);
-      console.info(
-        JSON.stringify({
-          kind: "world-bridge",
-          op: "removeGhostCell",
-          phase: "after-colyseus",
-          traceId,
-          ghostId: gid,
-        }),
-      );
+      log.info({ kind: "world-bridge", op: "removeGhostCell", phase: "after-colyseus", traceId, ghostId: gid });
       ghostAuthority.delete(gid);
     },
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
@@ -349,6 +318,10 @@ async function main(): Promise<void> {
       colyseusBridge.setGhostInventory(ghostId, itemRefs),
     setGhostLastAction: (ghostId: string, label: string) =>
       colyseusBridge.setGhostLastAction(ghostId, label),
+    setGhostLabels: (ghostId: string, labels: string) =>
+      colyseusBridge.setGhostLabels(ghostId, labels),
+    setGhostGlyph: (ghostId: string, glyph: string) =>
+      colyseusBridge.setGhostGlyph(ghostId, glyph),
     fanoutWorldV1: (payload: unknown) => colyseusBridge.fanoutWorldV1(payload),
   };
 
@@ -358,7 +331,7 @@ async function main(): Promise<void> {
       await ensureTileH3UniqueConstraint(neoDriver);
       await ensureMapManagementConstraints(neoDriver);
       await seedNeo4jGraphArtifacts(neoDriver, colyseusBridge.getLoadedMap());
-      console.info("[aie-matrix] Neo4j: constraint + graph seeds applied");
+      log.info({ kind: "neo4j-seeds", message: "constraint + graph seeds applied" });
       neo4jHealthy = true; // IC-001: Neo4j connectivity confirmed
     } catch (e) {
       console.error("[aie-matrix] Neo4j setup failed:", e);
@@ -379,6 +352,7 @@ async function main(): Promise<void> {
 
   let movementRules;
   let parsedMapForLedger: Awaited<ReturnType<typeof parseMapGram>> | undefined;
+  let mapGramText: string | undefined;
   try {
     movementRules = await Effect.runPromise(loadMovementRulesFromEnv(process.env, repoRoot));
     // Merge rule costs from the map file when one is loaded (costs are declared in the map's
@@ -386,12 +360,13 @@ async function main(): Promise<void> {
     if (mapPath) {
       try {
         const mapText = await readFile(mapPath, "utf8");
+        mapGramText = mapText;
         const parsedMap = await parseMapGram(mapText);
         parsedMapForLedger = parsedMap;
         const withCosts = rulesetFromParsedMap(parsedMap);
         if (withCosts.ruleCosts.size > 0) {
           movementRules = { ...movementRules, ruleCosts: withCosts.ruleCosts };
-          console.info(`[aie-matrix] Loaded ${withCosts.ruleCosts.size} rule cost(s) from map`);
+          log.info({ kind: "rule-costs", count: withCosts.ruleCosts.size });
         }
       } catch (e) {
         console.warn("[aie-matrix] Could not extract rule costs from map file:", e);
@@ -411,7 +386,7 @@ async function main(): Promise<void> {
     let calendarEvents;
     try {
       calendarEvents = await Effect.runPromise(parseCalendarGramFile(absoluteCalendarPath));
-      console.info(`[aie-matrix] Loaded ${calendarEvents.length} calendar event(s) from ${absoluteCalendarPath}`);
+      log.info({ kind: "calendar-loaded", count: calendarEvents.length, path: absoluteCalendarPath });
     } catch (e) {
       console.error(`[aie-matrix] Failed to load calendar from ${absoluteCalendarPath}:`, e);
       process.exit(1);
@@ -419,7 +394,7 @@ async function main(): Promise<void> {
     calendarLayer = makeWorldCalendarLayer(calendarEvents);
   } else {
     calendarLayer = makeWorldCalendarLayer([]);
-    console.info("[aie-matrix] No AIE_MATRIX_CALENDAR set — running in timeless mode.");
+    log.info({ kind: "timeless-mode", message: "No AIE_MATRIX_CALENDAR set — running in timeless mode." });
   }
 
   const conversationStore = new JsonlStore(conversationDataDir);
@@ -519,7 +494,7 @@ async function main(): Promise<void> {
       Layer.provide(Layer.mergeAll(mapMgmtLayer, mapSvcLayer)),
       Layer.orDie,
     );
-    console.info(`[aie-matrix] development mode: maps auto-discovered from ${repoRoot}/maps/`);
+    log.info({ kind: "dev-maps", mapsRoot: `${repoRoot}/maps/` });
   } else {
     // staging / production — require Neo4j
     if (!neoDriver) {
@@ -548,7 +523,21 @@ async function main(): Promise<void> {
     | LiveSessionService
     | WorldCalendarService
     | LedgerService
-    | ProposalService;
+    | ProposalService
+    | GroupService
+    | EvalContractService
+  | LeaderboardService;
+
+  // Layers with inter-dependencies must have those deps explicitly provided before
+  // entering mergeAll — mergeAll does not resolve cross-dependencies between peers.
+  const inMemoryBaseLayers = Layer.merge(LedgerServiceInMemoryLayer, GroupServiceInMemoryLayer);
+  const proposalLayer = Layer.provide(ProposalServiceWithGroupLayer, inMemoryBaseLayers);
+  const evalContractLayer = Layer.provide(EvalContractServiceInMemoryLayer, inMemoryBaseLayers);
+  const leaderboardLayer = neoDriver
+    ? Layer.provide(makeLeaderboardServiceLiveLayer(neoDriver), makeWorldBridgeLayer(bridge))
+    : LeaderboardServiceInMemoryLayer;
+
+  const calendarLayerWithLeaderboard = Layer.provide(calendarLayer, leaderboardLayer);
 
   // ProposalServiceLayer declares Layer.Layer<ProposalService, never, LedgerService>
   // — wire LedgerService into it before merging, otherwise the runtime has an
@@ -570,18 +559,38 @@ async function main(): Promise<void> {
     redisGhostStoreLayer,
     mapMgmtLayer,
     liveSessionLayer,
-    calendarLayer,
+    calendarLayerWithLeaderboard,
     LedgerServiceInMemoryLayer,
+    GroupServiceInMemoryLayer,
     proposalLayer,
+    evalContractLayer,
+    leaderboardLayer,
   ) as Layer.Layer<MatrixRuntimeServices>;
 
   const runtime = ManagedRuntime.make(runtimeLayer);
 
-  // Seed ledger with resource types from the map (MVP: in-memory only; Neo4j wiring requires session-scoped layer, tracked in ADR-0011 follow-up)
-  if (parsedMapForLedger && parsedMapForLedger.resourceTypes.length > 0) {
-    const resourceTypes = parsedMapForLedger.resourceTypes;
+  // Wire ledger into ItemService for take/drop accounting
+  {
+    const ledgerOps = await runtime.runPromise(LedgerService);
+    itemServiceImpl.setLedger(ledgerOps);
+  }
+
+  // Seed ledger with items from the map placements
+  if (parsedMapForLedger && parsedMapForLedger.itemPlacements.length > 0) {
+    // Group by (itemRef, h3Index) summing qty → ItemSeed[]
+    const seedMap = new Map<string, { itemRef: string; qty: number; h3Index?: string }>();
+    for (const p of parsedMapForLedger.itemPlacements) {
+      const key = `${p.itemRef}::${p.h3Index ?? ""}`;
+      const existing = seedMap.get(key);
+      if (existing) {
+        existing.qty += p.qty;
+      } else {
+        seedMap.set(key, { itemRef: p.itemRef, qty: p.qty, ...(p.h3Index ? { h3Index: p.h3Index } : {}) });
+      }
+    }
+    const itemSeeds = Array.from(seedMap.values());
     const initEffect = LedgerService.pipe(
-      Effect.flatMap(svc => svc.init(resourceTypes)),
+      Effect.flatMap(svc => svc.init(itemSeeds)),
       Effect.provide(runtimeLayer as any),
     ) as unknown as Effect.Effect<void, unknown, never>;
     await Effect.runPromise(initEffect)
@@ -652,6 +661,27 @@ async function main(): Promise<void> {
     }
   }
 
+  // Load spawn grants from the parsed map so first-connect seeding works
+  if (parsedMapForLedger && parsedMapForLedger.spawnGrants.length > 0) {
+    setSpawnGrants(parsedMapForLedger.spawnGrants);
+    log.info({ kind: "spawn-grants-loaded", count: parsedMapForLedger.spawnGrants.length });
+  }
+
+  // Load leaderboard specs from the map gram
+  if (mapGramText) {
+    try {
+      const leaderboardSpecs = await parseLeaderboardGramText(mapGramText);
+      if (leaderboardSpecs.length > 0) {
+        await runtime.runPromise(
+          LeaderboardService.pipe(Effect.flatMap(svc => svc.init(leaderboardSpecs))),
+        ).catch((e: unknown) => console.warn("[aie-matrix] Leaderboard init warning:", e));
+        log.info({ kind: "leaderboards", count: leaderboardSpecs.length });
+      }
+    } catch (e) {
+      console.warn("[aie-matrix] Could not load leaderboard specs from map:", e);
+    }
+  }
+
   // GitOps startup map sync (staging/production only).
   // Auto-publishes every .map.gram baked into the Docker image to GCS+Neo4j if not already present.
   // - New map (no Neo4j record) → publish
@@ -660,7 +690,7 @@ async function main(): Promise<void> {
   // - Archived map → skip (admin decision respected across deploys)
   // Individual publish failures are logged but do not abort startup.
   if (matrixMode !== "development") {
-    console.info("[aie-matrix] startup-map-sync: scanning maps/ for unpublished maps…");
+    log.info({ kind: "map-sync-start", message: "scanning maps/ for unpublished maps" });
     const syncSummary = await runtime.runPromise(
       Effect.gen(function* () {
         const mapSvc = yield* MapService;
@@ -676,7 +706,7 @@ async function main(): Promise<void> {
           );
 
           if (existing?.status === "archived") {
-            console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "skip-archived" }));
+            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-archived" });
             skipped++;
             continue;
           }
@@ -693,7 +723,7 @@ async function main(): Promise<void> {
           // Skip if published with same content hash (idempotent guard)
           const hash = createHash("sha256").update(bytes).digest("hex");
           if (existing?.status === "published" && existing.contentHash === hash) {
-            console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "skip-current" }));
+            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-current" });
             skipped++;
             continue;
           }
@@ -702,7 +732,7 @@ async function main(): Promise<void> {
           const action = existing ? "republish" : "publish";
           yield* mapMgmt.publish(entry.mapId, bytes).pipe(
             Effect.tap(() => Effect.sync(() => {
-              console.info(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action }));
+              log.info({ kind: "map-sync-entry", mapId: entry.mapId, action });
               synced++;
             })),
             Effect.catchAll((e) => Effect.sync(() => {
@@ -718,7 +748,7 @@ async function main(): Promise<void> {
       console.error("[aie-matrix] startup-map-sync failed:", e);
       return { total: 0, synced: 0, skipped: 0, failed: 0 };
     });
-    console.info(JSON.stringify({ kind: "startup-map-sync", ...syncSummary }));
+    log.info({ kind: "map-sync-summary", ...syncSummary });
   }
 
   // T025 — Session binding for staging/production (skip in development mode where
@@ -741,7 +771,7 @@ async function main(): Promise<void> {
       // sessions.length === 0 is ok — no session yet, server starts without binding
     }
     if (sessionToBind) {
-      console.info(JSON.stringify({ kind: "session-binding", op: "bind", sessionId: sessionToBind }));
+      log.info({ kind: "session-binding", op: "bind", sessionId: sessionToBind });
     }
   }
 
@@ -766,7 +796,7 @@ async function main(): Promise<void> {
     }
   })();
   if (calendarPath) {
-    console.info(`[aie-matrix] Calendar scheduler running (tick every ${calendarTickMs}ms)`);
+    log.info({ kind: "calendar-started", tickMs: calendarTickMs });
   }
 
   process.on("SIGTERM", () => {
@@ -819,6 +849,7 @@ async function main(): Promise<void> {
           p.startsWith("/ghosts") ||
           p.startsWith("/humans") ||
           p === "/mcp" ||
+          p === "/auth/guest" ||
           p === "/internal/world-fanout" ||
           p.startsWith("/agent-host/")
         ) {
@@ -930,6 +961,22 @@ async function main(): Promise<void> {
         }
       }
       if (req.method === "GET" && serveMapsIfMatched(url.pathname, res)) {
+        return;
+      }
+      if (url.pathname === "/auth/guest" && req.method === "POST") {
+        const buf = await readRequestBody(req);
+        let ghostId: string;
+        try {
+          const body = JSON.parse(buf.toString("utf8") || "{}") as { ghostId?: string };
+          ghostId = typeof body.ghostId === "string" && body.ghostId.trim().length > 0
+            ? body.ghostId.trim()
+            : randomUUID();
+        } catch {
+          ghostId = randomUUID();
+        }
+        const token = mintGhostToken({ sub: ghostId, ghostId, role: "human" });
+        res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+        res.end(JSON.stringify({ token, ghostId }));
         return;
       }
       if (url.pathname === "/humans/join" && req.method === "POST") {
@@ -1083,24 +1130,12 @@ async function main(): Promise<void> {
     })();
   });
 
-  console.log(`aie-matrix PoC listening on http://127.0.0.1:${httpPort}`);
-  console.log(`  Registry: POST /registry/caretakers | /registry/houses | /registry/adopt`);
-  console.log(`  MCP world-api (Streamable HTTP): POST ${worldApiBaseUrl}`);
-  console.log(`  Colyseus WebSocket: ws://127.0.0.1:${httpPort} (matchmake routes on same port)`);
-  console.log(`  Spectator room id: GET http://127.0.0.1:${httpPort}/spectator/room`);
+  log.info({ kind: "listening", url: `http://127.0.0.1:${httpPort}`, registry: "POST /registry/caretakers | /registry/houses | /registry/adopt", mcpUrl: worldApiBaseUrl, colyseusWs: `ws://127.0.0.1:${httpPort}`, spectatorRoom: `GET http://127.0.0.1:${httpPort}/spectator/room` });
   if (internalFanoutToken.length > 0) {
-    console.log(
-      `  World fanout (dev): POST http://127.0.0.1:${httpPort}/internal/world-fanout (Bearer AIE_MATRIX_INTERNAL_FANOUT_TOKEN)`,
-    );
+    log.info({ kind: "listening", feature: "world-fanout", url: `POST http://127.0.0.1:${httpPort}/internal/world-fanout` });
   }
-  console.log(`  Conversation threads: GET http://127.0.0.1:${httpPort}/threads/:ghostId`);
-  console.log(`  Map assets (dev): GET http://127.0.0.1:${httpPort}/maps/...`);
-  console.log(
-    `  Map index: GET http://127.0.0.1:${httpPort}/maps  (JSON; links to each /maps/<mapId>)`,
-  );
-  console.log(
-    `  Map gram/tmj (MapService): GET http://127.0.0.1:${httpPort}/maps/<mapId>?format=gram|tmj`,
-  );
+  log.info({ kind: "listening", feature: "conversation-threads", url: `GET http://127.0.0.1:${httpPort}/threads/:ghostId` });
+  log.info({ kind: "listening", feature: "map-assets", url: `GET http://127.0.0.1:${httpPort}/maps/...` });
 }
 
 void main().catch((err) => {

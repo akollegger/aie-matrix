@@ -12,16 +12,23 @@ export function getJwtSecret(): string {
 export interface GhostClaims {
   sub: string;
   ghostId: string;
+  /** Actor role — "human" for guest tokens issued by POST /auth/guest; absent for agent-issued tokens. */
+  role?: string;
   caretakerId?: string;
   agentHostId?: string;
+  /** Specific agent catalog ID (e.g. "funder-agent") — set when an agent-host spawns the ghost.
+   *  Used by world-api to look up catalog resourceGrants. */
+  agentId?: string;
 }
 
 export function mintGhostToken(claims: GhostClaims, ttlSeconds = 60 * 60 * 8): string {
   return jwt.sign(
     {
       ghostId: claims.ghostId,
+      ...(claims.role !== undefined ? { role: claims.role } : {}),
       ...(claims.caretakerId !== undefined ? { caretakerId: claims.caretakerId } : {}),
       ...(claims.agentHostId !== undefined ? { agentHostId: claims.agentHostId } : {}),
+      ...(claims.agentId !== undefined ? { agentId: claims.agentId } : {}),
     },
     getJwtSecret(),
     {
@@ -53,8 +60,10 @@ export function verifyGhostToken(token: string): Effect.Effect<GhostClaims, JwtE
     return {
       sub: decoded.sub,
       ghostId: decoded.ghostId,
+      role: typeof decoded.role === "string" ? decoded.role : undefined,
       caretakerId: typeof decoded.caretakerId === "string" ? decoded.caretakerId : undefined,
       agentHostId: typeof decoded.agentHostId === "string" ? decoded.agentHostId : undefined,
+      agentId: typeof decoded.agentId === "string" ? decoded.agentId : undefined,
     };
   });
 }

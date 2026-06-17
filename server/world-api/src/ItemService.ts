@@ -1,7 +1,10 @@
-import type { ItemDefinition, ItemSidecar } from "@aie-matrix/shared-types";
+import type { ItemTypeDef } from "@aie-matrix/map-gram";
 import type { LoadedMap } from "@aie-matrix/server-colyseus";
 import { Context, Effect, Layer } from "effect";
+import { ulid } from "ulid";
 import type { ColyseusWorldBridge } from "./colyseus-bridge.js";
+import type { LedgerServiceOps } from "./LedgerService.js";
+import type { LedgerInsufficientFunds } from "./ledger-errors.js";
 import {
   WorldApiInvalidConsumeAmount,
   WorldApiItemNotCarriable,
@@ -40,7 +43,7 @@ export interface ItemServiceOps {
     itemRef: string,
   ): Effect.Effect<
     { name: string },
-    WorldApiItemNotFound | WorldApiItemNotHere | WorldApiItemNotCarriable
+    WorldApiItemNotFound | WorldApiItemNotHere | WorldApiItemNotCarriable | LedgerInsufficientFunds
   >;
   dropItem(
     ghostId: string,
@@ -48,7 +51,7 @@ export interface ItemServiceOps {
     itemRef: string,
     tileCapacity: number | undefined,
     tileGhostCount: number,
-  ): Effect.Effect<void, WorldApiItemNotCarrying | WorldApiTileFull>;
+  ): Effect.Effect<void, WorldApiItemNotCarrying | WorldApiTileFull | LedgerInsufficientFunds>;
   /**
    * Eat some or all of a consumable item's energy in place. `amount`
    * defaults to the instance's remaining tokens; values exceeding
@@ -79,7 +82,7 @@ export interface ItemServiceOps {
    *  tile already has an instance of the same type (no double-stack).
    */
   spawnItem(h3Index: string, itemRef: string): boolean;
-  getSidecar(): Map<string, ItemDefinition>;
+  getSidecar(): Map<string, ItemTypeDef>;
 }
 
 export class ItemService extends Context.Tag("aie-matrix/ItemService")<
@@ -90,7 +93,7 @@ export class ItemService extends Context.Tag("aie-matrix/ItemService")<
 export class ItemServiceImpl implements ItemServiceOps {
   private readonly tileItems: Map<string, string[]> = new Map();
   private readonly ghostInventory: Map<string, string[]> = new Map();
-  private readonly sidecar: Map<string, ItemDefinition>;
+  private readonly sidecar: Map<string, ItemTypeDef>;
   /**
    * Mutable per-instance state: remaining tokens for each (h3, itemRef)
    * pair where the item type declared a `tokens` value. Parallel to
@@ -112,6 +115,7 @@ export class ItemServiceImpl implements ItemServiceOps {
    */
   private readonly inventoryTokens: Map<string, number> = new Map();
   private bridge: ColyseusWorldBridge | null = null;
+  private ledger: LedgerServiceOps | null = null;
 
   constructor(loadedMap: LoadedMap) {
     this.sidecar = loadedMap.itemSidecar;
@@ -134,6 +138,10 @@ export class ItemServiceImpl implements ItemServiceOps {
     this.bridge = bridge;
   }
 
+  setLedger(ledger: LedgerServiceOps): void {
+    this.ledger = ledger;
+  }
+
   broadcastAllTileItems(bridge: ColyseusWorldBridge): void {
     for (const [h3Index, refs] of this.tileItems) {
       if (refs.length > 0) {
@@ -142,7 +150,7 @@ export class ItemServiceImpl implements ItemServiceOps {
     }
   }
 
-  getSidecar(): Map<string, ItemDefinition> {
+  getSidecar(): Map<string, ItemTypeDef> {
     return this.sidecar;
   }
 
@@ -186,7 +194,7 @@ export class ItemServiceImpl implements ItemServiceOps {
     itemRef: string,
   ): Effect.Effect<
     { name: string },
-    WorldApiItemNotFound | WorldApiItemNotHere | WorldApiItemNotCarriable
+    WorldApiItemNotFound | WorldApiItemNotHere | WorldApiItemNotCarriable | LedgerInsufficientFunds
   > {
     return Effect.gen(this, function* () {
       const def = this.sidecar.get(itemRef);
@@ -200,9 +208,23 @@ export class ItemServiceImpl implements ItemServiceOps {
         yield* Effect.fail(new WorldApiItemNotHere({ itemRef }));
         return undefined as never;
       }
-      if (!def.carriable) {
+      if (!def.takeable) {
         yield* Effect.fail(new WorldApiItemNotCarriable({ itemRef }));
         return undefined as never;
+      }
+      if (this.ledger) {
+        yield* this.ledger.commit({
+          id: ulid(),
+          transfers: [{ resource: itemRef, qty: 1, from: `world@${h3Index}`, to: ghostId, location: { h3Index } }],
+          cause: "take",
+          actors: [ghostId],
+          ts: Date.now(),
+        }).pipe(
+          Effect.catchTag("LedgerError.ConservationViolation", Effect.die),
+          Effect.catchTag("LedgerError.DuplicateTransaction", Effect.die),
+          Effect.catchTag("LedgerError.UnknownResource", Effect.die),
+          Effect.catchTag("LedgerError.PersistenceError", Effect.die),
+        );
       }
       const newTile = [...onTile];
       newTile.splice(idx, 1);
@@ -323,7 +345,7 @@ export class ItemServiceImpl implements ItemServiceOps {
     itemRef: string,
     tileCapacity: number | undefined,
     tileGhostCount: number,
-  ): Effect.Effect<void, WorldApiItemNotCarrying | WorldApiTileFull> {
+  ): Effect.Effect<void, WorldApiItemNotCarrying | WorldApiTileFull | LedgerInsufficientFunds> {
     return Effect.gen(this, function* () {
       const inv = this.ghostInventory.get(ghostId) ?? [];
       const idx = inv.indexOf(itemRef);
@@ -343,6 +365,21 @@ export class ItemServiceImpl implements ItemServiceOps {
           yield* Effect.fail(new WorldApiTileFull({ h3Index }));
           return;
         }
+      }
+
+      if (this.ledger) {
+        yield* this.ledger.commit({
+          id: ulid(),
+          transfers: [{ resource: itemRef, qty: 1, from: ghostId, to: `world@${h3Index}`, location: { h3Index } }],
+          cause: "drop",
+          actors: [ghostId],
+          ts: Date.now(),
+        }).pipe(
+          Effect.catchTag("LedgerError.ConservationViolation", Effect.die),
+          Effect.catchTag("LedgerError.DuplicateTransaction", Effect.die),
+          Effect.catchTag("LedgerError.UnknownResource", Effect.die),
+          Effect.catchTag("LedgerError.PersistenceError", Effect.die),
+        );
       }
 
       const newInv = [...inv];
@@ -407,4 +444,3 @@ export function computeTileItemCost(
   }, 0);
 }
 
-export type { ItemSidecar };

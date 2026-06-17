@@ -32,6 +32,10 @@ export interface WhereAmIResult {
   tileId: string;
   col: number;
   row: number;
+  /** Human-readable display name for this ghost, if set at adoption. */
+  displayName?: string;
+  /** Per-ghost background description (IC-008). Present for NPC catalog characters. */
+  background?: string;
 }
 
 export interface LookArgs {
@@ -199,8 +203,25 @@ export interface GoFailure {
 
 export type GoResult = GoSuccess | GoFailure;
 
+export interface ExitsResult {
+  exits: ExitInfo[];
+}
+
+export interface LookTile {
+  /** "here" for current tile, compass face for adjacent tiles. */
+  at: "here" | Compass;
+  objects: TileItemSummary[];
+  occupants?: string[];
+}
+
+export interface LookResult {
+  tiles: LookTile[];
+}
+
 export interface SayArgs {
   content: string;
+  /** Speech-act intent (greet, propose, agree, decline, etc.). */
+  intent?: string;
   /** Ghost-id for directed delivery. When omitted, broadcasts to all nearby ghosts. */
   to?: string;
 }

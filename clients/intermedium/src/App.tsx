@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { ClientStateProvider, useClientState } from "./context/ClientState.js";
+import { IdentityProvider } from "./context/IdentityContext.js";
+import { useHumanIdentity } from "./context/IdentityContext.js";
 import { PairingProvider } from "./context/PairingContext.js";
-import { PanelView } from "./components/PanelView/PanelView.js";
-import { PersonalPanel } from "./components/PanelView/PersonalPanel.js";
+import { useContracts } from "./hooks/useContracts.js";
+import { HUDOverlay } from "./components/HUDOverlay/HUDOverlay.js";
 import { SceneView } from "./components/SceneView/SceneView.js";
 import { PersonalScene } from "./components/PersonalScene/PersonalScene.js";
 import { FailWhale } from "./components/FailWhale.js";
-import { GhostArrivalOverlay } from "./components/GhostArrivalOverlay.js";
 import { ReconnectingBanner } from "./components/ReconnectingBanner.js";
-import { ChatPanel } from "./components/ChatPanel/ChatPanel.js";
 import { NavHint } from "./components/NavHint.js";
 
 /** Fade duration in ms for the deck.gl ↔ R3F renderer swap (FR-028, T090). */
@@ -21,12 +21,67 @@ const FADE_MS = 200;
 function AppInner() {
   const state = useClientState();
   const stop = state.viewState.stop;
+  const identity = useHumanIdentity();
+  const worldApiUrl = import.meta.env.VITE_API_BASE_URL ?? "";
+
+  const [chatGhostRequest, setChatGhostRequest] = useState<string | null>(null);
+  // Scene ring tracks the last selected ghost — set on click AND when active chat pill changes.
+  const [selectedSceneGhostId, setSelectedSceneGhostId] = useState<string | null>(null);
 
   // showPersonal tracks which renderer is mounted (lags behind `stop` by FADE_MS).
   const [showPersonal, setShowPersonal] = useState(stop === "personal");
   const [fadeOpacity, setFadeOpacity] = useState(1);
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [chatOpen, setChatOpen] = useState(false);
+  const [leaderboardIds, setLeaderboardIds] = useState<string[]>([]);
+
+  // Watch for contract settlement (keeps contract poller alive).
+  const { activeContract: _activeContract } = useContracts(worldApiUrl, identity.token, identity.ghostId);
+  void _activeContract;
+
+  // Fetch declared leaderboard IDs on mount via MCP `leaderboards` tool.
+  useEffect(() => {
+    const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
+    if (!apiBase) return;
+    const base = apiBase.endsWith("/") ? apiBase.slice(0, -1) : apiBase;
+
+    const load = async () => {
+      if (!identity.token) return; // wait until we have a JWT
+      try {
+        const res = await fetch(`${base}/mcp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json, text/event-stream",
+            Authorization: `Bearer ${identity.token}`,
+          },
+          body: JSON.stringify({
+            jsonrpc: "2.0",
+            id: 1,
+            method: "tools/call",
+            params: { name: "leaderboards", arguments: {} },
+          }),
+        });
+        if (!res.ok) return;
+        // MCP returns SSE (text/event-stream). Find the first `data:` line and parse it.
+        const raw = await res.text();
+        const dataLine = raw.split("\n").find((l) => l.startsWith("data:"));
+        if (!dataLine) return;
+        const envelope = JSON.parse(dataLine.slice("data:".length).trim()) as {
+          result?: { content?: Array<{ type: string; text?: string }> };
+        };
+        const textItem = envelope.result?.content?.find((c) => c.type === "text");
+        if (!textItem?.text) return;
+        const list = JSON.parse(textItem.text) as Array<{ id: string }>;
+        if (Array.isArray(list)) {
+          setLeaderboardIds(list.map((l) => l.id));
+        }
+      } catch {
+        // world server may not be running
+      }
+    };
+
+    void load();
+  }, [identity.token]);
 
   useEffect(() => {
     const wantPersonal = stop === "personal";
@@ -45,17 +100,6 @@ function AppInner() {
     };
   }, [stop, showPersonal]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const tag = (e.target as HTMLElement | null)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA") return;
-      if ((e.key === "c" || e.key === "C") && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        setChatOpen((open) => !open);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
   // Find the focused ghost for the Personal scene (FR-029).
   const personalGhostId =
@@ -124,7 +168,20 @@ function AppInner() {
                 />
               </>
             )}
-            {state.mapGramStatus === "ready" && state.tiles.size > 0 ? <SceneView /> : null}
+            {state.mapGramStatus === "ready" && state.tiles.size > 0 ? (
+              <div
+                className={state.ghosts.size === 0 ? "awaiting-pulse" : undefined}
+                style={{ position: "absolute", inset: 0 }}
+              >
+                <SceneView
+                  onGhostSingleClick={(ghostId) => {
+                    setSelectedSceneGhostId(ghostId);
+                    setChatGhostRequest(ghostId);
+                  }}
+                  selectedChatGhostId={selectedSceneGhostId}
+                />
+              </div>
+            ) : null}
             {state.mapGramStatus === "loading" ? (
               <div
                 style={{
@@ -140,10 +197,6 @@ function AppInner() {
                 Loading world map…
               </div>
             ) : null}
-            <GhostArrivalOverlay
-              visible={state.mapGramStatus === "ready" && state.ghosts.size === 0}
-            />
-            <PanelView viewState={state.viewState} pairing={state.pairing} />
           </>
         )}
 
@@ -151,45 +204,38 @@ function AppInner() {
         {showPersonal && (
           <>
             <PersonalScene ghost={personalGhost} />
-            <PersonalPanel />
           </>
         )}
 
         <ReconnectingBanner visible={state.colyseusLinkState === "reconnecting"} />
 
-        {/* Overlay corner — toasts + persistent controls, bottom-right */}
+        {/* Bottom-right: nav hint only */}
         <div className="absolute bottom-5 right-5 z-10 flex flex-col items-end gap-2">
           <NavHint visible={stop === "global"} />
-          {/* Chat toggle button */}
-          <button
-            type="button"
-            onClick={() => setChatOpen((o) => !o)}
-            aria-label="Toggle ghost chat (C)"
-            title="Ghost Chat [C]"
-            className={[
-              "font-mono text-sm uppercase tracking-[--tracking-label] px-3 py-1.5 rounded border cursor-pointer transition-colors",
-              chatOpen
-                ? "bg-human-bg border-border-bright text-text"
-                : "bg-surface border-border text-text-dim hover:border-border-bright hover:text-text",
-            ].join(" ")}
-          >
-            Chat [C]
-          </button>
         </div>
       </div>
 
-      {/* Full-screen chat overlay */}
-      {chatOpen && <ChatPanel onClose={() => setChatOpen(false)} />}
+      <HUDOverlay
+        leaderboardIds={leaderboardIds}
+        humanGhostId={identity.ghostId}
+        worldApiUrl={worldApiUrl}
+        worldApiToken={identity.token}
+        ghostClickRequest={chatGhostRequest}
+        onGhostClickHandled={() => setChatGhostRequest(null)}
+        onSelectedGhostChange={(ghostId) => { if (ghostId) setSelectedSceneGhostId(ghostId); }}
+      />
     </div>
   );
 }
 
 export function App() {
   return (
-    <PairingProvider>
-      <ClientStateProvider>
-        <AppInner />
-      </ClientStateProvider>
-    </PairingProvider>
+    <IdentityProvider>
+      <PairingProvider>
+        <ClientStateProvider>
+          <AppInner />
+        </ClientStateProvider>
+      </PairingProvider>
+    </IdentityProvider>
   );
 }

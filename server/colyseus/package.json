@@ -24,6 +24,7 @@
     "tsx": "^4.21.0"
   },
   "dependencies": {
+    "@aie-matrix/logger": "workspace:*",
     "@aie-matrix/map-gram": "workspace:*",
     "@aie-matrix/root-env": "workspace:*",
     "@aie-matrix/shared-types": "workspace:*",

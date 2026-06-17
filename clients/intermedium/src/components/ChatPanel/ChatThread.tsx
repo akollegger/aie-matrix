@@ -7,15 +7,7 @@ interface ChatThreadProps {
   readonly ghostIdentity: GhostIdentity | null;
 }
 
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return "";
-  }
-}
-
-export function ChatThread({ thread, ghostIdentity }: ChatThreadProps) {
+export function ChatThread({ thread, ghostIdentity: _ghostIdentity }: ChatThreadProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -25,7 +17,7 @@ export function ChatThread({ thread, ghostIdentity }: ChatThreadProps) {
   if (!thread.isAvailable && thread.messages.length === 0) {
     return (
       <div className="flex-1 flex items-center justify-center text-text-faint text-lg italic">
-        {thread.ghostId ? "Connecting to ghost…" : "Select a ghost to start chatting"}
+        {thread.ghostId ? "Connecting to ghost…" : null}
       </div>
     );
   }
@@ -38,32 +30,38 @@ export function ChatThread({ thread, ghostIdentity }: ChatThreadProps) {
     );
   }
 
-  const ghostName = ghostIdentity?.name ?? thread.ghostId ?? "ghost";
-
   return (
-    <div className="flex-1 overflow-y-auto flex flex-col gap-0.5 font-mono text-lg min-h-0">
+    <div className="flex-1 overflow-y-auto flex flex-col gap-1 font-mono text-lg min-h-0 px-1 py-1">
       {thread.messages.map((msg) => {
         const isHuman = msg.sender === "human";
         return (
-          <div
-            key={msg.messageId}
-            className={[
-              "grid grid-cols-[3.75rem_7.5rem_1fr] gap-x-2.5 py-0.5 pl-2 border-l-2",
-              isHuman ? "border-human" : "border-ghost",
-            ].join(" ")}
-          >
-            <span className="text-base text-text-faint self-baseline pt-0.5">
-              {formatTime(msg.timestamp)}
+          <div key={msg.messageId} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span
+              style={{
+                fontFamily: "'Fira Code', monospace",
+                fontFeatureSettings: '"liga" 1, "calt" 1',
+                fontSize: 13,
+                flexShrink: 0,
+                color: isHuman ? "rgba(120, 160, 240, 0.7)" : "rgba(100, 170, 150, 0.7)",
+                lineHeight: 1.5,
+              }}
+            >
+              {isHuman ? "->" : "<-"}
             </span>
             <span
-              className={[
-                "font-semibold whitespace-nowrap overflow-hidden text-ellipsis self-baseline",
-                isHuman ? "text-human" : "text-ghost",
-              ].join(" ")}
+              style={{
+                display: "inline-block",
+                padding: "2px 8px",
+                borderRadius: 3,
+                background: isHuman
+                  ? "rgba(30, 55, 100, 0.72)"
+                  : "rgba(20, 35, 55, 0.72)",
+                color: isHuman ? "rgba(180, 210, 255, 0.92)" : "rgba(160, 200, 190, 0.9)",
+                lineHeight: 1.5,
+                wordBreak: "break-word",
+                fontFamily: "'Fira Code', monospace",
+              }}
             >
-              {isHuman ? "you" : ghostName}:
-            </span>
-            <span className="text-text leading-relaxed break-words">
               {msg.content}
             </span>
           </div>

@@ -2,17 +2,20 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isEnvTruthy } from "@aie-matrix/root-env";
 import { Room } from "@colyseus/core";
-import type { ItemDefinition } from "@aie-matrix/shared-types";
+import { createLogger } from "@aie-matrix/logger";
+import type { ItemTypeDef } from "@aie-matrix/map-gram";
 import type { LoadedMap } from "./mapTypes.js";
 import { loadHexMap } from "./mapLoader.js";
 import { TileCoord, WorldSpectatorState } from "./room-schema.js";
+
+const log = createLogger("colyseus");
 
 export interface MatrixRoomOptions {
   mapPath?: string;
   itemsPath?: string;
 }
 
-/** Max UTF-16 code units stored per `ItemDefinition.glyph` in `WorldSpectatorState.itemGlyphs`. */
+/** Max UTF-16 code units stored per `ItemTypeDef.glyph` in `WorldSpectatorState.itemGlyphs`. */
 const MAX_ITEM_GLYPH_UTF16 = 8;
 
 function clipGlyphForSpectator(raw: string): string {
@@ -24,7 +27,7 @@ function clipGlyphForSpectator(raw: string): string {
 }
 
 function seedItemGlyphsFromSidecar(
-  sidecar: Map<string, ItemDefinition>,
+  sidecar: Map<string, ItemTypeDef>,
   emit: (itemRef: string, glyph: string) => void,
 ): void {
   for (const [ref, def] of sidecar) {
@@ -116,7 +119,7 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     this.ghostCellByGhostId.set(gid, cid);
     this.state.ghostTiles.set(gid, cid);
     if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
-      console.info(`[aie-matrix] MatrixRoom.setGhostCell ghost=${gid} cell=${cid}`);
+      log.info({ kind: "set-ghost-cell", ghost: gid, cell: cid });
     }
     this.emitGhostPatch();
   }
@@ -143,7 +146,7 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     this.ghostCellByGhostId.delete(gid);
     this.state.ghostTiles.delete(gid);
     if (isEnvTruthy(process.env.AIE_MATRIX_DEBUG)) {
-      console.info(`[aie-matrix] MatrixRoom.removeGhostCell ghost=${gid}`);
+      log.info({ kind: "remove-ghost-cell", ghost: gid });
     }
     this.emitGhostPatch();
   }
@@ -209,5 +212,23 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     }
     const clipped = text.length > 200 ? `${text.slice(0, 197)}…` : text;
     this.state.ghostLastActions.set(gid, clipped);
+  }
+
+  setGhostLabels(ghostId: string, labels: string): void {
+    const gid = String(ghostId).trim();
+    if (labels === "") {
+      this.state.ghostLabels.delete(gid);
+      return;
+    }
+    this.state.ghostLabels.set(gid, labels);
+  }
+
+  setGhostGlyph(ghostId: string, glyph: string): void {
+    const gid = String(ghostId).trim();
+    if (glyph === "") {
+      this.state.ghostGlyphs.delete(gid);
+      return;
+    }
+    this.state.ghostGlyphs.set(gid, glyph);
   }
 }

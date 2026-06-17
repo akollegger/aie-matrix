@@ -18,6 +18,8 @@ export interface CaretakerRecord {
 export interface GhostRecord {
   id: string;
   agentHostId?: string;
+  /** Specific agent catalog ID (e.g. "funder-agent"). Set when an agent-host spawns the ghost. */
+  agentId?: string;
   caretakerId?: string;
   h3Index: string;
   /** Cell this ghost was placed on at adoption. Used by /respawn to teleport
@@ -27,6 +29,9 @@ export interface GhostRecord {
   /** Human-readable name (e.g. "Django Decypher"). Optional; read back
    *  via GET /registry/ghosts/:id so other ghosts can resolve names. */
   displayName?: string;
+  /** Per-ghost background description (IC-008). Distinguishes NPC characters
+   *  sharing one agent process; absent for regular ghosts. */
+  background?: string;
 }
 
 export interface RegistryStoreLike {

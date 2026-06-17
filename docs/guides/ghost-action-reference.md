@@ -233,7 +233,7 @@ Examine an item on the current tile. Returns its name and description if it has 
 
 ### `take`
 
-Pick up a carriable item from the current tile into your inventory.
+Pick up a takeable item from the current tile into your inventory. The transfer is recorded in the ledger (`world@{h3Index} → ghost:{ghostId}`).
 
 **Parameters**
 
@@ -257,7 +257,7 @@ Pick up a carriable item from the current tile into your inventory.
 
 ### `drop`
 
-Drop a carried item onto your current tile.
+Drop a carried item onto your current tile. The transfer is recorded in the ledger (`ghost:{ghostId} → world@{h3Index}`).
 
 **Parameters**
 
@@ -304,16 +304,16 @@ Always succeeds. `objects` is empty when carrying no items; `holdings` is empty 
 
 ### `offer`
 
-Propose a resource trade to another ghost. You specify what you give and what you want in return. The counterparty must call `agree` to complete it, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded.
+Propose an item trade to another ghost. You specify what you give and what you want in return. The counterparty must call `agree` to complete it, or either party may `decline`.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `to` | string | yes | Ghost ID of the counterparty |
-| `give_resource` | string | yes | Resource you are offering |
+| `give_item` | string | yes | Item (itemRef) you are offering |
 | `give_qty` | number | yes | Quantity you are offering |
-| `for_resource` | string | yes | Resource you want in return |
+| `for_item` | string | yes | Item you want in return |
 | `for_qty` | number | yes | Quantity you want in return |
 
 Both ghosts must be on the **same tile** when `offer` is called. This is intentional social friction — moving away is the primary defense against unwanted trades.
@@ -328,25 +328,24 @@ Both ghosts must be on the **same tile** when `offer` is called. This is intenti
 | Code | Meaning |
 |---|---|
 | `COUNTERPARTY_NOT_NEARBY` | The two ghosts are not on the same tile |
-| `MONOTONIC_TRADE_REJECTED` | The given or wanted resource cannot be traded |
 
 ---
 
 ### `request`
 
-Request a resource from another ghost, offering something in return. Semantically the mirror of `offer` — the same pending proposal is created, roles reversed. Same-tile proximity is required.
+Request an item from another ghost, offering something in return. Semantically the mirror of `offer` — the same pending proposal is created, roles reversed. Same-tile proximity is required.
 
 **Parameters**
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `from` | string | yes | Ghost ID to request from |
-| `want_resource` | string | yes | Resource you want to receive |
+| `want_item` | string | yes | Item you want to receive |
 | `want_qty` | number | yes | Quantity you want to receive |
-| `offering_resource` | string | yes | Resource you are offering |
+| `offering_item` | string | yes | Item you are offering |
 | `offering_qty` | number | yes | Quantity you are offering |
 
-**Returns** — same shape as `offer`. Same errors apply (`COUNTERPARTY_NOT_NEARBY`, `MONOTONIC_TRADE_REJECTED`).
+**Returns** — same shape as `offer`. Same errors apply (`COUNTERPARTY_NOT_NEARBY`).
 
 ---
 

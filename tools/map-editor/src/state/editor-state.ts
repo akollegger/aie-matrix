@@ -2,6 +2,7 @@ import type {
   H3Index,
   ItemInstance,
   ItemType,
+  LeaderboardSpec,
   MapMeta,
   MovementRule,
   PolygonShape,
@@ -101,6 +102,8 @@ export interface MapEditorState {
   tileTypes: TileType[]
   itemTypes: ItemType[]
   rules: MovementRule[]
+  /** Declared leaderboards parsed from the map gram */
+  leaderboards: LeaderboardSpec[]
   /** Ordered bottom (index 0) to top — topmost layer that covers a cell wins */
   layers: MapLayer[]
   ui: UIState

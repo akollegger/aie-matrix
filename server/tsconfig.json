@@ -5,6 +5,7 @@
     "outDir": "dist"
   },
   "references": [
+    { "path": "../shared/logging" },
     { "path": "../shared/root-env" },
     { "path": "./auth" },
     { "path": "./colyseus" },

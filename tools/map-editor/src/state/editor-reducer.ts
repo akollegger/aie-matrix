@@ -76,6 +76,7 @@ export function makeInitialState(): MapEditorState {
     tileTypes: [BUILTIN_FLOOR],
     itemTypes: [],
     rules: [{ fromTypeName: "Floor", toTypeName: "Floor" }],
+    leaderboards: [],
     layers: [ground],
     ui: {
       activeTool: "paint",

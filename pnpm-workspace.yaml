@@ -1,4 +1,5 @@
 packages:
+  - e2e
   - shared/map-gram
   - tools/tmj-to-gram
   - tools/map-editor
@@ -12,11 +13,14 @@ packages:
   - clients/intermedium
   - shared/types
   - shared/root-env
+  - shared/logging
   - ghosts/ts-client
   - server/agent-host
   - server/agent-host/examples/observer-agent
   - server/agent-host/examples/echo-agent
   - ghosts/random-agent
+  - ghosts/npc-agent
+  - ghosts/funder-agent
   - ghosts/ghost-cli
   - ghosts/tck
   - ghosts/peppers-inner
@@ -30,3 +34,13 @@ packages:
   - ghosts/rdc-poker
   - ghosts/rdc-ledger
   - ghosts/rdc-poker-session
+overrides:
+  '@colyseus/core': '0.15.57'
+
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  '@vaadin/vaadin-usage-statistics': true
+  esbuild: true
+  msgpackr-extract: true
+  msw: true

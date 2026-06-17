@@ -19,6 +19,7 @@ vi.mock("@aie-matrix/ghost-ts-client", () => ({
   GhostMcpClient: class {
     connect = vi.fn(async () => {});
     disconnect = vi.fn(async () => {});
+    announce = vi.fn(async () => {});
     callTool = vi.fn(async () => ({
       h3Index: RES15,
       exits: [{ toward: RES15 }],
@@ -85,8 +86,8 @@ describe("RandomWandererExecutor movement registry", () => {
       taskId: "task-b",
       contextId: "ctx-b",
     } as RequestContext;
-    await ex.execute(rcA, mkBus());
-    await ex.execute(rcB, mkBus());
+    void ex.execute(rcA, mkBus());
+    void ex.execute(rcB, mkBus());
     await vi.waitFor(() => mcpInstances.length >= 2);
     expect(mcpInstances.length).toBe(2);
     expect(mcpInstances[0].disconnect).not.toHaveBeenCalled();
@@ -102,7 +103,7 @@ describe("RandomWandererExecutor movement registry", () => {
     const ghostId = "ghost-same";
     const ctx1 = baseCtx(ghostId);
     const ctx2 = { ...baseCtx(ghostId), token: "tok-replaced" };
-    await ex.execute(
+    void ex.execute(
       {
         userMessage: mkSpawnMessage(ctx1),
         taskId: "task-1",
@@ -111,7 +112,7 @@ describe("RandomWandererExecutor movement registry", () => {
       mkBus(),
     );
     await vi.waitFor(() => mcpInstances.length >= 1);
-    await ex.execute(
+    void ex.execute(
       {
         userMessage: mkSpawnMessage(ctx2),
         taskId: "task-2",

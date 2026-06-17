@@ -1,8 +1,10 @@
 import { loadRootEnv, isEnvTruthy } from "@aie-matrix/root-env";
+import { createLogger } from "@aie-matrix/logger";
 import { Effect, Layer, ManagedRuntime, pipe } from "effect";
 import { A2AHostServiceLive } from "./a2a-host/A2AHostService.js";
 import { McpProxyServiceLive } from "./mcp-proxy/mcp-proxy.layer.js";
 import { CatalogService, CatalogServiceLive } from "./catalog/CatalogService.js";
+import type { CatalogEntry } from "./types.js";
 import { readHouseCapabilityManifest } from "./house-capabilities.js";
 import { AgentSupervisorLayer, AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { createApp } from "./app.js";
@@ -15,6 +17,8 @@ import {
 } from "./barnacle/index.js";
 
 loadRootEnv();
+
+const log = createLogger("agent-host");
 
 const devToken = process.env.AGENT_HOST_TOKEN ?? "";
 const port = (() => {
@@ -79,9 +83,7 @@ let colyseusHandle: ColyseusWorldBridgeHandle | undefined;
 let barnacleEncounterHandle: EncounterTriggerHandle | undefined;
 
 const server = app.listen(port, "0.0.0.0", () => {
-  console.info(
-    JSON.stringify({ kind: "agent-host.start", publicBase, port, catalog: catalogFilePath, worldApiUrl, colyseusUrl }),
-  );
+  log.info({ kind: "start", publicBase, port, catalog: catalogFilePath, worldApiUrl, colyseusUrl });
   if (!isEnvTruthy(process.env.AGENT_HOST_DISABLE_COLYSEUS_BRIDGE)) {
     const roomIdOverride = process.env.GHOST_SPECTATOR_ROOM_ID?.trim() || undefined;
     void (async () => {
@@ -96,13 +98,11 @@ const server = app.listen(port, "0.0.0.0", () => {
             void runtime.runPromise(deliverWorldEvent(ev));
           },
         });
-        console.info(
-          JSON.stringify({
-            kind: "colyseus.world-bridge.started",
-            worldHttpBase,
-            roomIdOverride: roomIdOverride ?? null,
-          }),
-        );
+        log.info({
+          kind: "colyseus.world-bridge.started",
+          worldHttpBase,
+          roomIdOverride: roomIdOverride ?? null,
+        });
       } catch (e) {
         console.error(
           JSON.stringify({
@@ -122,19 +122,19 @@ const server = app.listen(port, "0.0.0.0", () => {
   if (barnacleEncountersEnabled) {
     void (async () => {
       try {
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "resolving-services" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "resolving-services" });
         const catalog = await runtime.runPromise(
           pipe(CatalogService, Effect.map((c) => c)),
         );
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "catalog-resolved" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "catalog-resolved" });
         const agentSupervisor = await runtime.runPromise(
           pipe(AgentSupervisor, Effect.map((s) => s)),
         );
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "agent-supervisor-resolved" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "agent-supervisor-resolved" });
         const barnacleSupervisor = await runtime.runPromise(
           pipe(BarnacleSupervisor, Effect.map((s) => s)),
         );
-        console.info(JSON.stringify({ kind: "barnacle.encounter-trigger.bootstrap", phase: "barnacle-supervisor-resolved" }));
+        log.info({ kind: "barnacle.encounter-trigger.bootstrap", phase: "barnacle-supervisor-resolved" });
         barnacleEncounterHandle = await startBarnacleEncounterTrigger({
           worldHttpBase,
           registryBaseUrl: worldHttpBase,
@@ -147,6 +147,91 @@ const server = app.listen(port, "0.0.0.0", () => {
         console.error(
           JSON.stringify({
             kind: "barnacle.encounter-trigger.failed-to-start",
+            message: e instanceof Error ? e.message : String(e),
+          }),
+        );
+      }
+    })();
+  }
+
+  // Startup reconciliation: if a live session is already active (e.g. after a pod
+  // restart), spawn all roster agents' ghosts without waiting for world.session.start.
+  //
+  // In a cold-start (full cluster restart), ghost agents self-register after agent-host
+  // starts. We poll the catalog until rosterAgent entries appear before spawning, so
+  // reconciliation works even when the catalog starts empty.
+  if (process.env.AGENT_HOST_DISABLE_RECONCILIATION !== "1") {
+    const reconciliationWaitMs = (() => {
+      const raw = process.env.AGENT_HOST_RECONCILIATION_WAIT_MS;
+      const n = raw !== undefined ? parseInt(raw, 10) : NaN;
+      return Number.isFinite(n) && n >= 0 ? n : 30_000;
+    })();
+    void (async () => {
+      try {
+        const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
+          signal: AbortSignal.timeout(10_000),
+        });
+        if (!liveRes.ok) return;
+        const sessions = (await liveRes.json()) as Array<{ id: string }>;
+        if (!Array.isArray(sessions) || sessions.length === 0) {
+          log.info({ kind: "agent-host.startup-reconciliation.no-active-session" });
+          return;
+        }
+        log.info({
+          kind: "agent-host.startup-reconciliation.found-session",
+          sessionId: sessions[0]!.id,
+        });
+
+        const supervisor = await runtime.runPromise(
+          pipe(AgentSupervisor, Effect.map((s) => s)),
+        );
+        const catalog = await runtime.runPromise(
+          pipe(CatalogService, Effect.map((c) => c)),
+        );
+
+        // Poll until at least one rosterAgent entry is registered, or we time out.
+        // Ghost agents (random-agent, npc-agent) register after agent-host starts, so
+        // on a cold start the catalog is empty at reconciliation time.
+        const rosterPollStart = Date.now();
+        let rosterEntries: Array<[string, CatalogEntry]> = [];
+        while (true) {
+          const catalogFile = await runtime.runPromise(catalog.load());
+          rosterEntries = Object.entries(catalogFile.agents).filter(([, entry]) => {
+            if (entry.kind === "mini-game") return false;
+            return (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
+          });
+          if (rosterEntries.length > 0) break;
+          const elapsed = Date.now() - rosterPollStart;
+          if (elapsed >= reconciliationWaitMs) {
+            log.info({
+              kind: "agent-host.startup-reconciliation.no-roster-agents",
+              note: `timed out after ${elapsed}ms waiting for rosterAgent registrations`,
+            });
+            return;
+          }
+          log.info({
+            kind: "agent-host.startup-reconciliation.waiting-for-roster-agents",
+            elapsedMs: elapsed,
+            waitMs: reconciliationWaitMs,
+          });
+          await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
+        }
+
+        for (const [agentId, entry] of rosterEntries) {
+          const result = await runtime.runPromise(
+            supervisor.spawnRosterForAgent(agentId, entry.baseUrl),
+          );
+          log.info({
+            kind: "agent-host.startup-reconciliation.roster-spawn-complete",
+            agentId,
+            spawned: result.spawned.length,
+            failed: result.failed.length,
+          });
+        }
+      } catch (e) {
+        console.error(
+          JSON.stringify({
+            kind: "agent-host.startup-reconciliation.failed",
             message: e instanceof Error ? e.message : String(e),
           }),
         );

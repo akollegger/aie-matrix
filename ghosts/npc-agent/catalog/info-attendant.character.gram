@@ -1,0 +1,31 @@
+{ kind: "matrix-character" }
+
+(charAttendant:Character { id: "info-attendant", name: "Info Attendant", glyph: "ℹ️",
+  background: "A friendly conference guide stationed near the entrance.",
+  enabled: true, defaultAction: "idle" })
+
+(idle:DialogNode       { responses: ["How can I help? Ask me about directions, sessions, or speakers."] })
+(directions:DialogNode { responses: ["Hall A is north, Hall B is south. Main stage is straight ahead!"] })
+(schedule:DialogNode   { responses: ["Keynote starts at 9am on the main stage. Check the schedule app for full details."] })
+(speakers:DialogNode   { responses: ["Today's keynote speakers are listed in the schedule app. Main stage is straight ahead."] })
+(farewell:DialogNode   { responses: ["Enjoy the fair! Come back if you have more questions.", "Have a great time!"] })
+
+[dialog_1:DialogTree |
+  (idle)-[:DialogTrigger { triggers: ["where","hall","map","location"] }]->(directions),
+  (idle)-[:DialogTrigger { triggers: ["schedule","when","session","keynote"] }]->(schedule),
+  (idle)-[:DialogTrigger { triggers: ["speaker","talk","presentation"] }]->(speakers),
+  (idle)-[:DialogTrigger { triggers: ["bye","goodbye","thanks","thank"] }]->(farewell),
+  (idle)-[:DialogTrigger { triggers: [] }]->(idle),
+  (directions)-[:DialogTrigger { triggers: [] }]->(idle),
+  (schedule)-[:DialogTrigger { triggers: [] }]->(idle),
+  (speakers)-[:DialogTrigger { triggers: [] }]->(idle),
+  (farewell)-[:DialogTrigger { triggers: [] }]->(idle)
+]
+
+[behavior_1:Behaviors |
+  (b1:Rule { when: "crowded", do: "go",   toward: "random" }),
+  (b2:Rule { when: "always",  do: "idle"                   })
+]
+
+(charAttendant)-[:HAS_DIALOG]->(dialog_1)
+(charAttendant)-[:EXHIBITS_BEHAVIOR]->(behavior_1)

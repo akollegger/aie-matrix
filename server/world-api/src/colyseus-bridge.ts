@@ -29,6 +29,10 @@ export interface ColyseusWorldBridge {
   setGhostInventory(ghostId: string, itemRefs: string[]): void;
   /** Spectator debug: last successful MCP tool label for this ghost. */
   setGhostLastAction(ghostId: string, label: string): void;
+  /** Set character gram labels for an NPC ghost (e.g. "Character:Broker"). Cleared on ghost leave. */
+  setGhostLabels(ghostId: string, labels: string): void;
+  /** Set display glyph for a ghost (single grapheme/emoji). Source: agent card or character gram. */
+  setGhostGlyph(ghostId: string, glyph: string): void;
   /**
    * Fan out a `world-v1` Colyseus message to every connected bridge client
    * (e.g. ghost house) — used after `say` to reach nearby Social agents.
@@ -50,6 +54,8 @@ export function createColyseusBridge(room: MatrixRoom): ColyseusWorldBridge {
     setTileItems: (h3Index, itemRefs) => room.setTileItems(h3Index, itemRefs),
     setGhostInventory: (ghostId, itemRefs) => room.setGhostInventory(ghostId, itemRefs),
     setGhostLastAction: (ghostId, label) => room.setGhostLastAction(ghostId, label),
+    setGhostLabels: (ghostId, labels) => room.setGhostLabels(ghostId, labels),
+    setGhostGlyph: (ghostId, glyph) => room.setGhostGlyph(ghostId, glyph),
     fanoutWorldV1: (payload) => {
       room.broadcast("world-v1", payload);
     },

@@ -4,11 +4,17 @@ import type { GhostPosition } from "../../types/ghostPosition.js";
 interface GhostListProps {
   readonly identities: ReadonlyMap<string, GhostIdentity>;
   readonly ghosts: ReadonlyMap<string, GhostPosition>;
+  readonly ghostLabels?: ReadonlyMap<string, string>;
   readonly selectedGhostId: string | null;
   readonly onSelect: (ghostId: string) => void;
 }
 
-export function GhostList({ identities, ghosts, selectedGhostId, onSelect }: GhostListProps) {
+function isBroker(labels: string | undefined): boolean {
+  if (!labels) return false;
+  return labels.split(",").some((l) => l.trim() === "Broker" || l.trim() === "Character:Broker");
+}
+
+export function GhostList({ identities, ghosts, ghostLabels, selectedGhostId, onSelect }: GhostListProps) {
   const allIds = new Set([...identities.keys(), ...ghosts.keys()]);
   const entries = Array.from(allIds)
     .map((ghostId) => {
@@ -16,21 +22,15 @@ export function GhostList({ identities, ghosts, selectedGhostId, onSelect }: Gho
       return {
         ghostId,
         name: identity?.name ?? ghostId.slice(0, 12),
-        ghostClass: identity?.ghostClass ?? "unknown",
+        broker: isBroker(ghostLabels?.get(ghostId)),
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <aside className="w-80 shrink-0 flex flex-col border-r border-border pr-4 overflow-y-auto">
-      <header className="text-base uppercase tracking-[--tracking-label] text-text-muted mb-3 pb-2 border-b border-border">
-        Ghosts
-      </header>
-      {entries.length === 0 ? (
-        <p className="text-base text-text-faint italic">No ghosts active</p>
-      ) : (
-        <ul className="list-none m-0 p-0 flex flex-col gap-1">
-          {entries.map(({ ghostId, name, ghostClass }) => {
+    <aside className="w-80 shrink-0 flex flex-col overflow-y-auto">
+      <ul className="list-none m-0 p-0 flex flex-col gap-1">
+        {entries.map(({ ghostId, name, broker }) => {
             const isOnline = ghosts.has(ghostId);
             const isSelected = ghostId === selectedGhostId;
             return (
@@ -59,17 +59,30 @@ export function GhostList({ identities, ghosts, selectedGhostId, onSelect }: Gho
                       ].join(" ")}
                     >
                       {name}
-                    </span>
-                    <span className="block text-base text-text-faint uppercase tracking-[--tracking-label]">
-                      {ghostClass}
+                      {broker && (
+                        <span
+                          title="Broker — offers challenges"
+                          className="content-panel-dim"
+                          style={{
+                            marginLeft: 6,
+                            fontSize: "0.7em",
+                            fontWeight: 600,
+                            letterSpacing: "0.04em",
+                            color: "rgba(250,210,80,0.9)",
+                            padding: "0 4px",
+                            verticalAlign: "middle",
+                          }}
+                        >
+                          BROKER
+                        </span>
+                      )}
                     </span>
                   </span>
                 </button>
               </li>
             );
-          })}
-        </ul>
-      )}
+        })}
+      </ul>
     </aside>
   );
 }

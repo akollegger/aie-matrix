@@ -1,4 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
+import { timingSafeEqual, createHash } from "node:crypto";
+import { ulid } from "ulid";
+import { createLogger } from "@aie-matrix/logger";
+
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { CellId } from "@aie-matrix/server-colyseus";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -89,7 +92,27 @@ function artObjectsForAt(cell: string, at: TileItemSummary["at"]): TileItemSumma
   return out;
 }
 import { ProposalService } from "./ProposalService.js";
+import { GroupService } from "./GroupService.js";
+import { EvalContractService } from "./EvalContractService.js";
+import { LeaderboardService } from "./LeaderboardService.js";
 import { worldNow, WORLD_TIMEZONE } from "@aie-matrix/shared-types";
+
+// ---------------------------------------------------------------------------
+// Spawn grants — populated at map load from parsed SpawnGrant[] blocks.
+// Keyed by role (e.g. "explorer", "funder").
+// ---------------------------------------------------------------------------
+
+import type { SpawnGrant } from "@aie-matrix/map-gram";
+const log = createLogger("mcp");
+
+/** role → grants. Populated when a map is loaded. */
+let _spawnGrants: SpawnGrant[] = [];
+
+/** Called when a new map is loaded so spawn grants are available at ghost first-connect. */
+export function setSpawnGrants(grants: SpawnGrant[]): void {
+  _spawnGrants = grants;
+}
+
 
 type McpToolExtra = RequestHandlerExtra<ServerRequest, ServerNotification>;
 
@@ -107,10 +130,13 @@ type ToolServices =
   | RedisGhostStoreService
   | WorldCalendarService
   | LedgerService
-  | ProposalService;
+  | ProposalService
+  | GroupService
+  | EvalContractService
+  | LeaderboardService;
 
 function logJson(record: Record<string, unknown>): void {
-  console.info(JSON.stringify(record));
+  log.info(record as Parameters<typeof log.info>[0]);
 }
 
 function formatGhostLastAction(toolName: string, input: unknown): string {
@@ -391,7 +417,16 @@ function whereamiEffect(extra: McpToolExtra): Effect.Effect<WhereAmIResult, Auth
     if (!cell) {
       return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(tileId) }));
     }
-    return { h3Index: tileId, tileId, col: cell.col, row: cell.row };
+    const store = yield* RegistryStoreService;
+    const ghostRecord = store.ghosts.get(ghostId);
+    return {
+      h3Index: tileId,
+      tileId,
+      col: cell.col,
+      row: cell.row,
+      ...(ghostRecord?.displayName !== undefined ? { displayName: ghostRecord.displayName } : {}),
+      ...(ghostRecord?.background !== undefined ? { background: ghostRecord.background } : {}),
+    };
   });
 }
 
@@ -566,10 +601,8 @@ function nearestEffect(
     if (wantedItemClass) {
       const target = wantedItemClass.toLowerCase();
       for (const [ref, def] of sidecar) {
-        // itemClass may be colon-separated multi-label (e.g. "Badge:Sponsor");
-        // match any segment.
-        const segments = def.itemClass.toLowerCase().split(":");
-        if (segments.includes(target)) matchingItemRefs.add(ref);
+        // Match against typeName (e.g. "BrassKey", "GoldCoin")
+        if (def.typeName.toLowerCase() === target) matchingItemRefs.add(ref);
       }
     }
 
@@ -1208,6 +1241,12 @@ function takeEffect(
             code: "NOT_CARRIABLE" as const,
             reason: `Item "${itemRef}" cannot be picked up.`,
           }),
+        "LedgerError.InsufficientFunds": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_HERE" as const,
+            reason: `Item "${itemRef}" is not available on this tile.`,
+          }),
       }),
     );
   });
@@ -1326,6 +1365,12 @@ function dropEffect(
             code: "TILE_FULL" as const,
             reason: `Tile ${hereId} is at full capacity.`,
           }),
+        "LedgerError.InsufficientFunds": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_CARRYING" as const,
+            reason: `You are not carrying "${itemRef}" (ledger check failed).`,
+          }),
       }),
     );
   });
@@ -1371,7 +1416,7 @@ function timecheckEffect(
 // ---------------------------------------------------------------------------
 
 function offerEffect(
-  input: { to: string; give_resource: string; give_qty: number; for_resource: string; for_qty: number },
+  input: { to: string; give_item: string; give_qty: number; for_item: string; for_qty: number },
   extra: McpToolExtra,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
   return Effect.gen(function* () {
@@ -1382,8 +1427,8 @@ function offerEffect(
     const either = yield* Effect.either(proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.to,
-      give: { resource: input.give_resource, qty: input.give_qty },
-      want: { resource: input.for_resource, qty: input.for_qty },
+      give: { resource: input.give_item, qty: input.give_qty },
+      want: { resource: input.for_item, qty: input.for_qty },
     }, (id) => bridge.getGhostCell(id)));
     if (either._tag === "Left") {
       const e = either.left;
@@ -1550,6 +1595,236 @@ function ledgerVerifyEffect(
     }
     const err = result.left;
     return { ok: false, code: "CHAIN_TAMPERED", atId: err.atId, expectedHash: err.expectedHash, actualHash: err.actualHash };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Group tools: group.offer, group.vote, group.leave, group.say, group.list
+// ---------------------------------------------------------------------------
+
+function groupOfferEffect(
+  input: { to: string; resource: string; amount: number; expires_in?: number },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const bridge = yield* WorldBridgeService;
+    const store = yield* RegistryStoreService;
+    const proposals = yield* ProposalService;
+    const groups = yield* GroupService;
+
+    const expiresIn = Math.min(Math.max(input.expires_in ?? 300, 30), 3600);
+
+    // Determine if `to` is a known ghost (formation) or a group (join).
+    // Ghost IDs are registered in the registry; group IDs are not.
+    const isKnownGhost = store.ghosts.has(input.to);
+
+    if (isKnownGhost) {
+      // Group formation: shared offer ghost→ghost (proximity enforced)
+      const either = yield* Effect.either(
+        proposals.propose(
+          {
+            initiatorId: ghostId,
+            counterpartyId: input.to,
+            give: { resource: input.resource, qty: input.amount },
+            want: { resource: input.resource, qty: input.amount },
+            shared: true,
+            expiresAtMs: Date.now() + expiresIn * 1000,
+          },
+          (id) => bridge.getGhostCell(id),
+        ),
+      );
+      if (either._tag === "Left") {
+        const e = either.left as any;
+        const tag: string = e._tag ?? "UNKNOWN";
+        const message =
+          tag === "LedgerError.CounterpartyNotNearby"
+            ? "Both ghosts must be on the same tile to form a group"
+            : tag === "GroupError.ResourceMismatch"
+            ? "Both sides must offer the same resource type to form a group"
+            : tag === "LedgerError.MonotonicTradeRejected"
+            ? `${e.resource ?? "resource"} cannot be used for group formation`
+            : tag;
+        return { ok: false, code: tag.replace(/\w+\./, ""), message };
+      }
+      const result = either.right;
+      return {
+        ok: true,
+        proposalId: result.proposalId,
+        expiresAt: new Date(result.expiresAt).toISOString(),
+        type: "formation",
+        note: `Offer sent to ${store.ghosts.get(input.to)?.displayName ?? input.to}. They must call agree to form the group.`,
+      };
+    } else {
+      // Group join: ghost→group
+      const expiresAt = Date.now() + expiresIn * 1000;
+      const either = yield* Effect.either(
+        groups.proposeJoin({
+          groupId: input.to,
+          prospectId: ghostId,
+          resource: input.resource,
+          amount: input.amount,
+          expiresAt,
+        }),
+      );
+      if (either._tag === "Left") {
+        const e = either.left as any;
+        const tag: string = e._tag ?? "UNKNOWN";
+        const message =
+          tag === "GroupError.NotFound" ? `Group ${input.to} not found`
+          : tag === "GroupError.Dissolved" ? `Group ${input.to} has been dissolved`
+          : tag === "GroupError.AntesMismatch" ? `Ante mismatch: expected ${e.expected} ${e.resource}`
+          : tag === "GroupError.DuplicateOffer" ? "You already have a pending offer to join this group"
+          : tag;
+        return { ok: false, code: tag.replace("GroupError.", ""), message };
+      }
+      const result = either.right;
+      return {
+        ok: true,
+        offerId: result.offerId,
+        expiresAt: new Date(result.expiresAt).toISOString(),
+        type: "join",
+        note: "Join offer posted. Group members have been notified.",
+      };
+    }
+  });
+}
+
+function groupVoteEffect(
+  input: { group_id: string; offer_id: string; decision: "accept" | "reject" },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const either = yield* Effect.either(
+      groups.vote({ offerId: input.offer_id, voterId: ghostId, decision: input.decision }),
+    );
+    if (either._tag === "Left") {
+      const e = either.left as any;
+      const tag: string = e._tag ?? "UNKNOWN";
+      const message =
+        tag === "GroupError.OfferNotFound" ? "Offer not found or already resolved"
+        : tag === "GroupError.OfferExpired" ? "Offer has expired"
+        : tag === "GroupError.NotMember" ? `Not a member of group ${input.group_id}`
+        : tag;
+      return { ok: false, code: tag.replace("GroupError.", ""), message };
+    }
+    const result = either.right;
+    return { ok: true, resolved: result.resolved, outcome: result.outcome };
+  });
+}
+
+function groupLeaveEffect(
+  input: { group_id: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const ledger = yield* LedgerService;
+    const groupId = input.group_id;
+
+    // Fetch membership to know the contribution before leaving
+    const memberships = yield* groups.listMemberships(ghostId);
+    const membership = memberships.find(m => m.groupId === groupId);
+    if (!membership) {
+      return { ok: false, code: "NOT_MEMBER", message: `Not a member of group ${groupId}` };
+    }
+
+    const { resource, amount } = membership.myContribution;
+    const groupBagId = `group:${groupId}`;
+    const txId = ulid();
+
+    // Only commit a ledger transfer when the contribution is non-zero;
+    // communication-only bonds (amount=0) have no resources to return.
+    if (amount > 0) {
+      const txEither = yield* Effect.either(
+        ledger.commit({
+          id: txId,
+          transfers: [{ resource, qty: amount, from: groupBagId, to: ghostId }],
+          cause: "group.leave",
+          actors: [ghostId],
+          ts: Date.now(),
+        }),
+      );
+      if (txEither._tag === "Left") {
+        const e = txEither.left as any;
+        const tag: string = e._tag ?? "LEDGER_ERROR";
+        return { ok: false, code: tag.replace("LedgerError.", ""), message: `Leave failed: ${tag}` };
+      }
+    }
+
+    const either = yield* Effect.either(groups.leave({ groupId, ghostId, leaveTxId: txId }));
+    if (either._tag === "Left") {
+      const e = either.left;
+      return { ok: false, code: e._tag.replace("GroupError.", ""), message: e._tag };
+    }
+    const result = either.right;
+    const groupName = membership.name;
+    const base = `Left group "${groupName}". Returned: ${amount} ${resource} to your bag.`;
+    return {
+      ok: true,
+      message: result.dissolved ? `${base} Group dissolved.` : base,
+      dissolved: result.dissolved,
+      returned: result.returned,
+    };
+  });
+}
+
+function groupSayEffect(
+  input: { group_id: string; content: string },
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const bridge = yield* WorldBridgeService;
+    const store = yield* RegistryStoreService;
+    const senderName = store.ghosts.get(ghostId)?.displayName ?? ghostId;
+    const senderTile = bridge.getGhostCell(ghostId) ?? "";
+
+    const either = yield* Effect.either(
+      groups.groupSay({ groupId: input.group_id, senderId: ghostId, senderName, content: input.content, senderTile }),
+    );
+    if (either._tag === "Left") {
+      const e = either.left;
+      const message =
+        e._tag === "GroupError.NotFound" || e._tag === "GroupError.Dissolved"
+          ? `Group ${input.group_id} not found or dissolved`
+          : e._tag === "GroupError.NotMemberOrParticipant"
+          ? `Not a member or participant of group ${input.group_id}`
+          : e._tag;
+      return { ok: false, code: e._tag.replace("GroupError.", ""), message };
+    }
+    const result = either.right;
+    return { ok: true, messageId: result.messageId, deliveredTo: result.mx_listeners.length };
+  });
+}
+
+function groupListEffect(
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const groups = yield* GroupService;
+    const memberships = yield* groups.listMemberships(ghostId);
+    if (memberships.length === 0) {
+      return { ok: true, groups: [], message: "You are not a member of any group." };
+    }
+    const lines = memberships.map(
+      m => `- "${m.name}" (group_id: ${m.groupId}) — ${m.memberCount} members, contributed: ${m.myContribution.amount} ${m.myContribution.resource}`,
+    );
+    return {
+      ok: true,
+      groups: memberships,
+      message: `You are a member of ${memberships.length} group(s):\n${lines.join("\n")}`,
+    };
   });
 }
 
@@ -1892,18 +2167,18 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "offer",
     {
-      description: "Propose a resource trade to another ghost. You offer to give one resource in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Monotonic resources (XP, badges) cannot be traded. Both ghosts must be on the same tile.",
+      description: "Propose an item trade to another ghost. You offer to give one item in exchange for another. The counterparty must call `agree` to complete the trade, or either party may `decline`. Both ghosts must be on the same tile. Set `for_qty` to 0 to give an item as a gift with no return expected.",
       inputSchema: {
         to: z.string().describe("The ghost ID of the counterparty."),
-        give_resource: z.string().describe("The resource you are offering to give."),
+        give_item: z.string().describe("The item you are offering to give."),
         give_qty: z.number().int().positive().describe("The quantity you are offering to give."),
-        for_resource: z.string().describe("The resource you want in return."),
-        for_qty: z.number().int().positive().describe("The quantity you want in return."),
+        for_item: z.string().describe("The item you want in return (use an empty string for a gift)."),
+        for_qty: z.number().int().nonnegative().describe("The quantity you want in return. Use 0 to give as a gift."),
       },
     },
-    async ({ to, give_resource, give_qty, for_resource, for_qty }, extra) =>
-      runTool("offer", { to, give_resource, give_qty, for_resource, for_qty },
-        offerEffect({ to, give_resource, give_qty, for_resource, for_qty }, extra), extra),
+    async ({ to, give_item, give_qty, for_item, for_qty }, extra) =>
+      runTool("offer", { to, give_item, give_qty, for_item, for_qty },
+        offerEffect({ to, give_item, give_qty, for_item, for_qty }, extra), extra),
   );
 
   server.registerTool(
@@ -1947,6 +2222,502 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       runTool("decline", { proposalId }, declineEffect({ proposalId }, extra), extra),
   );
 
+  server.registerTool(
+    "group.offer",
+    {
+      description:
+        "Initiate a shared resource offer for group formation (to a ghost — both must be on the same tile) or to join an existing group (to a group_id). Both sides contribute the same resource and amount. The offer expires after `expires_in` seconds (default 300). For formation: the counterparty must call `agree` to complete. For joining: existing members vote via `group.vote`.",
+      inputSchema: {
+        to: z.string().describe("Ghost ID (for formation) or group ID (for joining an existing group)."),
+        resource: z.string().describe("Resource type to contribute (e.g. 'gold', 'trust')."),
+        amount: z.number().int().min(0).describe("Amount to contribute. Use 0 for a communication-only bond."),
+        expires_in: z.number().int().min(30).max(3600).optional().describe("Seconds until offer expires (default 300)."),
+      },
+    },
+    async ({ to, resource, amount, expires_in }, extra) =>
+      runTool("group.offer", { to, resource, amount, expires_in }, groupOfferEffect({ to, resource, amount, expires_in }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.vote",
+    {
+      description:
+        "Cast your vote on a pending group admission offer. You must be a current member of the group. A majority of members who vote before expiry determines the outcome. Abstentions do not count as rejections.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID the offer is for."),
+        offer_id: z.string().describe("The offer ID returned when the prospect called group.offer."),
+        decision: z.enum(["accept", "reject"]).describe("Your vote."),
+      },
+    },
+    async ({ group_id, offer_id, decision }, extra) =>
+      runTool("group.vote", { group_id, offer_id, decision }, groupVoteEffect({ group_id, offer_id, decision }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.leave",
+    {
+      description:
+        "Leave a group and recover the full amount you contributed. No vote is required. If you are the last member, the group is dissolved.",
+      inputSchema: {
+        group_id: z.string().describe("The ID of the group to leave."),
+      },
+    },
+    async ({ group_id }, extra) =>
+      runTool("group.leave", { group_id }, groupLeaveEffect({ group_id }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.say",
+    {
+      description:
+        "Post a message to a group chat thread. All members and participants receive it regardless of their location. Does not require conversational mode and does not interrupt movement.",
+      inputSchema: {
+        group_id: z.string().describe("The ID of the group to post to."),
+        content: z.string().describe("The message content."),
+      },
+    },
+    async ({ group_id, content }, extra) =>
+      runTool("group.say", { group_id, content }, groupSayEffect({ group_id, content }, extra), extra),
+  );
+
+  server.registerTool(
+    "group.add_participant",
+    {
+      description:
+        "Add a non-member actor to the group chat as a participant. Participants can send and receive group messages but cannot vote on admissions and contribute no resources. Any group member may call this.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID to add the participant to."),
+        actor_id: z.string().describe("The actor ID to add as a participant."),
+        role: z.string().describe("A role label for the participant (e.g. 'observer', 'inquisitor')."),
+      },
+    },
+    async ({ group_id, actor_id, role }, extra) =>
+      runTool(
+        "group.add_participant",
+        { group_id, actor_id, role },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const groups = yield* GroupService;
+          const either = yield* Effect.either(
+            groups.addParticipant({ groupId: group_id, actorId: actor_id, role, requesterId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            const tag: string = e._tag ?? "UNKNOWN";
+            return { ok: false, code: tag.replace("GroupError.", ""), message: tag };
+          }
+          return { ok: true, message: `Actor ${actor_id} added as participant with role "${role}".` };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "group.remove_participant",
+    {
+      description:
+        "Remove a participant from the group chat. The participant loses access to the group thread immediately. Any group member may call this.",
+      inputSchema: {
+        group_id: z.string().describe("The group ID to remove the participant from."),
+        actor_id: z.string().describe("The actor ID of the participant to remove."),
+      },
+    },
+    async ({ group_id, actor_id }, extra) =>
+      runTool(
+        "group.remove_participant",
+        { group_id, actor_id },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const groups = yield* GroupService;
+          const either = yield* Effect.either(
+            groups.removeParticipant({ groupId: group_id, actorId: actor_id, requesterId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            const tag: string = e._tag ?? "UNKNOWN";
+            return { ok: false, code: tag.replace("GroupError.", ""), message: tag };
+          }
+          return { ok: true, message: `Actor ${actor_id} removed from group.` };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "group.list",
+    {
+      description: "List all groups you are currently a member of, with your contribution and member count for each.",
+    },
+    async (extra) =>
+      runTool("group.list", {}, groupListEffect(extra), extra),
+  );
+
+  // ---------------------------------------------------------------------------
+  // Eval contract tools
+  // ---------------------------------------------------------------------------
+
+  server.registerTool(
+    "eval_contract_open",
+    {
+      description:
+        "Open a new eval contract. You become the client; the staked amount is immediately debited from your resource bag into escrow.",
+      inputSchema: {
+        contractorId: z.string().describe("Ghost ID or Group ID of the contractor"),
+        evaluatorId: z.string().describe("Ghost ID of the evaluator"),
+        request: z.string().describe("Opaque request payload (e.g. JSON question spec)"),
+        stakeResource: z.string().describe("Resource type to stake (must match a registered resource)"),
+        stakeAmount: z.number().int().nonnegative().describe("Amount to stake from your bag (0 is valid; floor arithmetic may yield zero payout)"),
+        deadlineMs: z.number().int().positive().describe("Absolute deadline as Unix milliseconds"),
+        artifactRef: z.string().optional().describe("SHA-256 hex of prompt-only exam artifact (exam contracts only)"),
+        disclosureRef: z.string().optional().describe("SHA-256 hex of full exam artifact with answer key (exam contracts only)"),
+      },
+    },
+    async ({ contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs, artifactRef, disclosureRef }, extra) =>
+      runTool(
+        "eval_contract_open",
+        { contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs, artifactRef, disclosureRef },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.openContract({
+              clientId: ghostId,
+              contractorId,
+              evaluatorId,
+              request,
+              stakeResource,
+              stakeAmount,
+              deadline: deadlineMs,
+              artifactRef,
+              disclosureRef,
+            }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          const c = either.right;
+          return { contractId: c.id, state: c.state, escrowActorId: c.escrowActorId, openedAt: c.openedAt };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_accept",
+    {
+      description:
+        "Accept an open eval contract. You must be the named contractor (or a member of the named group). Freezes beneficiary list for group contractors.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract to accept"),
+      },
+    },
+    async ({ contractId }, extra) =>
+      runTool(
+        "eval_contract_accept",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.acceptContract({ contractId, callerId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          const c = either.right;
+          return { contractId: c.id, state: c.state, beneficiaries: c.beneficiaries };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_decline",
+    {
+      description:
+        "Decline an open eval contract. You must be the named contractor. The client's stake is returned from escrow.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract to decline"),
+      },
+    },
+    async ({ contractId }, extra) =>
+      runTool(
+        "eval_contract_decline",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.declineContract({ contractId, callerId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          return { contractId, state: either.right.state };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_submit",
+    {
+      description:
+        "Submit a response to an accepted eval contract. You must be the named contractor. Submission is immutable once recorded.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract"),
+        submission: z.string().describe("Opaque submission payload"),
+      },
+    },
+    async ({ contractId, submission }, extra) =>
+      runTool(
+        "eval_contract_submit",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.submitContract({ contractId, callerId: ghostId, submission }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          const submitted = either.right;
+          // Dispatch world.contract.submitted to the evaluator ghost (fire-and-forget)
+          const bridge = yield* WorldBridgeService;
+          bridge.fanoutWorldV1({
+            t: "contract.submitted",
+            targetGhostId: submitted.evaluatorId,
+            payload: { contractId: submitted.id, contractorId: ghostId },
+          });
+          return { contractId, state: submitted.state };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_evaluate",
+    {
+      description:
+        "Issue a verdict on a submitted eval contract. You must be the named evaluator. Settlement executes atomically immediately after.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract"),
+        verdict: z.number().min(0).max(1).describe("Score in [0,1]; 0=fail, 1=full payment"),
+      },
+    },
+    async ({ contractId, verdict }, extra) =>
+      runTool(
+        "eval_contract_evaluate",
+        { contractId, verdict },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.evaluateContract({ contractId, callerId: ghostId, verdict }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          const r = either.right;
+          return {
+            contractId: r.id,
+            state: r.state,
+            verdict: r.verdict,
+            contractorPayment: r.contractorPayment,
+            clientRefund: r.clientRefund,
+            movements: r.movements,
+          };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_get",
+    {
+      description:
+        "Read the current state of an eval contract. You must be the named client, contractor, or evaluator.",
+      inputSchema: {
+        contractId: z.string().describe("ID of the contract"),
+      },
+    },
+    async ({ contractId }, extra) =>
+      runTool(
+        "eval_contract_get",
+        { contractId },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.getContract({ contractId, callerId: ghostId }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          return either.right;
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "eval_contract_list",
+    {
+      description:
+        "List eval contracts visible to you (where you are the client, contractor, or evaluator). Optionally filter by state.",
+      inputSchema: {
+        state: z
+          .enum(["Open", "Accepted", "Submitted", "Evaluated", "Settled", "Declined", "Expired"])
+          .optional()
+          .describe("Filter by contract state"),
+      },
+    },
+    async ({ state }, extra) =>
+      runTool(
+        "eval_contract_list",
+        { state },
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const svc = yield* EvalContractService;
+          const either = yield* Effect.either(
+            svc.listContracts({ callerId: ghostId, state }),
+          );
+          if (either._tag === "Left") {
+            const e = either.left as any;
+            return { ok: false, code: e._tag, message: e.message ?? e._tag };
+          }
+          return { contracts: either.right };
+        }),
+        extra,
+      ),
+  );
+
+  // ---------------------------------------------------------------------------
+  // Leaderboard tools
+  // ---------------------------------------------------------------------------
+
+  server.registerTool(
+    "leaderboards",
+    {
+      description: "List all declared leaderboards for the current session.",
+      inputSchema: {},
+    },
+    async (_input, extra) =>
+      runTool(
+        "leaderboards",
+        {},
+        Effect.gen(function* () {
+          const svc = yield* LeaderboardService;
+          return yield* svc.listLeaderboards();
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "leaderboard",
+    {
+      description: "Get ranked results for a specific leaderboard.",
+      inputSchema: {
+        id: z.string().describe("Leaderboard ID"),
+      },
+    },
+    async ({ id }, extra) =>
+      runTool(
+        "leaderboard",
+        { id },
+        Effect.gen(function* () {
+          const svc = yield* LeaderboardService;
+          const either = yield* Effect.either(svc.getLeaderboard(id));
+          if (either._tag === "Left") {
+            const e = either.left;
+            return {
+              ok: false,
+              code: e._tag,
+              message: e._tag === "LeaderboardError.NotFound"
+                ? `Leaderboard not found: ${id}`
+                : (e as { cause: string }).cause,
+            };
+          }
+          return either.right;
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "ghost_announce",
+    {
+      description: "Announce this ghost's character labels and display glyph to the world. Idempotent — call once on connect.",
+      inputSchema: {
+        labels: z.string().optional().describe("Comma-separated character gram labels (e.g. \"Character:Broker\"). Empty string clears labels."),
+        glyph: z.string().optional().describe("Single grapheme/emoji to display for this ghost (e.g. \"👻\"). Empty string clears glyph."),
+      },
+    },
+    async (input, extra) =>
+      runTool(
+        "ghost_announce",
+        input,
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const bridge = yield* WorldBridgeService;
+          bridge.setGhostLabels(ghostId, input.labels ?? "");
+          bridge.setGhostGlyph(ghostId, input.glyph ?? "");
+          return { ok: true };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
+    "finalize-leaderboards",
+    {
+      description: "Freeze all leaderboards. Admin/scheduler only. Idempotent.",
+      inputSchema: {},
+    },
+    async (_input, extra) =>
+      runTool(
+        "finalize-leaderboards",
+        {},
+        Effect.gen(function* () {
+          if (
+            !extra.authInfo?.scopes?.includes("admin") &&
+            !extra.authInfo?.scopes?.includes("scheduler")
+          ) {
+            yield* Effect.fail(
+              new AuthMissingCredentials({
+                message: "finalize-leaderboards requires admin or scheduler authentication",
+              }),
+            );
+          }
+          const svc = yield* LeaderboardService;
+          const either = yield* Effect.either(svc.finalizeLeaderboards());
+          if (either._tag === "Left") {
+            return { ok: false, code: either.left._tag, message: either.left.cause };
+          }
+          return { ok: true };
+        }),
+        extra,
+      ),
+  );
+
   return server;
 }
 
@@ -1985,6 +2756,50 @@ export function handleGhostMcpEffect(
     const adminAuth = tryAdminAuth(req);
     const auth = adminAuth ?? (yield* authenticateGhostRequestEffect(req));
     req.auth = auth;
+
+    // First-connect spawn-grant seeding: seed the ghost's bag based on their role (from agent card metadata).
+    // Uses ledger duplicate-tx guard to prevent double-seeding on reconnect.
+    const authExtra = auth.extra as { ghostId?: string; agentId?: string; role?: string } | undefined;
+    const seedGhostId = authExtra?.ghostId;
+    const seedAgentId = authExtra?.agentId;
+    // role comes from agent card metadata; absent defaults to "attendee" per FR-009.
+    // The JWT does not carry role — it must be fetched from the agent catalog via agentId.
+    // Until catalog lookup is wired here, we fall back to "attendee" for all connects.
+    const seedRole = authExtra?.role ?? "attendee";
+    if (seedGhostId) {
+      const spawnGrant = _spawnGrants.find(g => g.role === seedRole);
+      if (spawnGrant && spawnGrant.grants.length > 0) {
+        // Fire-and-forget seeding — errors logged but do not fail the MCP request
+        const ledgerSvc = yield* LedgerService;
+        for (const grant of spawnGrant.grants) {
+          const txId = createHash("sha256")
+            .update(`${seedGhostId}:${seedRole}:${grant.itemRef}`)
+            .digest("hex")
+            .slice(0, 26)
+            .toUpperCase();
+          void Effect.runPromise(
+            ledgerSvc.commit({
+              id: txId,
+              transfers: [{ resource: grant.itemRef, qty: grant.qty, from: "world", to: seedGhostId }],
+              cause: "spawn-grant",
+              actors: [seedGhostId],
+              ts: Date.now(),
+            }).pipe(
+              Effect.catchAll((e) =>
+                Effect.sync(() => {
+                  // DuplicateTransaction is expected on reconnect — suppress it silently
+                  const tag = (e as { _tag?: string })._tag ?? "";
+                  if (tag !== "LedgerError.DuplicateTransaction") {
+                    logJson({ kind: "mcp.spawn-grant.warn", ghostId: seedGhostId, agentId: seedAgentId ?? "unknown", role: seedRole, itemRef: grant.itemRef, error: tag });
+                  }
+                })
+              )
+            )
+          );
+        }
+      }
+    }
+
     const bridge = yield* WorldBridgeService;
     const store = yield* RegistryStoreService;
     const rules = yield* MovementRulesService;
@@ -1995,6 +2810,9 @@ export function handleGhostMcpEffect(
     const ledger = yield* LedgerService;
     const calendarSvc = yield* WorldCalendarService;
     const proposalSvc = yield* ProposalService;
+    const groupSvc = yield* GroupService;
+    const evalContractSvc = yield* EvalContractService;
+    const leaderboardSvc = yield* LeaderboardService;
     const servicesLayer = Layer.mergeAll(
       Layer.succeed(WorldBridgeService, bridge),
       Layer.succeed(RegistryStoreService, store),
@@ -2006,9 +2824,34 @@ export function handleGhostMcpEffect(
       Layer.succeed(LedgerService, ledger),
       Layer.succeed(WorldCalendarService, calendarSvc),
       Layer.succeed(ProposalService, proposalSvc),
+      Layer.succeed(GroupService, groupSvc),
+      Layer.succeed(EvalContractService, evalContractSvc),
+      Layer.succeed(LeaderboardService, leaderboardSvc),
     ) as Layer.Layer<ToolServices>;
     yield* Effect.tryPromise({
       try: async () => {
+        // Inject CORS headers into every response the MCP transport writes,
+        // since StreamableHTTPServerTransport calls res.writeHead directly.
+        const origWriteHead = res.writeHead.bind(res);
+        (res as ServerResponse).writeHead = function (statusCode: number, ...args: unknown[]) {
+          const corsHeaders: Record<string, string> = {
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS, DELETE",
+            "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, mcp-protocol-version, X-Requested-With, Origin",
+          };
+          if (args.length === 0) {
+            return origWriteHead(statusCode, corsHeaders);
+          }
+          if (typeof args[0] === "string") {
+            // statusMessage, headers?
+            const hdrs = (args[1] ?? {}) as Record<string, string>;
+            return origWriteHead(statusCode, args[0] as string, { ...corsHeaders, ...hdrs });
+          }
+          // headers only (no statusMessage)
+          const hdrs = (args[0] ?? {}) as Record<string, string>;
+          return origWriteHead(statusCode, { ...corsHeaders, ...hdrs });
+        } as typeof res.writeHead;
+
         const mcp = buildGhostMcpServer(servicesLayer);
         const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
         await mcp.connect(transport);

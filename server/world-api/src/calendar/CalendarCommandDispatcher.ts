@@ -1,5 +1,6 @@
 import { Data, Effect } from "effect";
 import type { SchedulerContext } from "@aie-matrix/shared-types";
+import { LeaderboardService } from "../LeaderboardService.js";
 
 export class NoActorOrigin extends Data.TaggedError("NoActorOrigin")<{
   readonly command: string;
@@ -26,7 +27,7 @@ export class CommandNotYetImplemented extends Data.TaggedError("CommandNotYetImp
 export function dispatchCalendarCommand(
   command: string,
   _context: SchedulerContext,
-): Effect.Effect<void, NoActorOrigin | UnknownCalendarCommand | CommandNotYetImplemented> {
+): Effect.Effect<void, NoActorOrigin | UnknownCalendarCommand | CommandNotYetImplemented, LeaderboardService> {
   const verb = command.trim().split(/\s+/)[0]?.toLowerCase();
 
   switch (verb) {
@@ -50,6 +51,16 @@ export function dispatchCalendarCommand(
     case "deactivate":
       // Stubs pending RFC-0006 world objects implementation.
       return Effect.fail(new CommandNotYetImplemented({ command }));
+
+    case "finalize-leaderboards":
+      return Effect.gen(function* () {
+        const leaderboardSvc = yield* LeaderboardService;
+        yield* leaderboardSvc.finalizeLeaderboards();
+      }).pipe(
+        Effect.catchTag("LeaderboardError.PersistenceError", (e) =>
+          Effect.logWarning(`[calendar] finalize-leaderboards failed: ${e.cause}`),
+        ),
+      );
 
     default:
       return Effect.fail(new UnknownCalendarCommand({ command }));

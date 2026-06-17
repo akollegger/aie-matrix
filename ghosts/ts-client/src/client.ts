@@ -1,7 +1,20 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { SayResult, ByeResult, InboxResult } from "@aie-matrix/shared-types";
+import type {
+  SayArgs, SayResult,
+  ByeResult,
+  InboxResult,
+  WhoAmIResult,
+  WhereAmIResult,
+  ExitsResult,
+  LookArgs, LookResult,
+  GoArgs, GoResult,
+  TakeArgs, TakeResult,
+  DropArgs, DropResult,
+  InventoryResult,
+  TraverseResult,
+} from "@aie-matrix/shared-types";
 
 /** One observed MCP tool call — fired AFTER the call resolves. */
 export interface ToolCallObservation {
@@ -64,10 +77,44 @@ export class GhostMcpClient {
     this.client = null;
   }
 
-  async say(content: string, intent?: string): Promise<SayResult> {
-    const payload: Record<string, unknown> = { content };
-    if (intent !== undefined) payload["intent"] = intent;
-    return (await this.callTool("say", payload)) as SayResult;
+  async whoami(): Promise<WhoAmIResult> {
+    return (await this.callTool("whoami")) as WhoAmIResult;
+  }
+
+  async whereami(): Promise<WhereAmIResult> {
+    return (await this.callTool("whereami")) as WhereAmIResult;
+  }
+
+  async exits(): Promise<ExitsResult> {
+    return (await this.callTool("exits")) as ExitsResult;
+  }
+
+  async look(args: LookArgs = {}): Promise<LookResult> {
+    return (await this.callTool("look", args as unknown as Record<string, unknown>)) as LookResult;
+  }
+
+  async go(args: GoArgs): Promise<GoResult> {
+    return (await this.callTool("go", args as unknown as Record<string, unknown>)) as GoResult;
+  }
+
+  async take(args: TakeArgs): Promise<TakeResult> {
+    return (await this.callTool("take", args as unknown as Record<string, unknown>)) as TakeResult;
+  }
+
+  async drop(args: DropArgs): Promise<DropResult> {
+    return (await this.callTool("drop", args as unknown as unknown as Record<string, unknown>)) as DropResult;
+  }
+
+  async inventory(): Promise<InventoryResult> {
+    return (await this.callTool("inventory")) as InventoryResult;
+  }
+
+  async traverse(args: { via: string }): Promise<TraverseResult> {
+    return (await this.callTool("traverse", args as unknown as Record<string, unknown>)) as TraverseResult;
+  }
+
+  async say(args: SayArgs): Promise<SayResult> {
+    return (await this.callTool("say", args as unknown as unknown as Record<string, unknown>)) as SayResult;
   }
 
   async bye(): Promise<ByeResult> {
@@ -76,6 +123,14 @@ export class GhostMcpClient {
 
   async inbox(): Promise<InboxResult> {
     return (await this.callTool("inbox")) as InboxResult;
+  }
+
+  /**
+   * Announce this ghost's character gram labels to the world server so the
+   * Colyseus room can badge this NPC in the spectator state. Idempotent.
+   */
+  async announce(labels: string, glyph = ""): Promise<void> {
+    await this.callTool("ghost_announce", { labels, glyph });
   }
 
   /**

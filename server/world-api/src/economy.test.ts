@@ -8,13 +8,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Effect } from "effect";
 import { ulid } from "ulid";
-import type { ResourceType } from "@aie-matrix/shared-types";
 import { makeLedgerServiceInMemory } from "./LedgerServiceInMemory.js";
+import type { ItemSeed } from "./LedgerService.js";
 import { consumeFromBag } from "./economy.js";
 
-const SEED: ResourceType[] = [
-  { id: "gold", class: "conserved", qty: 1000, floor: 0, label: "Gold" },
-  { id: "food-cake", class: "conserved", qty: 100, floor: 0, label: "Slice of Cake" },
+const SEED: ItemSeed[] = [
+  { itemRef: "gold", qty: 1000 },
+  { itemRef: "food-cake", qty: 100 },
 ];
 
 // Per-unit Fuel for foods (mirrors ItemDefinition.fuel; cake delivers 4).

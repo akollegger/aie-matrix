@@ -7,6 +7,6 @@ export type SpawnContext = {
   readonly houseEndpoints: { readonly mcp: string; readonly a2a: string };
   readonly token: string;
   readonly worldEntryPoint: string;
-  readonly ghostCard: { class: string; displayName: string; partnerEmail: string | null };
+  readonly ghostCard: { class: string; displayName: string; partnerEmail: string | null; glyph?: string };
   readonly expiresAt: string;
 };

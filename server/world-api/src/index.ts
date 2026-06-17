@@ -90,10 +90,12 @@ export {
 } from "./world-api-errors.js";
 export {
   LedgerService,
+  type LedgerServiceOps,
 } from "./LedgerService.js";
 export {
   ProposalService,
   ProposalServiceLayer,
+  ProposalServiceWithGroupLayer,
   makeProposalService,
   makeProposalServiceLayer,
   PROPOSAL_TTL_MS,
@@ -114,7 +116,6 @@ export {
   LedgerProposalNotFound,
   LedgerSelfAgreeDenied,
   LedgerProposalExpired,
-  LedgerMonotonicTradeRejected,
   LedgerCounterpartyNotNearby,
   type LedgerError,
 } from "./ledger-errors.js";
@@ -147,7 +148,10 @@ export {
   type MapListItem,
   type MapListResponse,
 } from "./map/MapRoutes.js";
-export { handleGhostMcpEffect } from "./mcp-server.js";
+export {
+  handleGhostMcpEffect,
+  setSpawnGrants,
+} from "./mcp-server.js";
 export {
   ItemService,
   ItemServiceImpl,
@@ -167,6 +171,24 @@ export {
   ensureMapManagementConstraints,
 } from "./neo4j-graph-init.js";
 export { seedNeo4jGraphArtifacts } from "./neo4j-graph-seed.js";
+export { GroupService, type GroupServiceOps } from "./GroupService.js";
+export { makeGroupServiceInMemory, GroupServiceInMemoryLayer } from "./GroupServiceInMemory.js";
+export { makeGroupServiceLiveLayer } from "./GroupServiceLive.js";
+export {
+  GroupNotFound,
+  GroupDissolved,
+  GroupNotMember,
+  GroupNotParticipant,
+  GroupNotMemberOrParticipant,
+  GroupAntesMismatch,
+  GroupResourceMismatch,
+  GroupOfferNotFound,
+  GroupOfferExpired,
+  GroupDuplicateOffer,
+  GroupPersistenceError,
+  GroupChatStoreError,
+  type GroupError,
+} from "./group-errors.js";
 export {
   Neo4jGraphService,
   makeLiveNeo4jGraphLayer,
@@ -225,3 +247,24 @@ export type { ScheduleEvent, ScheduledEvent, ScheduleEventKind } from "./calenda
 export { toScheduledEvent } from "./calendar/CalendarEvent.js";
 export { CalendarParseError, parseCalendarGramFile, parseCalendarGramText } from "./calendar/parse-calendar-gram.js";
 export { WorldCalendarService, makeWorldCalendarLayer, makeWorldCalendarService } from "./calendar/WorldCalendarService.js";
+export { EvalContractService, type EvalContractServiceOps } from "./EvalContractService.js";
+export { makeEvalContractServiceInMemory, EvalContractServiceInMemoryLayer } from "./EvalContractServiceInMemory.js";
+export { makeEvalContractServiceLiveLayer } from "./EvalContractServiceLive.js";
+export {
+  EvalContractNotFound,
+  EvalContractWrongState,
+  EvalContractNotAuthorized,
+  EvalContractInvalidEvaluator,
+  EvalContractDeadlineExpired,
+  EvalContractPersistenceError,
+  type EvalContractError,
+} from "./eval-contract-errors.js";
+export { LeaderboardService, type LeaderboardServiceOps } from "./LeaderboardService.js";
+export { makeLeaderboardServiceInMemory, LeaderboardServiceInMemoryLayer } from "./LeaderboardServiceInMemory.js";
+export { makeLeaderboardServiceLiveLayer } from "./LeaderboardServiceLive.js";
+export {
+  LeaderboardNotFound,
+  LeaderboardPersistenceError,
+  type LeaderboardError,
+} from "./leaderboard-errors.js";
+export { parseLeaderboardGramText } from "./parse-leaderboard-gram.js";

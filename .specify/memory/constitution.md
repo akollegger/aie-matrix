@@ -132,6 +132,17 @@ Every plan and pull request MUST pass these checks:
   appropriate tier (unit or integration) covering all interface methods and
   error paths. Missing tests require an explicit written justification naming
   which methods are uncovered and the plan to cover them.
+- **`pnpm run build` passes cleanly from the repository root.** This is a hard
+  gate — `pnpm typecheck` (`--noEmit`) does not substitute for it. TypeScript
+  composite project reference builds (`tsc -p tsconfig.json`) enforce stricter
+  resolution rules than `--noEmit` and can surface errors that typecheck misses.
+  Run the full build before marking implementation complete or opening a PR.
+- **`/speckit-verify` passes with a GO verdict before opening a pull request.**
+  This skill runs the full gate sequence: clean build, unit tests, integration
+  tests (with a Podman/Docker Neo4j container), spec coverage, and documentation
+  impact. A NO-GO verdict means the PR must not be opened until the failing gates
+  are resolved. Use `--skip-integration` only when a container runtime is
+  unavailable and integration tests have been run separately.
 
 Reviews SHOULD prioritize behavioral regressions, boundary violations, contract
 drift, and missing verification before style-level comments.
@@ -151,4 +162,4 @@ Compliance is checked during proposal review, planning, task generation, and pul
 request review. `AGENTS.md`, `README.md`, and the files under `.specify/templates/`
 are the operational guidance that MUST stay aligned with this constitution.
 
-**Version**: 1.2.0 | **Ratified**: 2026-04-12 | **Last Amended**: 2026-05-31
+**Version**: 1.3.0 | **Ratified**: 2026-04-12 | **Last Amended**: 2026-06-02

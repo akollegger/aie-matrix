@@ -1,5 +1,6 @@
 # aie-matrix staging stack — Tier 2 (ADR-0007)
-# Runs 4 containers: neo4j, redis, server (combined), agent-host
+# Runs containers: neo4j, redis, server (combined), agent-host, random-agent, npc-agent
+# The funder character runs inside npc-agent (029-funder-into-npc)
 #
 # Usage:
 #   cp deploy/staging/.env.staging.example deploy/staging/.env.staging
@@ -71,6 +72,8 @@ services:
       # (items layer) and registered from it at startup. WORLD_GHOST_STIPEND_GOLD
       # grants each ghost starting gold so it can buy from them.
       WORLD_GHOST_STIPEND_GOLD: "${WORLD_GHOST_STIPEND_GOLD:-60}"
+      # Set to "development" for local testing / CI to use file-backed maps (no GCS required)
+      AIE_MATRIX_MODE: "${AIE_MATRIX_MODE:-production}"
       AIE_MATRIX_INTERNAL_FANOUT_TOKEN: "${AIE_MATRIX_INTERNAL_FANOUT_TOKEN:-}"
       ADMIN_TOKEN: "${ADMIN_TOKEN}"
       # IC-002: MCP URL for spawn credentials — must be reachable by agent-host container
@@ -280,6 +283,37 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+
+  # ─── NPC agent (rule-based character roster, RFC-0026/0027) ─────────────────
+  npc-agent:
+    build:
+      context: ../..      # repo root
+      dockerfile: ghosts/npc-agent/Dockerfile
+    environment:
+      NODE_ENV: "${NODE_ENV:-production}"
+      # Agent-host connection — uses Docker service name, not localhost
+      AGENT_HOST_URL: "http://agent-host:4000"
+      AGENT_HOST_TOKEN: "${AGENT_HOST_TOKEN}"
+      # Public URL for this agent — used in A2A agent card and catalog registration
+      NPC_AGENT_PUBLIC_BASE_URL: "${NPC_AGENT_PUBLIC_BASE_URL:-http://npc-agent:4004}"
+      AGENT_PORT: "4004"
+      # Character catalog — mount a host directory of .character.gram files
+      NPC_CATALOG_DIR: "/catalog"
+    ports:
+      - "4004:4004"
+    volumes:
+      - "${NPC_CATALOG_DIR:-./catalog}:/catalog:ro"
+    networks:
+      - aie-matrix
+    depends_on:
+      agent-host:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4004/health',(r)=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(d.includes('\"status\":\"ok\"')?0:1))}).on('error',()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 # ─── Volumes ────────────────────────────────────────────────────────────────
 

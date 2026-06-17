@@ -14,6 +14,7 @@
     "dev": "tsx watch src/index.ts"
   },
   "dependencies": {
+    "@aie-matrix/logger": "workspace:*",
     "@aie-matrix/map-gram": "workspace:*",
     "@aie-matrix/root-env": "workspace:*",
     "@aie-matrix/server-auth": "workspace:*",

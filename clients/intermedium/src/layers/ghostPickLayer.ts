@@ -25,16 +25,13 @@ export function createGhostPickLayer(
     id,
     data,
     pickable,
-    opacity: 0.35,
+    opacity: 0,
     getPosition: (d) => [d.lng, d.lat, 0],
     getRadius: 22,
     radiusMinPixels: 18,
     radiusMaxPixels: 40,
     getFillColor: [0, 0, 0, 0] as [number, number, number, number],
-    getLineColor: [120, 200, 255, 100] as [number, number, number, number],
-    getLineWidth: 1,
-    lineWidthUnits: "pixels",
-    stroked: true,
+    stroked: false,
     radiusUnits: "pixels",
   });
 }

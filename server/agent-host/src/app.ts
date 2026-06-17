@@ -6,7 +6,7 @@ import { CatalogService } from "./catalog/CatalogService.js";
 import { AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { McpProxyService } from "./mcp-proxy/McpProxyService.js";
 import { ActiveSessionsPreventDeregister, Unauthorized } from "./errors.js";
-import type { WorldCredential } from "./types.js";
+import type { AgentSession, WorldCredential } from "./types.js";
 import { BarnacleSupervisor } from "./barnacle/index.js";
 import {
   BARNACLE_COMPLETE_SCHEMA,
@@ -478,6 +478,227 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           ghostId: session.ghostId,
           mcpToken: session.mcpToken,
         });
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.sync(() => {
+            const m = mapHouseError(e);
+            res.status(m.status).json(m.body);
+          }),
+        ),
+      ),
+    );
+  });
+
+  // Trusted spawn: collapses registry caretaker→adopt→spawn into one call.
+  // For roster agents (matrix.rosterAgent=true), spawns all characters without an orchestrator ghost.
+  // For regular agents, provisions a single ghost and spawns the agent session.
+  app.post("/v1/sessions/spawn-trusted/:agentId", (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        yield* requireBearer(req);
+        const agentId = req.params.agentId!;
+        const b = req.body as {
+          ghostId?: string;
+          displayName?: string;
+          background?: string;
+          characterId?: string;
+        } | null;
+
+        const supervisor = yield* AgentSupervisor;
+
+        // Check if this is a roster agent — if so, spawn all characters directly.
+        const catalog = yield* CatalogService;
+        const catalogEntry = yield* catalog.get(agentId).pipe(
+          Effect.map((e) => ({ found: true as const, entry: e })),
+          Effect.catchAll(() => Effect.succeed({ found: false as const, entry: null as never })),
+        );
+        if (
+          catalogEntry.found &&
+          catalogEntry.entry.kind !== "mini-game" &&
+          (catalogEntry.entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true
+        ) {
+          const result = yield* supervisor.spawnRosterForAgent(agentId, catalogEntry.entry.baseUrl);
+          res.status(201).json({ agentId, ...result });
+          return;
+        }
+
+        // Standard single-ghost path: provision ghost + spawn agent session.
+        const provisionResult = yield* Effect.promise(() =>
+          fetch(`${worldApiUrl}/registry/ghosts`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: req.headers.authorization ?? "",
+            },
+            body: JSON.stringify({
+              agentId,
+              ghostId: b?.ghostId,
+              displayName: b?.displayName,
+              background: b?.background,
+            }),
+          }).then(async (r) => {
+            if (!r.ok) {
+              const detail = await r.text().catch(() => "");
+              return { ok: false as const, status: r.status, detail };
+            }
+            const data = (await r.json()) as {
+              ghostId: string;
+              credential: { token: string; worldApiBaseUrl: string };
+            };
+            return { ok: true as const, data };
+          }).catch((e: unknown) => {
+            const msg = e instanceof Error ? e.message : String(e);
+            return { ok: false as const, status: 502, detail: msg };
+          }),
+        );
+        if (!provisionResult.ok) {
+          res.status(provisionResult.status).json({ error: "ghost provision failed", detail: provisionResult.detail, code: "PROVISION_FAILED" });
+          return;
+        }
+        const { ghostId, credential } = provisionResult.data;
+
+        const session = yield* supervisor.spawn({
+          agentId,
+          ghostId,
+          credential: { token: credential.token, worldApiBaseUrl: credential.worldApiBaseUrl },
+          ...(typeof b?.displayName === "string" && b.displayName.trim().length > 0
+            ? { displayName: b.displayName.trim() }
+            : {}),
+          ...(typeof b?.background === "string" && b.background.trim().length > 0
+            ? { background: b.background.trim() }
+            : {}),
+          ...(typeof b?.characterId === "string" && b.characterId.trim().length > 0
+            ? { characterId: b.characterId.trim() }
+            : {}),
+        });
+
+        res.status(201).json({
+          sessionId: session.sessionId,
+          agentId: session.agentId,
+          ghostId: session.ghostId,
+        });
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.sync(() => {
+            const m = mapHouseError(e);
+            res.status(m.status).json(m.body);
+          }),
+        ),
+      ),
+    );
+  });
+
+  // IC-006: agent-callable roster spawn endpoint.
+  // Authenticated by the calling agent's own MCP session token (not the host dev token).
+  app.post("/v1/sessions/spawn-roster/:agentId", (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        const tok = getBearerValue(req);
+        if (!tok) {
+          res.status(401).json({ error: "missing Authorization", code: "UNAUTHORIZED" });
+          return;
+        }
+        const supervisor = yield* AgentSupervisor;
+        const callerSession = supervisor.getByMcpToken(tok);
+        if (!callerSession) {
+          res.status(401).json({ error: "invalid agent session token", code: "UNAUTHORIZED" });
+          return;
+        }
+
+        const agentId = req.params.agentId!;
+        if (callerSession.agentId !== agentId) {
+          res.status(403).json({ error: "token does not belong to this agent", code: "FORBIDDEN" });
+          return;
+        }
+
+        const b = req.body as {
+          sessionId?: string;
+          characters?: Array<{
+            characterId?: string;
+            ghostId?: string;
+            displayName?: string;
+            background?: string;
+            credential?: { token?: string; worldApiBaseUrl?: string };
+          }>;
+        } | null;
+        if (!b || typeof b.sessionId !== "string" || !Array.isArray(b.characters)) {
+          res.status(400).json({ error: "sessionId and characters[] are required", code: "VALIDATION_FAILED" });
+          return;
+        }
+        const spawned: Array<{ characterId: string; ghostId: string; sessionId: string; ok: true }> = [];
+        const failed: Array<{ characterId: string; reason: string }> = [];
+
+        type SpawnOutcome = { ok: true; session: AgentSession | null } | { ok: false; reason: string };
+
+        for (const char of b.characters) {
+          const characterId = char.characterId;
+          if (typeof characterId !== "string" || characterId.trim().length === 0) {
+            failed.push({ characterId: String(characterId ?? ""), reason: "characterId is required" });
+            continue;
+          }
+
+          // Provision a fresh ghost credential from the registry for each character.
+          // This gives each character its own ghostId and world-api JWT so their MCP
+          // calls are routed correctly (not conflated with the npc-agent's own ghost).
+          type ProvResult =
+            | { ok: true; ghostId: string; credential: WorldCredential }
+            | { ok: false; reason: string };
+          const provResult: ProvResult = yield* Effect.tryPromise({
+            try: async () => {
+              const provRes = await fetch(`${worldApiUrl}/registry/ghosts`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ agentId }),
+              });
+              if (!provRes.ok) {
+                const body = await provRes.text().catch(() => "");
+                return { ok: false as const, reason: `registry provision failed: ${provRes.status} ${body}` };
+              }
+              const prov = await provRes.json() as { ghostId?: string; credential?: { token?: string; worldApiBaseUrl?: string } };
+              if (!prov.ghostId || !prov.credential?.token || !prov.credential?.worldApiBaseUrl) {
+                return { ok: false as const, reason: "registry provision returned incomplete response" };
+              }
+              return { ok: true as const, ghostId: prov.ghostId, credential: { token: prov.credential.token, worldApiBaseUrl: prov.credential.worldApiBaseUrl } };
+            },
+            catch: (e) => new Error(e instanceof Error ? e.message : String(e)),
+          }).pipe(Effect.catchAll((e) => Effect.succeed({ ok: false as const, reason: e.message })));
+
+          if (!provResult.ok) {
+            failed.push({ characterId, reason: provResult.reason });
+            continue;
+          }
+          const ghostId = provResult.ghostId;
+          const worldCredential: WorldCredential = provResult.credential;
+
+          const spawnResult: SpawnOutcome = yield* supervisor.spawn({
+            agentId,
+            ghostId,
+            credential: worldCredential,
+            displayName: char.displayName,
+            background: char.background,
+            characterId,
+          }).pipe(
+            Effect.map((session): SpawnOutcome => ({ ok: true, session })),
+            Effect.catchAll((e): Effect.Effect<SpawnOutcome> => {
+              // "ghostId already has an active session" = idempotent restart
+              if (e._tag === "SpawnFailed" && e.message.includes("ghostId already has an active session")) {
+                return Effect.succeed({ ok: true, session: null });
+              }
+              const reason = e._tag === "CapabilityUnmet"
+                ? `capability unmet: ${e.missing.join(", ")}`
+                : e.message;
+              return Effect.succeed({ ok: false, reason });
+            }),
+          );
+
+          if (spawnResult.ok) {
+            spawned.push({ characterId, ghostId, sessionId: b.sessionId, ok: true });
+          } else {
+            failed.push({ characterId, reason: spawnResult.reason });
+          }
+        }
+
+        res.status(200).json({ spawned, failed });
       }).pipe(
         Effect.catchAll((e) =>
           Effect.sync(() => {

@@ -80,7 +80,7 @@ describe("evaluateGo with authored rules", () => {
       getInstanceTokens: () => undefined,
       getInventoryTokens: () => undefined,
       spawnItem: () => false,
-      getSidecar: () => new Map([["statue", { name: "Statue", itemClass: "Obstacle", carriable: false, capacityCost: 1 }]]),
+      getSidecar: () => new Map([["statue", { identity: "statue", typeName: "Statue", name: "Statue", takeable: false, capacityCost: 1 }]]),
     };
     const out = evaluateGo(map, makeCellId(0, 0), "ne", permissiveRuleset(), { ghostLabels: new Set() }, {
       destGhostCount: 0,

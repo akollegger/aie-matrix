@@ -194,3 +194,65 @@ pnpm test   # from server/world-api/
 # or to run only calendar tests:
 pnpm exec node --import tsx --test "src/calendar/*.test.ts"
 ```
+
+## Group Formation — RFC-0024
+
+Groups are a first-class disembodied world actor: a named collective of ghosts with a shared resource bag and a location-independent group chat thread. See [RFC-0024](../../proposals/rfc/0024-group-formation-and-chat.md) and [spec-023](../../specs/023-group-formation/).
+
+### MCP tools
+
+| Tool | Input | Description |
+|------|-------|-------------|
+| `group.offer` | `{ to, resource, amount, expires_in? }` | Form a group (ghost→ghost, must be co-located) or join an existing group (ghost→group_id) |
+| `group.vote` | `{ group_id, offer_id, decision }` | Cast `accept` or `reject` on a pending admission offer |
+| `group.leave` | `{ group_id }` | Leave a group and recover contributed resources |
+| `group.say` | `{ group_id, content }` | Post to the group chat (no location required) |
+| `group.list` | _(none)_ | List your current group memberships |
+| `group.add_participant` | `{ group_id, actor_id, role }` | Add a non-member participant (any member may call) |
+| `group.remove_participant` | `{ group_id, actor_id }` | Remove a participant (any member may call) |
+
+### Services
+
+- `GroupService` — Effect Context.Tag for the group operations interface
+- `GroupServiceInMemory` — in-memory implementation (unit tests, dev)
+- `GroupServiceLive` — Neo4j-backed production implementation (requires `NEO4J_URI`)
+
+The server wires `GroupServiceInMemoryLayer` + `ProposalServiceWithGroupLayer` by default. To use the Neo4j-backed live implementation, inject `makeGroupServiceLiveLayer(driver, conversationDataDir)`.
+
+### Running group unit tests
+
+```bash
+pnpm test   # from server/world-api/
+# or to run only group tests:
+pnpm exec node --import tsx --test "test/GroupService.test.ts"
+```
+
+## Eval Contracts — RFC-0022
+
+Eval contracts are peer-to-peer performance agreements between ghosts. A client stakes resources into escrow when opening a contract; the contractor accepts or declines; an independent evaluator issues a verdict in `[0,1]` that triggers automatic settlement. See [RFC-0022](../../proposals/rfc/0022-eval-contract-protocol.md) and [spec-024](../../specs/024-eval-contracts/).
+
+### MCP tools
+
+| Tool | Input | Description |
+|------|-------|-------------|
+| `eval_contract_open` | `{ contractorId, evaluatorId, request, stakeResource, stakeAmount, deadlineMs }` | Open a contract and stake resources into escrow |
+| `eval_contract_accept` | `{ contractId }` | Contractor accepts the contract (freezes beneficiaries if group contractor) |
+| `eval_contract_decline` | `{ contractId }` | Contractor declines; escrow returned to client |
+| `eval_contract_submit` | `{ contractId, submission }` | Contractor submits a response before the deadline |
+| `eval_contract_evaluate` | `{ contractId, verdict }` | Evaluator issues verdict `0..1`; settlement executes immediately |
+| `eval_contract_get` | `{ contractId }` | Read contract state (parties only) |
+| `eval_contract_list` | `{ state? }` | List contracts visible to the caller |
+
+### Services
+
+- `EvalContractService` — Effect Context.Tag for the contract operations interface
+- `EvalContractServiceInMemory` — in-memory implementation (unit tests, dev)
+- `EvalContractServiceLive` — Neo4j-backed implementation; persists `(:EvalContract)` nodes and delegates ledger movements to `LedgerService`
+
+### Running eval contract unit tests
+
+```bash
+pnpm test   # from server/world-api/
+# or to run only eval contract tests:
+pnpm exec node --import tsx --test "src/EvalContractService.test.ts"
+```

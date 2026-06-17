@@ -6,13 +6,20 @@ export interface ParsedRuleCost {
   payee: string;
 }
 
+/**
+ * A role-based item grant, derived from per-item `[:Grants { role: qty, ... } | (itemRef)]` blocks.
+ * Multiple Grants blocks are merged by role so consumers see one entry per role.
+ */
+export interface SpawnGrant {
+  role: string;
+  grants: Array<{ itemRef: string; qty: number }>;
+}
+
 export interface ParsedMap {
   name: string;
   elevation: number;
   tileTypes: Map<string, TileTypeDef>;
   itemTypes: Map<string, ItemTypeDef>;
-  /** Resource type declarations from the [resources:Resources | ...] block, if present. */
-  resourceTypes: ParsedResourceType[];
   /**
    * All navigable and item-bearing cells after layer merging, keyed by H3 res-15 index.
    * Includes cells expanded from polygon fills. Use for runtime navigation (Colyseus, movement).
@@ -35,6 +42,8 @@ export interface ParsedMap {
   itemPlacements: ParsedItemPlacement[];
   portals: ParsedPortal[];
   rules: ParsedRule[];
+  /** Role-based item grants, aggregated from all `[:Grants { role: qty } | (itemRef)]` blocks. */
+  spawnGrants: SpawnGrant[];
 }
 
 export interface ParsedCell {
@@ -66,7 +75,10 @@ export interface TileTypeDef {
 
 export interface ItemTypeDef {
   identity: string;
-  /** Pascal-case label used in gram nodes (e.g., "BrassKey"). Matches values in `cell.items`. */
+  /**
+   * Pascal-case label used in gram nodes (e.g., "BrassKey"). Matches values in `cell.items`.
+   * Used as the canonical itemRef string throughout the system (ledger resource ID, MCP tool params, etc.).
+   */
   typeName: string;
   name: string;
   description?: string;
@@ -98,15 +110,6 @@ export interface ParsedRule {
   cost?: ParsedRuleCost;
 }
 
-export interface ParsedResourceType {
-  id: string;
-  class: "conserved" | "monotonic";
-  /** Seeded quantity in the world bag (conserved only; ignored for monotonic). */
-  qty: number;
-  floor: number;
-  label: string;
-}
-
 /** A single explicit tile placement from a `(:Tile:X { geometry: [h3\`...\`] })` declaration. */
 export interface ParsedExplicitTile {
   h3Index: string;
@@ -128,11 +131,18 @@ export interface ParsedPolygon {
   description?: string;
 }
 
-/** An item placement from a `(:Item:X { geometry: [h3\`...\`] })` declaration, with layer membership. */
+/**
+ * An item placement from a `(:Item:X { geometry: [h3\`...\`] })` declaration, with layer membership.
+ * `itemRef` is the Pascal-case ItemType label (e.g. "BrassKey") used as the ledger resource ID.
+ * `qty` defaults to 1 when not declared in the gram source.
+ */
 export interface ParsedItemPlacement {
   h3Index: string;
-  itemTypeName: string;
+  /** Pascal-case ItemType label — canonical itemRef string. */
+  itemRef: string;
   layerIdentity: string;
+  /** Number of units placed at this tile. Defaults to 1. */
+  qty: number;
 }
 
 export class MapGramParseError extends Error {
@@ -140,7 +150,7 @@ export class MapGramParseError extends Error {
 
   constructor(
     /** Discriminant identifying the failure class. */
-    public readonly reason: "missing-layer-stack" | "invalid-h3" | "gram-syntax",
+    public readonly reason: "missing-layer-stack" | "invalid-h3" | "gram-syntax" | "resources-block-forbidden",
     public readonly detail?: string,
   ) {
     super(detail ?? reason);

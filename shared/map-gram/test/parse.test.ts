@@ -65,6 +65,52 @@ describe("parseMapGram — canonical.map.gram", () => {
     expect(itemCell?.items).toContain("BrassKey");
   });
 
+  it("item qty=3 produces three BrassKey entries in cell.items", async () => {
+    const text = await readFile(canonicalPath, "utf8");
+    const map = await parseMapGram(text);
+    const itemCell = map.cells.get("8f2800000000015");
+    const brassKeyCount = itemCell?.items.filter(i => i === "BrassKey").length ?? 0;
+    expect(brassKeyCount).toBe(3);
+  });
+
+  it("itemPlacements carry qty=3 for the BrassKey placement", async () => {
+    const text = await readFile(canonicalPath, "utf8");
+    const map = await parseMapGram(text);
+    const placement = map.itemPlacements.find(p => p.itemRef === "BrassKey");
+    expect(placement).toBeDefined();
+    expect(placement?.qty).toBe(3);
+  });
+
+  it("parses [:Grants { role: qty } | (itemRef)] blocks into spawnGrants by role", async () => {
+    const text = await readFile(canonicalPath, "utf8");
+    const map = await parseMapGram(text);
+    // canonical.map.gram has [:Grants { explorer: 1, attendee: 1 } | (brassKey)]
+    expect(map.spawnGrants.length).toBe(2);
+    const explorer = map.spawnGrants.find(g => g.role === "explorer");
+    const attendee = map.spawnGrants.find(g => g.role === "attendee");
+    expect(explorer?.grants).toContainEqual({ itemRef: "BrassKey", qty: 1 });
+    expect(attendee?.grants).toContainEqual({ itemRef: "BrassKey", qty: 1 });
+  });
+
+  it("merges multiple Grants blocks into the same role entry", async () => {
+    const text = `
+      { kind: "matrix-map", name: "test", elevation: 0 }
+      (brassKey:ItemType:BrassKey { name: "Brass Key", takeable: true })
+      (goldCoin:ItemType:GoldCoin { name: "Gold Coin", takeable: true })
+      [g:Layer {kind: "items", name: "G"} | (:Item:BrassKey { geometry: [h3\`8f2800000000015\`] })]
+      [layers:LayerStack | g]
+      [:Grants { attendee: 1, vendor: 5 } | (brassKey)]
+      [:Grants { attendee: 10, vendor: 50 } | (goldCoin)]
+    `;
+    const map = await parseMapGram(text);
+    const attendee = map.spawnGrants.find(g => g.role === "attendee");
+    const vendor = map.spawnGrants.find(g => g.role === "vendor");
+    expect(attendee?.grants).toContainEqual({ itemRef: "BrassKey", qty: 1 });
+    expect(attendee?.grants).toContainEqual({ itemRef: "GoldCoin", qty: 10 });
+    expect(vendor?.grants).toContainEqual({ itemRef: "BrassKey", qty: 5 });
+    expect(vendor?.grants).toContainEqual({ itemRef: "GoldCoin", qty: 50 });
+  });
+
   it("parses portal with correct fromCell", async () => {
     const text = await readFile(canonicalPath, "utf8");
     const map = await parseMapGram(text);
@@ -93,6 +139,38 @@ describe("parseMapGram — error handling", () => {
 
   it("throws gram-syntax for unparseable text", async () => {
     await expect(parseMapGram("not valid gram {{ }}")).rejects.toMatchObject({ reason: "gram-syntax" });
+  });
+
+  it("gram-syntax detail contains parser diagnostic, not 'An error has occurred'", async () => {
+    // Trailing comma inside a node property block — mimics the real regression.
+    const gramText = `{ kind: "matrix-map", name: "test" }
+[leaderboards:Leaderboards |
+  (top-stars:Leaderboard {
+    title: "Top Stars",
+  }),
+]
+`;
+    const err = await parseMapGram(gramText).catch((e) => e);
+    expect(err).toBeInstanceOf(MapGramParseError);
+    expect(err.reason).toBe("gram-syntax");
+    // detail must come from the parser (position info), not the generic FiberFailure message
+    expect(err.detail).not.toBe("An error has occurred");
+    expect(err.detail).toMatch(/syntax error/i);
+  });
+
+  it("throws resources-block-forbidden when [resources:Resources] block present", async () => {
+    const gramText = `{ kind: "matrix-map", name: "old-resources", elevation: 0 }
+
+(floor:TileType:Floor { name: "Floor" })
+
+[tiles:Layer {kind: "tile"} | (:Tile:Floor { geometry: [h3\`8f2800000000195\`] })]
+[layers:LayerStack | tiles]
+
+[rules:Rules | (floor)-[:GO]->(floor)]
+
+[resources:Resources | (:Resource { id: "gold", label: "Gold", class: "conserved", qty: 100, floor: 0 })]
+`;
+    await expect(parseMapGram(gramText)).rejects.toMatchObject({ reason: "resources-block-forbidden" });
   });
 
   it("skips polygon with fewer than 3 vertices and continues parsing", async () => {

@@ -1,4 +1,5 @@
 import { loadRootEnv } from "@aie-matrix/root-env";
+import { createLogger } from "@aie-matrix/logger";
 import { AGENT_CARD_PATH } from "@a2a-js/sdk";
 import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
@@ -7,6 +8,7 @@ import { buildWandererAgentCard } from "./buildAgentCard.js";
 import { RandomWandererExecutor } from "./executor.js";
 
 loadRootEnv();
+const log = createLogger("random-agent");
 
 function listenPortFromEnv(fallback: number): number {
   const raw = process.env.AGENT_PORT;
@@ -57,6 +59,17 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+app.get("/v1/roster", (_req, res) => {
+  const raw = process.env.RANDOM_AGENT_COUNT;
+  const parsed = raw !== undefined && raw.trim() !== "" ? parseInt(raw, 10) : NaN;
+  const count = Math.max(0, Number.isFinite(parsed) ? parsed : 10);
+  const roster = Array.from({ length: count }, (_, i) => ({
+    characterId: `wanderer-${i + 1}`,
+    displayName: `Wanderer ${i + 1}`,
+  }));
+  res.json(roster);
+});
+
 app.use(`/${AGENT_CARD_PATH}`, agentCardHandler({ agentCardProvider: requestHandler }));
 app.use(
   "/a2a/jsonrpc",
@@ -94,7 +107,7 @@ async function register(): Promise<void> {
         body: JSON.stringify({ agentId, baseUrl: publicBase }),
       });
       if (res.ok || res.status === 201) {
-        console.info(JSON.stringify({ kind: "random-agent.registered", agentId }));
+        log.info({ kind: "registered", agentId });
         return;
       }
       if (res.status === 409) {
@@ -138,14 +151,7 @@ process.on("SIGTERM", () => {
 });
 
 app.listen(port, "0.0.0.0", () => {
-  console.info(
-    JSON.stringify({
-      kind: "random-agent.start",
-      publicBase,
-      port,
-      agentId,
-    }),
-  );
+  log.info({ kind: "start", publicBase, port, agentId });
   // Registration runs after listen — non-blocking relative to accepting connections
   register();
 });

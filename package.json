@@ -6,13 +6,9 @@
   "engines": {
     "node": ">=24"
   },
-  "packageManager": "pnpm@10.33.2",
-  "pnpm": {
-    "overrides": {
-      "@colyseus/core": "0.15.57"
-    }
-  },
+  "packageManager": "pnpm@11.6.0",
   "scripts": {
+    "prepare:effect": "./scripts/prepare-effect.sh",
     "release": "node scripts/release.mjs",
     "clean": "node scripts/clean.mjs",
     "build": "pnpm -r run build",
@@ -32,14 +28,22 @@
     "ghost:cli": "pnpm --filter @aie-matrix/ghost-cli start",
     "demo": "node scripts/demo.mjs",
     "lab": "node scripts/peppers-lab.mjs",
+    "stop": "node scripts/kill-poc-ports.mjs",
+    "stop:force": "node scripts/kill-poc-ports.mjs --yes --force",
     "ports": "node scripts/kill-poc-ports.mjs",
-    "ports:kill": "node scripts/kill-poc-ports.mjs --kill",
     "test": "pnpm run test:packages",
-    "test:packages": "pnpm --filter @aie-matrix/server-world-api test && pnpm --filter @aie-matrix/server-colyseus test && pnpm --filter @aie-matrix/tmj-to-gram test && pnpm --filter @aie-matrix/server-agent-host test && pnpm --filter @aie-matrix/ghost-cli test && pnpm --filter @aie-matrix/random-agent test && pnpm --filter @aie-matrix/client-map-overlay test",
+    "test:packages": "pnpm --filter @aie-matrix/server-world-api test && pnpm --filter @aie-matrix/server-colyseus test && pnpm --filter @aie-matrix/tmj-to-gram test && pnpm --filter @aie-matrix/server-agent-host test && pnpm --filter @aie-matrix/ghost-cli test && pnpm --filter @aie-matrix/random-agent test && pnpm --filter @aie-matrix/npc-agent test && pnpm --filter @aie-matrix/client-map-overlay test",
+    "test:e2e": "pnpm --filter @aie-matrix/e2e test",
     "test:tck": "pnpm --filter @aie-matrix/ghost-tck test",
     "tmj-to-gram": "node ./tools/tmj-to-gram/dist/main.js",
     "map:compare-svg": "pnpm --filter @aie-matrix/tmj-to-gram run gallery:parity",
-    "map:editor": "pnpm --filter @aie-matrix/map-editor dev"
+    "map:editor": "pnpm --filter @aie-matrix/map-editor dev",
+    "test:integration": "node scripts/integration-test.mjs",
+    "test:staging": "node scripts/test-staging.mjs",
+    "test:ghost-spawn": "node scripts/test-ghost-spawn.mjs",
+    "infra:up": "docker compose -f docker-compose.dev.yml up -d",
+    "infra:down": "docker compose -f docker-compose.dev.yml down",
+    "infra:reset": "docker compose -f docker-compose.dev.yml down -v"
   },
   "dependencies": {
     "@aie-matrix/root-env": "workspace:*"

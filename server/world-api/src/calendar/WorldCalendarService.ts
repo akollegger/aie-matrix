@@ -6,6 +6,8 @@ import { toScheduledEvent, todayOccurrences, firedKey } from "./CalendarEvent.js
 import type { ScheduledEvent } from "./CalendarEvent.js";
 import { dispatchCalendarCommand } from "./CalendarCommandDispatcher.js";
 import { makeSchedulerContext } from "@aie-matrix/shared-types";
+import { LeaderboardService } from "../LeaderboardService.js";
+import type { LeaderboardServiceOps } from "../LeaderboardService.js";
 
 // ── Service interface ────────────────────────────────────────────────────────
 
@@ -24,8 +26,24 @@ export const WorldCalendarService = Context.GenericTag<WorldCalendarService>(
 
 const SCHEDULER_CTX = makeSchedulerContext();
 
-function runCommand(command: string, phase: "enter" | "exit"): Effect.Effect<void> {
-  return dispatchCalendarCommand(command, SCHEDULER_CTX).pipe(
+function runCommand(
+  command: string,
+  phase: "enter" | "exit",
+  leaderboardSvc: LeaderboardServiceOps | null,
+): Effect.Effect<void> {
+  const dispatched = leaderboardSvc
+    ? dispatchCalendarCommand(command, SCHEDULER_CTX).pipe(
+        Effect.provideService(LeaderboardService, leaderboardSvc),
+      )
+    : dispatchCalendarCommand(command, SCHEDULER_CTX).pipe(
+        Effect.provideService(LeaderboardService, {
+          init: () => Effect.void,
+          listLeaderboards: () => Effect.succeed([]),
+          getLeaderboard: () => Effect.die("LeaderboardService not available"),
+          finalizeLeaderboards: () => Effect.logWarning("[calendar] LeaderboardService not wired — finalize-leaderboards skipped").pipe(Effect.asVoid),
+        }),
+      );
+  return dispatched.pipe(
     Effect.catchTag("NoActorOrigin", (e) =>
       Effect.logWarning(`[calendar] ${phase} command requires actor position — skipped: ${e.command}`),
     ),
@@ -38,19 +56,39 @@ function runCommand(command: string, phase: "enter" | "exit"): Effect.Effect<voi
   );
 }
 
-function runCommands(commands: readonly string[], phase: "enter" | "exit"): Effect.Effect<void> {
-  return Effect.forEach(commands, (cmd) => runCommand(cmd, phase), { discard: true });
+function runCommands(
+  commands: readonly string[],
+  phase: "enter" | "exit",
+  leaderboardSvc: LeaderboardServiceOps | null,
+): Effect.Effect<void> {
+  return Effect.forEach(commands, (cmd) => runCommand(cmd, phase, leaderboardSvc), { discard: true });
 }
 
 // ── Service factory ──────────────────────────────────────────────────────────
 
 export function makeWorldCalendarLayer(
   events: ScheduleEvent[],
-): Layer.Layer<WorldCalendarService> {
-  return Layer.succeed(WorldCalendarService, makeWorldCalendarService(events));
+  leaderboardSvc?: LeaderboardServiceOps,
+): Layer.Layer<WorldCalendarService, never, LeaderboardService> {
+  if (leaderboardSvc !== undefined) {
+    return Layer.succeed(
+      WorldCalendarService,
+      makeWorldCalendarService(events, leaderboardSvc),
+    );
+  }
+  return Layer.effect(
+    WorldCalendarService,
+    Effect.gen(function* () {
+      const svc = yield* LeaderboardService;
+      return makeWorldCalendarService(events, svc);
+    }),
+  );
 }
 
-export function makeWorldCalendarService(events: ScheduleEvent[]): WorldCalendarService {
+export function makeWorldCalendarService(
+  events: ScheduleEvent[],
+  leaderboardSvc: LeaderboardServiceOps | null = null,
+): WorldCalendarService {
   // Fired-event tracking uses an in-memory Set keyed by firedKey(id, date, n).
   // This prevents re-firing within a single process lifetime (including same-day
   // restarts that happen fast enough). Full cross-restart idempotency requires
@@ -96,7 +134,7 @@ export function makeWorldCalendarService(events: ScheduleEvent[]): WorldCalendar
 
             // ── Enter ──────────────────────────────────────────────────────
             if (Temporal.ZonedDateTime.compare(zdt, now) <= 0 && !fired.has(enterKey)) {
-              yield* runCommands(event.enterCommands, "enter");
+              yield* runCommands(event.enterCommands, "enter", leaderboardSvc);
               fired.add(enterKey);
               yield* Effect.logDebug(`[calendar] started: ${enterKey}`);
             }
@@ -105,7 +143,7 @@ export function makeWorldCalendarService(events: ScheduleEvent[]): WorldCalendar
             if (event.duration > 0 && fired.has(enterKey) && !fired.has(exitKey)) {
               const endZdt = zdt.add({ minutes: event.duration });
               if (Temporal.ZonedDateTime.compare(endZdt, now) <= 0) {
-                yield* runCommands(event.exitCommands, "exit");
+                yield* runCommands(event.exitCommands, "exit", leaderboardSvc);
                 fired.add(exitKey);
                 yield* Effect.logDebug(`[calendar] ended: ${exitKey}`);
               }

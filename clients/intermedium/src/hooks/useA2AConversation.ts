@@ -21,10 +21,10 @@ function toConversationMessage(r: MessageRecord): ConversationMessage {
 async function fetchMessages(
   worldApiUrl: string,
   ghostId: string,
-  since?: string,
+  after?: string,
 ): Promise<ConversationMessage[]> {
   const params = new URLSearchParams();
-  if (since) params.set("since", since);
+  if (after) params.set("after", after);
   const url = `${worldApiUrl}/threads/${encodeURIComponent(ghostId)}?${params.toString()}`;
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -37,10 +37,12 @@ async function postMessage(
   humanId: string,
   ghostId: string,
   text: string,
+  _token?: string | null,
 ): Promise<void> {
-  await fetch(`${worldApiUrl}/threads/${encodeURIComponent(ghostId)}/human-say`, {
+  const base = worldApiUrl.endsWith("/") ? worldApiUrl.slice(0, -1) : worldApiUrl;
+  await fetch(`${base}/threads/${encodeURIComponent(ghostId)}/human-say`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify({ humanId, text }),
   });
 }
@@ -53,13 +55,18 @@ export function useA2AConversation(
   ghostId: string | null,
   worldApiUrl: string,
   humanId: string,
+  token?: string | null,
 ): A2AConversationState {
   const [messages, setMessages] = useState<ConversationMessage[]>([]);
   const [isAvailable, setIsAvailable] = useState(false);
-  const sinceRef = useRef<string | undefined>(undefined);
+  const afterRef = useRef<string | undefined>(undefined);
   const pollRef = useRef<(() => Promise<void>) | null>(null);
 
   useEffect(() => {
+    // Reset conversation state whenever the selected ghost changes.
+    setMessages([]);
+    afterRef.current = undefined;
+
     if (!ghostId || !worldApiUrl) {
       setIsAvailable(false);
       return;
@@ -68,11 +75,11 @@ export function useA2AConversation(
 
     const poll = async () => {
       try {
-        const fetched = await fetchMessages(worldApiUrl, ghostId, sinceRef.current);
+        const fetched = await fetchMessages(worldApiUrl, ghostId, afterRef.current);
         if (cancelled) return;
         if (fetched.length > 0) {
           const last = fetched[fetched.length - 1];
-          if (last?.timestamp) sinceRef.current = last.timestamp;
+          if (last?.messageId) afterRef.current = last.messageId;
           setMessages((prev) => [...prev, ...fetched]);
         }
         setIsAvailable(true);
@@ -95,14 +102,14 @@ export function useA2AConversation(
     async (text: string) => {
       if (!ghostId || !worldApiUrl) return;
       try {
-        await postMessage(worldApiUrl, humanId, ghostId, text);
+        await postMessage(worldApiUrl, humanId, ghostId, text, token);
         // Immediate poll so the sent message appears without waiting for the next interval.
         void pollRef.current?.();
       } catch {
         // Silently ignore; next poll will surface the message if the POST eventually landed.
       }
     },
-    [ghostId, worldApiUrl, humanId],
+    [ghostId, worldApiUrl, humanId, token],
   );
 
   return {

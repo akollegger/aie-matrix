@@ -10,7 +10,9 @@
     "test": "pnpm run build && node dist/index.js",
     "tck:wanderer": "pnpm run build && node dist/wanderer.js",
     "tck:listener": "pnpm run build && node dist/listener.js",
-    "tck:social": "pnpm run build && node dist/social.js"
+    "tck:social": "pnpm run build && node dist/social.js",
+    "tck:npc": "pnpm run build && node dist/npc.js",
+    "tck:roster-spawn": "pnpm run build && node dist/roster-spawn.js"
   },
   "dependencies": {
     "@aie-matrix/ghost-ts-client": "workspace:*",

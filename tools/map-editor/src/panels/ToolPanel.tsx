@@ -79,8 +79,8 @@ export function ToolPanel() {
     setLoadingMapId(mapId)
     try {
       const gram = await loadMapGram(mapId)
-      const { state: imported, warnings } = await importGram(gram)
-      dispatch({ type: "IMPORT_MAP", state: imported })
+      const { state: imported, warnings, leaderboards } = await importGram(gram)
+      dispatch({ type: "IMPORT_MAP", state: { ...imported, leaderboards } })
       if (warnings.length > 0) {
         dispatch({ type: "SET_HINT", hint: `Import warnings: ${warnings.slice(0, 2).join("; ")}` })
       }
@@ -98,8 +98,8 @@ export function ToolPanel() {
     reader.onload = async evt => {
       const text = evt.target?.result
       if (typeof text !== "string") return
-      const { state: imported, warnings } = await importGram(text)
-      dispatch({ type: "IMPORT_MAP", state: imported })
+      const { state: imported, warnings, leaderboards } = await importGram(text)
+      dispatch({ type: "IMPORT_MAP", state: { ...imported, leaderboards } })
       if (warnings.length > 0) {
         dispatch({ type: "SET_HINT", hint: `Import warnings: ${warnings.slice(0, 2).join("; ")}` })
       }

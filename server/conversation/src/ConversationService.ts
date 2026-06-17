@@ -48,6 +48,8 @@ export interface ConversationServiceShape {
      *  read the speaker's register, not just the words. Does NOT trigger
      *  world effects; state-changing acts have dedicated tools. */
     intent?: string,
+    /** Caller role from JWT — "human" exempts directed (to-specified) messages from the position check. */
+    callerRole?: string,
   ): Effect.Effect<SayResult, ConversationStoreUnavailable | ConversationGhostNoPosition>;
   bye(ghostId: string): Effect.Effect<ByeResult>;
   inbox(ghostId: string): Effect.Effect<InboxResult>;
@@ -74,20 +76,25 @@ function makeConversationService(
   }
 
   return {
-    say(ghostId, content, to?: string, displayName?: string, intent?: string) {
+    say(ghostId, content, to?: string, displayName?: string, intent?: string, callerRole?: string) {
       return Effect.gen(function* () {
         const message_id = ulid();
         const timestamp = worldNow();
 
         const rawCell = bridge.getGhostCell(ghostId);
-        if (!rawCell) {
+        // Normalize recipient once; use throughout to avoid empty-string listener keys.
+        const recipient = typeof to === "string" && to.trim().length > 0 ? to.trim() : undefined;
+        // Human callers with an explicit recipient are exempt from the position check —
+        // they have no world position but can still address a specific ghost directly.
+        const humanDirected = callerRole === "human" && recipient !== undefined;
+        if (!rawCell && !humanDirected) {
           return yield* Effect.fail(new ConversationGhostNoPosition({ ghostId }));
         }
-        const ghostCell = rawCell;
+        const ghostCell = rawCell ?? "";
 
         let mx_listeners: string[];
-        if (to != null) {
-          mx_listeners = [to];
+        if (recipient !== undefined) {
+          mx_listeners = [recipient];
         } else {
           const clusterCells = gridDisk(ghostCell, 1);
           const listenerSet = new Set<string>();

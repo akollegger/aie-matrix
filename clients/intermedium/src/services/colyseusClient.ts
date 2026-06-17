@@ -103,6 +103,7 @@ export async function joinWorldSpectator(): Promise<Room<WorldSpectatorState>> {
     const c = ensureClient();
     const roomId = await fetchRoomId();
     const r = await c.joinById<WorldSpectatorState>(roomId, {}, WorldSpectatorState);
+    r.onMessage("ghost-patch", () => undefined); // server-internal broadcast; client ignores it
     setRoom(r);
     r.onLeave(() => {
       if (ignoreNextLeaveReconnect) {
