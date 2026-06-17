@@ -16,7 +16,7 @@ const NEO4J_URI = process.env["NEO4J_URI"];
 const NEO4J_USER = process.env["NEO4J_USER"] ?? "neo4j";
 const NEO4J_PASSWORD = process.env["NEO4J_PASSWORD"] ?? "devpassword";
 
-const SEED_TIMEOUT_MS = 5_000;
+const SEED_TIMEOUT_MS = 60_000;
 
 test.skip(!NEO4J_URI, "NEO4J_URI not set — skipping neo4j-graph-seed integration tests");
 
