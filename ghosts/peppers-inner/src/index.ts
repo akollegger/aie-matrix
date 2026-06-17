@@ -66,3 +66,63 @@ export {
   type CascadeTrigger,
   type CompleteOptions,
 } from "./cascade.js";
+
+export {
+  DEFAULT_NEED_DEPLETION,
+  NEED_CONFIGS,
+  STARTER_NEEDS,
+  adjustNeed,
+  adjustNeedDisplay,
+  applyCascadeDepletion,
+  fullnessFelt,
+  incrementNeedTolerance,
+  midpointNeeds,
+  needDistanceFromSetpoint,
+  needSetpointDisplay,
+  selectPrimalDrive,
+  startingNeeds,
+  type NeedBirthConfig,
+  type NeedName,
+  type NeedProfile,
+  type NeedState,
+  type PrimalDirection,
+  type PrimalDrive,
+} from "./needs.js";
+
+export {
+  FOOD_EFFECTS,
+  applyFoodConsume,
+  applyDuePendingEffects,
+  foodEffectFor,
+  type FoodEffect,
+  type PendingNeedEffect,
+} from "./food-effects.js";
+
+export {
+  DEFAULT_PRIMAL_BASE_STEP,
+  DEFAULT_PRIMAL_PERSONALITY_EDGES,
+  DEFAULT_PRIMAL_RECOVERY_MULTIPLIER,
+  computePrimalForces,
+  emptyPrimalStreaks,
+  primalEdgeKey,
+  updateStreaks,
+  type PrimalFlux,
+  type PrimalForce,
+  type PrimalPersonalityEdge,
+  type PrimalPersonalityStreaks,
+} from "./primal-personality-wiring.js";
+
+export {
+  applyEvent as applySliderEvent,
+  DEFAULT_SLIDER_CONFIG,
+  display as sliderDisplay,
+  displayToLogit as sliderDisplayToLogit,
+  distanceFromSetpoint as sliderDistanceFromSetpoint,
+  incrementTolerance as incrementSliderTolerance,
+  logitToDisplay as sliderLogitToDisplay,
+  makeSlider,
+  setpointDisplay as sliderSetpointDisplay,
+  sliderFromDisplay,
+  type Slider,
+  type SliderConfig,
+} from "./slider/index.js";

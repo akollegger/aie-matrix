@@ -7,9 +7,10 @@ export interface MessageRecord {
   content: string;
   mx_tile: string;
   mx_listeners: string[];
-  /** Speech-act intent declared by the speaker (greet, befriend,
-   *  propose, agree, decline, depart, ...). Optional for backwards
-   *  compatibility with legacy records that pre-date the intent enum. */
+  /** Optional non-verbal/social-register cue declared by the speaker
+   *  (`greet`, `befriend`, ...). Communicative metadata only — state
+   *  changes (propose, agree, decline, depart) are owned by dedicated
+   *  world tools (`offer`, `agree`, `decline`, `bye`), not by speech. */
   intent?: string;
 }
 

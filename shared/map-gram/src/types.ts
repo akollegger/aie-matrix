@@ -85,6 +85,15 @@ export interface ItemTypeDef {
   glyph?: string;
   takeable?: boolean;
   capacityCost?: number;
+  /**
+   * Consumable energy (in tokens — the LLM's literal substrate unit).
+   * When set, each spawned instance of this type starts with this many
+   * tokens; the `consume` MCP tool reduces the instance's remaining
+   * tokens by the requested amount (default = remaining). When tokens
+   * reach 0 the instance is removed from the world. Items without
+   * `tokens` are not consumable.
+   */
+  tokens?: number;
 }
 
 export interface ParsedPortal {

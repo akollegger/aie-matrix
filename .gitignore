@@ -101,6 +101,9 @@ e2e/test-results/
 # Tiled editor local session (absolute paths; noisy diffs)
 *.tiled-session
 
+# Per-user workspace chrome (Matrix theme, etc.) — keep local, never track.
+.vscode/settings.json
+
 # --- Misc ---
 *.log
 tmp/

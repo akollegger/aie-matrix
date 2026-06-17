@@ -5,6 +5,7 @@ export const GHOST_MCP_TOOLS = [
   "whoami",
   "whereami",
   "look",
+  "look_far",
   "exits",
   "go",
   "traverse",
@@ -49,6 +50,20 @@ export interface TileItemSummary {
   name: string;
   /** "here" when on the ghost's tile; compass face for adjacent tiles */
   at: "here" | "n" | "s" | "ne" | "nw" | "se" | "sw";
+  /**
+   * Remaining consumable energy on this instance, in tokens. Present
+   * only for items whose ItemDefinition declares `tokens`. The LLM
+   * sees this on `look` and can decide to `consume` (default: take all
+   * remaining) — no prompt-side cue needed.
+   */
+  tokens?: number;
+  /**
+   * A hyperlink the object carries (RFC-0031). Present on a description
+   * card beside an artwork: its value is the work's museum object-page URL,
+   * which the ghost can dereference with the `read` tool. The "ahref" the
+   * ghost perceives.
+   */
+  href?: string;
 }
 
 export interface TileInspectResult {
@@ -84,10 +99,49 @@ export type DropResult =
   | { ok: true }
   | { ok: false; code: "NOT_CARRYING" | "TILE_FULL" | "RULESET_DENY"; reason: string };
 
+export interface ConsumeArgs {
+  itemRef: string;
+  /**
+   * How much of the item's energy to consume, in tokens. Omit to take
+   * everything the instance has left (the affordance default). Positive
+   * numbers are clamped to remaining; non-positive numbers are an
+   * INVALID_AMOUNT error.
+   */
+  amount?: number;
+}
+
+export type ConsumeResult =
+  | {
+      ok: true;
+      itemRef: string;
+      /** Tokens transferred from the item to this ghost. */
+      consumed: number;
+      /** Tokens still in the instance after this call. */
+      remaining: number;
+      /** True when the instance was fully depleted and removed. */
+      depleted: boolean;
+    }
+  | {
+      ok: false;
+      code: "NOT_HERE" | "NOT_FOUND" | "NOT_CONSUMABLE" | "INVALID_AMOUNT";
+      reason: string;
+    };
+
 export interface InventoryResult {
   ok: true;
-  /** Carried physical items (from ItemService). */
-  objects: Array<{ itemRef: string; name: string }>;
+  /** Carried physical items (from ItemService). The optional `tokens`
+   *  field carries remaining consumable energy on an inventory instance
+   *  (used by the peppers consume mechanic — present only for items
+   *  the carrier picked up that had tokens to begin with). */
+  objects: Array<{
+    itemRef: string;
+    name: string;
+    /** Remaining consumable energy on this inventory instance, in
+     *  tokens. Present only for items the carrier picked up that had
+     *  tokens to begin with (e.g. food). Lets the agent see whether
+     *  what they're carrying is still worth sharing or eating. */
+    tokens?: number;
+  }>;
   /** Resource balances from the ledger (gold, XP, etc.). Empty when ledger not initialised. */
   holdings: Array<{ resource: string; qty: number; label: string }>;
 }

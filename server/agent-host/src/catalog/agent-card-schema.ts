@@ -5,6 +5,7 @@ const IC003_TOOLS = new Set([
   "whereami",
   "whoami",
   "look",
+  "look_far",
   "exits",
   "go",
   "traverse",
@@ -13,10 +14,22 @@ const IC003_TOOLS = new Set([
   "inspect",
   "take",
   "drop",
+  "consume",
   "say",
   "bye",
   "inbox",
   "request_intent",
+  // Trade / economy tools (RFC-0023 ledger, RFC-0029 vendors). These exist
+  // as world MCP tools but were missing from the canonical allow-list, so no
+  // agent could declare them (e.g. to buy from a vending machine via request).
+  "offer",
+  "request",
+  "agree",
+  "decline",
+  "timecheck",
+  // Art in the world (RFC-0031): `read` dereferences a description card's
+  // href into prompt text. (`inspect` already covers looking at a painting.)
+  "read",
   "ghost_announce",
 ]);
 

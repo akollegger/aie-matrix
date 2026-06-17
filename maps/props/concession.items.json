@@ -1,0 +1,161 @@
+{
+  "_README": {
+    "name": "Concession props — droppable economy pack",
+    "itemClass": "Doc",
+    "carriable": false,
+    "capacityCost": 0,
+    "description": "Map-agnostic prop pack for a resource-constrained run: priced foods + vendors that sell them for Cyphers. Drop into ANY run by layering this sidecar and scattering the vendor refs onto navigable cells at startup (ItemService.spawnItem) — no .map.gram edit required. Foods are consumables (tokens => Fuel on consume); attrs.price/strain/tol/rest carry the economic + physiological profile. Vendors are carriable:false fixtures; attrs.stock lists 'foodRef:cypherPrice' pairs (per-vendor price overrides the food's base price), attrs.concurrent=1 enforces one transaction at a time. See RFC-0028. The leading underscore marks this as documentation, not a spawnable item."
+  },
+
+  "food-water": {
+    "name": "Bottle of Water", "itemClass": "Food:Drink", "carriable": true, "capacityCost": 0,
+    "glyph": "💧", "tokens": 0.2,
+    "description": "Plain water. Keeps you going; barely.",
+    "attrs": { "price": 1, "strain": 0, "tol": 0 }
+  },
+  "food-bread": {
+    "name": "Bread Roll", "itemClass": "Food:Staple", "carriable": true, "capacityCost": 0,
+    "glyph": "🍞", "tokens": 2.5,
+    "description": "A dense roll. Honest fuel, nothing fancy.",
+    "attrs": { "price": 6, "strain": 0, "tol": 0.1 }
+  },
+  "food-salad": {
+    "name": "Garden Salad", "itemClass": "Food:Fresh", "carriable": true, "capacityCost": 0,
+    "glyph": "🥗", "tokens": 1.3,
+    "description": "Leaves, seeds, a little dressing. Light but clean.",
+    "attrs": { "price": 9, "strain": -0.2, "tol": 0 }
+  },
+  "food-sandwich": {
+    "name": "Sandwich", "itemClass": "Food:Meal", "carriable": true, "capacityCost": 0,
+    "glyph": "🥪", "tokens": 3.0,
+    "description": "A proper meal between two slices.",
+    "attrs": { "price": 8, "strain": 0.1, "tol": 0.1 }
+  },
+  "food-wrap": {
+    "name": "Veg Wrap", "itemClass": "Food:Fresh", "carriable": true, "capacityCost": 0,
+    "glyph": "🌯", "tokens": 2.4,
+    "description": "Vegetables rolled tight. Filling, kind to the body.",
+    "attrs": { "price": 8, "strain": -0.1, "tol": 0 }
+  },
+  "food-noodles": {
+    "name": "Noodle Box", "itemClass": "Food:Meal", "carriable": true, "capacityCost": 0,
+    "glyph": "🍜", "tokens": 3.4,
+    "description": "Hot noodles in a folding box. Substantial.",
+    "attrs": { "price": 8, "strain": 0.1, "tol": 0.1 }
+  },
+  "food-fruit": {
+    "name": "Fruit Cup", "itemClass": "Food:Fresh", "carriable": true, "capacityCost": 0,
+    "glyph": "🍎", "tokens": 1.6,
+    "description": "Cut fruit in a cup. Quick and bright.",
+    "attrs": { "price": 5, "strain": -0.1, "tol": 0 }
+  },
+  "food-coffee": {
+    "name": "Coffee", "itemClass": "Food:Drink", "carriable": true, "capacityCost": 0,
+    "glyph": "☕", "tokens": 0.6,
+    "description": "Still warm in a compostable cup. Pushes back the tiredness.",
+    "attrs": { "price": 4, "strain": 0, "tol": 0, "rest": 0.8 }
+  },
+  "food-pastry": {
+    "name": "Pastry", "itemClass": "Food:Treat", "carriable": true, "capacityCost": 0,
+    "glyph": "🥐", "tokens": 3.2,
+    "description": "Buttery, flaky, gone too fast. Sits heavy after.",
+    "attrs": { "price": 5, "strain": 0.4, "tol": 0.4 }
+  },
+  "food-cake": {
+    "name": "Slice of Cake", "itemClass": "Food:Treat", "carriable": true, "capacityCost": 0,
+    "glyph": "🍰", "tokens": 4.0,
+    "description": "Cheap, sweet, a lot of fuel at once — and a lot to carry.",
+    "attrs": { "price": 4, "strain": 0.6, "tol": 0.6 }
+  },
+  "food-hotdog": {
+    "name": "Hot Dog", "itemClass": "Food:Street", "carriable": true, "capacityCost": 0,
+    "glyph": "🌭", "tokens": 3.6,
+    "description": "Off the cart, wrapped in foil. Filling and greasy.",
+    "attrs": { "price": 6, "strain": 0.5, "tol": 0.3 }
+  },
+  "food-crisps": {
+    "name": "Crisps", "itemClass": "Food:Snack", "carriable": true, "capacityCost": 0,
+    "glyph": "🍟", "tokens": 1.8,
+    "description": "A foil bag of salt and air. Moreish.",
+    "attrs": { "price": 3, "strain": 0.3, "tol": 0.3 }
+  },
+  "food-chocolate": {
+    "name": "Chocolate Bar", "itemClass": "Food:Treat", "carriable": true, "capacityCost": 0,
+    "glyph": "🍫", "tokens": 2.6,
+    "description": "A quick hit of sweetness. The body learns to want more.",
+    "attrs": { "price": 3, "strain": 0.5, "tol": 0.5 }
+  },
+  "food-soda": {
+    "name": "Soda", "itemClass": "Food:Drink", "carriable": true, "capacityCost": 0,
+    "glyph": "🥤", "tokens": 1.2,
+    "description": "Fizzy and sugary. A jolt, then a slump.",
+    "attrs": { "price": 3, "strain": 0.4, "tol": 0.4, "rest": 0.4 }
+  },
+  "food-energybar": {
+    "name": "Energy Bar", "itemClass": "Food:Snack", "carriable": true, "capacityCost": 0,
+    "glyph": "🍫", "tokens": 2.2,
+    "description": "Pressed oats and syrup. Efficient if joyless.",
+    "attrs": { "price": 5, "strain": 0.1, "tol": 0.2 }
+  },
+
+  "vendor-vending-machine": {
+    "name": "Vending Machine", "itemClass": "Vendor:Vending", "carriable": false, "capacityCost": 1,
+    "glyph": "🛒",
+    "description": "A glass-fronted machine of cheap calories. Serves one customer at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-cake:4,food-chocolate:3,food-crisps:3,food-soda:3,food-energybar:5,food-water:2" }
+  },
+  "vendor-coffee-cart": {
+    "name": "Coffee Cart", "itemClass": "Vendor:Cart", "carriable": false, "capacityCost": 1,
+    "glyph": "☕",
+    "description": "Steam and a queue. One order goes through at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-coffee:4,food-pastry:5,food-water:2" }
+  },
+  "vendor-sandwich-bar": {
+    "name": "Sandwich Bar", "itemClass": "Vendor:Counter", "carriable": false, "capacityCost": 1,
+    "glyph": "🥪",
+    "description": "Made-to-order counter. One customer served at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-sandwich:8,food-wrap:8,food-salad:9,food-coffee:5" }
+  },
+  "vendor-fruit-stand": {
+    "name": "Fruit Stand", "itemClass": "Vendor:Stand", "carriable": false, "capacityCost": 1,
+    "glyph": "🍎",
+    "description": "Fresh and bright. The vendor handles one sale at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-fruit:5,food-salad:8,food-water:1" }
+  },
+  "vendor-snack-kiosk": {
+    "name": "Snack Kiosk", "itemClass": "Vendor:Kiosk", "carriable": false, "capacityCost": 1,
+    "glyph": "🍫",
+    "description": "Wall of wrappers. One transaction at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-crisps:3,food-chocolate:3,food-soda:3,food-energybar:5" }
+  },
+  "vendor-hotdog-stand": {
+    "name": "Hot Dog Stand", "itemClass": "Vendor:Stand", "carriable": false, "capacityCost": 1,
+    "glyph": "🌭",
+    "description": "Foil and steam. Serves one customer at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-hotdog:6,food-soda:3,food-water:2" }
+  },
+  "vendor-noodle-bar": {
+    "name": "Noodle Bar", "itemClass": "Vendor:Counter", "carriable": false, "capacityCost": 1,
+    "glyph": "🍜",
+    "description": "Hot boxes over a burner. One order at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-noodles:8,food-wrap:8,food-water:2" }
+  },
+  "vendor-bakery-cart": {
+    "name": "Bakery Cart", "itemClass": "Vendor:Cart", "carriable": false, "capacityCost": 1,
+    "glyph": "🥐",
+    "description": "Premium baked goods. The baker serves one at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-bread:6,food-pastry:6,food-cake:6,food-coffee:5" }
+  },
+  "vendor-salad-bar": {
+    "name": "Salad Bar", "itemClass": "Vendor:Counter", "carriable": false, "capacityCost": 1,
+    "glyph": "🥗",
+    "description": "Fresh and pricey. One customer plated at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-salad:9,food-wrap:8,food-fruit:5,food-water:1" }
+  },
+  "vendor-water-cooler": {
+    "name": "Water Cooler", "itemClass": "Vendor:Fixture", "carriable": false, "capacityCost": 1,
+    "glyph": "🚰",
+    "description": "The cheapest way to stay upright. One cup at a time.",
+    "attrs": { "concurrent": 1, "stock": "food-water:1" }
+  }
+}

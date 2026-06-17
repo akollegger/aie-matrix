@@ -13,11 +13,14 @@
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 
 import {
+  midpointNeeds,
   midpointPersonality,
   samplePersonality,
   STARTER_FACETS,
+  STARTER_NEEDS,
   toDisplay,
   type ActionOutcome,
+  type NeedProfile,
   type PersonalityState,
   type Stimulus,
 } from "@aie-matrix/ghost-peppers-inner";
@@ -27,9 +30,10 @@ import {
   type MemoryConnection,
 } from "@aie-matrix/ghost-peppers-mem";
 
+import { captureRecord } from "./debug-capture.js";
 import type { OverlayServer } from "./overlay-server.js";
 import { ID_SYSTEM_PROMPT } from "./reason-id.js";
-import { runOneStimulus } from "./run-loop.js";
+import { METABOLIC_STRAIN_DEATH_THRESHOLD, runOneStimulus } from "./run-loop.js";
 import {
   prefetchDisplayName,
   primeDisplayName,
@@ -63,6 +67,91 @@ export interface RunHouseOptions {
    * starting personality across runs.
    */
   readonly initialPersonality?: PersonalityState;
+  /**
+   * Starting primal-need profile. Default: every need at midpoint 5
+   * (satiated). Pass the previously-evolved state to survive
+   * pause/resume cycles — without this, a ghost that was nearly
+   * starving before a Barnacle handoff would come back satiated.
+   */
+  readonly initialNeeds?: NeedProfile;
+  /**
+   * Callback fired after every cascade with the post-depletion +
+   * post-replenishment need profile. The caller (typically the
+   * executor) persists this onto its per-ghost state record so the
+   * next `runHouse` invocation can pick up where this one left off.
+   */
+  readonly onNeedsUpdate?: (needs: NeedProfile) => void;
+  /**
+   * Starting commitment ledger. Default: empty. Pass the previously-
+   * evolved ledger to survive pause/resume cycles — without this,
+   * open self-debts evaporate every Barnacle handoff.
+   */
+  readonly initialCommitments?: import("@aie-matrix/ghost-peppers-inner").CommitmentLedger;
+  /**
+   * Callback fired after every cascade with the post-reconciliation
+   * commitment ledger. Same pattern as `onNeedsUpdate`.
+   */
+  readonly onCommitmentsUpdate?: (
+    ledger: import("@aie-matrix/ghost-peppers-inner").CommitmentLedger,
+  ) => void;
+  /**
+   * Callback fired after every cascade with the post-cascade
+   * personality state (birth + accumulated drift). Same pattern as the
+   * other update hooks — persists drift across pause/resume so a
+   * ghost that's evolved over many cascades doesn't snap back to
+   * birth on every Barnacle handoff.
+   */
+  readonly onPersonalityUpdate?: (state: PersonalityState) => void;
+  /**
+   * Starting primal→personality streak state. Default: empty (zero
+   * per edge). Pass the previously-evolved streaks to survive
+   * pause/resume so accumulated stress (or windfall) doesn't reset
+   * mid-life.
+   */
+  readonly initialPrimalStreaks?: import("@aie-matrix/ghost-peppers-inner").PrimalPersonalityStreaks;
+  /**
+   * Callback fired after every cascade with the post-update streaks.
+   * Same pattern as the other update hooks; persists per-ghost.
+   */
+  readonly onPrimalStreaksUpdate?: (
+    streaks: import("@aie-matrix/ghost-peppers-inner").PrimalPersonalityStreaks,
+  ) => void;
+  /**
+   * Starting metabolic strain. Default 0. Threaded so pause/resume
+   * preserves accumulated chronic-overeating damage.
+   */
+  readonly initialMetabolicStrain?: number;
+  /**
+   * Callback fired after every cascade with the post-update strain.
+   * Same pattern as the other update hooks; persists per-ghost.
+   */
+  readonly onMetabolicStrainUpdate?: (strain: number) => void;
+  /**
+   * Item refs the ghost is BLIND to. Items matching any ref here are
+   * filtered out of `worldContext.takeableItemRefs` and never trigger
+   * `mcguffin-in-view` stimuli. This is the architectural mechanism
+   * that keeps the substrate ignorant of house-specific content —
+   * default peppers passes nothing; house-flavoured variants populate
+   * this with the platform classes their world contains that they
+   * don't engage with (e.g. a default peppers running in a world
+   * with a PokerTable passes `["PokerTable"]` so they walk over it
+   * blind). Empty default means the substrate has no built-in
+   * knowledge of any platform class.
+   */
+  readonly ignoredItemRefs?: ReadonlyArray<string>;
+  /**
+   * Pre-computed bearings to label-tagged points of interest. Each
+   * entry triggers a `nearest` MCP call per cascade and the result
+   * goes into `worldContext.bearings` for the Surface to use without
+   * spending its own tool call. Empty default — the substrate has
+   * no built-in destinations. House variants pass house-specific
+   * targets (e.g. RDC-peppers would pass `[{ label: "Black Bart's",
+   * spec: { itemClass: "PokerTable" } }]`).
+   */
+  readonly bearingTargets?: ReadonlyArray<{
+    readonly label: string;
+    readonly spec: { itemClass?: string; tileClass?: string };
+  }>;
   /**
    * What this ghost is in the world to do. Shapes monologue framing and
    * action selection. If omitted, the ghost has no goal and tends to
@@ -295,6 +384,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
     opts.registryBase,
     adopted.agentHostId,
     tag,
+    opts.ignoredItemRefs ?? [],
   );
   let stimuliRun = 0;
   let consecutiveQuietTicks = 0;
@@ -327,9 +417,28 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
   const recentSuperObjectives: string[] = [];
   // Per-ghost commitment ledger — debts the inner voice resolved on
   // but hasn't yet paid down. Threads across cascades; the run-loop
-  // returns the next ledger after every step.
-  let commitmentLedger: import("@aie-matrix/ghost-peppers-inner").CommitmentLedger = [];
+  // returns the next ledger after every step. Survives pause/resume
+  // via `initialCommitments` — without that, open debts evaporate
+  // on every Barnacle handoff.
+  let commitmentLedger: import("@aie-matrix/ghost-peppers-inner").CommitmentLedger =
+    opts.initialCommitments ?? [];
   let cascadeIndex = 0;
+  // Primal need state. Survives pause/resume cycles via the
+  // `initialNeeds` option — the caller (executor) passes the ghost's
+  // last known profile so depletion is continuous across Barnacle
+  // handoffs. Without this, every poker-table encounter silently
+  // reset every ghost's Fuel back to 5.0 mid-demo.
+  let needs: NeedProfile = opts.initialNeeds ?? midpointNeeds();
+  // Primal→personality streaks — per-edge signed counters that
+  // accumulate the dynamic flux of each primal. Default to empty
+  // (all zero) at birth; survive pause/resume via initialPrimalStreaks.
+  let primalStreaks: import("@aie-matrix/ghost-peppers-inner").PrimalPersonalityStreaks =
+    opts.initialPrimalStreaks ?? {};
+  // Metabolic strain — state-based counter that accrues while Fuel
+  // sits above the binge threshold and decays slowly when below. Drives
+  // the "metabolic-collapse" decommission path, distinct from acute
+  // Fuel=0 starvation.
+  let metabolicStrain: number = opts.initialMetabolicStrain ?? 0;
   const startedAt = new Date().toISOString();
 
   // Rebind the externally-owned overlay's init payload to this run's
@@ -344,6 +453,11 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
       displayName: selfDisplayName ?? null,
       objective: objective ?? null,
       personality: personalityForUi(state),
+      // Initial need profile — every ghost spawns satiated at 5/10.
+      needs: STARTER_NEEDS.map((n) => ({
+        need: n,
+        urgency: needs[n].display,
+      })),
       startedAt,
     }));
   }
@@ -386,7 +500,13 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
 
       // Snapshot world context for the Surface so it can ground "go" /
       // "take" / "say" choices in what's actually available right now.
-      const snapshot = await snapshotWorldContext(mcp, adopted.ghostId, opts.registryBase);
+      const snapshot = await snapshotWorldContext(
+        mcp,
+        adopted.ghostId,
+        opts.registryBase,
+        opts.ignoredItemRefs ?? [],
+        opts.bearingTargets ?? [],
+      );
 
       // Re-arm the anchor when a peer first appears in the cluster.
       // `cluster-entered` covers events that fire mid-run, but ghosts
@@ -419,13 +539,183 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
           tools,
           commitmentLedger,
           cascadeIndex,
+          needs,
+          primalStreaks,
+          metabolicStrain,
           ...(selfDisplayName ? { selfDisplayName } : {}),
           ...(recentSuperObjectives.length > 0
             ? { recentSuperObjectives }
             : {}),
         });
         commitmentLedger = record.nextLedger;
+        needs = record.nextNeeds;
+        primalStreaks = record.nextPrimalStreaks;
+        metabolicStrain = record.nextMetabolicStrain;
+        // Persist back to the caller so pause/resume can resume at the
+        // same need / ledger level and with accumulated drift. The
+        // callbacks are expected to do synchronous assignments (e.g.
+        // `ghost.needs = n`). Personality update fires below after
+        // `state = record.nextState`.
+        opts.onNeedsUpdate?.(needs);
+        opts.onCommitmentsUpdate?.(commitmentLedger);
+        opts.onPrimalStreaksUpdate?.(primalStreaks);
+        opts.onMetabolicStrainUpdate?.(metabolicStrain);
         cascadeIndex += 1;
+
+        // Full structured capture of this cascade — every prompt the
+        // LLM saw, every response, the resolved expressions, the
+        // primal drive, the world snapshot. Lets the agent authoring
+        // the system verify properties like "no PokerTable references
+        // anywhere" or "Fuel monotonic-down" post-hoc, instead of
+        // relying on the human as a parser.
+        captureRecord("cascade", {
+          ghostId: adopted.ghostId,
+          displayName: selfDisplayName ?? null,
+          cascadeIndex,
+          stimulus: record.stimulus,
+          needs: {
+            Fuel: needs.Fuel.display,
+            Coherence: needs.Coherence.display,
+            Rest: needs.Rest.display,
+          },
+          primalDrive: record.id.primalDrive,
+          superObjective: record.id.superObjective,
+          emotionalRead: record.id.emotionalRead,
+          impulse: record.id.impulse,
+          monologue: record.id.monologue,
+          facetReadings: record.id.facetReadings.map((r) => ({
+            facet: r.facet,
+            judgment: r.judgment,
+            adjustment: r.adjustment,
+            reading: r.reading,
+            expression: r.expression,
+          })),
+          idUserPrompt: record.id.userPrompt,
+          idRaw: record.id.raw,
+          surfaceUserPrompt: record.surface.userPrompt,
+          surfaceRaw: record.surface.raw,
+          action: record.action,
+          outcome: record.outcome,
+          worldContext: worldContext,
+          adjustments: record.applied,
+          commitmentEvaluation: record.commitment,
+          openCommitments: commitmentLedger,
+          primalFlux: record.primalFlux,
+          primalStreaks: record.nextPrimalStreaks,
+          primalForces: record.primalForces.map((f) => ({
+            source: f.edge.source,
+            facet: f.edge.targetFacet,
+            axis: f.edge.targetAxis,
+            logitDelta: f.logitDelta,
+          })),
+          metabolicStrain: record.nextMetabolicStrain,
+          // Post-cascade personality (includes both facet drift AND
+          // primal-driven drift, in that order). Display values for
+          // each facet's internal + external sliders. Lets us trace
+          // primal→personality wiring effects post-hoc.
+          personalityAfter: Object.fromEntries(
+            STARTER_FACETS.map((f) => [
+              f,
+              {
+                internal: toDisplay(record.nextState[f].internal),
+                external: toDisplay(record.nextState[f].external),
+              },
+            ]),
+          ),
+        });
+
+        // Fuel-critical decommission. Fuel has no replenishment in the
+        // world yet, so every ghost is on a finite clock. When Fuel
+        // display drops below 1.0 the ghost is starving past the point
+        // of useful action — stop cascading and let the outer loop
+        // exit. The ghost stays in the world (visible to others) but
+        // emits no further actions. World-side removal (registry
+        // withdraw, colyseus removeGhostCell) is a follow-up.
+        const fuelDisplay = needs.Fuel.display;
+        const cohDisplay = needs.Coherence.display;
+        const restDisplay = needs.Rest.display;
+        // Per-cascade need diagnostic — keeps the terminal honest about
+        // where the sliders actually are. Helpful for verifying
+        // depletion is working even when the overlay isn't open.
+        log(
+          `needs: Fuel=${fuelDisplay.toFixed(2)} Coh=${cohDisplay.toFixed(2)} Rest=${restDisplay.toFixed(2)}` +
+            (record.id.primalDrive
+              ? ` · DRIVE: ${record.id.primalDrive.need} ${record.id.primalDrive.direction} (urgency ${record.id.primalDrive.urgency.toFixed(2)})`
+              : ""),
+        );
+        if (fuelDisplay <= 0) {
+          // True mortality: Fuel has hit the floor. With linear
+          // depletion clamped at 0, this fires the cascade after Fuel
+          // reaches exactly 0.00 — not earlier. The previous `< 1.0`
+          // test was a holdover from sigmoid-era Fuel that never
+          // actually reached 0; with linear math, that test killed
+          // ghosts a full cascade before they were actually empty.
+          //
+          // Banner-style multi-line log — easy to spot in a stream of
+          // 6 ghosts' cascade output. The 💀 line alone gets buried.
+          log("");
+          log("╔════════════════════════════════════════════════════════════╗");
+          log(`║ 💀 DECOMMISSIONED: ${selfDisplayName ?? adopted.ghostId.slice(0, 8)}`);
+          log(`║    Fuel ${fuelDisplay.toFixed(2)} — out of energy`);
+          log(`║    Cascade ${cascadeIndex}, no further actions will be emitted`);
+          log("╚════════════════════════════════════════════════════════════╝");
+          log("");
+          // Notify the overlay so the UI can render a DECOMMISSIONED
+          // banner — otherwise the dashboard shows the last cascade
+          // state forever and you can't tell whether the ghost is
+          // dead or merely quiet.
+          if (overlay !== null) {
+            overlay.broadcast("decommissioned", {
+              ghostId: adopted.ghostId,
+              displayName: selfDisplayName ?? null,
+              cascadeIndex,
+              cause: "fuel-critical",
+              fuelDisplay,
+              atIso: new Date().toISOString(),
+            });
+          }
+          captureRecord("decommissioned", {
+            ghostId: adopted.ghostId,
+            displayName: selfDisplayName ?? null,
+            cascadeIndex,
+            cause: "fuel-critical",
+            fuelDisplay,
+            metabolicStrain,
+          });
+          stopRequested = true;
+        } else if (metabolicStrain >= METABOLIC_STRAIN_DEATH_THRESHOLD) {
+          // Chronic-overeating mortality. Strain accumulated past the
+          // tolerance threshold while Fuel sat above the binge zone for
+          // too many cascades. Distinct death cause from acute
+          // starvation — `metabolic-collapse` not `fuel-critical`.
+          log("");
+          log("╔════════════════════════════════════════════════════════════╗");
+          log(`║ 🥩 METABOLIC COLLAPSE: ${selfDisplayName ?? adopted.ghostId.slice(0, 8)}`);
+          log(`║    strain ${metabolicStrain.toFixed(1)} (threshold ${METABOLIC_STRAIN_DEATH_THRESHOLD})`);
+          log(`║    Cascade ${cascadeIndex}, no further actions will be emitted`);
+          log("╚════════════════════════════════════════════════════════════╝");
+          log("");
+          if (overlay !== null) {
+            overlay.broadcast("decommissioned", {
+              ghostId: adopted.ghostId,
+              displayName: selfDisplayName ?? null,
+              cascadeIndex,
+              cause: "metabolic-collapse",
+              fuelDisplay,
+              metabolicStrain,
+              atIso: new Date().toISOString(),
+            });
+          }
+          captureRecord("decommissioned", {
+            ghostId: adopted.ghostId,
+            displayName: selfDisplayName ?? null,
+            cascadeIndex,
+            cause: "metabolic-collapse",
+            fuelDisplay,
+            metabolicStrain,
+          });
+          stopRequested = true;
+        }
         if (record.commitment !== null) {
           const sat = record.commitment.satisfiedIds.length;
           const minted = record.commitment.newCommitments.length;
@@ -443,6 +733,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         recentSuperObjectives.push(record.id.superObjective);
         if (recentSuperObjectives.length > 3) recentSuperObjectives.shift();
         state = record.nextState;
+        opts.onPersonalityUpdate?.(state);
         // 4-way reaction tag: when the stimulus was an utterance, label
         // the chosen action. `go` covers both EVADE (escape) and
         // DEPART (purposeful movement toward an agreed destination) —
@@ -464,7 +755,7 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
           log(`reaction: ${reactionTag} → ${(stimulus as { from?: string }).from ?? "?"}`);
         }
         if (overlay !== null) {
-          const payload = buildCascadePayload(record, state, worldContext, ctx, objective, selfDisplayName) as Record<string, unknown>;
+          const payload = buildCascadePayload(record, state, record.nextNeeds, worldContext, ctx, objective, selfDisplayName) as Record<string, unknown>;
           overlay.broadcast("cascade", {
             ...payload,
             ...(reactionTag !== null ? { reaction: reactionTag } : {}),
@@ -503,6 +794,12 @@ export async function runHouse(opts: RunHouseOptions): Promise<void> {
         ));
       } catch (err) {
         warn("cascade failed:", err);
+        // Back off after a failed cascade so a recurring failure can't
+        // pin the world MCP at world-call-latency. Without this, a
+        // pre-LLM failure (e.g. memory retrieval throwing) skips the
+        // LLM call that normally rate-limits the loop, and the loop
+        // hot-spins firing snapshot calls.
+        await delay(idleTickMs);
       }
     }
 
@@ -543,6 +840,7 @@ function personalityForUi(state: PersonalityState): ReadonlyArray<{
 function buildCascadePayload(
   record: import("./run-loop.js").RunRecord,
   nextState: PersonalityState,
+  nextNeeds: NeedProfile,
   worldContext: WorldContext,
   ctx: StimulusContext,
   objective: string | undefined,
@@ -568,7 +866,44 @@ function buildCascadePayload(
       beforeDisplay: a.beforeDisplay,
       afterDisplay: a.afterDisplay,
     })),
+    // Per-facet resolved expressions + LLM readings. Lets the overlay
+    // surface the slider-derived character anchors the LLM actually saw,
+    // alongside the reading it produced. Lifeline for debugging the
+    // mechanical resolver.
+    facetReadings: record.id.facetReadings.map((r) => ({
+      facet: r.facet,
+      judgment: r.judgment,
+      reading: r.reading,
+      adjustment: r.adjustment === null ? null : {
+        axis: r.adjustment.axis,
+        direction: r.adjustment.direction,
+      },
+      expression: r.expression === null ? null : {
+        feltSummary: r.expression.feltSummary,
+        feltCharacters: r.expression.feltCharacters,
+        projectedSummary: r.expression.projectedSummary,
+        projectedCharacters: r.expression.projectedCharacters,
+        maskDescription: r.expression.maskDescription,
+        compoundArchetype: r.expression.compoundArchetype,
+      },
+    })),
     personality: personalityForUi(nextState),
+    // Primal need state after this cascade's depletion. Same display
+    // shape as personality facets so the overlay can render bars.
+    needs: STARTER_NEEDS.map((n) => ({
+      need: n,
+      urgency: nextNeeds[n].display,
+    })),
+    // The lizard's call for this cascade — null when all needs are
+    // healthy. Lets the overlay show "ghost X is starving and being
+    // told to find sustenance" right alongside the actions they take.
+    primalDrive: record.id.primalDrive === null ? null : {
+      need: record.id.primalDrive.need,
+      direction: record.id.primalDrive.direction,
+      urgency: record.id.primalDrive.urgency,
+      currentDisplay: record.id.primalDrive.currentDisplay,
+      drive: record.id.primalDrive.drive,
+    },
     worldContext: {
       exits: worldContext.availableExits ?? null,
       nearbyGhosts: worldContext.nearbyGhostIds ?? null,
@@ -597,6 +932,14 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** Render a list of item names as English: ["A","B","C"] → "A, B and C". */
+function formatItemList(names: ReadonlyArray<string>): string {
+  if (names.length === 0) return "";
+  if (names.length === 1) return names[0]!;
+  if (names.length === 2) return `${names[0]} and ${names[1]}`;
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
 /**
  * Snapshot what the ghost can act on right now: valid exits, items
  * on the current tile, other ghosts here, and current inventory.
@@ -606,39 +949,66 @@ async function snapshotWorldContext(
   mcp: GhostMcpClient,
   selfGhostId: string,
   registryBase: string,
+  ignoredItemRefs: ReadonlyArray<string>,
+  bearingTargets: ReadonlyArray<{ label: string; spec: { itemClass?: string; tileClass?: string } }>,
 ): Promise<WorldContext> {
+  const ignored = new Set(ignoredItemRefs);
   const ctx: WorldContext = {};
   const next: {
     -readonly [K in keyof WorldContext]: WorldContext[K];
   } = ctx as { -readonly [K in keyof WorldContext]: WorldContext[K] };
 
+  // Capture exits with tileId → direction so we can label impressions
+  // ("Yul B-Tree, to the n of you, on a Blue tile") rather than the
+  // fuzzy "nearby". Falls back gracefully if exits fail.
+  const dirByTileId = new Map<string, string>();
   try {
     const exits = (await mcp.callTool("exits", {})) as {
-      exits?: ReadonlyArray<{ toward?: string }>;
+      exits?: ReadonlyArray<{ toward?: string; tileId?: string }>;
     };
     next.availableExits = (exits.exits ?? [])
       .map((e) => e.toward)
       .filter((t): t is string => typeof t === "string");
+    for (const e of exits.exits ?? []) {
+      if (typeof e.tileId === "string" && typeof e.toward === "string") {
+        dirByTileId.set(e.tileId, e.toward);
+      }
+    }
   } catch {
     /* leave undefined */
   }
 
-  // Same-tile occupants and items
+  // Same-tile occupants and items. Keep `lookHere` for the impression pass.
   let hereOccupants: string[] = [];
+  let hereTileClass: string | null = null;
+  const hereItemNames: string[] = [];
   try {
     const look = (await mcp.callTool("look", { at: "here" })) as {
+      tileClass?: string;
       occupants?: ReadonlyArray<string>;
-      objects?: ReadonlyArray<{ id?: string; at?: string }>;
+      objects?: ReadonlyArray<{ id?: string; name?: string; at?: string }>;
     };
+    if (typeof look.tileClass === "string") hereTileClass = look.tileClass;
     if (Array.isArray(look.occupants)) {
       hereOccupants = look.occupants.filter(
         (g): g is string => typeof g === "string" && g !== selfGhostId,
       );
     }
-    const hereItems = (look.objects ?? [])
+    const hereObjs = look.objects ?? [];
+    const hereItems = hereObjs
       .filter((o) => o.at === "here" && typeof o.id === "string")
-      .map((o) => o.id as string);
-    if (hereItems.length > 0) next.takeableItemRefs = hereItems;
+      .map((o) => o.id as string)
+      .filter((ref) => !ignored.has(ref));
+    if (hereItems.length > 0) {
+      next.takeableItemRefs = hereItems;
+    }
+    // For impressions: collect human-readable names (fall back to id).
+    for (const o of hereObjs) {
+      if (o.at !== "here") continue;
+      const ref = typeof o.id === "string" ? o.id : null;
+      if (ref === null || ignored.has(ref)) continue;
+      hereItemNames.push(typeof o.name === "string" ? o.name : ref);
+    }
   } catch {
     /* leave undefined */
   }
@@ -646,16 +1016,46 @@ async function snapshotWorldContext(
   // Cluster occupants = same-tile + each neighbor's occupants.
   // Mirrors `pollNextStimulus`: a ghost on an adjacent tile is in
   // social range and the LLM should know they exist.
+  // We also keep the per-neighbor tileClass + items + occupants so the
+  // impression-building pass below can describe where each cluster
+  // member was without re-calling look.
+  interface NeighborSummary {
+    readonly tileId: string;
+    readonly tileClass: string | null;
+    readonly occupants: ReadonlyArray<string>;
+    readonly itemNames: ReadonlyArray<string>;
+  }
+  const neighborByOccupant = new Map<string, NeighborSummary>();
   let clusterOccupants: Set<string> = new Set(hereOccupants);
   try {
     const around = (await mcp.callTool("look", { at: "around" })) as {
-      neighbors?: ReadonlyArray<{ occupants?: ReadonlyArray<string> }>;
+      neighbors?: ReadonlyArray<{
+        tileId?: string;
+        tileClass?: string;
+        occupants?: ReadonlyArray<string>;
+        objects?: ReadonlyArray<{ id?: string; name?: string; at?: string }>;
+      }>;
     };
     for (const n of around.neighbors ?? []) {
-      for (const g of n.occupants ?? []) {
-        if (typeof g === "string" && g !== selfGhostId) {
-          clusterOccupants.add(g);
-        }
+      if (typeof n.tileId !== "string") continue;
+      const occupants = (n.occupants ?? []).filter(
+        (g): g is string => typeof g === "string" && g !== selfGhostId,
+      );
+      const itemNames: string[] = [];
+      for (const o of n.objects ?? []) {
+        const ref = typeof o.id === "string" ? o.id : null;
+        if (ref === null || ignored.has(ref)) continue;
+        itemNames.push(typeof o.name === "string" ? o.name : ref);
+      }
+      const summary: NeighborSummary = {
+        tileId: n.tileId,
+        tileClass: typeof n.tileClass === "string" ? n.tileClass : null,
+        occupants,
+        itemNames,
+      };
+      for (const g of occupants) {
+        clusterOccupants.add(g);
+        neighborByOccupant.set(g, summary);
       }
     }
   } catch {
@@ -663,32 +1063,76 @@ async function snapshotWorldContext(
   }
   if (clusterOccupants.size > 0 || hereOccupants.length > 0) {
     for (const g of clusterOccupants) void prefetchDisplayName(registryBase, g);
-    next.nearbyGhostIds = [...clusterOccupants].map((g) =>
-      resolveDisplayNameSync(registryBase, g),
-    );
+    const pairs = [...clusterOccupants].map((g) => ({
+      ghostId: g,
+      displayName: resolveDisplayNameSync(registryBase, g),
+    }));
+    next.nearbyGhostIds = pairs.map((p) => p.displayName);
+    next.nearbyGhosts = pairs;
+
+    // Build one impression snippet per cluster occupant. The snippet is
+    // the spatial observation only — relative direction + tile class +
+    // any items visible on their tile. The gap-to-now ("3 cascades
+    // ago") is rendered separately by the Surface prompt's timeline
+    // block from the impression's cascade index.
+    const impressions: NonNullable<WorldContext["impressions"]>[number][] = [];
+    const hereSet = new Set(hereOccupants);
+    for (const p of pairs) {
+      let snippet: string;
+      if (hereSet.has(p.ghostId)) {
+        const tile = hereTileClass ?? "tile";
+        const items = hereItemNames.length > 0
+          ? `, ${formatItemList(hereItemNames)} on the tile`
+          : "";
+        snippet = `here on a ${tile} tile${items}`;
+      } else {
+        const neighbor = neighborByOccupant.get(p.ghostId);
+        const dir = neighbor ? dirByTileId.get(neighbor.tileId) : undefined;
+        const tile = neighbor?.tileClass ?? "tile";
+        const items = neighbor && neighbor.itemNames.length > 0
+          ? `, ${formatItemList(neighbor.itemNames)} on the tile`
+          : "";
+        snippet = dir
+          ? `to the ${dir} of you, on a ${tile} tile${items}`
+          : `nearby on a ${tile} tile${items}`;
+      }
+      impressions.push({
+        observedGhostId: p.ghostId,
+        observedDisplayName: p.displayName,
+        snippet,
+      });
+    }
+    if (impressions.length > 0) next.impressions = impressions;
   }
 
   try {
     const inv = (await mcp.callTool("inventory", {})) as {
-      objects?: ReadonlyArray<{ itemRef?: string }>;
+      objects?: ReadonlyArray<{ itemRef?: string; tokens?: number }>;
     };
-    const refs = (inv.objects ?? [])
-      .map((o) => o.itemRef)
-      .filter((r): r is string => typeof r === "string");
-    if (refs.length > 0) next.inventoryItemRefs = refs;
+    const items = (inv.objects ?? []).filter(
+      (o): o is { itemRef: string; tokens?: number } => typeof o.itemRef === "string",
+    );
+    if (items.length > 0) {
+      next.inventoryItemRefs = items.map((o) => o.itemRef);
+      const consumables = items.filter((o) => typeof o.tokens === "number" && o.tokens > 0);
+      if (consumables.length > 0) {
+        next.inventoryConsumables = consumables.map((o) => ({
+          itemRef: o.itemRef,
+          tokens: o.tokens!,
+        }));
+      }
+    }
   } catch {
     /* leave undefined */
   }
 
-  // Pre-compute bearings to actionable points of interest. Saves the
-  // LLM from spending a full cascade calling `nearest` just to learn
-  // which direction Black Bart's lies. Empty array means no targets
-  // are reachable (or the tool isn't present); the prompt omits the
-  // section. Iterate sequentially — each call is cheap server-side
-  // and parallel calls would race the auth context.
-  const bearingTargets: Array<{ label: string; spec: { itemClass?: string; tileClass?: string } }> = [
-    { label: "Black Bart's Poker Table", spec: { itemClass: "PokerTable" } },
-  ];
+  // Pre-compute bearings to caller-configured points of interest.
+  // The substrate has NO built-in targets — the previous hardcoded
+  // "Black Bart's Poker Table" entry violated the architectural rule
+  // that default peppers must be ignorant of house-specific content.
+  // House variants pass their own targets via `opts.bearingTargets`.
+  // Iterate sequentially — each call is cheap server-side and
+  // parallel calls would race the auth context.
   const bearings: NonNullable<WorldContext["bearings"]>[number][] = [];
   for (const target of bearingTargets) {
     try {
@@ -813,6 +1257,8 @@ function describeStimulus(s: Stimulus): string {
       return `entered ${s.tileClass}`;
     case "idle":
       return `idle (${Math.round(s.quietForMs / 1000)}s)`;
+    case "primal":
+      return `primal (${s.need} ${s.direction}, urgency ${s.urgency.toFixed(2)})`;
   }
 }
 

@@ -55,6 +55,17 @@ function intProp(props: PropMap, key: string): number | undefined {
   return v.value.value as number;
 }
 
+/** Accept both IntVal and FloatVal — gram authors use either for numbers
+ *  like `tokens: 1.5`. Returns undefined for any other type. */
+function numProp(props: PropMap, key: string): number | undefined {
+  const v = HashMap.get(props, key);
+  if (Option.isNone(v)) return undefined;
+  if (v.value._tag === "IntVal" || v.value._tag === "FloatVal") {
+    return v.value.value as number;
+  }
+  return undefined;
+}
+
 function boolProp(props: PropMap, key: string): boolean | undefined {
   const v = HashMap.get(props, key);
   if (Option.isNone(v) || v.value._tag !== "BoolVal") return undefined;
@@ -192,6 +203,7 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
       const glyph = charTagProp(props, "glyph");
       const takeable = boolProp(props, "takeable");
       const capacityCost = intProp(props, "capacityCost");
+      const tokens = numProp(props, "tokens");
       itemTypes.set(id, {
         identity: id,
         typeName,
@@ -200,6 +212,7 @@ export async function parseMapGram(gramText: string): Promise<ParsedMap> {
         ...(glyph !== undefined ? { glyph } : {}),
         ...(takeable !== undefined ? { takeable } : {}),
         ...(capacityCost !== undefined ? { capacityCost } : {}),
+        ...(tokens !== undefined ? { tokens } : {}),
       });
 
     // Resources block — forbidden; error out

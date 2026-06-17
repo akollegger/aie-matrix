@@ -6,3 +6,4 @@
  *
  * @deprecated Use `ItemTypeDef` from `@aie-matrix/map-gram` instead.
  */
+export {};

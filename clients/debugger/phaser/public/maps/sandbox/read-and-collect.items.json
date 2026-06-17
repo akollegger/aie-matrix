@@ -1,0 +1,18 @@
+{
+  "key-brass": {
+    "name": "Brass Key",
+    "itemClass": "Key",
+    "carriable": true,
+    "capacityCost": 0,
+    "glyph": "🔑",
+    "description": "A small brass key. It might open something nearby."
+  },
+  "info-sign": {
+    "name": "Sign",
+    "itemClass": "Sign",
+    "carriable": false,
+    "capacityCost": 0,
+    "glyph": "🪧",
+    "description": "Short text meant to be read before you move on."
+  }
+}

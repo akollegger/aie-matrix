@@ -4,6 +4,10 @@
 (room:TileType:Room { name: "Room", style: css`background: #46074b` })
 (void:TileType:Void { name: "Void", style: css`background: #454545` })
 
+(vendingMachine:ItemType:VendingMachine { name: "Vending Machine", glyph: "🛒", takeable: false, capacityCost: 1 })
+(artwork:ItemType:Artwork { name: "Painting", glyph: "🖼", takeable: false, capacityCost: 0 })
+(artcard:ItemType:ArtCard { name: "Description card", glyph: "🪧", takeable: false, capacityCost: 0 })
+
 [ground:Layer {kind: "tile", name: "Ground"}]
 [building-lyro3xkilq:Layer {kind: "polygon", name: "Building"} | (:Polygon:Floor { geometry: [h3`8f283082aa33654`, h3`8f283082ab8dbac`, h3`8f283082ab1838c`, h3`8f283082aa20ce5`], name: "First Floor" })]
 [rooms-lyr6m4dmw7:Layer {kind: "polygon", name: "Rooms"} |
@@ -17,6 +21,81 @@
     (:Polygon:Room { geometry: [h3`8f283082aa30db6`, h3`8f283082aa368e6`, h3`8f283082aa3459c`, h3`8f283082aa346ac`], name: "Expo Stage L2" }),
     (:Polygon:Void { geometry: [h3`8f283082aa362ae`, h3`8f283082aa3619e`, h3`8f283082aa368d4`, h3`8f283082aa36364`], name: "Offices" })
 ]
-[layers:LayerStack | ground, building-lyro3xkilq, rooms-lyr6m4dmw7]
+[vending-machines:Layer {kind: "items", name: "Vending Machines"} |
+    (:Item:VendingMachine { geometry: [h3`8f283082aa205ab`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa224d3`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa22c71`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa264e9`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa26984`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa26a11`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa3000b`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa3069a`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa3095c`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa30d00`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa310c4`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa31c2b`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa3202a`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa32d72`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa33398`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa33401`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa3390c`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa33a04`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa340c3`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa34960`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa34a6c`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa34c0b`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa35198`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa35200`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa360b0`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa362e3`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082aa36809`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082ab1838d`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082ab194f1`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082ab1b041`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082ab1bd1c`] }),
+    (:Item:VendingMachine { geometry: [h3`8f283082ab8db13`] })
+]
+[artworks:Layer {kind: "items", name: "Artworks"} |
+    (:Item:Artwork {geometry: [h3`8f283082ab1bb0d`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082ab1bb0c`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa26d15`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa26d14`]}),
+    (:Item:Artwork {geometry: [h3`8f283082ab1b3aa`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082ab1b385`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa34c6d`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa34c6c`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa26592`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa35965`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa2645c`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa26451`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa35c29`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa35c28`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa35b48`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa35b4e`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa22d35`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa22d34`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa3465b`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa3465a`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa30d1d`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa30d1c`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa35281`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa35280`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa30a00`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa30a06`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa3666a`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa36645`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa31b23`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa31b22`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa31166`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa318db`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa32164`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa328d9`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa33d0c`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa33d01`]}),
+    (:Item:Artwork {geometry: [h3`8f283082aa33ced`]}),
+    (:Item:ArtCard {geometry: [h3`8f283082aa33cec`]})
+]
 
-[rules:Rules | (floor)-[:GO]->(floor), (room)-[:GO]->(room)]
+[layers:LayerStack | ground, building-lyro3xkilq, rooms-lyr6m4dmw7, vending-machines, artworks]
+
+[rules:Rules | (floor)-[:GO]->(floor), (room)-[:GO]->(room), (floor)-[:GO]->(room), (room)-[:GO]->(floor)]

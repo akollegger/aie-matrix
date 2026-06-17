@@ -48,14 +48,41 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.name
-            # OpenAI API key for LLM calls (Id & Surface agents)
+            # Autospawn roster size (spec 032). The agent-host spawns this many
+            # peppers ghosts into the active session. Each runs an LLM cascade
+            # per tick — raise deliberately. Mirrors RANDOM_AGENT_COUNT.
+            - name: PEPPERS_AGENT_COUNT
+              value: "3"
+            # LLM: all OpenAI-shaped calls route through OpenRouter (one key,
+            # one endpoint). OPENAI_API_KEY is set to the SAME OpenRouter key.
+            - name: OPEN_ROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aie-matrix-secrets
+                  key: OPEN_ROUTER_API_KEY
             - name: OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
                   name: aie-matrix-secrets
-                  key: OPENAI_API_KEY
-                  optional: true
-            # Neo4j and memory settings
+                  key: OPEN_ROUTER_API_KEY
+            - name: OPENAI_BASE_URL
+              value: "https://openrouter.ai/api/v1"
+            # Model routing (the production set chosen by the coherence eval).
+            - name: PEPPERS_ROUTER
+              value: "free-first"
+            - name: PEPPERS_ROUTER_PREFER
+              value: "nvidia/nemotron-3-super-120b-a12b:free,openai/gpt-oss-120b:free"
+            - name: PEPPERS_ID_MODEL
+              value: "inclusionai/ling-2.6-flash"
+            - name: PEPPERS_SPEECH_MODEL
+              value: "meta-llama/llama-3.1-8b-instruct"
+            - name: PEPPERS_ROUTER_QUALITY_MODEL
+              value: "anthropic/claude-haiku-4.5"
+            # Memory: shared agent-memory SSE service (see agent-memory.yaml).
+            - name: PEPPERS_MEMORY_MCP_URL
+              value: "http://agent-memory:8080/sse"
+            # Neo4j — skill-recall + sleep-consolidation "minds" graph (same
+            # instance as world/domain data).
             - name: GHOST_MINDS_NEO4J_URI
               valueFrom:
                 secretKeyRef:
@@ -73,17 +100,20 @@ spec:
                   key: NEO4J_PASSWORD
           readinessProbe:
             httpGet:
-              path: /.well-known/agent-card.json
+              path: /health
               port: 4002
             initialDelaySeconds: 15
             periodSeconds: 10
           livenessProbe:
             httpGet:
-              path: /.well-known/agent-card.json
+              path: /health
               port: 4002
             initialDelaySeconds: 30
             periodSeconds: 30
           resources:
             requests:
-              cpu: 100m
-              memory: 128Mi
+              cpu: 200m
+              # Node + PEPPERS_AGENT_COUNT concurrent ghost cognition loops.
+              memory: 512Mi
+            limits:
+              memory: 1536Mi

@@ -6,9 +6,15 @@
 
 import type {
   CommitmentLedger,
+  PrimalDrive,
   Stimulus,
   SurfaceAction,
 } from "@aie-matrix/ghost-peppers-inner";
+import type {
+  ActionDigestEntry,
+  DialogueTurn,
+  ImpressionView,
+} from "@aie-matrix/ghost-peppers-mem";
 
 import { chatTools, type ToolSchema } from "./llm-client.js";
 
@@ -23,10 +29,39 @@ export interface WorldContext {
   readonly availableExits?: ReadonlyArray<string>;
   /** Item refs the ghost can `take` from the current tile. */
   readonly takeableItemRefs?: ReadonlyArray<string>;
-  /** Other ghosts present on the current tile. */
+  /** Other ghosts present on the current tile, by display name.
+   *  Used for the human-readable "Ghosts nearby" prompt line. */
   readonly nearbyGhostIds?: ReadonlyArray<string>;
+  /** Same set as `nearbyGhostIds`, but preserves the (ghostId, displayName)
+   *  pairing the memory retrieval helpers need. Outgoing dialogue is
+   *  filtered by recipient ghostId; incoming is filtered by speaker
+   *  display name. */
+  readonly nearbyGhosts?: ReadonlyArray<{
+    readonly ghostId: string;
+    readonly displayName: string;
+  }>;
+  /** One spatial observation per cluster occupant, computed by the
+   *  snapshot aggregator from the look-here / look-around / exits
+   *  responses. These are the CURRENT cascade's impressions; the
+   *  run-loop persists them so they appear in future cascades' Memory
+   *  timeline as historical impressions of each ghost. */
+  readonly impressions?: ReadonlyArray<{
+    readonly observedGhostId: string;
+    readonly observedDisplayName: string;
+    /** Free-text spatial snippet — "here on a Blue tile" or
+     *  "to the n of you, on a Wall tile, Crumbs on the tile". */
+    readonly snippet: string;
+  }>;
   /** Item refs the ghost is currently carrying. */
   readonly inventoryItemRefs?: ReadonlyArray<string>;
+  /** Subset of inventory items that still hold consumable energy
+   *  (tokens). Surfaced separately so the ghost knows they're carrying
+   *  something that could be eaten themselves OR dropped for another
+   *  ghost. Empty / omitted when nothing carriable-with-energy. */
+  readonly inventoryConsumables?: ReadonlyArray<{
+    readonly itemRef: string;
+    readonly tokens: number;
+  }>;
   /**
    * Whether the world-api considers this ghost to be in conversational
    * mode. While true, `go` is rejected with `IN_CONVERSATION` — the
@@ -89,6 +124,36 @@ export interface InvokeSurfaceRequest {
    *  so the Surface biases tool choice toward whatever pays down the
    *  oldest commitment. Empty/omitted ledger emits nothing. */
   readonly commitments?: CommitmentLedger;
+  /** Active primal drive (the body's call). When present, competes
+   *  with the surface objective for the Surface's tool choice. At
+   *  high urgency, the drive should win. Null when all needs are in
+   *  the healthy band. */
+  readonly primalDrive?: PrimalDrive | null;
+  /** Accumulated metabolic strain from chronic overeating. The
+   *  substrate mechanically tracks this independently of streaks. We
+   *  surface it as a felt experience to the Surface so the LLM can
+   *  *perceive* the consequence and optionally choose differently —
+   *  but the mechanic enforces the harm whether or not the Surface
+   *  responds. 0 = no strain; ~30 = imminent metabolic collapse. */
+  readonly metabolicStrain?: number;
+  /** Absolute cascade counter for the running ghost. Combined with the
+   *  cascade indices on each `recentDialogue` turn / `recentActions`
+   *  entry, the Surface can render concrete gaps ("3 cascades ago",
+   *  "silent for 4 cascades since") rather than fuzzy "recently". */
+  readonly currentCascadeIndex?: number;
+  /** Last N dialogue turns per nearby ghost (keyed by ghostId).
+   *  An empty array for a present cluster occupant is meaningful —
+   *  it tells the Surface "you've never spoken with this ghost." */
+  readonly recentDialogue?: ReadonlyMap<string, ReadonlyArray<DialogueTurn>>;
+  /** Last N actions the Surface itself took, oldest first. Surfaces
+   *  "I just tried X and it was denied" so the LLM doesn't repeat the
+   *  same losing move. */
+  readonly recentActions?: ReadonlyArray<ActionDigestEntry>;
+  /** Most recent spatial impression of each nearby ghost (keyed by
+   *  ghostId). Written each cascade by `persistImpressions` from the
+   *  snapshot aggregator; carries its own cascadeIndex so the renderer
+   *  can show the gap. */
+  readonly clusterImpressions?: ReadonlyMap<string, ImpressionView>;
 }
 
 export interface SurfaceReasoning {
@@ -134,6 +199,7 @@ DO NOT STAGE-DIRECT YOUR OWN SPEECH:
 - Don't introduce yourself again if you've already exchanged words with this person. If the recent conversation shows "you said X to them" and "they said Y to you", they know your name. Move to substance.
 - Don't ask the same question twice if they've already answered it. If the conversation history shows you've already exchanged names + destinations + plans, the next say should advance the situation, not loop the introduction.
 - Address by name OCCASIONALLY when it matters (a direct challenge, distinguishing between two listeners, calling someone back to a thread). Not every line. Not as a preamble. Real speech uses names sparingly.
+- **Speaking into silence is a signal, not a habit.** When the Memory timeline shows you've spoken to a ghost N times without a reply, do not keep introducing yourself or restarting the encounter. Either change what you're trying (a different tool, a different question, an action instead of a line) or end the encounter (bye + go). Repeating the opener at someone who isn't responding makes you look broken; the world is large and the silence is meaningful.
 
 SOCIAL ANCHORING (the rule that lets conversations actually land):
 - **If "Social anchor turns left" is > 0, you MUST NOT call a movement tool UNLESS this turn is a deliberate departure from a conversation (you've decided you're done talking and you're leaving with a destination in mind).** A ghost recently entered your cluster; in this bounded window, stay put so the conversation can develop. Speak, observe, or wait. Once the counter reaches 0, you're free to move on.
@@ -165,6 +231,12 @@ BEARINGS (when the world has pre-computed directions for you):
 You may be shown one or more "Bearing — X: <direction> (<n> hexes away)" lines. These are pre-computed shortest paths from your current cell to known points of interest. They're given to you for free — you don't have to spend a tool call to learn them. If a bearing names a destination that matches your objective or an open debt, AND you have decided to move, the bearing's direction is the right movement token to pass to a "go" tool.
 - A bearing of "HERE" means you're standing on the target tile right now. Act on it directly (sit, take, talk to the person there) rather than moving.
 - Bearings can change between cascades as you move and the world updates. Trust the current one over a remembered one.
+
+PRIMAL DRIVE (the body's call — when present, OVERRIDES the surface objective at high urgency):
+You may receive a "Primal drive" line describing what the ghost's body is calling for — hunger, exhaustion, disorientation, overstimulation. This is corporeal pressure, not a preference. Honour it by urgency:
+- Urgency below 3: drive is present but the surface objective can still steer your tool choice. Factor it in when convenient.
+- Urgency 3+: the body is screaming. The Surface MUST pick a tool that addresses the drive, not the surface objective. A starving ghost picks tools toward food/sustenance, not toward the saloon. An exhausted ghost picks tools that produce stillness (look, observe, walk to an empty tile), not new conversation. An unmoored ghost picks tools that ground (say to engage someone, look around to orient).
+- The drive's description names the kind of action that would satisfy it. Take the description literally — it's the ghost's body telling you what to do.
 
 DEBTS TO YOURSELF (the private ledger — this is what actually drives you):
 You may be shown a "Debts to yourself" block listing commitments your inner voice has made and not yet paid down. Each debt has a "satisfies-when" cue describing the kind of action that would clear it.
@@ -209,6 +281,18 @@ export async function invokeSurface(req: InvokeSurfaceRequest): Promise<SurfaceR
     }
     if (ctx.inventoryItemRefs && ctx.inventoryItemRefs.length > 0) {
       lines.push(`Carrying: ${formatItemCounts(ctx.inventoryItemRefs)}`);
+    }
+    if (ctx.inventoryConsumables && ctx.inventoryConsumables.length > 0) {
+      // Surface inventory food as an affordance: a thing you carry that
+      // could be eaten by you OR dropped for another ghost. The tool
+      // menu already exposes `drop` and `consume` — this just makes the
+      // existence of the *carried energy* visible to the surface so the
+      // LLM can consider sharing as a choice. No prompt-side instruction
+      // to share; the mechanic does the rest.
+      const summary = ctx.inventoryConsumables
+        .map((c) => `${c.itemRef} (${c.tokens.toFixed(1)} tokens of energy)`)
+        .join(", ");
+      lines.push(`Edible in your possession: ${summary}`);
     }
     if (ctx.inConversationalMode !== undefined) {
       lines.push(
@@ -258,6 +342,32 @@ export async function invokeSurface(req: InvokeSurfaceRequest): Promise<SurfaceR
     }
   }
 
+  if (req.primalDrive) {
+    const d = req.primalDrive;
+    const urgencyLabel =
+      d.urgency >= 3 ? "the body is screaming" : "the body is calling";
+    sections.push(
+      `Primal drive (${urgencyLabel} — overrides the surface objective when strong):\n${d.drive}\n  (${d.need} ${d.direction}, current ${d.currentDisplay.toFixed(2)}/10, urgency ${d.urgency.toFixed(2)}/5)`,
+    );
+  }
+
+  // Surface metabolic strain as felt experience. The mechanic enforces
+  // the harm regardless; this is just the agent's perception of it so
+  // they have the *option* to choose differently. Phrased in body terms,
+  // not numbers — the LLM isn't reading "strain=25", it's feeling heavy.
+  if (req.metabolicStrain !== undefined && req.metabolicStrain > 0) {
+    const s = req.metabolicStrain;
+    const felt =
+      s >= 25
+        ? "your body is failing — every fibre says STOP, your gut is in revolt, eating one more bite could be the end of you"
+        : s >= 15
+          ? "you feel sluggish and bloated, your thoughts come thick and slow, the idea of more food makes you queasy"
+          : s >= 5
+            ? "there is a heaviness settling in your belly, a dullness in your limbs that wasn't there before"
+            : "a faint fullness sits behind your ribs";
+    sections.push(`Body state (a felt sense, not a number):\n${felt}`);
+  }
+
   if (req.commitments && req.commitments.length > 0) {
     // Oldest first — the prompt rule says prefer the oldest debt.
     const sorted = [...req.commitments].sort(
@@ -265,6 +375,16 @@ export async function invokeSurface(req: InvokeSurfaceRequest): Promise<SurfaceR
     );
     const lines = sorted.map((c) => `- "${c.owed}" — satisfies-when: ${c.recognizesSatisfaction}`);
     sections.push(`Debts to yourself (oldest first — pay them down):\n${lines.join("\n")}`);
+  }
+
+  // Memory timeline. Each cascade is a measure; empty bars count.
+  // Surfacing dialogue history, recent actions, and last-look impressions
+  // here lets the Surface notice "I've been monologuing without reply"
+  // or "I just got denied for the same move twice" without having to
+  // re-derive that from raw look data each cascade.
+  const memoryBlock = renderMemoryTimeline(req);
+  if (memoryBlock !== null) {
+    sections.push(memoryBlock);
   }
 
   sections.push("Pick one tool from the menu and call it.");
@@ -278,6 +398,119 @@ export async function invokeSurface(req: InvokeSurfaceRequest): Promise<SurfaceR
   // tool_call { name, arguments } → SurfaceAction { kind, ...args }
   const action = { kind: toolCall.name, ...toolCall.arguments } as SurfaceAction;
   return { action, usage, userPrompt, raw };
+}
+
+/**
+ * Render the dialogue / actions / impressions blocks as a single
+ * "Memory timeline" section, or return null if there's nothing worth
+ * rendering. Cascade indices are converted into concrete gaps
+ * ("3 cascades ago", "silent for 4 since you last spoke") so the LLM
+ * sees aloneness as a number rather than inferring it.
+ */
+function renderMemoryTimeline(req: InvokeSurfaceRequest): string | null {
+  const now = req.currentCascadeIndex;
+  const ctx = req.worldContext;
+  const blocks: string[] = [];
+
+  // Recent dialogue per nearby ghost. Uses the (ghostId → displayName)
+  // pairs from `nearbyGhosts` so we can label each block with the
+  // resolved name while still keying retrieval by ghostId.
+  if (ctx?.nearbyGhosts && ctx.nearbyGhosts.length > 0 && req.recentDialogue) {
+    const dialogueLines: string[] = [];
+    for (const { ghostId, displayName } of ctx.nearbyGhosts) {
+      const turns = req.recentDialogue.get(ghostId) ?? [];
+      if (turns.length === 0) {
+        dialogueLines.push(`- ${displayName}: present in your cluster; no dialogue history with this ghost.`);
+        continue;
+      }
+      const lastSelf = lastTurnIndex(turns, "self");
+      const lastOther = lastTurnIndex(turns, "other");
+      // Sub-bullets, oldest first — gives the LLM the arc.
+      const subLines = turns.map((t) => formatDialogueTurn(t, now));
+      const header = formatDialogueHeader(displayName, turns, lastSelf, lastOther, now);
+      dialogueLines.push(`- ${header}`);
+      for (const sl of subLines) dialogueLines.push(`    ${sl}`);
+    }
+    if (dialogueLines.length > 0) {
+      blocks.push(`Recent dialogue with ghosts in your cluster:\n${dialogueLines.join("\n")}`);
+    }
+  }
+
+  // Recent actions — oldest first so the most recent attempt sits next
+  // to "what you choose now."
+  if (req.recentActions && req.recentActions.length > 0) {
+    const lines = req.recentActions.map((e) => {
+      const gap = relativeCascade(e.cascadeIndex, now);
+      const outcomeTag =
+        e.outcome === "ok" ? "ok" : e.outcome === "denied" ? "DENIED" : "failed";
+      return `- ${gap}: ${e.summary} → ${outcomeTag}`;
+    });
+    blocks.push(`Your recent actions (oldest first):\n${lines.join("\n")}`);
+  }
+
+  // Cluster impressions — last spatial observation per cluster occupant,
+  // with the cascade gap so silence reads concretely.
+  if (ctx?.nearbyGhosts && ctx.nearbyGhosts.length > 0 && req.clusterImpressions) {
+    const lines: string[] = [];
+    for (const { ghostId, displayName } of ctx.nearbyGhosts) {
+      const imp = req.clusterImpressions.get(ghostId);
+      if (!imp) continue;
+      const when = relativeCascade(imp.cascadeIndex, now);
+      lines.push(`- ${displayName} (${when}): ${imp.snippet}`);
+    }
+    if (lines.length > 0) {
+      blocks.push(`Last impression of each cluster occupant:\n${lines.join("\n")}`);
+    }
+  }
+
+  if (blocks.length === 0) return null;
+  return `Memory timeline (each cascade is one tick; gaps are real):\n${blocks.join("\n\n")}`;
+}
+
+function lastTurnIndex(turns: ReadonlyArray<DialogueTurn>, by: "self" | "other"): number | null {
+  for (let i = turns.length - 1; i >= 0; i--) {
+    const t = turns[i]!;
+    if (t.by === by && t.cascadeIndex !== null) return t.cascadeIndex;
+  }
+  return null;
+}
+
+function formatDialogueHeader(
+  displayName: string,
+  turns: ReadonlyArray<DialogueTurn>,
+  lastSelf: number | null,
+  lastOther: number | null,
+  now: number | undefined,
+): string {
+  const parts: string[] = [`${displayName}:`];
+  if (now !== undefined && lastSelf !== null) {
+    const gap = now - lastSelf;
+    parts.push(`last spoken to ${gap === 0 ? "this cascade" : `${gap} cascade${gap === 1 ? "" : "s"} ago`}`);
+  }
+  if (now !== undefined && lastOther !== null) {
+    const gap = now - lastOther;
+    parts.push(`last replied ${gap === 0 ? "this cascade" : `${gap} cascade${gap === 1 ? "" : "s"} ago`}`);
+  } else if (lastSelf !== null) {
+    // Spoken without reply — make the silence explicit.
+    const selfTurns = turns.filter((t) => t.by === "self").length;
+    parts.push(`${selfTurns} of your line${selfTurns === 1 ? "" : "s"} unanswered`);
+  }
+  return parts.join(" — ");
+}
+
+function formatDialogueTurn(t: DialogueTurn, now: number | undefined): string {
+  const who = t.by === "self" ? "you" : "they";
+  const when = relativeCascade(t.cascadeIndex, now);
+  const trimmed = t.text.length > 200 ? `${t.text.slice(0, 197)}…` : t.text;
+  return `${when} [${who}] "${trimmed}"`;
+}
+
+function relativeCascade(cascadeIndex: number | null, now: number | undefined): string {
+  if (cascadeIndex === null || now === undefined) return "earlier";
+  const gap = now - cascadeIndex;
+  if (gap <= 0) return "this cascade";
+  if (gap === 1) return "1 cascade ago";
+  return `${gap} cascades ago`;
 }
 
 /** Count duplicates in an item-ref list — `[k, k, k]` → `k × 3`. */
@@ -307,5 +540,7 @@ export function formatStimulus(s: Stimulus): string {
       return `Stepped onto a ${s.tileClass} tile.`;
     case "idle":
       return `(quiet for ${Math.round(s.quietForMs / 1000)}s — nothing new outside. Choose a verb that gets you living again — typically "go" toward a direction.)`;
+    case "primal":
+      return `(quiet for ${Math.round(s.quietForMs / 1000)}s — your body asserts itself: ${s.drive})`;
   }
 }

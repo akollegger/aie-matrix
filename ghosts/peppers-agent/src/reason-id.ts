@@ -21,8 +21,11 @@
 
 import {
   STARTER_FACETS,
+  selectPrimalDrive,
   type Adjustment,
+  type NeedProfile,
   type PersonalityState,
+  type PrimalDrive,
   type Stimulus,
 } from "@aie-matrix/ghost-peppers-inner";
 
@@ -54,6 +57,10 @@ export interface IdReasoning {
   readonly emotionalRead: string;
   /** Impulse layer's 2-8 word action-oriented urge. */
   readonly impulse: string;
+  /** Active primal drive at the time of this cascade, or null if all
+   *  needs were in the healthy band. Exposed for overlay rendering
+   *  and cascade-log diagnosis. */
+  readonly primalDrive: PrimalDrive | null;
 }
 
 export interface InvokeIdRequest {
@@ -70,11 +77,20 @@ export interface InvokeIdRequest {
    *  Fed into convergence so committed plans persist across ticks
    *  rather than regenerating fresh each cascade. */
   readonly recentSuperObjectives?: ReadonlyArray<string>;
+  /** Primal need state at the start of this cascade. Used to scale
+   *  pipeline behaviour (currently just synthesis max_tokens via the
+   *  Fuel need). Optional — when omitted, the pipeline runs at full
+   *  capacity. */
+  readonly needs?: NeedProfile;
 }
 
 export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
   const recentTriggers = extractRecentTriggers(req.recentCascades);
   const { lastAction, lastOutcome } = extractLastDecision(req.recentCascades);
+  // The lizard's call. Null when every need is in the healthy band;
+  // otherwise the strongest need's drive. Feeds the impulse stage
+  // (what to do) and propagates out for overlay rendering.
+  const primalDrive = req.needs ? selectPrimalDrive(req.needs) : null;
 
   // Stage 1 — TWO parallel chains:
   //   (a) Eight facet agents in parallel → convergence (sequential).
@@ -104,6 +120,7 @@ export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
       objective: req.objective,
       lastAction,
       lastOutcome,
+      primalDrive,
     }),
   ]);
 
@@ -123,6 +140,12 @@ export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
 
   // Stage 3 — synthesis: voice it. Receives BOTH the emotional flavor
   // (super-objective) and the action-pull (impulse), weaves them.
+  // Fuel-need scales the max_tokens cap so a starving ghost's
+  // monologue is mechanically shorter — the first end-to-end primal
+  // consequence the cascade observes.
+  const fuelMaxTokens = req.needs
+    ? fuelToSynthesisMaxTokens(req.needs)
+    : undefined;
   const synth = await invokeSynthesis({
     emotionalRead: conv.emotionalRead,
     superObjective: conv.superObjective,
@@ -131,6 +154,7 @@ export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
     worldContext: req.worldContext,
     objective: req.objective,
     ...(req.selfDisplayName ? { selfDisplayName: req.selfDisplayName } : {}),
+    ...(fuelMaxTokens !== undefined ? { maxTokens: fuelMaxTokens } : {}),
   });
 
   const adjustments: Adjustment[] = [];
@@ -162,7 +186,32 @@ export async function invokeId(req: InvokeIdRequest): Promise<IdReasoning> {
     facetReadings,
     emotionalRead: conv.emotionalRead,
     impulse: impulse.impulse,
+    primalDrive,
   };
+}
+
+/**
+ * Map current Fuel level → synthesis max_tokens. Linear: a satiated
+ * ghost (display 5) gets 400 tokens; a starving ghost (display 1) gets
+ * 160; an oversaturated ghost (display 9) gets 640 (the over-thinking
+ * pathology — verbosity without benefit). Floor at 100 tokens so even
+ * a critical ghost can still emit a fragment.
+ */
+function fuelToSynthesisMaxTokens(needs: NeedProfile): number {
+  // Linear up to display 7 (the binge threshold), then linear down at
+  // double the slope above. A satiated ghost (5) gets 400; a healthy
+  // ghost at the satiety peak (7) gets 520; a binging ghost at 10 gets
+  // 280 — bloated, sluggish thinking, less to say per cascade. Floor
+  // at 100 so even a critical ghost can emit a fragment.
+  const fuelDisplay = needs.Fuel.display;
+  const BINGE_THRESHOLD = 7;
+  const UP_SLOPE = 60;
+  const DOWN_SLOPE = 80;
+  const peak = 100 + BINGE_THRESHOLD * UP_SLOPE; // 520
+  const tokens = fuelDisplay <= BINGE_THRESHOLD
+    ? 100 + fuelDisplay * UP_SLOPE
+    : peak - (fuelDisplay - BINGE_THRESHOLD) * DOWN_SLOPE;
+  return Math.max(100, Math.round(tokens));
 }
 
 /**

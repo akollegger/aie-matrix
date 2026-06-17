@@ -76,6 +76,10 @@ describe("evaluateGo with authored rules", () => {
       inspectItem: () => Effect.die("not used"),
       takeItem: () => Effect.die("not used"),
       dropItem: () => Effect.die("not used"),
+      consumeItem: () => Effect.die("not used"),
+      getInstanceTokens: () => undefined,
+      getInventoryTokens: () => undefined,
+      spawnItem: () => false,
       getSidecar: () => new Map([["statue", { identity: "statue", typeName: "Statue", name: "Statue", takeable: false, capacityCost: 1 }]]),
     };
     const out = evaluateGo(map, makeCellId(0, 0), "ne", permissiveRuleset(), { ghostLabels: new Set() }, {

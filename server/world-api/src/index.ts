@@ -48,6 +48,18 @@ export {
 } from "./auth-errors.js";
 export { McpHandlerError } from "./mcp-handler-error.js";
 export {
+  registerVendor,
+  getVendor,
+  listVendors,
+  vendorsOnCell,
+  type VendorInfo,
+} from "./vendors.js";
+export {
+  registerArtwork,
+  listArtworks,
+  type ArtworkInfo,
+} from "./artworks.js";
+export {
   WorldBridgeNoNavigableCells,
   WorldBridgeNotReady,
   type WorldBridgeError,

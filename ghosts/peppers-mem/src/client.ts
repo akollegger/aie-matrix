@@ -11,6 +11,7 @@
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 
 /** Connection parameters for the ghost-minds Neo4j (PeppersGhosts in dev). */
 export interface MemoryConnection {
@@ -21,19 +22,34 @@ export interface MemoryConnection {
   readonly database?: string;
 }
 
-/** Options when spawning the MCP server subprocess. */
+/** Options for connecting to the Agent Memory MCP server.
+ *
+ * Two transports, selected by config (production picks the service URL;
+ * the stdio path stays for local dev with no service running):
+ *
+ *   - serviceUrl set (or PEPPERS_MEMORY_MCP_URL env) → connect over SSE
+ *     to a shared, multi-tenant agent-memory service (the k8s-scalable
+ *     production shape). No subprocess; memory is its own deployable.
+ *   - else → spawn the package as a uvx stdio subprocess (local dev).
+ *     Requires `connection` (Neo4j creds for the subprocess).
+ */
 export interface MemoryClientOptions {
-  readonly connection: MemoryConnection;
+  /** SSE endpoint of a running agent-memory service, e.g.
+   *  `http://agent-memory:8080/sse`. Overrides the stdio path.
+   *  Falls back to PEPPERS_MEMORY_MCP_URL when omitted. */
+  readonly serviceUrl?: string;
+  /** Neo4j connection — required only for the stdio (local) path; the
+   *  SSE service owns its own Neo4j connection. */
+  readonly connection?: MemoryConnection;
   /**
    * "core" (6 tools, lower context overhead) or "extended" (16 tools,
    * includes reasoning-trace tools and `graph_query` for direct
-   * Cypher reads).
+   * Cypher reads). stdio path only; the service is configured server-side.
    */
   readonly profile?: "core" | "extended";
   /**
-   * Optional override for the uvx invocation. Defaults to the upstream
-   * package coordinates; useful if the user has the package vendored
-   * locally or pinned to a version.
+   * Optional override for the uvx invocation (stdio path only). Defaults
+   * to the upstream package coordinates.
    */
   readonly uvxArgs?: readonly string[];
 }
@@ -65,6 +81,38 @@ export async function connectMemory(opts: MemoryClientOptions): Promise<MemoryCl
   // memory_complete_trace (which the core profile omits) and graph_query for
   // direct Cypher reads. Required by persistCascade.
   const { connection, profile = "extended" } = opts;
+
+  // ── Production path: connect to a shared agent-memory SSE service ──────────
+  // The service is its own k8s-scalable deployable, multi-tenant by
+  // session_id, owning its own Neo4j connection. peppers just holds an
+  // MCP Client over SSE — no subprocess, no Python in this image.
+  const serviceUrl = opts.serviceUrl ?? process.env.PEPPERS_MEMORY_MCP_URL;
+  if (serviceUrl !== undefined && serviceUrl.length > 0) {
+    const transport = new SSEClientTransport(new URL(serviceUrl));
+    const client = new Client(
+      { name: "ghost-peppers-mem", version: "0.0.0" },
+      { capabilities: {} },
+    );
+    await client.connect(transport);
+    return {
+      client,
+      async close() {
+        try {
+          await client.close();
+        } finally {
+          await transport.close();
+        }
+      },
+    };
+  }
+
+  // ── Local-dev path: spawn the package as a uvx stdio subprocess ───────────
+  if (connection === undefined) {
+    throw new Error(
+      "connectMemory: provide serviceUrl/PEPPERS_MEMORY_MCP_URL (SSE service) " +
+        "or `connection` (Neo4j creds for the local uvx subprocess).",
+    );
+  }
 
   const args = [
     ...(opts.uvxArgs ?? DEFAULT_UVX_ARGS),

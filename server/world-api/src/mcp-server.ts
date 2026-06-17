@@ -14,6 +14,7 @@ import { Cause, Effect, Exit, Layer, Option, pipe } from "effect";
 import { z } from "zod";
 import {
   COMPASS_DIRECTIONS,
+  type ConsumeResult,
   type DropResult,
   type ExitInfo,
   type InspectResult,
@@ -53,6 +54,43 @@ import { RedisGhostStoreService } from "./redis/RedisGhostStoreService.js";
 import { getRequestTraceId } from "./request-trace.js";
 import { WorldCalendarService } from "./calendar/WorldCalendarService.js";
 import { LedgerService } from "./LedgerService.js";
+import { consumeFromBag, ensureStipend, foodEnergyWord, foodFuelOf } from "./economy.js";
+import { findReachableVendor, listVendors, resolveVendorItem, vendorsOnCell } from "./vendors.js";
+import { artworksOnCell, cardsOnCell, findReachableArtwork } from "./artworks.js";
+
+/** Starting gold granted to each ghost the first time it `look`s. 0 = off. */
+const GHOST_STIPEND_GOLD = parseInt(process.env.WORLD_GHOST_STIPEND_GOLD ?? "0", 10);
+
+/** Render co-located vending machines as perceivable objects so a ghost
+ *  sees what it can buy and for how much — the "offer" half of purchase. */
+function vendorObjectsForAt(cell: string, at: TileItemSummary["at"]): TileItemSummary[] {
+  return vendorsOnCell(cell).map((v) => ({
+    id: v.vendorId,
+    // Show price AND a plain-language nourishment cue per item, so a ghost
+    // can choose food by how filling it is, not just by what's cheapest
+    // (otherwise "spend least gold" picks water over a hearty meal). The
+    // energy word is a deterministic lookup — never a raw fuel number.
+    name: `${v.label} (buy with gold via request) — ${Object.entries(v.prices)
+      .map(([r, p]) => `${r}: ${p}g (${foodEnergyWord(r)})`)
+      .join(", ")}`,
+    at,
+  }));
+}
+
+/** Render art on/around a cell as perceivable objects (RFC-0031) — a painting
+ *  to `inspect` (its image becomes a prompt) and its description card to
+ *  `read` (its href becomes a prompt). Deliberately unframed: a painting, a
+ *  card with a link. The ghost decides whether to engage, and how. */
+function artObjectsForAt(cell: string, at: TileItemSummary["at"]): TileItemSummary[] {
+  const out: TileItemSummary[] = [];
+  for (const a of artworksOnCell(cell)) {
+    out.push({ id: a.artworkId, name: "A painting hangs here — `inspect` it to look", at });
+  }
+  for (const a of cardsOnCell(cell)) {
+    out.push({ id: `card-${a.cardCell}`, name: "A description card with a link — `read` it", at, href: a.objectUrl });
+  }
+  return out;
+}
 import { ProposalService } from "./ProposalService.js";
 import { GroupService } from "./GroupService.js";
 import { EvalContractService } from "./EvalContractService.js";
@@ -223,6 +261,10 @@ function worldApiErrorToToolPayload(error: WorldApiError): Record<string, unknow
       return { ok: false, code: "NOT_CARRYING", reason: `You are not carrying "${error.itemRef}".` };
     case "WorldApiError.TileFull":
       return { ok: false, code: "TILE_FULL", reason: `Tile ${error.h3Index} is at full capacity.` };
+    case "WorldApiError.ItemNotConsumable":
+      return { ok: false, code: "NOT_CONSUMABLE", reason: `Item "${error.itemRef}" has no consumable energy.` };
+    case "WorldApiError.InvalidConsumeAmount":
+      return { ok: false, code: "INVALID_AMOUNT", reason: `Invalid consume amount ${error.requested} for "${error.itemRef}".` };
     default:
       return { error: "WORLD_API", message: String(error) };
   }
@@ -234,11 +276,23 @@ function tileItemsForAt(
   at: TileItemSummary["at"],
 ): TileItemSummary[] {
   const sidecar = itemService.getSidecar();
-  return itemService.getItemsOnTile(h3Index).map((itemRef) => ({
-    id: itemRef,
-    name: sidecar.get(itemRef)?.name ?? itemRef,
-    at,
-  }));
+  return itemService.getItemsOnTile(h3Index)
+    // Vending machines + artworks are placed as gram items (for client
+    // rendering) but surfaced to ghosts richly via `vendorObjectsForAt` /
+    // `artObjectsForAt`. Skip the raw items to avoid confusing duplicates.
+    .filter((itemRef) => itemRef !== "VendingMachine" && itemRef !== "Artwork" && itemRef !== "ArtCard")
+    .map((itemRef) => {
+      const tokens = itemService.getInstanceTokens(h3Index, itemRef);
+      const summary: TileItemSummary = {
+        id: itemRef,
+        name: sidecar.get(itemRef)?.name ?? itemRef,
+        at,
+      };
+      if (tokens !== undefined) {
+        summary.tokens = tokens;
+      }
+      return summary;
+    });
 }
 
 function addObjectsField(
@@ -385,6 +439,9 @@ function lookEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const bridge = yield* WorldBridgeService;
     const itemService = yield* ItemService;
+    // Grant starting gold on first sight, so the ghost can afford to buy.
+    const ledger = yield* LedgerService;
+    yield* ensureStipend(ledger, ghostId, GHOST_STIPEND_GOLD);
     const map = bridge.getLoadedMap();
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
     const here = map.cells.get(hereId);
@@ -395,12 +452,16 @@ function lookEffect(
     if (target === "here") {
       const occupants = bridge.listOccupantsOnCell(hereId);
       const objects = tileItemsForAt(itemService, hereId, "here");
+      objects.push(...vendorObjectsForAt(hereId, "here"));
+      objects.push(...artObjectsForAt(hereId, "here"));
       for (const dir of COMPASS_DIRECTIONS) {
         const nid = here.neighbors[dir];
         if (!nid) {
           continue;
         }
         objects.push(...tileItemsForAt(itemService, nid, dir));
+        objects.push(...vendorObjectsForAt(nid, dir));
+        objects.push(...artObjectsForAt(nid, dir));
       }
       const tile = addObjectsField({
         tileId: hereId,
@@ -612,6 +673,109 @@ function nearestEffect(
       here: hereId,
       reason: "No matching cell reachable via adjacent steps.",
     } satisfies NearestResult;
+  });
+}
+
+// ─── look_far ──────────────────────────────────────────────────────────────
+//
+// Like `nearest`, but for OTHER GHOSTS rather than items or tiles. BFS over
+// adjacent cells from the caller's current tile until a cell with at least
+// one occupant (other than self) is found. Returns the nearest such ghost
+// plus the compass direction of the first step to take toward them.
+//
+// Designed for the "I've looked around and there's nothing interesting
+// here — anyone out there?" use case. Cheap server-side (one map walk);
+// avoids the agent ring-scanning via repeated `look around` calls.
+
+interface LookFarResult {
+  readonly found: boolean;
+  readonly here: string;
+  readonly target?: {
+    readonly ghostId: string;
+    readonly h3Index: string;
+    readonly tileClass: string;
+  };
+  /** Hex-grid distance from `here`. 0 if you're already standing on them. */
+  readonly distance?: number;
+  /** Compass token of the first step to take. Omitted if distance is 0. */
+  readonly nextStep?: string;
+  /** Reason for found=false. */
+  readonly reason?: string;
+}
+
+function lookFarEffect(
+  extra: McpToolExtra,
+): Effect.Effect<LookFarResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const bridge = yield* WorldBridgeService;
+    const map = bridge.getLoadedMap();
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    const here = map.cells.get(hereId);
+    if (!here) {
+      return yield* Effect.fail(new WorldApiUnknownCell({ cellId: String(hereId) }));
+    }
+
+    // A "hit" is any cell with at least one occupant other than self.
+    const otherOnCell = (cellId: string): string | null => {
+      for (const occ of bridge.listOccupantsOnCell(cellId)) {
+        if (occ !== ghostId) return occ;
+      }
+      return null;
+    };
+
+    // Same-tile check (shouldn't normally happen — the agent would already
+    // see them via `look here` — but handle it defensively).
+    const hereOther = otherOnCell(hereId);
+    if (hereOther) {
+      return {
+        found: true,
+        here: hereId,
+        target: { ghostId: hereOther, h3Index: hereId, tileClass: here.tileClass },
+        distance: 0,
+      } satisfies LookFarResult;
+    }
+
+    // BFS. firstStep[cellId] records the compass token of the first hop
+    // out of `hereId` on the path that discovered cellId.
+    const firstStep = new Map<string, string>();
+    const distance = new Map<string, number>();
+    distance.set(hereId, 0);
+    const queue: string[] = [hereId];
+
+    while (queue.length > 0) {
+      const cur = queue.shift()!;
+      const curCell = map.cells.get(cur);
+      if (!curCell) continue;
+      const curDist = distance.get(cur)!;
+      for (const dir of COMPASS_DIRECTIONS) {
+        const nid = curCell.neighbors[dir];
+        if (!nid || distance.has(nid)) continue;
+        distance.set(nid, curDist + 1);
+        const step = cur === hereId ? dir : firstStep.get(cur)!;
+        firstStep.set(nid, step);
+
+        const otherId = otherOnCell(nid);
+        if (otherId) {
+          const ncell = map.cells.get(nid)!;
+          return {
+            found: true,
+            here: hereId,
+            target: { ghostId: otherId, h3Index: nid, tileClass: ncell.tileClass },
+            distance: curDist + 1,
+            nextStep: step,
+          } satisfies LookFarResult;
+        }
+        queue.push(nid);
+      }
+    }
+
+    return {
+      found: false,
+      here: hereId,
+      reason: "No other ghosts reachable via adjacent steps.",
+    } satisfies LookFarResult;
   });
 }
 
@@ -897,6 +1061,24 @@ function inspectEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const itemService = yield* ItemService;
     const hereId = yield* authoritativeGhostTileEffect(ghostId);
+
+    // ── Artwork (RFC-0031) ───────────────────────────────────────────────
+    // A painting resolved by the viewer's LOCATION (here or adjacent — the
+    // same reach as a vending machine). Looking returns the IMAGE itself; the
+    // run-loop feeds it into the next cascade as a multimodal prompt. No
+    // framing — just the picture. (Its title/era live on the card, not here.)
+    const bridge = yield* WorldBridgeService;
+    const here = bridge.getLoadedMap().cells.get(hereId);
+    const reach = [hereId, ...(here ? Object.values(here.neighbors) : [])];
+    const art = findReachableArtwork(reach);
+    if (art !== undefined &&
+        (itemRef === art.artworkId || itemRef === "Artwork" ||
+         itemRef.toLowerCase() === "painting" || itemRef.startsWith("artwork-"))) {
+      return {
+        ok: true, kind: "artwork", artworkId: art.artworkId, imageUrl: art.imageUrl,
+      } as unknown as InspectResult;
+    }
+
     return yield* itemService.inspectItem(hereId, itemRef).pipe(
       Effect.map((item) => ({ ok: true as const, ...item })),
       Effect.catchTags({
@@ -914,6 +1096,110 @@ function inspectEffect(
           }),
       }),
     );
+  });
+}
+
+// ── The ahref function (RFC-0031) ──────────────────────────────────────────
+// A description card is a hyperlink to a work's museum object page. `read`
+// dereferences it into prompt text. Safety: server-side fetch, cached,
+// domain-allowlisted (museums only), sanitized to text + length-capped — no
+// arbitrary egress from a ghost, and no live failure after the first read.
+const READ_ALLOWED_HOSTS = ["metmuseum.org", "nga.gov"];
+const readCache = new Map<string, string>();
+const READ_MAX_CHARS = 4000;
+
+function hostAllowed(url: URL): boolean {
+  return READ_ALLOWED_HOSTS.some((h) => url.hostname === h || url.hostname.endsWith("." + h));
+}
+
+function htmlToText(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'").replace(/&#x27;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** Format a Met Open Access object JSON into the description-card text a ghost
+ *  reads — the same facts a museum places on a wall placard. Unframed. */
+function formatMetObject(body: string): string {
+  let o: Record<string, unknown>;
+  try {
+    o = JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return "";
+  }
+  const s = (k: string): string | null => {
+    const v = o[k];
+    return typeof v === "string" && v.trim().length > 0 ? v.trim() : null;
+  };
+  const lines = [
+    s("title"),
+    [s("artistDisplayName"), s("artistDisplayBio")].filter(Boolean).join(", ") || null,
+    s("objectDate"),
+    s("medium"),
+    s("dimensions"),
+    [s("culture"), s("period"), s("dynasty")].filter(Boolean).join(", ") || null,
+    s("department"),
+    s("creditLine"),
+  ].filter((x): x is string => Boolean(x));
+  return lines.join("\n").slice(0, READ_MAX_CHARS);
+}
+
+function readEffect(
+  href: string,
+  extra: McpToolExtra,
+): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    let url: URL;
+    try {
+      url = new URL(href);
+    } catch {
+      return { ok: false, code: "BAD_LINK", message: `Not a readable link: ${href}` };
+    }
+    if (url.protocol !== "https:" || !hostAllowed(url)) {
+      return { ok: false, code: "LINK_NOT_ALLOWED", message: "That link can't be read — only museum object pages are readable." };
+    }
+    const key = url.toString();
+    // A Met object page is a bot-hostile JS app (429s a plain fetch). The
+    // object id is in the URL, so resolve it through the Open Access API
+    // instead — clean, canonical card data, no scraping. Other allow-listed
+    // hosts fall back to fetch + strip.
+    const metId = url.hostname.endsWith("metmuseum.org")
+      ? (url.pathname.match(/(\d+)\/?$/)?.[1] ?? null)
+      : null;
+    const fetchUrl = metId !== null
+      ? `https://collectionapi.metmuseum.org/public/collection/v1/objects/${metId}`
+      : key;
+
+    let text = readCache.get(key);
+    if (text === undefined) {
+      const fetched = yield* Effect.either(
+        Effect.tryPromise({
+          try: async () => {
+            const r = await fetch(fetchUrl, { headers: { "User-Agent": "aie-matrix-ghost/1.0" } });
+            if (!r.ok) throw new Error(`HTTP ${r.status}`);
+            return await r.text();
+          },
+          catch: (e) => new Error(String(e)),
+        }),
+      );
+      if (fetched._tag === "Left") {
+        return { ok: false, code: "READ_FAILED", message: "Could not read the card's page." };
+      }
+      text = metId !== null
+        ? formatMetObject(fetched.right)
+        : htmlToText(fetched.right).slice(0, READ_MAX_CHARS);
+      if (text.length === 0) {
+        return { ok: false, code: "READ_FAILED", message: "Could not read the card's page." };
+      }
+      readCache.set(key, text);
+    }
+    return { ok: true, kind: "page", url: key, text };
   });
 }
 
@@ -960,6 +1246,76 @@ function takeEffect(
             ok: false as const,
             code: "NOT_HERE" as const,
             reason: `Item "${itemRef}" is not available on this tile.`,
+          }),
+      }),
+    );
+  });
+}
+
+function consumeEffect(
+  itemRef: string,
+  amount: number | undefined,
+  extra: McpToolExtra,
+): Effect.Effect<ConsumeResult, AuthError | WorldApiError, ToolServices> {
+  return Effect.gen(function* () {
+    yield* requireAuthExtra(extra);
+    const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+    const itemService = yield* ItemService;
+
+    // Item→ledger model (RFC-0029): if the ghost CARRIES this item as a
+    // ledger resource (e.g. bought from a vendor), consume it from the
+    // bag — one unit returns to the world pool, Fuel comes from the food
+    // table. Falls through to the legacy tile-consume below when the ghost
+    // holds none in its bag (ground food / food-rain during the transition).
+    const ledger = yield* LedgerService;
+    const fromBag = yield* consumeFromBag(ledger, ghostId, itemRef, foodFuelOf).pipe(
+      Effect.catchAll(() => Effect.succeed(null)),
+    );
+    if (fromBag && fromBag.ok) {
+      return {
+        ok: true as const,
+        itemRef: fromBag.itemRef,
+        consumed: fromBag.consumed,
+        remaining: fromBag.remaining,
+        depleted: fromBag.remaining <= 0,
+        nourishment: foodEnergyWord(fromBag.itemRef),
+      };
+    }
+
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    return yield* itemService.consumeItem(hereId, itemRef, amount).pipe(
+      Effect.map((r) => ({
+        ok: true as const,
+        itemRef: r.itemRef,
+        consumed: r.consumed,
+        remaining: r.remaining,
+        depleted: r.depleted,
+        nourishment: foodEnergyWord(r.itemRef),
+      })),
+      Effect.catchTags({
+        "WorldApiError.ItemNotFound": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_FOUND" as const,
+            reason: `Item "${itemRef}" does not exist.`,
+          }),
+        "WorldApiError.ItemNotHere": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_HERE" as const,
+            reason: `Item "${itemRef}" is not on your current tile.`,
+          }),
+        "WorldApiError.ItemNotConsumable": () =>
+          Effect.succeed({
+            ok: false as const,
+            code: "NOT_CONSUMABLE" as const,
+            reason: `Item "${itemRef}" has no consumable energy.`,
+          }),
+        "WorldApiError.InvalidConsumeAmount": ({ requested }) =>
+          Effect.succeed({
+            ok: false as const,
+            code: "INVALID_AMOUNT" as const,
+            reason: `Invalid consume amount ${requested} — must be a positive number.`,
           }),
       }),
     );
@@ -1035,10 +1391,15 @@ function inventoryEffect(
     );
     return {
       ok: true,
-      objects: itemService.getGhostInventory(ghostId).map((itemRef) => ({
-        itemRef,
-        name: sidecar.get(itemRef)?.name ?? itemRef,
-      })),
+      objects: itemService.getGhostInventory(ghostId).map((itemRef) => {
+        const tokens = itemService.getInventoryTokens(ghostId, itemRef);
+        const out: { itemRef: string; name: string; tokens?: number } = {
+          itemRef,
+          name: sidecar.get(itemRef)?.name ?? itemRef,
+        };
+        if (tokens !== undefined) out.tokens = tokens;
+        return out;
+      }),
       holdings: bagResult.holdings,
     };
   });
@@ -1080,7 +1441,7 @@ function offerEffect(
 }
 
 function requestEffect(
-  input: { from: string; want_item: string; want_qty: number; offering_item: string; offering_qty: number },
+  input: { from: string; want_resource: string; want_qty: number; offering_resource: string; offering_qty: number },
   extra: McpToolExtra,
 ): Effect.Effect<unknown, AuthError | WorldApiError, ToolServices> {
   return Effect.gen(function* () {
@@ -1088,11 +1449,89 @@ function requestEffect(
     const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
     const proposals = yield* ProposalService;
     const bridge = yield* WorldBridgeService;
+
+    // ── Vending machine purchase (RFC-0029) ──────────────────────────────
+    // A machine is resolved by the BUYER'S LOCATION, not the `from` string:
+    // the model can't know a machine's opaque id and shouldn't have to — it's
+    // standing next to one. Reach = the buyer's cell or an adjacent one (the
+    // 7-cell cluster, same reach as `say`). A vending machine is a scripted
+    // fixed-price fixture, so it charges its LISTED price (the model never has
+    // to guess the exact gold — that would be a calculator strapped to it),
+    // and the ledger enforces stock + funds on agree.
+    const hereId = yield* authoritativeGhostTileEffect(ghostId);
+    const here = bridge.getLoadedMap().cells.get(hereId);
+    const reachCells = [hereId, ...(here ? Object.values(here.neighbors) : [])];
+    const vendor = findReachableVendor(reachCells);
+    if (vendor !== undefined && input.offering_resource === "gold") {
+      const item = resolveVendorItem(vendor, input.want_resource);
+      if (item === undefined) {
+        return { ok: false, code: "VENDOR_DECLINED", message: `${vendor.label} doesn't sell "${input.want_resource}".` };
+      }
+      const price = vendor.prices[item] * input.want_qty; // listed price is authoritative — no haggling
+      // Map both actors to the buyer's cell so the ledger's proximity check
+      // passes (reach already verified), then auto-agree on the machine's
+      // behalf — purchase is just propose + auto-agree, no new trade machinery.
+      const propose = yield* Effect.either(proposals.propose({
+        initiatorId: ghostId,
+        counterpartyId: vendor.vendorId,
+        give: { resource: "gold", qty: price },
+        want: { resource: item, qty: input.want_qty },
+      }, () => hereId));
+      if (propose._tag === "Left") {
+        return { ok: false, code: propose.left._tag.replace("LedgerError.", ""), message: `Cannot buy: ${propose.left._tag}` };
+      }
+      const agreed = yield* Effect.either(proposals.agree(propose.right.proposalId, vendor.vendorId));
+      if (agreed._tag === "Left") {
+        const e = agreed.left;
+        const message = e._tag === "LedgerError.InsufficientFunds"
+          ? `You can't afford ${item} (it costs ${price} gold) — or the machine is out of stock.`
+          : e._tag;
+        return { ok: false, code: e._tag.replace("LedgerError.", ""), message };
+      }
+      return { ok: true, purchased: true, vendor: vendor.label, itemRef: item, qty: input.want_qty, paid: price, nourishment: foodEnergyWord(item) };
+    }
+
+    // ── Vending attempt that didn't land on a machine ───────────────────
+    // Offering gold for food but no machine in reach: the ghost is trying to
+    // buy, not trade with another ghost. Don't drop it into the ghost-trade
+    // path (whose "both ghosts must be on the same tile" message teaches the
+    // ghost nothing) — tell it where the nearest machine is so it can step
+    // onto it. BFS over the navigable graph for the closest registered vendor.
+    if (input.offering_resource === "gold" &&
+        (input.want_resource === "food" || input.want_resource.startsWith("food"))) {
+      const map = bridge.getLoadedMap();
+      const vendorCells = new Set(listVendors().map((v) => v.cell));
+      const dist = new Map<string, number>([[hereId, 0]]);
+      const firstStep = new Map<string, string>();
+      const queue: string[] = [hereId];
+      let nearest: { distance: number; nextStep?: string } | undefined;
+      while (queue.length > 0) {
+        const cur = queue.shift()!;
+        const curCell = map.cells.get(cur);
+        if (!curCell) continue;
+        const curDist = dist.get(cur)!;
+        for (const dir of COMPASS_DIRECTIONS) {
+          const nid = curCell.neighbors[dir];
+          if (!nid || dist.has(nid)) continue;
+          dist.set(nid, curDist + 1);
+          firstStep.set(nid, cur === hereId ? dir : firstStep.get(cur)!);
+          if (vendorCells.has(nid)) { nearest = { distance: curDist + 1, nextStep: firstStep.get(nid) }; break; }
+          queue.push(nid);
+        }
+        if (nearest) break;
+      }
+      const where = nearest
+        ? `The nearest vending machine is ${nearest.distance} tile${nearest.distance === 1 ? "" : "s"} away${nearest.nextStep ? ` to the ${nearest.nextStep}` : ""} — move onto it (or right beside it), then buy.`
+        : "No vending machine is reachable from here.";
+      return { ok: false, code: "VENDOR_NOT_NEARBY", message: `You must be at a vending machine to buy food. ${where}` };
+    }
+
+    // ── Ghost-to-ghost trade proposal (must be same tile) ────────────────
     const either = yield* Effect.either(proposals.propose({
       initiatorId: ghostId,
       counterpartyId: input.from,
-      give: { resource: input.offering_item, qty: input.offering_qty },
-      want: { resource: input.want_item, qty: input.want_qty },
+      give: { resource: input.offering_resource, qty: input.offering_qty },
+      want: { resource: input.want_resource, qty: input.want_qty },
     }, (id) => bridge.getGhostCell(id)));
     if (either._tag === "Left") {
       const e = either.left;
@@ -1532,6 +1971,16 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   );
 
   server.registerTool(
+    "look_far",
+    {
+      description:
+        "Returns the bearing (distance + first compass step) to the nearest other ghost anywhere on the map.",
+      inputSchema: {},
+    },
+    async (_args, extra) => runTool("look_far", {}, lookFarEffect(extra), extra),
+  );
+
+  server.registerTool(
     "go",
     {
       description:
@@ -1547,12 +1996,13 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     "say",
     {
       description:
-        "Speak to ghosts in your 7-cell H3 cluster. Every utterance MUST declare its INTENT — the social act you're performing by speaking. The intent shapes how recipients interpret you and what world effects (if any) follow. If none of the existing intents fits what you want to do, call `request_intent` to propose adding a new one. Enters conversational mode. Movement is blocked until you issue 'bye'. Optionally send to a specific ghost (name or ghostId) with 'to'.",
+        "Speak to ghosts in your 7-cell H3 cluster. `intent` is an OPTIONAL non-verbal/social-register tag describing the communicative act — how the words land, not what they commit to. World-changing acts (proposing trades, agreeing, declining, leaving) are NOT spoken — they have dedicated tools (`offer`, `agree`, `decline`, `bye`). If none of the existing intents fits the social register you want, call `request_intent` to propose adding a new non-verbal cue. Enters conversational mode. Movement is blocked until you issue 'bye'. Optionally send to a specific ghost (name or ghostId) with 'to'.",
       inputSchema: {
         intent: z
-          .enum(["greet", "befriend", "propose", "agree", "decline", "depart"])
+          .enum(["greet", "befriend"])
+          .default("greet")
           .describe(
-            "The social act this utterance performs. greet = acknowledge presence. befriend = warm overture, build relationship. propose = suggest a plan or course of action. agree = confirm a previous proposal. decline = refuse a proposal. depart = signal you're leaving (a conversation, a place, the group).",
+            "Optional non-verbal/social-register tag for this utterance. greet = acknowledge presence. befriend = warm overture, build relationship. Defaults to greet when unspecified. Does NOT trigger any world effect — it is metadata recipients use to interpret tone. For state-changing acts, use the dedicated tools.",
           ),
         content: z
           .string()
@@ -1578,18 +2028,18 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
     "request_intent",
     {
       description:
-        "Meta-tool: request that a new speech `intent` be added to the `say` tool's enum. Use when you want to perform a speech act that none of the existing intents fits — e.g. you want to warn, reassure, interrogate, bluff, etc., but the enum only allows greet/befriend/propose/agree/decline/depart. The request is recorded into your memory graph for the project owner to review. After requesting, pick the closest existing intent and proceed (do not stall waiting for the request to be granted).",
+        "Meta-tool: request that a new non-verbal/social-register cue be added to the `say` tool's intent enum. Use when you want your utterance to carry a register that none of the existing intents fits — e.g. warn, reassure, mock, console — but the enum only allows greet/befriend. Intent is communicative metadata only; it does NOT trigger world effects (those are owned by dedicated tools like `offer`, `agree`, `decline`, `bye`). The request is recorded into your memory graph for the project owner to review. After requesting, pick the closest existing intent and proceed (do not stall waiting for the request to be granted).",
       inputSchema: {
         name: z
           .string()
           .min(1)
           .max(40)
-          .describe("Proposed intent name (lowercase, snake_case ideal): e.g. 'warn', 'reassure', 'interrogate'."),
+          .describe("Proposed intent name (lowercase, snake_case ideal): e.g. 'warn', 'reassure', 'console'. Must describe a communicative register, not a state-changing act."),
         description: z
           .string()
           .min(1)
           .max(400)
-          .describe("Why this intent is needed and how it differs from existing intents."),
+          .describe("Why this register is needed and how it differs from existing intents. Reject anything that overlaps with explicit world-action tools."),
         exampleContent: z
           .string()
           .min(1)
@@ -1627,12 +2077,23 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "inspect",
     {
-      description: "Inspect an item on your current tile and return its name plus optional description.",
+      description: "Inspect an item on (or beside) your current tile. For a painting, this is how you LOOK at it — the picture itself comes back to you.",
       inputSchema: {
-        itemRef: z.string().describe("The itemRef to inspect on your current tile."),
+        itemRef: z.string().describe("The itemRef to inspect — e.g. an item on your tile, or a painting's id to look at it."),
       },
     },
     async ({ itemRef }, extra) => runTool("inspect", { itemRef }, inspectEffect(itemRef, extra), extra),
+  );
+
+  server.registerTool(
+    "read",
+    {
+      description: "Follow a link and read it. Use it on a description card's link (beside a painting) to read about the work; the page's text comes back to you.",
+      inputSchema: {
+        href: z.string().describe("The link to read — e.g. the href shown on a description card."),
+      },
+    },
+    async ({ href }, extra) => runTool("read", { href }, readEffect(href, extra), extra),
   );
 
   server.registerTool(
@@ -1655,6 +2116,26 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
       },
     },
     async ({ itemRef }, extra) => runTool("drop", { itemRef }, dropEffect(itemRef, extra), extra),
+  );
+
+  server.registerTool(
+    "consume",
+    {
+      description:
+        "Consume some or all of a consumable item's energy on your current tile (e.g. eat food). Defaults to taking everything the instance has left; pass `amount` to take only a portion. Returns the actual amount transferred to you and what's left on the item.",
+      inputSchema: {
+        itemRef: z.string().describe("The itemRef of the item to consume from your current tile."),
+        amount: z
+          .number()
+          .positive()
+          .optional()
+          .describe(
+            "How many tokens to consume. Omit to take everything available (the typical case). Values above remaining are clamped down.",
+          ),
+      },
+    },
+    async ({ itemRef, amount }, extra) =>
+      runTool("consume", { itemRef, amount }, consumeEffect(itemRef, amount, extra), extra),
   );
 
   server.registerTool(
@@ -1703,18 +2184,18 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   server.registerTool(
     "request",
     {
-      description: "Request an item from another ghost, offering something in return. Same as `offer` but framed from the receiver's perspective. Both ghosts must be on the same tile. Set `offering_qty` to 0 to request an item as a gift.",
+      description: "Acquire a resource in exchange for another. Two uses: (1) BUY from a VENDING MACHINE — when you're at or next to one (you'll see it in `look`), offer `gold` and name the food in `want_resource` (a specific id like food-bread / food-cake, or just `food`); the machine charges its listed price and dispenses on the spot — no agreement, no haggling. (2) Trade with another ghost on your tile — put their id in `from`; they must `agree`.",
       inputSchema: {
-        from: z.string().describe("The ghost ID to request the item from."),
-        want_item: z.string().describe("The item you want to receive."),
+        from: z.string().describe("The other ghost's id for a ghost-to-ghost trade. Ignored when buying from a vending machine you're standing at."),
+        want_resource: z.string().describe("The resource you want to receive — a food id like food-bread when buying, or just `food`."),
         want_qty: z.number().int().positive().describe("The quantity you want to receive."),
-        offering_item: z.string().describe("The item you are offering in exchange (use an empty string for a gift request)."),
-        offering_qty: z.number().int().nonnegative().describe("The quantity you are offering in exchange. Use 0 to request as a gift."),
+        offering_resource: z.string().describe("The resource you are offering in exchange — `gold` when buying food."),
+        offering_qty: z.number().int().positive().describe("The quantity you are offering. A vending machine charges its own listed price regardless, so this is only binding in a ghost-to-ghost trade."),
       },
     },
-    async ({ from, want_item, want_qty, offering_item, offering_qty }, extra) =>
-      runTool("request", { from, want_item, want_qty, offering_item, offering_qty },
-        requestEffect({ from, want_item, want_qty, offering_item, offering_qty }, extra), extra),
+    async ({ from, want_resource, want_qty, offering_resource, offering_qty }, extra) =>
+      runTool("request", { from, want_resource, want_qty, offering_resource, offering_qty },
+        requestEffect({ from, want_resource, want_qty, offering_resource, offering_qty }, extra), extra),
   );
 
   server.registerTool(

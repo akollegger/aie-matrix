@@ -20,6 +20,7 @@
     "inspect:tools": "node --import tsx src/inspect-tools.ts",
     "inspect:graph": "node --import tsx src/inspect-graph.ts",
     "inspect:cascade": "node --import tsx src/inspect-cascade.ts",
+    "inspect:sleep": "node --import tsx src/inspect-sleep-corpus.ts",
     "smoke:retrieve": "node --import tsx src/retrieve-smoke.ts"
   },
   "dependencies": {

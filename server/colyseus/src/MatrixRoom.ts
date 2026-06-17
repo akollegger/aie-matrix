@@ -162,6 +162,19 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     return ids;
   }
 
+  /** Enumerate every ghost currently placed in the world with their
+   *  authoritative cell. Returned as a stable-ordered list (sorted by
+   *  ghostId) so callers iterating over the population get reproducible
+   *  partitions (e.g. "feed the first half"). */
+  listAllGhostCells(): ReadonlyArray<{ ghostId: string; cellId: string }> {
+    const out: { ghostId: string; cellId: string }[] = [];
+    for (const [ghostId, cellId] of this.ghostCellByGhostId) {
+      out.push({ ghostId, cellId });
+    }
+    out.sort((a, b) => (a.ghostId < b.ghostId ? -1 : a.ghostId > b.ghostId ? 1 : 0));
+    return out;
+  }
+
   setGhostMode(ghostId: string, mode: "normal" | "conversational"): void {
     const gid = String(ghostId).trim();
     this.state.ghostModes.set(gid, mode);

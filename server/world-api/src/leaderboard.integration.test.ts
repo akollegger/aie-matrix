@@ -23,6 +23,7 @@ const stubBridge: ColyseusWorldBridge = {
   setGhostCell: noop,
   removeGhostCell: noop,
   listOccupantsOnCell: () => [],
+  listAllGhostCells: () => [],
   setGhostMode: noop,
   getGhostMode: () => "normal",
   setTileItems: noop,

@@ -52,6 +52,8 @@ import {
   Neo4jGraphService,
   ItemService,
   ItemServiceImpl,
+  registerVendor,
+  registerArtwork,
   LiveSessionService,
   RedisPublishService,
   runWithRequestTrace,
@@ -306,6 +308,7 @@ async function main(): Promise<void> {
       ghostAuthority.delete(gid);
     },
     listOccupantsOnCell: (cellId: string) => colyseusBridge.listOccupantsOnCell(cellId),
+    listAllGhostCells: () => colyseusBridge.listAllGhostCells(),
     setGhostMode: (ghostId: string, mode: "normal" | "conversational") =>
       colyseusBridge.setGhostMode(ghostId, mode),
     getGhostMode: (ghostId: string) => colyseusBridge.getGhostMode(ghostId),
@@ -410,6 +413,69 @@ async function main(): Promise<void> {
   itemServiceImpl.setBridge(bridge);
   broadcastInitialItemState(itemServiceImpl, bridge);
 
+  // Test-only food rain: when WORLD_FOOD_RAIN_INTERVAL_MS is set, a
+  // background ticker drops a random consumable (specified by class via
+  // WORLD_FOOD_RAIN_CLASS, default "Food") at a random tile every N ms.
+  // Existence is gated by env so production / staging never sees it.
+  // Drives observation of the primal-personality recovery dynamics
+  // when ghosts find food consecutively.
+  const foodRainInterval = parseInt(
+    process.env.WORLD_FOOD_RAIN_INTERVAL_MS ?? "0",
+    10,
+  );
+  if (Number.isFinite(foodRainInterval) && foodRainInterval > 0) {
+    const foodClass = process.env.WORLD_FOOD_RAIN_CLASS ?? "Food";
+    const tileIds = [...loadedMap.cells.keys()];
+    if (tileIds.length === 0) {
+      console.warn("[aie-matrix] WORLD_FOOD_RAIN_INTERVAL_MS set but map has no cells; food rain disabled");
+    } else {
+      console.info(
+        `[aie-matrix] food rain enabled — dropping one '${foodClass}' every ${foodRainInterval}ms at a random tile (${tileIds.length} candidates)`,
+      );
+      setInterval(() => {
+        const h3 = tileIds[Math.floor(Math.random() * tileIds.length)]!;
+        itemServiceImpl.spawnItem(h3, foodClass);
+      }, foodRainInterval);
+    }
+  }
+
+  // Targeted food rain — feeds the first N×fraction ghosts (sorted by
+  // ghostId, so the partition is stable across the run) at their
+  // CURRENT tiles every interval, leaving the rest unfed. Used to
+  // engineer a clean A/B contrast for the primal→personality wiring:
+  // the "fed" cohort should show sustained `+` streaks and rising
+  // personality drift; the "starved" cohort should show sustained `−`
+  // streaks and declining drift. Both groups walk the same map at the
+  // same depletion rate, so the only differing input is whether food
+  // appears at their tile.
+  const targetedInterval = parseInt(
+    process.env.WORLD_FOOD_TARGETED_INTERVAL_MS ?? "0",
+    10,
+  );
+  const targetedFraction = parseFloat(
+    process.env.WORLD_FOOD_TARGETED_FRACTION ?? "0.5",
+  );
+  if (
+    Number.isFinite(targetedInterval) &&
+    targetedInterval > 0 &&
+    Number.isFinite(targetedFraction) &&
+    targetedFraction > 0
+  ) {
+    const foodClass = process.env.WORLD_FOOD_RAIN_CLASS ?? "Food";
+    console.info(
+      `[aie-matrix] targeted food rain enabled — feeding the first ${(targetedFraction * 100).toFixed(0)}% of ghosts at their tile every ${targetedInterval}ms (class='${foodClass}')`,
+    );
+    setInterval(() => {
+      const allGhosts = bridge.listAllGhostCells();
+      if (allGhosts.length === 0) return;
+      const feedCount = Math.max(1, Math.floor(allGhosts.length * targetedFraction));
+      for (let i = 0; i < feedCount; i++) {
+        const { cellId } = allGhosts[i]!;
+        itemServiceImpl.spawnItem(cellId, foodClass);
+      }
+    }, targetedInterval);
+  }
+
   // Map management + live session layers — implementation selected by AIE_MATRIX_MODE.
   //
   //   development: local file-backed (no Neo4j/GCS); discovers all .map.gram files
@@ -503,8 +569,8 @@ async function main(): Promise<void> {
     itemServiceImpl.setLedger(ledgerOps);
   }
 
-  // Seed ledger with items from the map placements
-  if (parsedMapForLedger && parsedMapForLedger.itemPlacements.length > 0) {
+  // Seed ledger with items from the map placements + the world economy pool.
+  if (parsedMapForLedger) {
     // Group by (itemRef, h3Index) summing qty → ItemSeed[]
     const seedMap = new Map<string, { itemRef: string; qty: number; h3Index?: string }>();
     for (const p of parsedMapForLedger.itemPlacements) {
@@ -517,12 +583,90 @@ async function main(): Promise<void> {
       }
     }
     const itemSeeds = Array.from(seedMap.values());
+    // World economy pool (RFC-0029): non-spatial seeds (no h3Index → the "world"
+    // bag) for gold + foods. Replaces the former [resources:Resources] map block,
+    // removed when non-spatial resources left the map grammar (027). Stipends,
+    // spawn-grants, and vendor stock all draw from "world". init() mints these
+    // from world.genesis once (idempotent on chain replay).
+    itemSeeds.push(
+      { itemRef: "gold", qty: 1_000_000 },
+      { itemRef: "food-water", qty: 10_000 },
+      { itemRef: "food-bread", qty: 10_000 },
+      { itemRef: "food-salad", qty: 10_000 },
+      { itemRef: "food-sandwich", qty: 10_000 },
+      { itemRef: "food-coffee", qty: 10_000 },
+      { itemRef: "food-cake", qty: 10_000 },
+    );
     const initEffect = LedgerService.pipe(
       Effect.flatMap(svc => svc.init(itemSeeds)),
       Effect.provide(runtimeLayer as any),
     ) as unknown as Effect.Effect<void, unknown, never>;
     await Effect.runPromise(initEffect)
       .catch((e: unknown) => console.warn("[aie-matrix] Ledger init warning:", e));
+  }
+
+  // Vending machines (RFC-0029): registered from the MAP. The gram's items
+  // layer places `VendingMachine` items on cells (the map authors WHERE the
+  // machines are); each placement becomes a functional dispenser actor with
+  // a stocked ledger bag — a co-located ghost buys via `request` (gold→food)
+  // and the machine auto-agrees. The machine type's MENU is server-defined
+  // (the map only places instances). The client draws them from the gram.
+  if (parsedMapForLedger) {
+    const VENDING_MACHINE_REF = "VendingMachine";
+    const MENU: Record<string, number> = {
+      "food-cake": 4, "food-bread": 6, "food-salad": 9, "food-sandwich": 8, "food-coffee": 4, "food-water": 1,
+    };
+    const STOCK_PER_ITEM = 100;
+    const seedTransfers: Array<{ resource: string; qty: number; from: string; to: string }> = [];
+    let placed = 0;
+    for (const [cell, c] of loadedMap.cells) {
+      if (!c.initialItemRefs.includes(VENDING_MACHINE_REF)) continue;
+      registerVendor({ vendorId: `vendor-${cell}`, cell, label: "Vending Machine", prices: MENU });
+      for (const ref of Object.keys(MENU)) {
+        seedTransfers.push({ resource: ref, qty: STOCK_PER_ITEM, from: "world", to: `vendor-${cell}` });
+      }
+      placed += 1;
+    }
+    if (seedTransfers.length > 0) {
+      const seedEffect = LedgerService.pipe(
+        Effect.flatMap((svc) => svc.commit({
+          id: randomUUID(), transfers: seedTransfers, cause: "vendor-stock", actors: [], ts: Date.now(),
+        })),
+        Effect.provide(runtimeLayer as any),
+      ) as unknown as Effect.Effect<unknown, unknown, never>;
+      await Effect.runPromise(seedEffect).then(
+        () => console.info(`[aie-matrix] ${placed} vending machines registered from map`),
+        (e: unknown) => console.warn("[aie-matrix] vendor seed warning:", e),
+      );
+    }
+  }
+
+  // Artworks (RFC-0031): registered from the curated catalog that sits beside
+  // the map (`<map>.artworks.json`). The gram authors WHERE each painting +
+  // card hang (Artwork / ArtCard items); the catalog carries the per-work data
+  // the gram can't (image URL, object-page href, title/artist/date). Looking
+  // at a painting returns its image; reading a card dereferences its href.
+  if (mapPath) {
+    const artPath = mapPath.replace(/\.map\.gram$/, ".artworks.json");
+    if (existsSync(artPath)) {
+      try {
+        const catalog = JSON.parse(await readFile(artPath, "utf8")) as Array<{
+          cell: string; cardCell: string; imageUrl: string; objectUrl: string;
+          title: string; artist: string; date: string;
+        }>;
+        for (const w of catalog) {
+          registerArtwork({
+            artworkId: `artwork-${w.cell}`,
+            cell: w.cell, cardCell: w.cardCell,
+            imageUrl: w.imageUrl, objectUrl: w.objectUrl,
+            title: w.title, artist: w.artist, date: w.date,
+          });
+        }
+        console.info(`[aie-matrix] ${catalog.length} artworks registered from catalog`);
+      } catch (e) {
+        console.warn("[aie-matrix] artwork catalog warning:", e);
+      }
+    }
   }
 
   // Load spawn grants from the parsed map so first-connect seeding works

@@ -74,3 +74,10 @@ What other approaches were considered?
 | [RFC-0025](0025-session-leaderboards.md) | Session Leaderboards | under review |
 | [RFC-0026](0026-npc-agent.md) | NPC Agent — Rule-Based Character Roster | draft |
 | [RFC-0027](0027-structured-exam-artifact.md) | Structured Exam Artifact Format | draft |
+| [RFC-0028](0028-in-world-vendors-and-cypher-economy.md) | In-World Vendors & the Cypher Economy — priced foods, droppable vendor props, one-transaction-at-a-time | draft |
+| [RFC-0029](0029-item-ledger-unification-and-dispensers.md) | Item–Ledger Unification & the Dispenser (Vending) Actor — items become ledger resources; purchase = offer/agree trade | draft |
+| [RFC-0030](0030-rdc-onto-the-joint-ledger.md) | RDC onto the Joint Ledger (Cyphers → gold) — fold RDC's parallel ledger onto the world ledger; backlog, not on the vending critical path | draft |
+| [RFC-0031](0031-art-in-world.md) | Art in the World — paintings hung as image prompts + ahref description cards as text prompts; full-pipeline multimodal insert | accepted |
+| [RFC-0032](0032-ghost-substrate-extraction.md) | Ghost cognitive substrate extraction — PeppersGhost as the default ghost | draft |
+| [RFC-0033](0033-third-party-mind-modeling.md) | Third-party-mind modeling — predictive peer models in the cascade | draft |
+| [RFC-0034](0034-cosmic-elevators.md) | Cosmic Elevators — birth-only, queued, distributed ghost spawn points | draft |
