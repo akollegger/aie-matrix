@@ -21,6 +21,9 @@ env:
   # Ephemeral catalog — agents self-register on startup, so /tmp starts empty
   # and is never stale from a baked-in catalog.json in the Docker image.
   CATALOG_FILE_PATH: "/tmp/catalog.json"
+  # Reconciliation polling window — ghost pods need time to self-register after agent-host starts.
+  # 120s gives ghost deployments ~2 min to come up and register before the window closes.
+  AGENT_HOST_RECONCILIATION_WAIT_MS: "120000"
   # In-cluster URL for MCP + push-ingest endpoints sent to ghost agents in spawn contexts.
   # Must be directly reachable from agent pods (not through the external proxy which
   # swaps Authorization headers and doesn't forward mcpToken).

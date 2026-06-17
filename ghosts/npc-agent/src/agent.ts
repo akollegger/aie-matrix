@@ -27,7 +27,7 @@ const port = listenPortFromEnv(4004);
 const publicBase = (
   process.env.NPC_AGENT_PUBLIC_BASE_URL ?? `http://127.0.0.1:${port}`
 ).replace(/\/$/, "");
-const agentId = process.env.HOSTNAME ?? "npc-agent-local";
+const agentId = process.env.AGENT_ID ?? process.env.HOSTNAME ?? "npc-agent-local";
 const registerTimeoutMs = (() => {
   const raw = process.env.AGENT_REGISTER_TIMEOUT;
   if (!raw) return 120_000;
