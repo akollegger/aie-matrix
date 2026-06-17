@@ -769,7 +769,7 @@ async function main(): Promise<void> {
       // Map management routes — BEFORE the read-only map GET handler.
       // Handles POST /maps, DELETE /maps/:id, and management GETs (list, metadata, gram download).
       // tryHandleMapManagement returns false for unrecognised paths so multi-segment static paths
-      // (e.g. /maps/sandbox/freeplay.map.gram) fall through to serveMapsIfMatched as before.
+      // (e.g. /maps/moscone/moscone-aiewf-mini.map.gram) fall through to serveMapsIfMatched as before.
       if (url.pathname === "/maps" || url.pathname === "/maps/" || url.pathname.startsWith("/maps/")) {
         if (req.method === "POST" || req.method === "DELETE" || req.method === "GET") {
           const traceId = randomUUID();

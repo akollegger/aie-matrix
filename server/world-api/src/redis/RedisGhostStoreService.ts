@@ -75,7 +75,7 @@ export async function makeRedisGhostStoreLayerFromEnv(
   const ioredis = await import("ioredis");
   const RedisClass = ioredis.default ?? (ioredis as unknown as { Redis: new (url: string, opts?: object) => Redis }).Redis;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const client: Redis = new (RedisClass as any)(redisUrl, { lazyConnect: true, enableOfflineQueue: false }) as Redis;
+  const client: Redis = new (RedisClass as any)(redisUrl, { lazyConnect: true }) as Redis;
   await client.connect();
   return makeLiveRedisGhostStoreLayer(client);
 }

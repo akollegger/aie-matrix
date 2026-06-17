@@ -43,7 +43,7 @@ function httpGet(url: string): Promise<{ status: number; headers: NodeJS.Dict<st
 }
 
 
-test("GET /maps/freeplay → 200 text/plain; charset=utf-8", async () => {
+test("GET /maps/moscone-aiewf-mini → 200 text/plain; charset=utf-8", async () => {
   const layer = makeMapServiceLayer(repoRoot);
   const runtime = ManagedRuntime.make(layer);
   try {
@@ -64,7 +64,7 @@ test("GET /maps/freeplay → 200 text/plain; charset=utf-8", async () => {
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
-    const r = await httpGet(`http://127.0.0.1:${port}/maps/freeplay`);
+    const r = await httpGet(`http://127.0.0.1:${port}/maps/moscone-aiewf-mini`);
     server.close();
     assert.equal(r.status, 200);
     assert.equal(r.headers["content-type"], "text/plain; charset=utf-8");
@@ -75,7 +75,7 @@ test("GET /maps/freeplay → 200 text/plain; charset=utf-8", async () => {
   }
 });
 
-test("GET /maps/freeplay?format=gram → 200 same content-type", async () => {
+test("GET /maps/moscone-aiewf-mini?format=gram → 200 same content-type", async () => {
   const layer = makeMapServiceLayer(repoRoot);
   const runtime = ManagedRuntime.make(layer);
   try {
@@ -89,7 +89,7 @@ test("GET /maps/freeplay?format=gram → 200 same content-type", async () => {
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
-    const r = await httpGet(`http://127.0.0.1:${port}/maps/freeplay?format=gram`);
+    const r = await httpGet(`http://127.0.0.1:${port}/maps/moscone-aiewf-mini?format=gram`);
     server.close();
     assert.equal(r.status, 200);
     assert.equal(r.headers["content-type"], "text/plain; charset=utf-8");
@@ -124,7 +124,7 @@ test("GET /maps/nonexistent → 404 JSON", async () => {
   }
 });
 
-test("GET /maps/freeplay?format=unknown → 400 JSON", async () => {
+test("GET /maps/moscone-aiewf-mini?format=unknown → 400 JSON", async () => {
   const layer = makeMapServiceLayer(repoRoot);
   const runtime = ManagedRuntime.make(layer);
   try {
@@ -138,7 +138,7 @@ test("GET /maps/freeplay?format=unknown → 400 JSON", async () => {
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
-    const r = await httpGet(`http://127.0.0.1:${port}/maps/freeplay?format=unknown`);
+    const r = await httpGet(`http://127.0.0.1:${port}/maps/moscone-aiewf-mini?format=unknown`);
     server.close();
     assert.equal(r.status, 400);
     assert.equal(r.headers["content-type"], "application/json");
@@ -150,7 +150,7 @@ test("GET /maps/freeplay?format=unknown → 400 JSON", async () => {
   }
 });
 
-test("GET /maps/freeplay?format=tmj → 400 (TMJ no longer supported)", async () => {
+test("GET /maps/moscone-aiewf-mini?format=tmj → 400 (TMJ no longer supported)", async () => {
   const layer = makeMapServiceLayer(repoRoot);
   const runtime = ManagedRuntime.make(layer);
   try {
@@ -164,7 +164,7 @@ test("GET /maps/freeplay?format=tmj → 400 (TMJ no longer supported)", async ()
     });
     await new Promise<void>((resolve) => server.listen(0, resolve));
     const { port } = server.address() as AddressInfo;
-    const r = await httpGet(`http://127.0.0.1:${port}/maps/freeplay?format=tmj`);
+    const r = await httpGet(`http://127.0.0.1:${port}/maps/moscone-aiewf-mini?format=tmj`);
     server.close();
     assert.equal(r.status, 400);
     assert.equal(r.headers["content-type"], "application/json");
@@ -197,12 +197,12 @@ test("GET /maps → 200 application/json; lists known map ids with links", async
       const j = JSON.parse(r.body) as { maps: { id: string; links: { self: string; gram: string } }[] };
       assert.ok(Array.isArray(j.maps), "body.maps must be an array");
       assert.ok(j.maps.length > 0, "repo must index at least one map");
-      const freeplay = j.maps.find((m) => m.id === "freeplay");
-      assert.ok(freeplay, "expected freeplay in index");
+      const miniMap = j.maps.find((m) => m.id === "moscone-aiewf-mini");
+      assert.ok(miniMap, "expected moscone-aiewf-mini in index");
       const base = `http://127.0.0.1:${port}`;
-      assert.equal(freeplay!.links.self, `${base}/maps/freeplay`);
-      assert.equal(freeplay!.links.gram, `${base}/maps/freeplay?format=gram`);
-      assert.ok(!("tmj" in freeplay!.links), "links must not include tmj");
+      assert.equal(miniMap!.links.self, `${base}/maps/moscone-aiewf-mini`);
+      assert.equal(miniMap!.links.gram, `${base}/maps/moscone-aiewf-mini?format=gram`);
+      assert.ok(!("tmj" in miniMap!.links), "links must not include tmj");
     }
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -210,8 +210,8 @@ test("GET /maps → 200 application/json; lists known map ids with links", async
   }
 });
 
-test("GET /maps/active → 200 with freeplay content when activeGramPath set", async () => {
-  const activeGramPath = join(repoRoot, "maps/sandbox/freeplay.map.gram");
+test("GET /maps/active → 200 with moscone-aiewf-mini content when activeGramPath set", async () => {
+  const activeGramPath = join(repoRoot, "maps/moscone/moscone-aiewf-mini.map.gram");
   const layer = makeMapServiceLayer(repoRoot, activeGramPath);
   const runtime = ManagedRuntime.make(layer);
   try {
@@ -227,7 +227,7 @@ test("GET /maps/active → 200 with freeplay content when activeGramPath set", a
     server.close();
     assert.equal(r.status, 200);
     assert.equal(r.headers["content-type"], "text/plain; charset=utf-8");
-    assert.ok(r.body.includes("freeplay"), "body should contain the freeplay map");
+    assert.ok(r.body.includes("moscone-aiewf-mini"), "body should contain the moscone-aiewf-mini map");
   } finally {
     await runtime.dispose();
   }
@@ -254,7 +254,7 @@ test("GET /maps/active → 404 when no activeGramPath set", async () => {
 });
 
 test("GET /maps → body includes active field matching configured map", async () => {
-  const activeGramPath = join(repoRoot, "maps/sandbox/freeplay.map.gram");
+  const activeGramPath = join(repoRoot, "maps/moscone/moscone-aiewf-mini.map.gram");
   const layer = makeMapServiceLayer(repoRoot, activeGramPath);
   const runtime = ManagedRuntime.make(layer);
   try {
@@ -269,7 +269,7 @@ test("GET /maps → body includes active field matching configured map", async (
     const r = await httpGet(`http://127.0.0.1:${port}/maps`);
     server.close();
     const j = JSON.parse(r.body) as { maps: unknown[]; active: string | null };
-    assert.equal(j.active, "freeplay");
+    assert.equal(j.active, "moscone-aiewf-mini");
   } finally {
     await runtime.dispose();
   }

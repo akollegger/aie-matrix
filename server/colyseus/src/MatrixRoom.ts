@@ -82,7 +82,7 @@ export class MatrixRoom extends Room<WorldSpectatorState> {
     // PoC world room must stay in matchmaker with zero clients; default autoDispose
     // removes it after the seat-reservation window, breaking joinById + /spectator/room.
     this.autoDispose = false;
-    const _mapPathFallback = join(process.cwd(), "maps/sandbox/freeplay.map.gram");
+    const _mapPathFallback = join(process.cwd(), "maps/moscone/moscone-aiewf-mini.map.gram");
     const mapPath =
       options.mapPath ??
       process.env.AIE_MATRIX_MAP ??

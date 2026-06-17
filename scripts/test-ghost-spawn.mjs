@@ -50,10 +50,15 @@ try {
   const data = await getJson(`${SERVER_URL}/maps`);
   const maps = Array.isArray(data) ? data : (data.maps ?? []);
   if (maps.length === 0) fail("discover-maps", "No maps available. Is AIE_MATRIX_MODE=development set on the server?");
-  // Prefer an entry with an explicit .id or .mapId field
-  const first = maps[0];
-  mapId = typeof first === "string" ? first : (first.id ?? first.mapId ?? first.name);
-  if (!mapId) fail("discover-maps", `Could not extract map ID from: ${JSON.stringify(first)}`);
+  const getId = (m) => typeof m === "string" ? m : (m.id ?? m.mapId ?? m.name);
+  // Prefer maps large enough for multi-step navigation (freeplay, then moscone, then first)
+  const preferred =
+    maps.find(m => getId(m)?.includes("moscone-aiewf-mini")) ??
+    maps.find(m => getId(m)?.includes("moscone")) ??
+    maps.find(m => getId(m)?.includes("freeplay")) ??
+    maps[0];
+  mapId = getId(preferred);
+  if (!mapId) fail("discover-maps", `Could not extract map ID from: ${JSON.stringify(preferred)}`);
 } catch (e) {
   fail("discover-maps", `GET ${SERVER_URL}/maps`, e);
 }

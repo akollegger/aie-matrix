@@ -35,6 +35,8 @@ jobs:
       COLYSEUS_URL: ws://server:8787
       # Use file-backed maps so tests work without GCS
       AIE_MATRIX_MODE: development
+      # Spawn all ghosts at map anchor cell for deterministic co-location tests
+      AIE_MATRIX_TCK_MODE: "1"
 
     steps:
       - uses: actions/checkout@v5
@@ -86,10 +88,11 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build workspace packages required by TCK
-        # shared-types and ghost-ts-client are compiled inside Docker images but not
-        # on the host runner. Build them so the TCK pretest can find their dist/.
+        # These packages are compiled inside Docker images but not on the host runner.
+        # Build them so the TCK and its pretest can find their dist/.
         run: |
           pnpm --filter @aie-matrix/shared-types run build
+          pnpm --filter @aie-matrix/root-env run build
           pnpm --filter @aie-matrix/ghost-ts-client run build
 
       - name: Test ghost autospawn (cold-start scenario)
@@ -103,6 +106,7 @@ jobs:
       - name: Run Ghost TCK (Contract Tests)
         env:
           AIE_MATRIX_REGISTRY_BASE: http://localhost:8787
+          AIE_MATRIX_MCP_URL: http://localhost:8787/mcp
           AIE_MATRIX_TCK_MODE: "1"
         run: pnpm test:tck
 
@@ -113,6 +117,7 @@ jobs:
           NEO4J_USER: neo4j
           NEO4J_PASSWORD: ci-test-pw
           AGENT_HOST_TOKEN: ci-test-token
+          AIE_MATRIX_MCP_URL: http://localhost:8787/mcp
         run: pnpm test:e2e
 
       - name: Dump logs on failure

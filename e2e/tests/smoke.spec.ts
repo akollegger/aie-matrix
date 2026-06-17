@@ -18,7 +18,7 @@ test("spectator room endpoint returns roomId", async ({ request }) => {
 test("maps list is non-empty", async ({ request }) => {
   const res = await request.get("/maps");
   expect(res.ok()).toBe(true);
-  const body = (await res.json()) as unknown[];
-  expect(Array.isArray(body)).toBe(true);
-  expect(body.length).toBeGreaterThan(0);
+  const body = (await res.json()) as { maps?: unknown[] };
+  expect(Array.isArray(body.maps)).toBe(true);
+  expect(body.maps!.length).toBeGreaterThan(0);
 });

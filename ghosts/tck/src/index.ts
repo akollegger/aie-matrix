@@ -97,8 +97,9 @@ async function stepRegistryAndMcp(): Promise<void> {
     fail("adopt", "Registry caretaker/house/adopt chain failed.", e);
   }
 
+  const mcpUrl = (process.env.AIE_MATRIX_MCP_URL ?? "").trim() || adopt.credential.worldApiBaseUrl;
   const mcp = new GhostMcpClient({
-    worldApiBaseUrl: adopt.credential.worldApiBaseUrl,
+    worldApiBaseUrl: mcpUrl,
     token: adopt.credential.token,
   });
   try {
