@@ -35,6 +35,8 @@ jobs:
       COLYSEUS_URL: ws://server:8787
       # Use file-backed maps so tests work without GCS
       AIE_MATRIX_MODE: development
+      # Spawn all ghosts at map anchor cell for deterministic co-location tests
+      AIE_MATRIX_TCK_MODE: "1"
 
     steps:
       - uses: actions/checkout@v5

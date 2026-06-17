@@ -64,6 +64,8 @@ services:
       AIE_MATRIX_MODE: "${AIE_MATRIX_MODE:-production}"
       AIE_MATRIX_INTERNAL_FANOUT_TOKEN: "${AIE_MATRIX_INTERNAL_FANOUT_TOKEN:-}"
       ADMIN_TOKEN: "${ADMIN_TOKEN}"
+      # Spawn all ghosts at the map anchor cell so co-location tests are deterministic
+      AIE_MATRIX_TCK_MODE: "${AIE_MATRIX_TCK_MODE:-}"
       # IC-002: MCP URL for spawn credentials — must be reachable by agent-host container
       AIE_MATRIX_WORLD_API_MCP_URL: "http://server:8787/mcp"
     ports:

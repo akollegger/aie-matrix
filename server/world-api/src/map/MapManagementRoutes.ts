@@ -61,18 +61,9 @@ export function tryHandleMapManagement(
     });
   }
 
-  // GET /maps (collection)
-  if (req.method === "GET" && (pathname === "/maps" || pathname === "/maps/")) {
-    return Effect.gen(function* () {
-      const svc = yield* MapManagementService;
-      const statusParam = url.searchParams.get("status");
-      const status =
-        statusParam === "published" || statusParam === "archived" ? statusParam : undefined;
-      const records = yield* svc.list(status);
-      sendJson(res, 200, records, corsHeaders);
-      return true as const;
-    });
-  }
+  // GET /maps (collection) — handled by tryHandleMapGet (MapRoutes.ts) for public API shape { maps, active }.
+  // Management list (with status filter) is available via GET /maps?status=published|archived through
+  // the same fallthrough path; MapRoutes.ts ignores unknown query params.
 
   // GET /maps/:mapId/gram — returns raw .map.gram bytes (public)
   if (req.method === "GET") {
