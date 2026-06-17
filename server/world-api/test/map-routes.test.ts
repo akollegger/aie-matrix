@@ -197,12 +197,12 @@ test("GET /maps → 200 application/json; lists known map ids with links", async
       const j = JSON.parse(r.body) as { maps: { id: string; links: { self: string; gram: string } }[] };
       assert.ok(Array.isArray(j.maps), "body.maps must be an array");
       assert.ok(j.maps.length > 0, "repo must index at least one map");
-      const moscone-aiewf-mini = j.maps.find((m) => m.id === "moscone-aiewf-mini");
-      assert.ok(moscone-aiewf-mini, "expected moscone-aiewf-mini in index");
+      const miniMap = j.maps.find((m) => m.id === "moscone-aiewf-mini");
+      assert.ok(miniMap, "expected moscone-aiewf-mini in index");
       const base = `http://127.0.0.1:${port}`;
-      assert.equal(moscone-aiewf-mini!.links.self, `${base}/maps/moscone-aiewf-mini`);
-      assert.equal(moscone-aiewf-mini!.links.gram, `${base}/maps/moscone-aiewf-mini?format=gram`);
-      assert.ok(!("tmj" in moscone-aiewf-mini!.links), "links must not include tmj");
+      assert.equal(miniMap!.links.self, `${base}/maps/moscone-aiewf-mini`);
+      assert.equal(miniMap!.links.gram, `${base}/maps/moscone-aiewf-mini?format=gram`);
+      assert.ok(!("tmj" in miniMap!.links), "links must not include tmj");
     }
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
