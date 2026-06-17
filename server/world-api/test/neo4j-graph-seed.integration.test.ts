@@ -19,7 +19,11 @@ let driver: ReturnType<typeof neo4j.driver>;
 
 test.before(async () => {
   const container = await new GenericContainer("neo4j:5")
-    .withEnvironment({ NEO4J_AUTH: "neo4j/testpassword" })
+    .withEnvironment({
+      NEO4J_AUTH: "neo4j/testpassword",
+      // Required since neo4j:5 community moved to a single licensing model
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes",
+    })
     .withExposedPorts(7474, 7687)
     // No log-based wait — Neo4j's startup message varies. Instead we poll
     // for Bolt connectivity below after the port is open.
