@@ -21,13 +21,28 @@ test.before(async () => {
   const container = await new GenericContainer("neo4j:5")
     .withEnvironment({ NEO4J_AUTH: "neo4j/testpassword" })
     .withExposedPorts(7474, 7687)
-    .withWaitStrategy(Wait.forHttp("/", 7474).forStatusCode(200))
+    // No log-based wait — Neo4j's startup message varies. Instead we poll
+    // for Bolt connectivity below after the port is open.
+    .withWaitStrategy(Wait.forListeningPorts())
     .withStartupTimeout(CONTAINER_STARTUP_TIMEOUT_MS)
     .start();
 
   const boltUrl = `bolt://${container.getHost()}:${container.getMappedPort(7687)}`;
   driver = neo4j.driver(boltUrl, neo4j.auth.basic("neo4j", "testpassword"));
-}, { timeout: CONTAINER_STARTUP_TIMEOUT_MS + 5_000 });
+
+  // Poll until Bolt accepts queries — port open doesn't mean Neo4j is ready
+  const deadline = Date.now() + 60_000;
+  while (Date.now() < deadline) {
+    try {
+      const s = driver.session();
+      await s.run("RETURN 1");
+      await s.close();
+      break;
+    } catch {
+      await new Promise((r) => setTimeout(r, 1_000));
+    }
+  }
+}, { timeout: CONTAINER_STARTUP_TIMEOUT_MS + 65_000 });
 
 test.after(async () => {
   await driver?.close();
