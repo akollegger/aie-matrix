@@ -53,9 +53,9 @@ try {
   const getId = (m) => typeof m === "string" ? m : (m.id ?? m.mapId ?? m.name);
   // Prefer maps large enough for multi-step navigation (freeplay, then moscone, then first)
   const preferred =
-    maps.find(m => getId(m)?.includes("freeplay")) ??
     maps.find(m => getId(m)?.includes("moscone-aiewf-mini")) ??
     maps.find(m => getId(m)?.includes("moscone")) ??
+    maps.find(m => getId(m)?.includes("freeplay")) ??
     maps[0];
   mapId = getId(preferred);
   if (!mapId) fail("discover-maps", `Could not extract map ID from: ${JSON.stringify(preferred)}`);
