@@ -60,6 +60,8 @@ services:
       # Server config
       AIE_MATRIX_HTTP_PORT: "${AIE_MATRIX_HTTP_PORT:-8787}"
       AIE_MATRIX_DEBUG: "${AIE_MATRIX_DEBUG:-false}"
+      # Set to "development" for local testing / CI to use file-backed maps (no GCS required)
+      AIE_MATRIX_MODE: "${AIE_MATRIX_MODE:-production}"
       AIE_MATRIX_INTERNAL_FANOUT_TOKEN: "${AIE_MATRIX_INTERNAL_FANOUT_TOKEN:-}"
       ADMIN_TOKEN: "${ADMIN_TOKEN}"
       # IC-002: MCP URL for spawn credentials — must be reachable by agent-host container

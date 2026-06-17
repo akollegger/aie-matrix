@@ -36,6 +36,8 @@
     "map:compare-svg": "pnpm --filter @aie-matrix/tmj-to-gram run gallery:parity",
     "map:editor": "pnpm --filter @aie-matrix/map-editor dev",
     "test:integration": "node scripts/integration-test.mjs",
+    "test:staging": "node scripts/test-staging.mjs",
+    "test:ghost-spawn": "node scripts/test-ghost-spawn.mjs",
     "infra:up": "docker compose -f docker-compose.dev.yml up -d",
     "infra:down": "docker compose -f docker-compose.dev.yml down",
     "infra:reset": "docker compose -f docker-compose.dev.yml down -v"

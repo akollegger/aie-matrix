@@ -19,7 +19,12 @@ env:
   NAMESPACE: aie-matrix
 
 jobs:
+  staging-gate:
+    uses: ./.github/workflows/staging-ci.yml
+    secrets: inherit
+
   build-push-deploy:
+    needs: staging-gate
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
