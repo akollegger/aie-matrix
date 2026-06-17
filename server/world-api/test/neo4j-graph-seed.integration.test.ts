@@ -20,8 +20,8 @@ let driver: ReturnType<typeof neo4j.driver>;
 test.before(async () => {
   const container = await new GenericContainer("neo4j:5")
     .withEnvironment({ NEO4J_AUTH: "neo4j/testpassword" })
-    .withExposedPorts(7687)
-    .withWaitStrategy(Wait.forLogMessage("Started."))
+    .withExposedPorts(7474, 7687)
+    .withWaitStrategy(Wait.forHttp("/", 7474).forStatusCode(200))
     .withStartupTimeout(CONTAINER_STARTUP_TIMEOUT_MS)
     .start();
 
