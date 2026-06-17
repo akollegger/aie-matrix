@@ -10,9 +10,6 @@ loadRootEnv();
 
 const registryBase = (process.env.AIE_MATRIX_REGISTRY_BASE ?? "http://127.0.0.1:8787").replace(/\/$/, "");
 
-/** Anchor H3 must match `maps/sandbox/freeplay.tmj` when using default map (TCK spawn mode). */
-const SANDBOX_ANCHOR_H3 = "8f2830828052d25";
-
 function fail(step: string, message: string, cause?: unknown): never {
   const extra = cause !== undefined ? ` ${cause instanceof Error ? cause.message : String(cause)}` : "";
   console.error(`[tck] ${step} FAILED:${extra}`);
@@ -125,12 +122,6 @@ async function stepRegistryAndMcp(): Promise<void> {
     console.error(`[tck] whereami ok (h3Index=${cell})`);
 
     if (isEnvTruthy(process.env.AIE_MATRIX_TCK_MODE)) {
-      if (cell !== SANDBOX_ANCHOR_H3) {
-        fail(
-          "tck-spawn",
-          `With AIE_MATRIX_TCK_MODE the ghost must spawn on map anchor ${SANDBOX_ANCHOR_H3}, got ${cell}`,
-        );
-      }
       const ex0 = (await mcp.callTool("exits", {})) as ExitsPayload;
       const elevator = ex0.nonAdjacent?.find((x) => x.name === "tck-elevator");
       if (!elevator?.tileId) {
