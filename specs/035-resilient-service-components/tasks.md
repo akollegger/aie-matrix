@@ -18,10 +18,10 @@
 
 **Purpose**: RFC, dependency additions, and CatalogEntry type extensions that all later phases depend on.
 
-- [ ] T001 Author `proposals/rfc/RFC-035-resilient-service-components.md` referencing spec-035, summarising the four implementation areas and key decisions from `specs/035-resilient-service-components/research.md`
-- [ ] T002 Add `ioredis` v5 (dependency) and `ioredis-mock` (devDependency) to `server/agent-host/package.json` and run `pnpm install` from workspace root
-- [ ] T003 Extend `CatalogEntry` (agent kind) in `server/agent-host/src/types.ts` with `lastSeenAt?: string` and `healthStatus?: "active" | "inactive" | "unverified"` — additive only, no breaking changes
-- [ ] T004 Add `HeartbeatRequest` and `HeartbeatResponse` types to `server/agent-host/src/types.ts`
+- [X] T001 Author `proposals/rfc/RFC-035-resilient-service-components.md` referencing spec-035, summarising the four implementation areas and key decisions from `specs/035-resilient-service-components/research.md`
+- [X] T002 Add `ioredis` v5 (dependency) and `ioredis-mock` (devDependency) to `server/agent-host/package.json` and run `pnpm install` from workspace root
+- [X] T003 Extend `CatalogEntry` (agent kind) in `server/agent-host/src/types.ts` with `lastSeenAt?: string` and `healthStatus?: "active" | "inactive" | "unverified"` — additive only, no breaking changes
+- [X] T004 Add `HeartbeatRequest` and `HeartbeatResponse` types to `server/agent-host/src/types.ts`
 
 **Checkpoint**: RFC exists; types compile; no functional changes yet.
 
@@ -35,16 +35,16 @@
 
 ### Tests (write first, confirm they fail before implementing)
 
-- [ ] T005 [P] Write unit tests for `RedisCatalogService` in `server/agent-host/src/catalog/__tests__/RedisCatalogService.test.ts` using `ioredis-mock`: cover `load()` (empty Redis → empty catalog), `save()` + `load()` round-trip, `register()` persists to Redis, `deregister()` removes entry, Redis ECONNREFUSED returns empty catalog gracefully; assert double-`register()` of the same agentId is idempotent (no duplicate entries, no error)
-- [ ] T006 [P] Write unit tests for the heartbeat handler in `server/agent-host/src/__tests__/heartbeat.test.ts`: cover 200 with `sessionActive: false` for known agent, 404 for unknown agent, `lastSeenAt` field updated on successful heartbeat, 401 for missing token
-- [ ] T007 Write integration test skeleton in `server/agent-host/src/catalog/__tests__/RedisCatalogService.integration.test.ts`: skips when `REDIS_URL` unset; covers persist → restart → restore round-trip and TTL expiry → empty catalog
+- [X] T005 [P] Write unit tests for `RedisCatalogService` in `server/agent-host/tests/unit/redis-catalog-service.test.ts` using `ioredis-mock`: cover `load()` (empty Redis → empty catalog), `save()` + `load()` round-trip, `register()` persists to Redis, `deregister()` removes entry, Redis ECONNREFUSED returns empty catalog gracefully; assert double-`register()` of the same agentId is idempotent (no duplicate entries, no error)
+- [X] T006 [P] Write unit tests for the heartbeat handler in `server/agent-host/tests/unit/heartbeat.test.ts`: cover 200 with `sessionActive: false` for known agent, 404 for unknown agent, `lastSeenAt` field updated on successful heartbeat, 401 for missing token
+- [X] T007 Write integration test skeleton in `server/agent-host/tests/integration/redis-catalog-service.integration.test.ts`: skips when `REDIS_URL` unset; covers persist → restart → restore round-trip and TTL expiry → empty catalog
 
 ### Implementation
 
-- [ ] T008 Implement `RedisCatalogService` in `server/agent-host/src/catalog/RedisCatalogService.ts`: `load()` via `HGETALL agent-host:catalog`, `save()` via `HMSET` + `EXPIRE 86400`, `register()` / `deregister()` delegate to in-memory logic then persist; implement `makeRedisCatalogLayerFromEnv()` that falls back to `CatalogServiceLive` (file-backed) when `REDIS_URL` unset — mirror pattern from `server/world-api/src/redis/RedisGhostStoreService.ts`
-- [ ] T009 Wire `RedisCatalogService` into `server/agent-host/src/main.ts`: replace `CatalogServiceLive` with `makeRedisCatalogLayerFromEnv()` in the Layer composition
-- [ ] T010 Add `POST /v1/catalog/:agentId/heartbeat` handler to `server/agent-host/src/app.ts`: auth check (bearer token), 404 if agentId absent, update `lastSeenAt` + `healthStatus: "active"` on catalog entry, fetch active session (cache ≤10s), return `HeartbeatResponse`; does NOT call `spawnRosterForAgent`
-- [ ] T011 Replace polling reconciliation loop (`main.ts:192–218`) with eager ping-and-spawn pass: restore catalog from Redis (T009), for each `rosterAgent` entry ping the agent's base URL, on ping success + active session call `supervisor.spawnRosterForAgent()`; mark unreachable entries `healthStatus: "inactive"` (not removed); log deprecation warning if `AGENT_HOST_RECONCILIATION_WAIT_MS` is set in env
+- [X] T008 Implement `RedisCatalogService` in `server/agent-host/src/catalog/RedisCatalogService.ts`: `load()` via `GET agent-host:catalog`, `save()` via `SET` + `EX 86400`, `register()` / `deregister()` delegate to patched `CatalogServiceImpl`; implement `makeRedisCatalogLayerFromEnv()` that falls back to `CatalogServiceLive` (file-backed) when `REDIS_URL` unset — mirrors pattern from `server/world-api/src/redis/RedisGhostStoreService.ts`
+- [X] T009 Wire `RedisCatalogService` into `server/agent-host/src/main.ts`: replace `CatalogServiceLive` with `await makeRedisCatalogLayerFromEnv()` using top-level await (ESM module)
+- [X] T010 Add `POST /v1/catalog/:agentId/heartbeat` handler to `server/agent-host/src/app.ts`: auth check (bearer token), 404 if agentId absent, update `lastSeenAt` + `healthStatus: "active"` on catalog entry, fetch active session from supervisor, return `HeartbeatResponse`; does NOT call `spawnRosterForAgent`
+- [X] T011 Replace polling reconciliation loop with eager ping-and-spawn pass: restore catalog from Redis (T009), for each `rosterAgent` entry ping agent's `/health` URL, on ping success + active session call `supervisor.spawnRosterForAgent()`; mark unreachable entries `healthStatus: "inactive"` (not removed); log deprecation warning if `AGENT_HOST_RECONCILIATION_WAIT_MS` is set in env
 
 **Checkpoint**: `pnpm test` passes in `server/agent-host`. Heartbeat endpoint returns 200/404. Catalog survives agent-host restart when `REDIS_URL` is set (smoke test in quickstart.md).
 
@@ -58,14 +58,14 @@
 
 ### Tests (write first, confirm they fail before implementing)
 
-- [ ] T012 [P] [US1] Write unit tests for reconnect logic in `ghosts/npc-agent/src/__tests__/reconnect.test.ts`: mock `GhostMcpClient` that throws N consecutive times then succeeds; assert `consecutiveFailures` increments correctly; assert inner loop exits at threshold; assert `npc-agent.mcp.degraded` emitted exactly once; assert `npc-agent.mcp.recovered` emitted on successful reconnect; assert final tick count matches expectations
-- [ ] T013 [P] [US1] Write unit tests for backoff schedule in `ghosts/npc-agent/src/__tests__/reconnect.test.ts` (same file): assert schedule starts at 2s, doubles, caps at 60s; assert `Effect.retry` with the schedule retries the correct number of times before giving up
+- [X] T012 [P] [US1] Write unit tests for reconnect logic in `ghosts/npc-agent/src/__tests__/reconnect.test.ts`: mock `GhostMcpClient` that throws N consecutive times then succeeds; assert `consecutiveFailures` increments correctly; assert inner loop exits at threshold; assert `npc-agent.mcp.degraded` emitted exactly once; assert `npc-agent.mcp.recovered` emitted on successful reconnect; assert final tick count matches expectations
+- [X] T013 [P] [US1] Write unit tests for backoff schedule in `ghosts/npc-agent/src/__tests__/reconnect.test.ts` (same file): assert schedule starts at 2s, doubles, caps at 60s; assert `Effect.retry` with the schedule retries the correct number of times before giving up
 
 ### Implementation
 
-- [ ] T014 [US1] Create `ghosts/npc-agent/src/reconnect.ts`: export `CONSECUTIVE_FAILURE_THRESHOLD` (default 5), `makeReconnectSchedule()` returning `Schedule.exponential("2 seconds").pipe(Schedule.upTo("60 seconds"))`, `McpReconnectState` type, `logDegraded(ghostId)` and `logRecovered(ghostId)` structured log helpers emitting `npc-agent.mcp.degraded` / `npc-agent.mcp.recovered`
-- [ ] T015 [US1] Modify `ghostActionLoop` in `ghosts/npc-agent/src/executor.ts`: add consecutive-failure counter inside the tick's `Effect.catchAll`; when counter reaches `CONSECUTIVE_FAILURE_THRESHOLD`, call `logDegraded`, reset counter, and exit the inner loop via `Effect.fail` (triggers the `acquireRelease` release path, cleanly disconnecting the MCP client)
-- [ ] T016 [US1] Wrap the `ghostActionLoop` Effect.acquireRelease block in `ghosts/npc-agent/src/executor.ts` with `Effect.retry(makeReconnectSchedule())`: on re-acquire success + first tick success, call `logRecovered`; on retry schedule exhausted (hard cap), emit a `npc-agent.mcp.failed-permanently` event and exit the fiber cleanly
+- [X] T014 [US1] Create `ghosts/npc-agent/src/reconnect.ts`: export `CONSECUTIVE_FAILURE_THRESHOLD` (default 5), `makeReconnectSchedule()` returning `Schedule.exponential("2 seconds").pipe(Schedule.upTo("60 seconds"))`, `McpReconnectState` type, `logDegraded(ghostId)` and `logRecovered(ghostId)` structured log helpers emitting `npc-agent.mcp.degraded` / `npc-agent.mcp.recovered`
+- [X] T015 [US1] Modify `ghostActionLoop` in `ghosts/npc-agent/src/executor.ts`: add consecutive-failure counter inside the tick's `Effect.catchAll`; when counter reaches `CONSECUTIVE_FAILURE_THRESHOLD`, call `logDegraded`, reset counter, and exit the inner loop via `Effect.fail` (triggers the `acquireRelease` release path, cleanly disconnecting the MCP client)
+- [X] T016 [US1] Wrap the `ghostActionLoop` Effect.acquireRelease block in `ghosts/npc-agent/src/executor.ts` with `Effect.retry(makeReconnectSchedule())`: on re-acquire success + first tick success, call `logRecovered`; on retry schedule exhausted (hard cap), emit a `npc-agent.mcp.failed-permanently` event and exit the fiber cleanly
 
 **Checkpoint**: `pnpm test` passes in `ghosts/npc-agent`. Chaos scenario 3 (server restart) produces degraded/recovered log pair and ghost movement resumes within 90s.
 

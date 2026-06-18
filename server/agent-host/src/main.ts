@@ -3,8 +3,8 @@ import { createLogger } from "@aie-matrix/logger";
 import { Effect, Layer, ManagedRuntime, pipe } from "effect";
 import { A2AHostServiceLive } from "./a2a-host/A2AHostService.js";
 import { McpProxyServiceLive } from "./mcp-proxy/mcp-proxy.layer.js";
-import { CatalogService, CatalogServiceLive } from "./catalog/CatalogService.js";
-import type { CatalogEntry } from "./types.js";
+import { CatalogService } from "./catalog/CatalogService.js";
+import { makeRedisCatalogLayerFromEnv } from "./catalog/RedisCatalogService.js";
 import { readHouseCapabilityManifest } from "./house-capabilities.js";
 import { AgentSupervisorLayer, AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { createApp } from "./app.js";
@@ -49,7 +49,8 @@ if (devToken.length === 0) {
   process.exit(1);
 }
 
-const base = Layer.mergeAll(CatalogServiceLive(catalogFilePath), A2AHostServiceLive(devToken));
+const catalogLayer = await makeRedisCatalogLayerFromEnv(catalogFilePath);
+const base = Layer.mergeAll(catalogLayer, A2AHostServiceLive(devToken));
 
 export const appLayer = Layer.mergeAll(
   base,
@@ -154,26 +155,30 @@ const server = app.listen(port, "0.0.0.0", () => {
     })();
   }
 
-  // Startup reconciliation: if a live session is already active (e.g. after a pod
-  // restart), spawn all roster agents' ghosts without waiting for world.session.start.
-  //
-  // In a cold-start (full cluster restart), ghost agents self-register after agent-host
-  // starts. We poll the catalog until rosterAgent entries appear before spawning, so
-  // reconciliation works even when the catalog starts empty.
+  // Startup reconciliation: restore catalog from Redis, ping each known agent,
+  // and for reachable rosterAgent entries with an active session, call
+  // spawnRosterForAgent (idempotent — "ghost already active" is a no-op).
+  // This replaces the old 120s passive-wait polling loop (spec-035 T011).
   if (process.env.AGENT_HOST_DISABLE_RECONCILIATION !== "1") {
-    const reconciliationWaitMs = (() => {
-      const raw = process.env.AGENT_HOST_RECONCILIATION_WAIT_MS;
-      const n = raw !== undefined ? parseInt(raw, 10) : NaN;
-      return Number.isFinite(n) && n >= 0 ? n : 30_000;
-    })();
+    if (process.env.AGENT_HOST_RECONCILIATION_WAIT_MS !== undefined) {
+      log.warn({
+        kind: "agent-host.startup-reconciliation.wait-ms-deprecated",
+        note: "AGENT_HOST_RECONCILIATION_WAIT_MS is no longer used; startup reconciliation is now eager (spec-035)",
+      });
+    }
     void (async () => {
       try {
+        // 1. Check for an active world session
         const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
           signal: AbortSignal.timeout(10_000),
         });
-        if (!liveRes.ok) return;
+        if (!liveRes.ok) {
+          log.info({ kind: "agent-host.startup-reconciliation.live-check-failed" });
+          return;
+        }
         const sessions = (await liveRes.json()) as Array<{ id: string }>;
-        if (!Array.isArray(sessions) || sessions.length === 0) {
+        const sessionActive = Array.isArray(sessions) && sessions.length > 0;
+        if (!sessionActive) {
           log.info({ kind: "agent-host.startup-reconciliation.no-active-session" });
           return;
         }
@@ -189,35 +194,43 @@ const server = app.listen(port, "0.0.0.0", () => {
           pipe(CatalogService, Effect.map((c) => c)),
         );
 
-        // Poll until at least one rosterAgent entry is registered, or we time out.
-        // Ghost agents (random-agent, npc-agent) register after agent-host starts, so
-        // on a cold start the catalog is empty at reconciliation time.
-        const rosterPollStart = Date.now();
-        let rosterEntries: Array<[string, CatalogEntry]> = [];
-        while (true) {
-          const catalogFile = await runtime.runPromise(catalog.load());
-          rosterEntries = Object.entries(catalogFile.agents).filter(([, entry]) => {
-            if (entry.kind === "mini-game") return false;
-            return (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
-          });
-          if (rosterEntries.length > 0) break;
-          const elapsed = Date.now() - rosterPollStart;
-          if (elapsed >= reconciliationWaitMs) {
-            log.info({
-              kind: "agent-host.startup-reconciliation.no-roster-agents",
-              note: `timed out after ${elapsed}ms waiting for rosterAgent registrations`,
-            });
-            return;
-          }
-          log.info({
-            kind: "agent-host.startup-reconciliation.waiting-for-roster-agents",
-            elapsedMs: elapsed,
-            waitMs: reconciliationWaitMs,
-          });
-          await new Promise<void>((resolve) => setTimeout(resolve, 2_000));
+        // 2. Restore catalog from Redis (already loaded by Layer; we just read it)
+        const catalogFile = await runtime.runPromise(catalog.load());
+        const rosterEntries = Object.entries(catalogFile.agents).filter(([, entry]) => {
+          if (entry.kind === "mini-game") return false;
+          return (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
+        });
+
+        if (rosterEntries.length === 0) {
+          log.info({ kind: "agent-host.startup-reconciliation.no-roster-agents-in-catalog" });
+          return;
         }
 
+        // 3. Eagerly ping each rosterAgent; spawn only if reachable
+        let spawned = 0;
+        let inactive = 0;
         for (const [agentId, entry] of rosterEntries) {
+          try {
+            const pingRes = await fetch(`${entry.baseUrl}/health`, {
+              signal: AbortSignal.timeout(5_000),
+            });
+            if (!pingRes.ok) throw new Error(`HTTP ${pingRes.status}`);
+            log.info({ kind: "agent-host.startup-reconciliation.ping-ok", agentId });
+          } catch (pingErr) {
+            // Mark inactive but retain the entry
+            const updatedEntry = { ...entry, healthStatus: "inactive" as const };
+            await runtime.runPromise(
+              catalog.save({ agents: { ...catalogFile.agents, [agentId]: updatedEntry } }),
+            );
+            log.info({
+              kind: "agent-host.startup-reconciliation.ping-fail",
+              agentId,
+              reason: pingErr instanceof Error ? pingErr.message : String(pingErr),
+            });
+            inactive++;
+            continue;
+          }
+
           const result = await runtime.runPromise(
             supervisor.spawnRosterForAgent(agentId, entry.baseUrl),
           );
@@ -227,7 +240,15 @@ const server = app.listen(port, "0.0.0.0", () => {
             spawned: result.spawned.length,
             failed: result.failed.length,
           });
+          spawned += result.spawned.length;
         }
+
+        log.info({
+          kind: "agent-host.startup-reconciliation.complete",
+          spawned,
+          inactive,
+          total: rosterEntries.length,
+        });
       } catch (e) {
         console.error(
           JSON.stringify({

@@ -15,6 +15,13 @@ export type CatalogEntry =
       readonly agentCard: AgentCard;
       readonly registeredAt: string;
       readonly builtIn: boolean;
+      /** ISO 8601 timestamp of the last heartbeat or registration received. */
+      readonly lastSeenAt?: string;
+      /** Health status set by agent-host based on pings and heartbeats.
+       *  "unverified" = restored from Redis before first ping.
+       *  "active"     = responded to ping or sent heartbeat.
+       *  "inactive"   = ping failed; entry retained for recovery. */
+      readonly healthStatus?: "active" | "inactive" | "unverified";
       /** Resource grants seeded into the agent's ghost bag on first connect.
        *  Only honoured for built-in catalog entries; ignored on external /register payloads. */
       readonly resourceGrants?: ReadonlyArray<{
@@ -121,6 +128,17 @@ export type AgentSession = {
   /** Current exponential backoff (ms) before a reconnect; resets on success. */
   currentBackoffMs: number;
   spawnClient?: import("@a2a-js/sdk/client").Client;
+};
+
+/** Payload for `POST /v1/catalog/:agentId/heartbeat` (IC-001). */
+export type HeartbeatRequest = {
+  readonly ts: string;
+};
+
+/** Response from `POST /v1/catalog/:agentId/heartbeat`. */
+export type HeartbeatResponse = {
+  readonly sessionActive: boolean;
+  readonly sessionId?: string;
 };
 
 export type WorldEventKind =

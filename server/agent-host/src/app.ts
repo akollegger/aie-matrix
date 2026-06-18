@@ -6,7 +6,7 @@ import { CatalogService } from "./catalog/CatalogService.js";
 import { AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { McpProxyService } from "./mcp-proxy/McpProxyService.js";
 import { ActiveSessionsPreventDeregister, Unauthorized } from "./errors.js";
-import type { AgentSession, WorldCredential } from "./types.js";
+import type { AgentSession, HeartbeatRequest, HeartbeatResponse, WorldCredential } from "./types.js";
 import { BarnacleSupervisor } from "./barnacle/index.js";
 import {
   BARNACLE_COMPLETE_SCHEMA,
@@ -319,6 +319,60 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           return;
         }
         res.status(200).type("json").send(JSON.stringify(entry.agentCard, null, 2) + "\n");
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.sync(() => {
+            const m = mapHouseError(e);
+            res.status(m.status).json(m.body);
+          }),
+        ),
+      ),
+    );
+  });
+
+  /**
+   * IC-001 (spec-035): Lightweight liveness heartbeat. Separate from
+   * registration — heartbeat is ~100 bytes; registration fetches the full
+   * agent card. Returns current session state so the agent can self-trigger
+   * roster reconciliation when the session ID changes.
+   */
+  app.post("/v1/catalog/:agentId/heartbeat", (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        yield* requireBearer(req);
+        const catalog = yield* CatalogService;
+        const supervisor = yield* AgentSupervisor;
+        const { agentId } = req.params;
+        const body = req.body as HeartbeatRequest | null;
+
+        // Validate the entry exists
+        const entry = yield* catalog.get(agentId!);
+
+        // Update lastSeenAt and healthStatus on the entry
+        const ts =
+          typeof body?.ts === "string" ? body.ts : new Date().toISOString();
+        const catalogFile = yield* catalog.load();
+        if (entry.kind !== "mini-game") {
+          const updated = {
+            ...entry,
+            lastSeenAt: ts,
+            healthStatus: "active" as const,
+          };
+          yield* catalog.save({
+            agents: { ...catalogFile.agents, [agentId!]: updated },
+          });
+        }
+
+        // Detect active session (cached at ≤10s via world-api live endpoint)
+        const sessionIds = supervisor.listSessionIdsByAgent(agentId!);
+        const sessionActive = sessionIds.length > 0;
+        const sessionId = sessionIds[0];
+
+        const responseBody: HeartbeatResponse = sessionActive
+          ? { sessionActive: true, sessionId }
+          : { sessionActive: false };
+
+        res.status(200).json(responseBody);
       }).pipe(
         Effect.catchAll((e) =>
           Effect.sync(() => {
