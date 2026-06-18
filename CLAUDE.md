@@ -52,6 +52,8 @@ A hex-tile virtual world running alongside the AI Engineer World's Fair, where a
 - Existing Neo4j ledger (EvalContract nodes, additive field additions); in-memory exam state per NPC ghost (031-exam-npcs)
 - TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `express` v4, `@a2a-js/sdk` 0.3.13+ (032-ghost-autospawn)
 - None (no new persistence; catalog.json is existing) (032-ghost-autospawn)
+- TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `ioredis` v5 (new dep in `server/agent-host`), `@a2a-js/sdk` 0.3.13+, `@modelcontextprotocol/sdk` 1.29+, `express` v4 (035-resilient-service-components)
+- Redis (catalog hash per agent ID, TTL-based cleanup); existing `catalog.json` as fallback when `REDIS_URL` unse (035-resilient-service-components)
 
 TypeScript 5.7 / Node.js 24, pnpm 10 workspace monorepo. Key packages: `effect` v3+, `@colyseus/core` 0.15.57, `@modelcontextprotocol/sdk` 1.29+, `zod` 3.
 
@@ -99,7 +101,6 @@ See `AGENTS.md` for agent-specific guidance on navigating and contributing to th
 <!-- MANUAL ADDITIONS END -->
 
 ## Recent Changes
+- 035-resilient-service-components: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `ioredis` v5 (new dep in `server/agent-host`), `@a2a-js/sdk` 0.3.13+, `@modelcontextprotocol/sdk` 1.29+, `express` v4
 - 032-ghost-autospawn: Ghost agents now auto-spawn into active sessions without manual intervention. `random-agent` exposes `GET /v1/roster` returning N synthetic wanderer entries (controlled by `RANDOM_AGENT_COUNT` env var, default 10) and declares `rosterAgent: true` in its agent card, plugging into the existing `spawnRosterForAgent` path used by npc-agent. `agent-host` startup now runs a reconciliation pass: if a live session is already active on startup (e.g. after a pod restart), it calls `spawnRosterForAgent` for every `rosterAgent: true` catalog entry. Set `AGENT_HOST_DISABLE_RECONCILIATION=1` to opt out.
 - 031-exam-npcs: Added TypeScript 5.7 / Node.js 24 (ESM, `"type": "module"`) + `effect` v3+, `@relateby/pattern` ^0.4.2, `@a2a-js/sdk` 0.3.13+, `@modelcontextprotocol/sdk` 1.29+, `node:crypto` (built-in)
-- 030-human-ghost-peer: Intermedium browser client is now a first-class ghost peer. `POST /auth/guest` issues a guest JWT with `role: "human"`. Human callers skip proximity check for directed `say()`. NPC ghosts call `ghost_announce` MCP tool on connect to populate `ghostLabels` in Colyseus room state (used to badge brokers in the ghost list). Client-side: `useIdentity` hook persists ghostId + displayName in localStorage; `BalanceDisplay` shows broker-credit balance; `useContracts` polls for active contracts and renders an inline submission form in `ChatPanel`; leaderboard highlights the human's own entry.
-- 029-funder-into-npc: Migrated funder character into npc-agent as `behaviorKind: "broker"`, dispatched via gram label `Character:Broker`. `funder-agent` container removed from `deploy/staging/docker-compose.yml`. New `broker-behavior.ts` module holds per-ghost state machine; behavior kind is derived from secondary gram labels (not a property field); `broker.character.gram` added to npc-agent catalog.
