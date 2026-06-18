@@ -37,8 +37,9 @@ jobs:
       AIE_MATRIX_MODE: development
       # Spawn all ghosts at map anchor cell for deterministic co-location tests
       AIE_MATRIX_TCK_MODE: "1"
-      # Point npc-agent at the committed catalog (deploy/staging/catalog/ is empty by design)
-      NPC_CATALOG_DIR: ghosts/npc-agent/catalog
+      # Point npc-agent at the committed catalog (deploy/staging/catalog/ is empty by design).
+      # Must start with ./ so Docker Compose treats it as a host path, not a named volume.
+      NPC_CATALOG_DIR: ./ghosts/npc-agent/catalog
 
     steps:
       - uses: actions/checkout@v5
