@@ -54,9 +54,31 @@ function makeStubSupervisorLayer(activeSessions: Record<string, string[]> = {}) 
     shutdown: () => Effect.die("stub"),
     getSession: () => undefined,
     getByMcpToken: () => undefined,
+    getSessionByGhostId: () => undefined,
     listSessionIdsByAgent: (agentId: string) => activeSessions[agentId] ?? [],
     listSessions: () => [],
     deliverWorldEvent: () => Effect.void,
+    spawnRosterForAgent: () => Effect.succeed({ spawned: [], failed: [] }),
+  });
+}
+
+function makeStubSupervisorWithSpyRoster(
+  spawnRosterFn: ReturnType<typeof vi.fn>,
+  activeSessions: Record<string, string[]> = {},
+) {
+  return Layer.succeed(AgentSupervisor, {
+    spawn: () => Effect.die("stub"),
+    shutdown: () => Effect.die("stub"),
+    getSession: () => undefined,
+    getByMcpToken: () => undefined,
+    getSessionByGhostId: () => undefined,
+    listSessionIdsByAgent: (agentId: string) => activeSessions[agentId] ?? [],
+    listSessions: () => [],
+    deliverWorldEvent: () => Effect.void,
+    spawnRosterForAgent: (agentId: string, agentBaseUrl: string) => {
+      spawnRosterFn(agentId, agentBaseUrl);
+      return Effect.succeed({ spawned: [], failed: [] });
+    },
   });
 }
 
@@ -91,6 +113,25 @@ function stubFetchCard(card: object | "network-error" | "http-error"): void {
     );
   }
 }
+
+// Stubs both the agent-card fetch AND the /live?status=active check.
+// Differentiates by URL: /live returns sessions, everything else returns the card.
+function stubFetchCardAndLive(card: object, sessions: Array<{ id: string }>): void {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockImplementation((url: string) => {
+      if (String(url).includes("/live")) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(sessions) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(card) });
+    }),
+  );
+}
+
+const ROSTER_CARD = {
+  ...VALID_CARD,
+  matrix: { ...VALID_CARD.matrix, rosterAgent: true },
+};
 
 let tmpDir: string;
 let catalogPath: string;
@@ -188,6 +229,74 @@ describe("POST /v1/catalog/register", () => {
     await rt.dispose();
     expect(res.status).toBe(401);
     expect(res.body.code).toBe("UNAUTHORIZED");
+  });
+
+  describe("registration-spawn hook", () => {
+    it("calls spawnRosterForAgent when a roster agent registers and a session is active", async () => {
+      const spawnRosterFn = vi.fn();
+      stubFetchCardAndLive(ROSTER_CARD, [{ id: "session-1" }]);
+      const layer = Layer.mergeAll(
+        CatalogServiceLive(catalogPath),
+        makeStubSupervisorWithSpyRoster(spawnRosterFn),
+        McpProxyServiceLive,
+      );
+      const rt = ManagedRuntime.make(layer);
+      const app = createApp(rt, BASE_OPTS);
+
+      const res = await supertest(app)
+        .post("/v1/catalog/register")
+        .set("Authorization", `Bearer ${DEV_TOKEN}`)
+        .send({ agentId: "roster-agent", baseUrl: "http://127.0.0.1:4001" });
+
+      expect(res.status).toBe(201);
+      // Wait for the fire-and-forget async block to complete
+      await vi.waitFor(() => expect(spawnRosterFn).toHaveBeenCalledWith("roster-agent", "http://127.0.0.1:4001"));
+      await rt.dispose();
+    });
+
+    it("does not call spawnRosterForAgent when a roster agent registers but no session is active", async () => {
+      const spawnRosterFn = vi.fn();
+      stubFetchCardAndLive(ROSTER_CARD, []); // empty sessions
+      const layer = Layer.mergeAll(
+        CatalogServiceLive(catalogPath),
+        makeStubSupervisorWithSpyRoster(spawnRosterFn),
+        McpProxyServiceLive,
+      );
+      const rt = ManagedRuntime.make(layer);
+      const app = createApp(rt, BASE_OPTS);
+
+      const res = await supertest(app)
+        .post("/v1/catalog/register")
+        .set("Authorization", `Bearer ${DEV_TOKEN}`)
+        .send({ agentId: "roster-agent", baseUrl: "http://127.0.0.1:4001" });
+
+      expect(res.status).toBe(201);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(spawnRosterFn).not.toHaveBeenCalled();
+      await rt.dispose();
+    });
+
+    it("does not call spawnRosterForAgent for a non-roster agent even when a session is active", async () => {
+      const spawnRosterFn = vi.fn();
+      stubFetchCardAndLive(VALID_CARD, [{ id: "session-1" }]);
+      const layer = Layer.mergeAll(
+        CatalogServiceLive(catalogPath),
+        makeStubSupervisorWithSpyRoster(spawnRosterFn),
+        McpProxyServiceLive,
+      );
+      const rt = ManagedRuntime.make(layer);
+      const app = createApp(rt, BASE_OPTS);
+
+      const res = await supertest(app)
+        .post("/v1/catalog/register")
+        .set("Authorization", `Bearer ${DEV_TOKEN}`)
+        .send({ agentId: "new-agent", baseUrl: "http://127.0.0.1:4001" });
+
+      expect(res.status).toBe(201);
+      await new Promise((r) => setTimeout(r, 100));
+      expect(spawnRosterFn).not.toHaveBeenCalled();
+      await rt.dispose();
+    });
   });
 });
 

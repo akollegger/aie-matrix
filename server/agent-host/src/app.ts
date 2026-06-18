@@ -342,6 +342,35 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
         }
         const out = yield* catalog.register({ agentId: body.agentId, baseUrl: body.baseUrl, builtIn: false });
         res.status(201).json({ ok: true, agentId: out.agentId });
+
+        // If this is a roster agent, trigger spawn now if a session is already active.
+        // Fire-and-forget: failures are logged but don't affect the registration response.
+        const isRoster =
+          out.kind !== "mini-game" &&
+          (out.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
+        if (isRoster) {
+          void (async () => {
+            try {
+              const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
+                signal: AbortSignal.timeout(5_000),
+              });
+              if (!liveRes.ok) return;
+              const sessions = (await liveRes.json()) as Array<{ id: string }>;
+              if (!Array.isArray(sessions) || sessions.length === 0) return;
+              await runtime.runPromise(
+                Effect.flatMap(AgentSupervisor, (s) => s.spawnRosterForAgent(out.agentId, out.baseUrl)),
+              );
+            } catch (e) {
+              console.error(
+                JSON.stringify({
+                  kind: "agent-host.registration-spawn-hook.error",
+                  agentId: out.agentId,
+                  message: e instanceof Error ? e.message : String(e),
+                }),
+              );
+            }
+          })();
+        }
       }).pipe(
         Effect.catchAll((e) =>
           Effect.sync(() => {
