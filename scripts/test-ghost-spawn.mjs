@@ -23,6 +23,7 @@ const HOUSE_URL = (process.env.AGENT_HOST_URL ?? "http://127.0.0.1:4000").replac
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN;
 const AGENT_HOST_TOKEN = process.env.AGENT_HOST_TOKEN;
 const GHOST_MIN_COUNT = Math.max(1, parseInt(process.env.GHOST_MIN_COUNT ?? "1", 10));
+const NPC_MIN_COUNT = Math.max(1, parseInt(process.env.NPC_MIN_COUNT ?? "1", 10));
 const WAIT_TIMEOUT_MS = Math.max(5000, parseInt(process.env.WAIT_TIMEOUT_MS ?? "60000", 10));
 
 if (!ADMIN_TOKEN) { console.error("[ghost-spawn] ERROR: ADMIN_TOKEN is required"); process.exit(1); }
@@ -93,29 +94,32 @@ log(`  session activated: ${sessionId}`);
 
 // ── Step 3: Wait for ghosts ───────────────────────────────────────────────────
 
-log(`Step 3/3: Waiting for ≥${GHOST_MIN_COUNT} random-agent ghost(s) (timeout ${WAIT_TIMEOUT_MS / 1000}s)`);
+log(`Step 3/3: Waiting for ≥${GHOST_MIN_COUNT} random-agent and ≥${NPC_MIN_COUNT} npc-agent ghost(s) (timeout ${WAIT_TIMEOUT_MS / 1000}s)`);
 const deadline = Date.now() + WAIT_TIMEOUT_MS;
-let ghostCount = 0;
+let randomCount = 0;
+let npcCount = 0;
 while (true) {
   try {
     const data = await getJson(`${HOUSE_URL}/v1/sessions`, {
       headers: { Authorization: `Bearer ${AGENT_HOST_TOKEN}` },
     });
     const sessions = data.sessions ?? [];
-    // agentId is "random-agent" in compose (AGENT_ID env) or "random-agent-<pod>" in K8s (HOSTNAME)
-    const active = sessions.filter(s => s.agentId?.startsWith("random-agent") && s.status !== "terminated");
-    ghostCount = active.length;
-    log(`  random-agent sessions: ${ghostCount}`);
-    if (ghostCount >= GHOST_MIN_COUNT) break;
+    // agentId is "<name>" in compose (AGENT_ID env) or "<name>-<pod>" in K8s (HOSTNAME)
+    const active = sessions.filter(s => s.status !== "terminated");
+    randomCount = active.filter(s => s.agentId?.startsWith("random-agent")).length;
+    npcCount = active.filter(s => s.agentId?.startsWith("npc-agent")).length;
+    log(`  random-agent sessions: ${randomCount}  npc-agent sessions: ${npcCount}`);
+    if (randomCount >= GHOST_MIN_COUNT && npcCount >= NPC_MIN_COUNT) break;
   } catch (e) {
     log(`  /v1/sessions error: ${e.message}`);
   }
   if (Date.now() >= deadline) {
-    fail("wait-for-ghosts", `Timed out. Got ${ghostCount} session(s), need ≥${GHOST_MIN_COUNT}. ` +
-      `Check agent-host logs for startup-reconciliation entries.`);
+    fail("wait-for-ghosts",
+      `Timed out. random-agent: ${randomCount}/${GHOST_MIN_COUNT}, npc-agent: ${npcCount}/${NPC_MIN_COUNT}. ` +
+      `Check agent-host logs for startup-reconciliation and registration-spawn-hook entries.`);
   }
   await new Promise(r => setTimeout(r, 4000));
 }
 
 log("");
-log(`✓ PASS — ${ghostCount} random-agent ghost(s) active after session activation.`);
+log(`✓ PASS — ${randomCount} random-agent and ${npcCount} npc-agent ghost(s) active after session activation.`);
