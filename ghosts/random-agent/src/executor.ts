@@ -72,6 +72,12 @@ export function isTaskNotFoundError(response: unknown): boolean {
   return typeof r["error"] === "string" && r["error"].toLowerCase().includes("task not found");
 }
 
+export function getActivePushDegradedGhosts(): string[] {
+  return [...pushStateByGhost.entries()]
+    .filter(([, s]) => s.status === "degraded")
+    .map(([id]) => id);
+}
+
 // ── Movement loop ─────────────────────────────────────────────────────────────
 
 export function activeLoopCount(): number {

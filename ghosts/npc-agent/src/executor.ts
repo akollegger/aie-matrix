@@ -52,6 +52,14 @@ let _tickMs = ACTION_TICK_MS;
 /** Per-character ghost fiber handles. Keyed by ghostId. */
 const actionFibersByGhostId = new Map<string, Fiber.RuntimeFiber<void, never>>();
 
+/** Degraded state per ghostId — set when MCP reconnect backoff begins, cleared on recover. */
+const degradedByGhostId = new Set<string>();
+
+/** Returns the set of ghostIds currently in degraded (reconnecting) state. */
+export function getDegradedGhosts(): ReadonlySet<string> {
+  return degradedByGhostId;
+}
+
 /** Active MCP clients per ghostId (set during fiber acquire, cleared during release). */
 const mcpByGhostId = new Map<string, GhostMcpClient>();
 
@@ -446,6 +454,7 @@ function ghostActionLoopOnce(
           // Emit recovered on first successful tick after a degraded period.
           if (wasRecoveringRef.value) {
             wasRecoveringRef.value = false;
+            degradedByGhostId.delete(ctx.ghostId);
             logRecovered(ctx.ghostId);
           }
         } else if (consecutiveFailures >= CONSECUTIVE_FAILURE_THRESHOLD) {
@@ -485,6 +494,7 @@ function ghostActionLoop(
         Schedule.recurWhile((_err: McpConnectionBroken) => {
           if (!wasRecoveringRef.value) {
             wasRecoveringRef.value = true;
+            degradedByGhostId.add(ctx.ghostId);
             logDegraded(ctx.ghostId);
           }
           return true;

@@ -5,7 +5,7 @@ import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
 import express, { type Request, type RequestHandler, type Response } from "express";
 import { buildWandererAgentCard } from "./buildAgentCard.js";
-import { RandomWandererExecutor, activeLoopCount } from "./executor.js";
+import { RandomWandererExecutor, activeLoopCount, getActivePushDegradedGhosts } from "./executor.js";
 import { startHeartbeat } from "./heartbeat.js";
 import { reconcileRoster } from "./reconciliation.js";
 
@@ -59,6 +59,11 @@ app.use(express.json({ limit: "4mb" }));
 
 // Health endpoint — required by compose depends_on and K8s probes
 app.get("/health", (_req, res) => {
+  const degradedGhosts = getActivePushDegradedGhosts();
+  if (degradedGhosts.length > 0) {
+    res.status(503).json({ status: "degraded", ghosts: degradedGhosts });
+    return;
+  }
   res.json({ status: "ok" });
 });
 

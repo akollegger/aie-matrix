@@ -113,13 +113,13 @@
 
 ### Tests
 
-- [ ] T022 [US3] Write unit test for startup reconciliation in `server/agent-host/src/__tests__/startupReconciliation.test.ts`: mock catalog with one `rosterAgent` entry (`healthStatus: "unverified"`); mock agent ping succeeds; mock active session exists → assert `spawnRosterForAgent` called; mock agent ping fails → assert entry marked `"inactive"` and `spawnRosterForAgent` NOT called; assert `AGENT_HOST_RECONCILIATION_WAIT_MS` env var logged as deprecated when present; assert agent ping succeeds but NO active session exists → `spawnRosterForAgent` NOT called (session-ended edge case)
-- [ ] T023 [P] [US3] Write integration test in `server/agent-host/src/catalog/__tests__/RedisCatalogService.integration.test.ts` (skeleton from T007): implement the persist → clear in-memory → restore round-trip test; implement TTL expiry test (write entry, `EXPIRE` key to 1s, wait 2s, reload → empty)
+- [X] T022 [US3] Write unit test for startup reconciliation in `server/agent-host/src/__tests__/startupReconciliation.test.ts`: mock catalog with one `rosterAgent` entry (`healthStatus: "unverified"`); mock agent ping succeeds; mock active session exists → assert `spawnRosterForAgent` called; mock agent ping fails → assert entry marked `"inactive"` and `spawnRosterForAgent` NOT called; assert `AGENT_HOST_RECONCILIATION_WAIT_MS` env var logged as deprecated when present; assert agent ping succeeds but NO active session exists → `spawnRosterForAgent` NOT called (session-ended edge case)
+- [X] T023 [P] [US3] Write integration test in `server/agent-host/src/catalog/__tests__/RedisCatalogService.integration.test.ts` (skeleton from T007): implement the persist → clear in-memory → restore round-trip test; implement TTL expiry test (write entry, `EXPIRE` key to 1s, wait 2s, reload → empty)
 
 ### Observability
 
-- [ ] T024 [P] [US3] Add structured log events to `server/agent-host/src/catalog/RedisCatalogService.ts`: `agent-host.catalog.redis-restore` (with entry count), `agent-host.catalog.redis-restore-empty`, `agent-host.catalog.redis-save-error` (non-fatal)
-- [ ] T025 [P] [US3] Add structured log events to startup reconciliation in `server/agent-host/src/main.ts`: `agent-host.startup-reconciliation.ping-ok` (with agentId), `agent-host.startup-reconciliation.ping-fail` (with agentId, marks inactive), `agent-host.startup-reconciliation.complete` (with spawned/inactive counts)
+- [X] T024 [P] [US3] Add structured log events to `server/agent-host/src/catalog/RedisCatalogService.ts`: `agent-host.catalog.redis-restore` (with entry count), `agent-host.catalog.redis-restore-empty`, `agent-host.catalog.redis-save-error` (non-fatal)
+- [X] T025 [P] [US3] Add structured log events to startup reconciliation in `server/agent-host/src/main.ts`: `agent-host.startup-reconciliation.ping-ok` (with agentId), `agent-host.startup-reconciliation.ping-fail` (with agentId, marks inactive), `agent-host.startup-reconciliation.complete` (with spawned/inactive counts)
 
 **Checkpoint**: `pnpm test` passes in `server/agent-host` (including T022, T023 when Redis available). After agent-host restart with Redis populated, catalog endpoint returns both agents immediately.
 
@@ -135,14 +135,14 @@
 
 ### Tests
 
-- [ ] T026 [P] [US4] Write unit tests for health endpoint in `ghosts/npc-agent/src/__tests__/health.test.ts`: mock `McpReconnectState` with `status: "degraded"` → assert health endpoint returns `{ status: "degraded" }`; mock `status: "ok"` → assert `{ status: "ok" }`
-- [ ] T027 [P] [US4] Write unit tests for health endpoint in `ghosts/random-agent/src/__tests__/health.test.ts`: mock heartbeat client in failing state → assert health endpoint returns `{ status: "degraded" }`; mock normal state → assert `{ status: "ok" }`
+- [X] T026 [P] [US4] Write unit tests for health endpoint in `ghosts/npc-agent/src/__tests__/health.test.ts`: mock `McpReconnectState` with `status: "degraded"` → assert health endpoint returns `{ status: "degraded" }`; mock `status: "ok"` → assert `{ status: "ok" }`
+- [X] T027 [P] [US4] Write unit tests for health endpoint in `ghosts/random-agent/src/__tests__/health.test.ts`: mock heartbeat client in failing state → assert health endpoint returns `{ status: "degraded" }`; mock normal state → assert `{ status: "ok" }`
 
 ### Implementation
 
-- [ ] T028 [US4] Update npc-agent health endpoint in `ghosts/npc-agent/src/agent.ts` (or equivalent health handler): return `{ status: "degraded", ghosts: [{ ghostId, status }] }` when any ghost has `McpReconnectState.status !== "ok"`; return `{ status: "ok" }` otherwise
-- [ ] T029 [US4] Update random-agent health endpoint in `ghosts/random-agent/src/agent.ts` (or equivalent): return `{ status: "degraded" }` when heartbeat client has accumulated ≥3 consecutive failures; return `{ status: "ok" }` otherwise
-- [ ] T030 [US4] Update agent-host health endpoint in `server/agent-host/src/app.ts`: return `{ status: "degraded", inactiveAgents: [agentId, ...] }` when any catalog entry has `healthStatus: "inactive"`; return `{ status: "ok" }` when all known agents are active or unverified
+- [X] T028 [US4] Update npc-agent health endpoint in `ghosts/npc-agent/src/agent.ts` (or equivalent health handler): return `{ status: "degraded", ghosts: [{ ghostId, status }] }` when any ghost has `McpReconnectState.status !== "ok"`; return `{ status: "ok" }` otherwise
+- [X] T029 [US4] Update random-agent health endpoint in `ghosts/random-agent/src/agent.ts` (or equivalent): return `{ status: "degraded" }` when heartbeat client has accumulated ≥3 consecutive failures; return `{ status: "ok" }` otherwise
+- [X] T030 [US4] Update agent-host health endpoint in `server/agent-host/src/app.ts`: return `{ status: "degraded", inactiveAgents: [agentId, ...] }` when any catalog entry has `healthStatus: "inactive"`; return `{ status: "ok" }` when all known agents are active or unverified
 
 **Checkpoint**: All three services' `/health` endpoints reflect real degraded state. `pnpm test` passes across all three packages.
 
@@ -150,11 +150,11 @@
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T031 [P] Update `docs/architecture.md`: add section documenting the heartbeat pattern, Redis catalog durability, and per-ghost MCP reconnect strategy
-- [ ] T032 [P] Update `CLAUDE.md` Recent Changes section: add 035-resilient-service-components entry
-- [ ] T033 [P] Review and update `deploy/staging/docker-compose.yml` and any Kubernetes manifests: add `REDIS_URL` env var to agent-host deployment; verify liveness probe does not fire during MCP backoff window (probe timeout > max backoff cap of 60s)
-- [ ] T034 Run full validation: `pnpm run build` from workspace root (hard gate per constitution); `pnpm test` across all affected packages; `/speckit-verify` passes with GO verdict before opening PR
-- [ ] T035 Run chaos runbook from `specs/035-resilient-service-components/quickstart.md` against staging: all 4 scenarios pass; document results in PR description
+- [X] T031 [P] Update `docs/architecture.md`: add section documenting the heartbeat pattern, Redis catalog durability, and per-ghost MCP reconnect strategy
+- [X] T032 [P] Update `CLAUDE.md` Recent Changes section: add 035-resilient-service-components entry
+- [X] T033 [P] Review and update `deploy/staging/docker-compose.yml` and any Kubernetes manifests: add `REDIS_URL` env var to agent-host deployment; verify liveness probe does not fire during MCP backoff window (probe timeout > max backoff cap of 60s)
+- [X] T034 Run full validation: `pnpm run build` from workspace root (hard gate per constitution); `pnpm test` across all affected packages; `/speckit-verify` passes with GO verdict before opening PR
+- [X] T035 Run chaos runbook from `specs/035-resilient-service-components/quickstart.md` against staging: all 4 scenarios pass; document results in PR description
 
 ---
 

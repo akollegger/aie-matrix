@@ -133,17 +133,36 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
   });
   app.options("*", (_req, res) => res.status(204).end());
 
-  // IC-001: /health — checks world-api reachability; HTTP 200 = healthy, 503 = degraded
-  app.get("/health", async (_req, res) => {
-    let worldApiOk = false;
-    try {
-      const r = await fetch(`${worldApiUrl}/health`, { signal: AbortSignal.timeout(3000) });
-      worldApiOk = r.status === 200;
-    } catch {
-      worldApiOk = false;
-    }
-    const status = worldApiOk ? "ok" : "degraded";
-    res.status(worldApiOk ? 200 : 503).json({ status, checks: { "world-api": worldApiOk } });
+  // IC-001: /health — checks world-api reachability and catalog agent health
+  app.get("/health", (_req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        const worldApiOk: boolean = yield* Effect.promise(async () => {
+          try {
+            const r = await fetch(`${worldApiUrl}/health`, { signal: AbortSignal.timeout(3000) });
+            return r.status === 200;
+          } catch {
+            return false;
+          }
+        });
+
+        const catalog = yield* CatalogService;
+        const catalogFile = yield* catalog.load();
+        const inactiveAgents = Object.entries(catalogFile.agents)
+          .filter(([, e]) => e.kind !== "mini-game" && (e as { healthStatus?: string }).healthStatus === "inactive")
+          .map(([id]) => id);
+
+        const allOk = worldApiOk && inactiveAgents.length === 0;
+        const httpStatus = allOk ? 200 : 503;
+        res.status(httpStatus).json({
+          status: allOk ? "ok" : "degraded",
+          checks: { "world-api": worldApiOk },
+          ...(inactiveAgents.length > 0 ? { inactiveAgents } : {}),
+        });
+      }).pipe(Effect.catchAll((e) => Effect.sync(() => {
+        res.status(500).json({ status: "error", message: String(e) });
+      }))),
+    );
   });
 
   /**
