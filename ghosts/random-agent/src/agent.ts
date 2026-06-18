@@ -5,7 +5,9 @@ import { DefaultRequestHandler, InMemoryTaskStore } from "@a2a-js/sdk/server";
 import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/server/express";
 import express, { type Request, type RequestHandler, type Response } from "express";
 import { buildWandererAgentCard } from "./buildAgentCard.js";
-import { RandomWandererExecutor } from "./executor.js";
+import { RandomWandererExecutor, activeLoopCount, getActivePushDegradedGhosts } from "./executor.js";
+import { startHeartbeat } from "./heartbeat.js";
+import { reconcileRoster } from "./reconciliation.js";
 
 loadRootEnv();
 const log = createLogger("random-agent");
@@ -27,6 +29,7 @@ const publicBase = (process.env.RANDOM_AGENT_PUBLIC_BASE_URL ?? `http://127.0.0.
   "",
 );
 const agentId = process.env.AGENT_ID ?? process.env.HOSTNAME ?? "random-agent-local";
+const worldApiUrl = (process.env.WORLD_API_URL ?? "").replace(/\/$/, "");
 const registerTimeoutMs = (() => {
   const raw = process.env.AGENT_REGISTER_TIMEOUT;
   if (!raw) return 120_000;
@@ -56,6 +59,11 @@ app.use(express.json({ limit: "4mb" }));
 
 // Health endpoint — required by compose depends_on and K8s probes
 app.get("/health", (_req, res) => {
+  const degradedGhosts = getActivePushDegradedGhosts();
+  if (degradedGhosts.length > 0) {
+    res.status(503).json({ status: "degraded", ghosts: degradedGhosts });
+    return;
+  }
   res.json({ status: "ok" });
 });
 
@@ -76,6 +84,38 @@ app.use(
   requireToken,
   jsonRpcHandler({ requestHandler, userBuilder: UserBuilder.noAuthentication }),
 );
+
+function startHeartbeatAfterRegistration(): void {
+  if (!agentHostUrl) return;
+  const raw = process.env.RANDOM_AGENT_COUNT;
+  const parsed = raw !== undefined && raw.trim() !== "" ? parseInt(raw, 10) : NaN;
+  const targetCount = Math.max(0, Number.isFinite(parsed) ? parsed : 10);
+
+  startHeartbeat({
+    agentId,
+    agentHostUrl,
+    token,
+    onSessionChange: (newSessionId) => {
+      log.info({ kind: "random-agent.session-change", agentId, newSessionId });
+      if (!worldApiUrl) return;
+      void reconcileRoster({
+        worldApiUrl,
+        agentId,
+        token,
+        targetCount,
+        activeLoopsCount: activeLoopCount(),
+        spawnGhost: async () => {
+          // Ask agent-host to spawn one more ghost for this roster agent
+          await fetch(`${agentHostUrl}/v1/catalog/${agentId}/spawn`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          });
+          return { ghostId: "pending" };
+        },
+      });
+    },
+  });
+}
 
 async function register(): Promise<void> {
   if (!agentHostUrl) {
@@ -108,11 +148,13 @@ async function register(): Promise<void> {
       });
       if (res.ok || res.status === 201) {
         log.info({ kind: "registered", agentId });
+        startHeartbeatAfterRegistration();
         return;
       }
       if (res.status === 409) {
         // Already registered (race or restart without clean deregister) — treat as success
         console.warn(JSON.stringify({ kind: "random-agent.already-registered", agentId }));
+        startHeartbeatAfterRegistration();
         return;
       }
       // 4xx client error that isn't 409 — unlikely to recover, fall through to retry

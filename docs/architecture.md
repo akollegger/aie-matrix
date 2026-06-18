@@ -237,6 +237,33 @@ The [Minimal PoC](../specs/001-minimal-poc/) combines several packages in **one 
 
 ---
 
+---
+
+## Resilience Patterns (spec-035)
+
+Three complementary patterns keep ghosts alive through pod restarts and network partitions.
+
+### Redis Catalog Durability (agent-host)
+
+`agent-host` persists its agent catalog to Redis (`agent-host:catalog`, 24h TTL) via `RedisCatalogService`. On startup, it restores the catalog, pings each registered `rosterAgent`, and triggers `spawnRosterForAgent` for reachable agents when a session is active. Unreachable agents are marked `healthStatus: "inactive"` (retained, not deleted). Falls back to file-backed catalog when `REDIS_URL` is unset.
+
+### Heartbeat Client (random-agent → agent-host)
+
+`random-agent` sends `POST /v1/catalog/:agentId/heartbeat` every 30s. The response includes `sessionActive` and `sessionId`. When `sessionId` changes, `random-agent` calls `reconcileRoster()` which queries the world API for existing ghosts, computes the delta, and spawns only the missing ghosts (idempotent). Push failures are counted; after `PUSH_FAILURE_THRESHOLD` consecutive failures the agent logs `random-agent.push.degraded`; on recovery it logs `random-agent.push.recovered`.
+
+### Per-Ghost MCP Reconnect (npc-agent)
+
+Each NPC ghost fiber wraps its MCP connect+tick loop with `Effect.retry(makeReconnectSchedule())`. The schedule uses exponential backoff starting at 2s, doubling each attempt, capping at 60s. After `CONSECUTIVE_FAILURE_THRESHOLD` (5) consecutive tick failures the inner loop fails with `McpConnectionBroken`, triggering a retry. State transitions emit exactly one `npc-agent.mcp.degraded` / `npc-agent.mcp.recovered` structured event per ghost per transition. On retry schedule exhaustion, `npc-agent.mcp.failed-permanently` is emitted and the fiber exits cleanly.
+
+### Health Endpoint Semantics
+
+All three services expose `GET /health`:
+- **agent-host**: returns `{ status: "degraded", inactiveAgents: [...] }` when any catalog entry has `healthStatus: "inactive"`; `{ status: "ok" }` otherwise.
+- **npc-agent**: returns `{ status: "degraded", ghosts: [...] }` when any ghost fiber is in reconnect backoff; `{ status: "ok" }` otherwise.
+- **random-agent**: returns `{ status: "degraded", ghosts: [...] }` when push failures have exceeded the threshold; `{ status: "ok" }` otherwise.
+
+---
+
 ## Proposals
 
 See [proposals/](../proposals/) for RFCs and ADRs.  

@@ -169,7 +169,7 @@ describe("spawn-replace fiber lifecycle", () => {
 // ── Area 3: MCP connect failure ───────────────────────────────────────────────
 
 describe("MCP connect failure", () => {
-  it("connect failure causes the loop to exit, not hang", async () => {
+  it("connect failure causes the fiber to enter reconnect backoff (not exit permanently)", async () => {
     vi.mocked(GhostMcpClient).mockImplementationOnce(() => ({
       connect: vi.fn().mockRejectedValue(new Error("ECONNREFUSED")),
       disconnect: vi.fn().mockResolvedValue(undefined),
@@ -179,12 +179,13 @@ describe("MCP connect failure", () => {
     await _test.launchGhostLoop(makeSpawnCtx("ghost-cf"), makeCharDef("char-cf"));
     const fiber = _test.getFiber("ghost-cf")!;
 
-    // Give the fiber time to attempt connect, fail, log, and exit.
+    // Give the fiber time to attempt connect, fail, and enter backoff sleep.
     await new Promise((r) => setTimeout(r, 100));
 
-    // Fiber should have exited — poll returns Some(_) for a completed/interrupted fiber.
+    // Fiber should still be alive (in backoff sleep) — spec-035 retry wraps connect failures.
+    // The fiber exits only after the retry schedule is exhausted (multiple minutes), not immediately.
     const poll = await Effect.runPromise(Fiber.poll(fiber));
-    expect(poll._tag).toBe("Some");
+    expect(poll._tag).toBe("None");
   });
 
   it("connect failure for one ghost does not affect sibling fibers", async () => {
@@ -208,8 +209,8 @@ describe("MCP connect failure", () => {
 
     const badFiber = _test.getFiber("ghost-bad")!;
     const badPoll = await Effect.runPromise(Fiber.poll(badFiber));
-    // ghost-bad exited after connect failed.
-    expect(badPoll._tag).toBe("Some");
+    // ghost-bad is in reconnect backoff — fiber still alive (spec-035).
+    expect(badPoll._tag).toBe("None");
   });
 });
 

@@ -6,7 +6,7 @@ import { agentCardHandler, jsonRpcHandler, UserBuilder } from "@a2a-js/sdk/serve
 import express, { type Request, type RequestHandler, type Response } from "express";
 import { join } from "node:path";
 import { buildNpcAgentCard } from "./buildAgentCard.js";
-import { NpcAgentExecutor, initExecutor, getDialogStateSnapshot } from "./executor.js";
+import { NpcAgentExecutor, initExecutor, getDialogStateSnapshot, getDegradedGhosts } from "./executor.js";
 import { loadCatalog } from "./catalog/catalog-loader.js";
 import type { NpcAgentCatalog } from "./types.js";
 
@@ -56,6 +56,12 @@ const app = express();
 app.use(express.json({ limit: "4mb" }));
 
 app.get("/health", (_req, res) => {
+  const degraded = getDegradedGhosts();
+  if (degraded.size > 0) {
+    const ghosts = [...degraded].map((ghostId) => ({ ghostId, status: "degraded" }));
+    res.status(503).json({ status: "degraded", ghosts });
+    return;
+  }
   res.json({ status: "ok" });
 });
 

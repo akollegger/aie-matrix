@@ -6,7 +6,7 @@ import { CatalogService } from "./catalog/CatalogService.js";
 import { AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { McpProxyService } from "./mcp-proxy/McpProxyService.js";
 import { ActiveSessionsPreventDeregister, Unauthorized } from "./errors.js";
-import type { AgentSession, WorldCredential } from "./types.js";
+import type { AgentSession, HeartbeatRequest, HeartbeatResponse, WorldCredential } from "./types.js";
 import { BarnacleSupervisor } from "./barnacle/index.js";
 import {
   BARNACLE_COMPLETE_SCHEMA,
@@ -133,17 +133,36 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
   });
   app.options("*", (_req, res) => res.status(204).end());
 
-  // IC-001: /health — checks world-api reachability; HTTP 200 = healthy, 503 = degraded
-  app.get("/health", async (_req, res) => {
-    let worldApiOk = false;
-    try {
-      const r = await fetch(`${worldApiUrl}/health`, { signal: AbortSignal.timeout(3000) });
-      worldApiOk = r.status === 200;
-    } catch {
-      worldApiOk = false;
-    }
-    const status = worldApiOk ? "ok" : "degraded";
-    res.status(worldApiOk ? 200 : 503).json({ status, checks: { "world-api": worldApiOk } });
+  // IC-001: /health — checks world-api reachability and catalog agent health
+  app.get("/health", (_req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        const worldApiOk: boolean = yield* Effect.promise(async () => {
+          try {
+            const r = await fetch(`${worldApiUrl}/health`, { signal: AbortSignal.timeout(3000) });
+            return r.status === 200;
+          } catch {
+            return false;
+          }
+        });
+
+        const catalog = yield* CatalogService;
+        const catalogFile = yield* catalog.load();
+        const inactiveAgents = Object.entries(catalogFile.agents)
+          .filter(([, e]) => e.kind !== "mini-game" && (e as { healthStatus?: string }).healthStatus === "inactive")
+          .map(([id]) => id);
+
+        const allOk = worldApiOk && inactiveAgents.length === 0;
+        const httpStatus = allOk ? 200 : 503;
+        res.status(httpStatus).json({
+          status: allOk ? "ok" : "degraded",
+          checks: { "world-api": worldApiOk },
+          ...(inactiveAgents.length > 0 ? { inactiveAgents } : {}),
+        });
+      }).pipe(Effect.catchAll((e) => Effect.sync(() => {
+        res.status(500).json({ status: "error", message: String(e) });
+      }))),
+    );
   });
 
   /**
@@ -182,13 +201,22 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           ? body.lastEventIso
           : new Date().toISOString(),
     };
-    void runtime.runPromise(
+    runtime.runPromise(
       Effect.gen(function* () {
         const supervisor = yield* BarnacleSupervisor;
         yield* supervisor.onCompleteReceived(complete);
       }),
-    );
-    res.status(204).end();
+    ).then(() => {
+      res.status(204).end();
+    }).catch((e: unknown) => {
+      console.error(JSON.stringify({
+        kind: "agent-host.barnacle-complete.error",
+        sessionId: complete.sessionId,
+        ghostId: complete.ghostId,
+        message: e instanceof Error ? e.message : String(e),
+      }));
+      if (!res.headersSent) res.status(500).json({ error: "internal error processing barnacle complete" });
+    });
   });
 
   /**
@@ -319,6 +347,60 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           return;
         }
         res.status(200).type("json").send(JSON.stringify(entry.agentCard, null, 2) + "\n");
+      }).pipe(
+        Effect.catchAll((e) =>
+          Effect.sync(() => {
+            const m = mapHouseError(e);
+            res.status(m.status).json(m.body);
+          }),
+        ),
+      ),
+    );
+  });
+
+  /**
+   * IC-001 (spec-035): Lightweight liveness heartbeat. Separate from
+   * registration — heartbeat is ~100 bytes; registration fetches the full
+   * agent card. Returns current session state so the agent can self-trigger
+   * roster reconciliation when the session ID changes.
+   */
+  app.post("/v1/catalog/:agentId/heartbeat", (req, res) => {
+    void runtime.runPromise(
+      Effect.gen(function* () {
+        yield* requireBearer(req);
+        const catalog = yield* CatalogService;
+        const supervisor = yield* AgentSupervisor;
+        const { agentId } = req.params;
+        const body = req.body as HeartbeatRequest | null;
+
+        // Validate the entry exists
+        const entry = yield* catalog.get(agentId!);
+
+        // Update lastSeenAt and healthStatus on the entry
+        const ts =
+          typeof body?.ts === "string" ? body.ts : new Date().toISOString();
+        const catalogFile = yield* catalog.load();
+        if (entry.kind !== "mini-game") {
+          const updated = {
+            ...entry,
+            lastSeenAt: ts,
+            healthStatus: "active" as const,
+          };
+          yield* catalog.save({
+            agents: { ...catalogFile.agents, [agentId!]: updated },
+          });
+        }
+
+        // Detect active session (cached at ≤10s via world-api live endpoint)
+        const sessionIds = supervisor.listSessionIdsByAgent(agentId!);
+        const sessionActive = sessionIds.length > 0;
+        const sessionId = sessionIds[0];
+
+        const responseBody: HeartbeatResponse = sessionActive
+          ? { sessionActive: true, sessionId }
+          : { sessionActive: false };
+
+        res.status(200).json(responseBody);
       }).pipe(
         Effect.catchAll((e) =>
           Effect.sync(() => {

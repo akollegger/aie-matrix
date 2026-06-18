@@ -2,7 +2,14 @@ import { createLogger } from "@aie-matrix/logger";
 import type { Message, Task, TaskStatusUpdateEvent } from "@a2a-js/sdk";
 import { AgentExecutor, type ExecutionEventBus, type RequestContext } from "@a2a-js/sdk/server";
 import { randomUUID } from "node:crypto";
-import { Effect, Fiber, Duration, Match } from "effect";
+import { Effect, Fiber, Duration, Match, Schedule } from "effect";
+import {
+  CONSECUTIVE_FAILURE_THRESHOLD,
+  makeReconnectSchedule,
+  McpConnectionBroken,
+  logDegraded,
+  logRecovered,
+} from "./reconnect.js";
 import { GhostMcpClient } from "@aie-matrix/ghost-ts-client";
 import type { SpawnContext } from "./spawn-types.js";
 import { asWorldEvent, type WorldEvent } from "./world-event.js";
@@ -44,6 +51,14 @@ let _tickMs = ACTION_TICK_MS;
 
 /** Per-character ghost fiber handles. Keyed by ghostId. */
 const actionFibersByGhostId = new Map<string, Fiber.RuntimeFiber<void, never>>();
+
+/** Degraded state per ghostId — set when MCP reconnect backoff begins, cleared on recover. */
+const degradedByGhostId = new Set<string>();
+
+/** Returns the set of ghostIds currently in degraded (reconnecting) state. */
+export function getDegradedGhosts(): ReadonlySet<string> {
+  return degradedByGhostId;
+}
 
 /** Active MCP clients per ghostId (set during fiber acquire, cleared during release). */
 const mcpByGhostId = new Map<string, GhostMcpClient>();
@@ -362,18 +377,16 @@ async function handleDialogMessage(
 // ── Per-character action loop (Effect-based) ──────────────────────────────────
 
 /**
- * Returns an Effect that connects an MCP client, runs behavior ticks every
- * ACTION_TICK_MS until interrupted, then disconnects. The MCP client is stored
- * in mcpByGhostId for use by the dialog handler while the fiber is alive.
- *
- * Tick failures are non-fatal (FR-005): logged and skipped; the loop continues.
- * Connect failures propagate to the outer catchAll and are logged.
- * Fiber interruption triggers the acquireRelease finalizer (disconnect + map cleanup).
+ * One attempt of the ghost action loop (spec-035 T015).
+ * Connects an MCP client, runs ticks until CONSECUTIVE_FAILURE_THRESHOLD
+ * is reached, then disconnects and fails with McpConnectionBroken so the
+ * outer retry can re-acquire a fresh connection.
  */
-function ghostActionLoop(
+function ghostActionLoopOnce(
   ctx: SpawnContext,
   characterDef: CharacterDefinition,
-): Effect.Effect<void, never> {
+  wasRecoveringRef: { value: boolean },
+): Effect.Effect<void, McpConnectionBroken> {
   return Effect.scoped(
     Effect.gen(function* () {
       const mcp = yield* Effect.acquireRelease(
@@ -390,7 +403,10 @@ function ghostActionLoop(
             mcpByGhostId.set(ctx.ghostId, client);
             return client;
           },
-          catch: (e) => (e instanceof Error ? e : new Error(String(e))),
+          catch: (e) => new McpConnectionBroken({
+            ghostId: ctx.ghostId,
+            reason: e instanceof Error ? e.message : String(e),
+          }),
         }),
         // Release: disconnect unconditionally on fiber exit or interruption.
         (client) =>
@@ -404,8 +420,8 @@ function ghostActionLoop(
           ),
       );
 
-      // Single tick: dispatch to behavior-specific Effect, provide the MCP service, then sleep.
-      // Tick failure is non-fatal: logged and skipped (FR-005).
+      let consecutiveFailures = 0;
+
       const tick = Effect.gen(function* () {
         const tickEffect = Match.value(characterDef.behaviorKind).pipe(
           Match.when("broker",      () => brokerTick(ctx.ghostId)),
@@ -414,34 +430,84 @@ function ghostActionLoop(
           Match.when("contestant",  () => contestantTick(ctx.ghostId)),
           Match.exhaustive,
         );
-        yield* tickEffect.pipe(
+        const tickResult = yield* tickEffect.pipe(
           Effect.provide(GhostMcpServiceLive(mcp)),
+          Effect.map(() => "ok" as const),
           Effect.catchAll((e) =>
-            Effect.sync(() =>
+            Effect.sync(() => {
+              consecutiveFailures++;
               console.warn(
                 JSON.stringify({
                   kind: "npc-agent.character.tick-error",
                   ghostId: ctx.ghostId,
+                  consecutiveFailures,
                   error: String(e),
                 }),
-              ),
-            ),
+              );
+              return "err" as const;
+            }),
           ),
         );
+
+        if (tickResult === "ok") {
+          consecutiveFailures = 0;
+          // Emit recovered on first successful tick after a degraded period.
+          if (wasRecoveringRef.value) {
+            wasRecoveringRef.value = false;
+            degradedByGhostId.delete(ctx.ghostId);
+            logRecovered(ctx.ghostId);
+          }
+        } else if (consecutiveFailures >= CONSECUTIVE_FAILURE_THRESHOLD) {
+          yield* Effect.fail(
+            new McpConnectionBroken({
+              ghostId: ctx.ghostId,
+              reason: `${consecutiveFailures} consecutive tick failures`,
+            }),
+          );
+        }
+
         yield* Effect.sleep(Duration.millis(_tickMs));
       });
 
       yield* Effect.forever(tick);
     }),
-  ).pipe(
-    Effect.asVoid,
+  );
+}
+
+/**
+ * Full ghost action loop with MCP reconnect (spec-035 T016).
+ * Wraps `ghostActionLoopOnce` with exponential-backoff retry.
+ * Emits `npc-agent.mcp.degraded` once when threshold is hit and
+ * `npc-agent.mcp.recovered` once on the first successful tick after reconnect.
+ * On retry schedule exhaustion, emits `npc-agent.mcp.failed-permanently`.
+ */
+function ghostActionLoop(
+  ctx: SpawnContext,
+  characterDef: CharacterDefinition,
+): Effect.Effect<void, never> {
+  const wasRecoveringRef = { value: false };
+
+  return ghostActionLoopOnce(ctx, characterDef, wasRecoveringRef).pipe(
+    Effect.retry(
+      Schedule.intersect(
+        makeReconnectSchedule(),
+        Schedule.recurWhile((_err: McpConnectionBroken) => {
+          if (!wasRecoveringRef.value) {
+            wasRecoveringRef.value = true;
+            degradedByGhostId.add(ctx.ghostId);
+            logDegraded(ctx.ghostId);
+          }
+          return true;
+        }),
+      ) as unknown as Schedule.Schedule<unknown, McpConnectionBroken, never>,
+    ),
     Effect.catchAll((e) =>
       Effect.sync(() =>
         console.error(
           JSON.stringify({
-            kind: "npc-agent.character.loop-error",
+            event: "npc-agent.mcp.failed-permanently",
             ghostId: ctx.ghostId,
-            error: e instanceof Error ? e.message : String(e),
+            error: e instanceof McpConnectionBroken ? e.reason : String(e),
           }),
         ),
       ),

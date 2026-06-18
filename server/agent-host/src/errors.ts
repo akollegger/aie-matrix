@@ -64,6 +64,8 @@ export type HouseHttpError =
   | AgentNotFound
   | SpawnFailed
   | SpawnTimeout
+  | HealthCheckTimeout
+  | RetryLimitExceeded
   | CapabilityUnmet
   | Unauthorized
   | ActiveSessionsPreventDeregister
