@@ -39,7 +39,8 @@ jobs:
       AIE_MATRIX_TCK_MODE: "1"
       # Point npc-agent at the committed catalog (deploy/staging/catalog/ is empty by design).
       # Must start with ./ so Docker Compose treats it as a host path, not a named volume.
-      NPC_CATALOG_DIR: ./ghosts/npc-agent/catalog
+      # Path is relative to the compose file's directory (deploy/staging/), hence ../../.
+      NPC_CATALOG_DIR: ../../ghosts/npc-agent/catalog
 
     steps:
       - uses: actions/checkout@v5
