@@ -1,5 +1,5 @@
 import type { Redis } from "ioredis";
-import { Effect, Layer } from "effect";
+import { Effect, Exit, Layer } from "effect";
 import type { CatalogFile, ICatalogService } from "./CatalogService.js";
 import { CatalogService, CatalogServiceImpl } from "./CatalogService.js";
 import {
@@ -114,7 +114,10 @@ export class RedisCatalogServiceImpl implements ICatalogService {
   }): Effect.Effect<
     import("../types.js").CatalogEntry,
     AgentCardInvalid | AgentAlreadyRegistered | AgentCardFetchFailed
-  > => Effect.promise(() => this.withLock(() => Effect.runPromise(this.delegate().register(input))));
+  > => Effect.flatMap(
+    Effect.promise(() => this.withLock(() => Effect.runPromiseExit(this.delegate().register(input)))),
+    (exit) => Exit.match(exit, { onSuccess: Effect.succeed, onFailure: Effect.failCause }),
+  );
 
   registerMiniGame = (input: {
     agentId: string;
@@ -124,7 +127,10 @@ export class RedisCatalogServiceImpl implements ICatalogService {
     builtIn: boolean;
     about?: string;
   }): Effect.Effect<import("../types.js").CatalogEntry, AgentAlreadyRegistered> =>
-    Effect.promise(() => this.withLock(() => Effect.runPromise(this.delegate().registerMiniGame(input))));
+    Effect.flatMap(
+      Effect.promise(() => this.withLock(() => Effect.runPromiseExit(this.delegate().registerMiniGame(input)))),
+      (exit) => Exit.match(exit, { onSuccess: Effect.succeed, onFailure: Effect.failCause }),
+    );
 
   list = (): Effect.Effect<
     ReadonlyArray<{
@@ -146,7 +152,10 @@ export class RedisCatalogServiceImpl implements ICatalogService {
   > => this.delegate().findMiniGameForPlatformClass(platformClass);
 
   deregister = (agentId: string): Effect.Effect<void, AgentNotFound> =>
-    Effect.promise(() => this.withLock(() => Effect.runPromise(this.delegate().deregister(agentId))));
+    Effect.flatMap(
+      Effect.promise(() => this.withLock(() => Effect.runPromiseExit(this.delegate().deregister(agentId)))),
+      (exit) => Exit.match(exit, { onSuccess: Effect.succeed, onFailure: Effect.failCause }),
+    );
 }
 
 export const makeRedisCatalogLayer = (redis: Redis): Layer.Layer<CatalogService> =>
