@@ -106,6 +106,7 @@ const matrixMode = (process.env.AIE_MATRIX_MODE ?? "development") as
   | "production";
 
 log.info({ kind: "mode", mode: matrixMode });
+const startupT = performance.now();
 
 const mapPathRaw = process.env.AIE_MATRIX_MAP;
 const _mapPathFallback = join(repoRoot, "maps/moscone/moscone-aiewf-mini.map.gram");
@@ -569,6 +570,7 @@ async function main(): Promise<void> {
   // - Archived map → skip (admin decision respected across deploys)
   // Individual publish failures are logged but do not abort startup.
   if (matrixMode !== "development") {
+    const mapSyncT = performance.now();
     log.info({ kind: "map-sync-start", message: "scanning maps/ for unpublished maps" });
     const syncSummary = await runtime.runPromise(
       Effect.gen(function* () {
@@ -627,7 +629,7 @@ async function main(): Promise<void> {
       console.error("[aie-matrix] startup-map-sync failed:", e);
       return { total: 0, synced: 0, skipped: 0, failed: 0 };
     });
-    log.info({ kind: "map-sync-summary", ...syncSummary });
+    log.info({ kind: "map-sync-summary", ...syncSummary, elapsedMs: Math.round(performance.now() - mapSyncT) });
   }
 
   // T025 — Session binding for staging/production (skip in development mode where
@@ -693,6 +695,7 @@ async function main(): Promise<void> {
     mapHttpError: (e: unknown) => errorToResponse(e as HttpMappingError),
   });
 
+  log.info({ kind: "startup-complete", elapsedMs: Math.round(performance.now() - startupT) });
   spectatorMetaReady = true;
 
   httpServer.on("request", (req, res) => {
