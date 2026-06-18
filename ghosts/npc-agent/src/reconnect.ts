@@ -1,4 +1,4 @@
-import { Data, Schedule } from "effect";
+import { Data, Duration, Schedule } from "effect";
 
 /** Number of consecutive tick failures before a ghost's loop exits and reconnects. */
 export const CONSECUTIVE_FAILURE_THRESHOLD = 5;
@@ -11,13 +11,17 @@ export class McpConnectionBroken extends Data.TaggedError("McpConnectionBroken")
 
 /**
  * Exponential backoff schedule for MCP reconnect attempts.
- * Starts at 2 seconds, doubles each attempt, caps at 60 seconds.
+ * Starts at 2 seconds, doubles each attempt, caps at 60 seconds per attempt.
  * There is no hard retry limit — the loop continues until the ghost
  * fiber is interrupted by a new spawn or pod shutdown.
+ *
+ * Schedule.union takes the minimum delay at each step, so once the exponential
+ * grows beyond 60 s the spaced schedule wins and holds it at 60 s.
  */
 export function makeReconnectSchedule(): Schedule.Schedule<unknown, McpConnectionBroken, never> {
-  return Schedule.exponential("2 seconds", 2).pipe(
-    Schedule.upTo("60 seconds"),
+  return Schedule.union(
+    Schedule.exponential("2 seconds", 2),
+    Schedule.spaced(Duration.seconds(60)),
   ) as unknown as Schedule.Schedule<unknown, McpConnectionBroken, never>;
 }
 

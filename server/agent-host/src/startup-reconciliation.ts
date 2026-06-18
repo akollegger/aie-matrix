@@ -78,6 +78,8 @@ export async function runStartupReconciliation(
   // 3. Eagerly ping each rosterAgent; spawn only if reachable
   let spawned = 0;
   let inactive = 0;
+  // Accumulate mutations so each catalog.save includes all prior updates
+  const updatedAgents = { ...catalogFile.agents };
   for (const [agentId, entry] of rosterEntries) {
     try {
       const pingRes = await fetch(`${entry.baseUrl}/health`, {
@@ -87,7 +89,8 @@ export async function runStartupReconciliation(
       log.info({ kind: "agent-host.startup-reconciliation.ping-ok", agentId });
     } catch (pingErr) {
       const updatedEntry = { ...entry, healthStatus: "inactive" as const };
-      await catalog.save({ agents: { ...catalogFile.agents, [agentId]: updatedEntry } });
+      updatedAgents[agentId] = updatedEntry;
+      await catalog.save({ agents: updatedAgents });
       log.info({
         kind: "agent-host.startup-reconciliation.ping-fail",
         agentId,

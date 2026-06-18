@@ -201,13 +201,22 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           ? body.lastEventIso
           : new Date().toISOString(),
     };
-    void runtime.runPromise(
+    runtime.runPromise(
       Effect.gen(function* () {
         const supervisor = yield* BarnacleSupervisor;
         yield* supervisor.onCompleteReceived(complete);
       }),
-    );
-    res.status(204).end();
+    ).then(() => {
+      res.status(204).end();
+    }).catch((e: unknown) => {
+      console.error(JSON.stringify({
+        kind: "agent-host.barnacle-complete.error",
+        sessionId: complete.sessionId,
+        ghostId: complete.ghostId,
+        message: e instanceof Error ? e.message : String(e),
+      }));
+      if (!res.headersSent) res.status(500).json({ error: "internal error processing barnacle complete" });
+    });
   });
 
   /**

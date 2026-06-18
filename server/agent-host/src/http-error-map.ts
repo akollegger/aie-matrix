@@ -5,7 +5,9 @@ import {
   AgentCardInvalid,
   AgentNotFound,
   CapabilityUnmet,
+  HealthCheckTimeout,
   McpToolRejected,
+  RetryLimitExceeded,
   SessionNotFound,
   SpawnFailed,
   SpawnTimeout,
@@ -38,6 +40,12 @@ export function mapHouseError(e: unknown): { status: number; body: ErrBody } {
   }
   if (e instanceof SpawnTimeout) {
     return { status: 503, body: { error: e.message, code: "AGENT_UNREACHABLE" } };
+  }
+  if (e instanceof HealthCheckTimeout) {
+    return { status: 503, body: { error: `health check timed out for session ${e.sessionId}`, code: "HEALTH_CHECK_TIMEOUT" } };
+  }
+  if (e instanceof RetryLimitExceeded) {
+    return { status: 503, body: { error: `retry limit exceeded for session ${e.sessionId}`, code: "RETRY_LIMIT_EXCEEDED" } };
   }
   if (e instanceof CapabilityUnmet) {
     return {

@@ -45,6 +45,7 @@ coverage/
 .env.*
 !.env.example
 !.env.staging.example
+!.env.test.example
 
 # --- Python ---
 __pycache__/

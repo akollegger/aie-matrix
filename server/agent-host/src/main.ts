@@ -5,6 +5,7 @@ import { A2AHostServiceLive } from "./a2a-host/A2AHostService.js";
 import { McpProxyServiceLive } from "./mcp-proxy/mcp-proxy.layer.js";
 import { CatalogService } from "./catalog/CatalogService.js";
 import { makeRedisCatalogLayerFromEnv } from "./catalog/RedisCatalogService.js";
+import { runStartupReconciliation } from "./startup-reconciliation.js";
 import { readHouseCapabilityManifest } from "./house-capabilities.js";
 import { AgentSupervisorLayer, AgentSupervisor } from "./supervisor/SupervisorService.js";
 import { createApp } from "./app.js";
@@ -168,86 +169,18 @@ const server = app.listen(port, "0.0.0.0", () => {
     }
     void (async () => {
       try {
-        // 1. Check for an active world session
-        const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
-          signal: AbortSignal.timeout(10_000),
-        });
-        if (!liveRes.ok) {
-          log.info({ kind: "agent-host.startup-reconciliation.live-check-failed" });
-          return;
-        }
-        const sessions = (await liveRes.json()) as Array<{ id: string }>;
-        const sessionActive = Array.isArray(sessions) && sessions.length > 0;
-        if (!sessionActive) {
-          log.info({ kind: "agent-host.startup-reconciliation.no-active-session" });
-          return;
-        }
-        log.info({
-          kind: "agent-host.startup-reconciliation.found-session",
-          sessionId: sessions[0]!.id,
-        });
-
-        const supervisor = await runtime.runPromise(
-          pipe(AgentSupervisor, Effect.map((s) => s)),
-        );
-        const catalog = await runtime.runPromise(
-          pipe(CatalogService, Effect.map((c) => c)),
-        );
-
-        // 2. Restore catalog from Redis (already loaded by Layer; we just read it)
-        const catalogFile = await runtime.runPromise(catalog.load());
-        const rosterEntries = Object.entries(catalogFile.agents).filter(([, entry]) => {
-          if (entry.kind === "mini-game") return false;
-          return (entry.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
-        });
-
-        if (rosterEntries.length === 0) {
-          log.info({ kind: "agent-host.startup-reconciliation.no-roster-agents-in-catalog" });
-          return;
-        }
-
-        // 3. Eagerly ping each rosterAgent; spawn only if reachable
-        let spawned = 0;
-        let inactive = 0;
-        for (const [agentId, entry] of rosterEntries) {
-          try {
-            const pingRes = await fetch(`${entry.baseUrl}/health`, {
-              signal: AbortSignal.timeout(5_000),
-            });
-            if (!pingRes.ok) throw new Error(`HTTP ${pingRes.status}`);
-            log.info({ kind: "agent-host.startup-reconciliation.ping-ok", agentId });
-          } catch (pingErr) {
-            // Mark inactive but retain the entry
-            const updatedEntry = { ...entry, healthStatus: "inactive" as const };
-            await runtime.runPromise(
-              catalog.save({ agents: { ...catalogFile.agents, [agentId]: updatedEntry } }),
-            );
-            log.info({
-              kind: "agent-host.startup-reconciliation.ping-fail",
-              agentId,
-              reason: pingErr instanceof Error ? pingErr.message : String(pingErr),
-            });
-            inactive++;
-            continue;
-          }
-
-          const result = await runtime.runPromise(
-            supervisor.spawnRosterForAgent(agentId, entry.baseUrl),
-          );
-          log.info({
-            kind: "agent-host.startup-reconciliation.roster-spawn-complete",
-            agentId,
-            spawned: result.spawned.length,
-            failed: result.failed.length,
-          });
-          spawned += result.spawned.length;
-        }
-
-        log.info({
-          kind: "agent-host.startup-reconciliation.complete",
-          spawned,
-          inactive,
-          total: rosterEntries.length,
+        const catalog = await runtime.runPromise(pipe(CatalogService, Effect.map((c) => c)));
+        const supervisor = await runtime.runPromise(pipe(AgentSupervisor, Effect.map((s) => s)));
+        await runStartupReconciliation({
+          worldApiUrl,
+          catalog: {
+            load: () => runtime.runPromise(catalog.load()),
+            save: (file) => runtime.runPromise(catalog.save(file)),
+          },
+          supervisor: {
+            spawnRosterForAgent: (agentId, baseUrl) =>
+              runtime.runPromise(supervisor.spawnRosterForAgent(agentId, baseUrl)),
+          },
         });
       } catch (e) {
         console.error(

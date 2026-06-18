@@ -57,10 +57,22 @@ export async function reconcileRoster(opts: ReconcileOpts): Promise<ReconcileRes
   }));
 
   let spawned = 0;
+  let failed = 0;
   for (let i = 0; i < delta; i++) {
-    await spawnGhost().catch(() => {});
-    spawned++;
+    try {
+      await spawnGhost();
+      spawned++;
+    } catch (e) {
+      failed++;
+      console.warn(JSON.stringify({
+        event: "random-agent.reconciliation.spawn-failed",
+        agentId,
+        attempt: i + 1,
+        message: e instanceof Error ? e.message : String(e),
+        ts: new Date().toISOString(),
+      }));
+    }
   }
 
-  return { spawned };
+  return { spawned, ...(failed > 0 ? { error: new Error(`${failed} spawn(s) failed`) } : {}) };
 }
