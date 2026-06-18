@@ -582,12 +582,13 @@ async function main(): Promise<void> {
         let failed = 0;
 
         for (const entry of entries) {
+          const entryT = performance.now();
           const existing = yield* mapMgmt.get(entry.mapId).pipe(
             Effect.catchTag("MapError.NotFound", () => Effect.succeed(null)),
           );
 
           if (existing?.status === "archived") {
-            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-archived" });
+            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-archived", elapsedMs: Math.round(performance.now() - entryT) });
             skipped++;
             continue;
           }
@@ -604,7 +605,7 @@ async function main(): Promise<void> {
           // Skip if published with same content hash (idempotent guard)
           const hash = createHash("sha256").update(bytes).digest("hex");
           if (existing?.status === "published" && existing.contentHash === hash) {
-            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-current" });
+            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-current", elapsedMs: Math.round(performance.now() - entryT) });
             skipped++;
             continue;
           }
@@ -613,11 +614,11 @@ async function main(): Promise<void> {
           const action = existing ? "republish" : "publish";
           yield* mapMgmt.publish(entry.mapId, bytes).pipe(
             Effect.tap(() => Effect.sync(() => {
-              log.info({ kind: "map-sync-entry", mapId: entry.mapId, action });
+              log.info({ kind: "map-sync-entry", mapId: entry.mapId, action, elapsedMs: Math.round(performance.now() - entryT) });
               synced++;
             })),
             Effect.catchAll((e) => Effect.sync(() => {
-              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "publish-error", error: String(e) }));
+              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "publish-error", elapsedMs: Math.round(performance.now() - entryT), error: String(e) }));
               failed++;
             })),
           );
