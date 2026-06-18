@@ -13,6 +13,71 @@ import type { WorldEvent } from "./world-event.js";
 
 const log = createLogger("random-agent");
 
+// ── Push-failure degraded/recovered tracking (T038) ──────────────────────────
+
+export const PUSH_FAILURE_THRESHOLD = 3;
+
+type PushStatus = "ok" | "degraded";
+type PushState = { status: PushStatus; consecutiveFailures: number };
+const pushStateByGhost = new Map<string, PushState>();
+
+function getPushStateInternal(ghostId: string): PushState {
+  if (!pushStateByGhost.has(ghostId)) {
+    pushStateByGhost.set(ghostId, { status: "ok", consecutiveFailures: 0 });
+  }
+  return pushStateByGhost.get(ghostId)!;
+}
+
+export function getPushState(ghostId: string): PushState {
+  return { ...getPushStateInternal(ghostId) };
+}
+
+export function resetPushStateForGhost(ghostId: string): void {
+  pushStateByGhost.set(ghostId, { status: "ok", consecutiveFailures: 0 });
+}
+
+export function trackPushFailure(ghostId: string, _err: Error): void {
+  const state = getPushStateInternal(ghostId);
+  state.consecutiveFailures++;
+  if (state.status === "ok" && state.consecutiveFailures >= PUSH_FAILURE_THRESHOLD) {
+    state.status = "degraded";
+    console.log(JSON.stringify({
+      event: "random-agent.push.degraded",
+      ghostId,
+      consecutiveFailures: state.consecutiveFailures,
+      ts: new Date().toISOString(),
+    }));
+  }
+}
+
+export function trackPushSuccess(ghostId: string): void {
+  const state = getPushStateInternal(ghostId);
+  const wasD = state.status === "degraded";
+  state.consecutiveFailures = 0;
+  state.status = "ok";
+  if (wasD) {
+    console.log(JSON.stringify({
+      event: "random-agent.push.recovered",
+      ghostId,
+      ts: new Date().toISOString(),
+    }));
+  }
+}
+
+// ── Task-not-found detection (T039) ───────────────────────────────────────────
+
+export function isTaskNotFoundError(response: unknown): boolean {
+  if (response === null || typeof response !== "object") return false;
+  const r = response as Record<string, unknown>;
+  return typeof r["error"] === "string" && r["error"].toLowerCase().includes("task not found");
+}
+
+// ── Movement loop ─────────────────────────────────────────────────────────────
+
+export function activeLoopCount(): number {
+  return loopsByGhostId.size;
+}
+
 type MoveLoop = { cancel: () => void };
 
 /** One movement loop per `ghostId`; parallel distinct `ghostId`s. */
