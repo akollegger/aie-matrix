@@ -94,6 +94,7 @@ jobs:
           pnpm --filter @aie-matrix/shared-types run build
           pnpm --filter @aie-matrix/root-env run build
           pnpm --filter @aie-matrix/ghost-ts-client run build
+          pnpm --filter @aie-matrix/map-gram run build
 
       - name: Test ghost autospawn (cold-start scenario)
         env:
@@ -109,6 +110,13 @@ jobs:
           AIE_MATRIX_MCP_URL: http://localhost:8787/mcp
           AIE_MATRIX_TCK_MODE: "1"
         run: pnpm test:tck
+
+      - name: Run integration tests (Neo4j-backed)
+        env:
+          NEO4J_URI: bolt://localhost:7687
+          NEO4J_USER: neo4j
+          NEO4J_PASSWORD: ${{ env.NEO4J_PASSWORD }}
+        run: pnpm --filter @aie-matrix/server-world-api test:integration
 
       - name: Run Playwright E2E Tests
         env:

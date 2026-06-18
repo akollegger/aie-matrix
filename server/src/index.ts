@@ -106,6 +106,7 @@ const matrixMode = (process.env.AIE_MATRIX_MODE ?? "development") as
   | "production";
 
 log.info({ kind: "mode", mode: matrixMode });
+const startupT = performance.now();
 
 const mapPathRaw = process.env.AIE_MATRIX_MAP;
 const _mapPathFallback = join(repoRoot, "maps/moscone/moscone-aiewf-mini.map.gram");
@@ -210,6 +211,12 @@ async function main(): Promise<void> {
     }
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${httpPort}`);
     if (req.method !== "GET") {
+      return;
+    }
+    if (url.pathname === "/ping") {
+      // Liveness probe — process is alive if it can respond here; no dependency on seeding
+      res.writeHead(200, { "Content-Type": "application/json", ...corsHeaders });
+      res.end(JSON.stringify({ status: "alive" }));
       return;
     }
     if (url.pathname === "/health") {
@@ -325,9 +332,18 @@ async function main(): Promise<void> {
   let neoDriver = createNeo4jDriverFromEnv() ?? null;
   if (neoDriver) {
     try {
+      let t = performance.now();
       await ensureTileH3UniqueConstraint(neoDriver);
+      log.info({ kind: "neo4j-init", step: "tile-h3-constraint", elapsedMs: Math.round(performance.now() - t) });
+
+      t = performance.now();
       await ensureMapManagementConstraints(neoDriver);
+      log.info({ kind: "neo4j-init", step: "map-management-constraints", elapsedMs: Math.round(performance.now() - t) });
+
+      t = performance.now();
       await seedNeo4jGraphArtifacts(neoDriver, colyseusBridge.getLoadedMap());
+      log.info({ kind: "neo4j-init", step: "graph-artifacts", elapsedMs: Math.round(performance.now() - t) });
+
       log.info({ kind: "neo4j-seeds", message: "constraint + graph seeds applied" });
       neo4jHealthy = true; // IC-001: Neo4j connectivity confirmed
     } catch (e) {
@@ -554,6 +570,7 @@ async function main(): Promise<void> {
   // - Archived map → skip (admin decision respected across deploys)
   // Individual publish failures are logged but do not abort startup.
   if (matrixMode !== "development") {
+    const mapSyncT = performance.now();
     log.info({ kind: "map-sync-start", message: "scanning maps/ for unpublished maps" });
     const syncSummary = await runtime.runPromise(
       Effect.gen(function* () {
@@ -565,12 +582,13 @@ async function main(): Promise<void> {
         let failed = 0;
 
         for (const entry of entries) {
+          const entryT = performance.now();
           const existing = yield* mapMgmt.get(entry.mapId).pipe(
             Effect.catchTag("MapError.NotFound", () => Effect.succeed(null)),
           );
 
           if (existing?.status === "archived") {
-            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-archived" });
+            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-archived", elapsedMs: Math.round(performance.now() - entryT) });
             skipped++;
             continue;
           }
@@ -587,7 +605,7 @@ async function main(): Promise<void> {
           // Skip if published with same content hash (idempotent guard)
           const hash = createHash("sha256").update(bytes).digest("hex");
           if (existing?.status === "published" && existing.contentHash === hash) {
-            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-current" });
+            log.info({ kind: "map-sync-entry", mapId: entry.mapId, action: "skip-current", elapsedMs: Math.round(performance.now() - entryT) });
             skipped++;
             continue;
           }
@@ -596,11 +614,11 @@ async function main(): Promise<void> {
           const action = existing ? "republish" : "publish";
           yield* mapMgmt.publish(entry.mapId, bytes).pipe(
             Effect.tap(() => Effect.sync(() => {
-              log.info({ kind: "map-sync-entry", mapId: entry.mapId, action });
+              log.info({ kind: "map-sync-entry", mapId: entry.mapId, action, elapsedMs: Math.round(performance.now() - entryT) });
               synced++;
             })),
             Effect.catchAll((e) => Effect.sync(() => {
-              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "publish-error", error: String(e) }));
+              console.error(JSON.stringify({ kind: "startup-map-sync", mapId: entry.mapId, action: "publish-error", elapsedMs: Math.round(performance.now() - entryT), error: String(e) }));
               failed++;
             })),
           );
@@ -612,7 +630,7 @@ async function main(): Promise<void> {
       console.error("[aie-matrix] startup-map-sync failed:", e);
       return { total: 0, synced: 0, skipped: 0, failed: 0 };
     });
-    log.info({ kind: "map-sync-summary", ...syncSummary });
+    log.info({ kind: "map-sync-summary", ...syncSummary, elapsedMs: Math.round(performance.now() - mapSyncT) });
   }
 
   // T025 — Session binding for staging/production (skip in development mode where
@@ -678,6 +696,7 @@ async function main(): Promise<void> {
     mapHttpError: (e: unknown) => errorToResponse(e as HttpMappingError),
   });
 
+  log.info({ kind: "startup-complete", elapsedMs: Math.round(performance.now() - startupT) });
   spectatorMetaReady = true;
 
   httpServer.on("request", (req, res) => {
