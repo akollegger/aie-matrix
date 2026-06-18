@@ -331,9 +331,18 @@ async function main(): Promise<void> {
   let neoDriver = createNeo4jDriverFromEnv() ?? null;
   if (neoDriver) {
     try {
+      let t = performance.now();
       await ensureTileH3UniqueConstraint(neoDriver);
+      log.info({ kind: "neo4j-init", step: "tile-h3-constraint", elapsedMs: Math.round(performance.now() - t) });
+
+      t = performance.now();
       await ensureMapManagementConstraints(neoDriver);
+      log.info({ kind: "neo4j-init", step: "map-management-constraints", elapsedMs: Math.round(performance.now() - t) });
+
+      t = performance.now();
       await seedNeo4jGraphArtifacts(neoDriver, colyseusBridge.getLoadedMap());
+      log.info({ kind: "neo4j-init", step: "graph-artifacts", elapsedMs: Math.round(performance.now() - t) });
+
       log.info({ kind: "neo4j-seeds", message: "constraint + graph seeds applied" });
       neo4jHealthy = true; // IC-001: Neo4j connectivity confirmed
     } catch (e) {
