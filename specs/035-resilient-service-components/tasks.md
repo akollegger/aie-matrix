@@ -5,7 +5,7 @@
 
 **Tests**: Required at every level per user request and constitution §Service Testing Requirements. Unit tests ship in the same change as the code they cover. Integration tests planned in the same change; may land separately if Redis unavailable in CI (documented gap).
 
-**Organization**: 4 user stories → 4 implementation phases after setup. Each phase is independently deployable and verifiable.
+**Organization**: 4 user stories → 4 implementation phases after setup. Each phase is independently deployable and verifiable. 39 tasks total (35 original + 4 added by analysis remediation: T036–T039).
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -19,7 +19,7 @@
 **Purpose**: RFC, dependency additions, and CatalogEntry type extensions that all later phases depend on.
 
 - [ ] T001 Author `proposals/rfc/RFC-035-resilient-service-components.md` referencing spec-035, summarising the four implementation areas and key decisions from `specs/035-resilient-service-components/research.md`
-- [ ] T002 Add `ioredis` v5 to `server/agent-host/package.json` and run `pnpm install` from workspace root
+- [ ] T002 Add `ioredis` v5 (dependency) and `ioredis-mock` (devDependency) to `server/agent-host/package.json` and run `pnpm install` from workspace root
 - [ ] T003 Extend `CatalogEntry` (agent kind) in `server/agent-host/src/types.ts` with `lastSeenAt?: string` and `healthStatus?: "active" | "inactive" | "unverified"` — additive only, no breaking changes
 - [ ] T004 Add `HeartbeatRequest` and `HeartbeatResponse` types to `server/agent-host/src/types.ts`
 
@@ -35,7 +35,7 @@
 
 ### Tests (write first, confirm they fail before implementing)
 
-- [ ] T005 [P] Write unit tests for `RedisCatalogService` in `server/agent-host/src/catalog/__tests__/RedisCatalogService.test.ts` using `ioredis-mock`: cover `load()` (empty Redis → empty catalog), `save()` + `load()` round-trip, `register()` persists to Redis, `deregister()` removes entry, Redis ECONNREFUSED returns empty catalog gracefully
+- [ ] T005 [P] Write unit tests for `RedisCatalogService` in `server/agent-host/src/catalog/__tests__/RedisCatalogService.test.ts` using `ioredis-mock`: cover `load()` (empty Redis → empty catalog), `save()` + `load()` round-trip, `register()` persists to Redis, `deregister()` removes entry, Redis ECONNREFUSED returns empty catalog gracefully; assert double-`register()` of the same agentId is idempotent (no duplicate entries, no error)
 - [ ] T006 [P] Write unit tests for the heartbeat handler in `server/agent-host/src/__tests__/heartbeat.test.ts`: cover 200 with `sessionActive: false` for known agent, 404 for unknown agent, `lastSeenAt` field updated on successful heartbeat, 401 for missing token
 - [ ] T007 Write integration test skeleton in `server/agent-host/src/catalog/__tests__/RedisCatalogService.integration.test.ts`: skips when `REDIS_URL` unset; covers persist → restart → restore round-trip and TTL expiry → empty catalog
 
@@ -90,7 +90,14 @@
 - [ ] T020 [US2] Create `ghosts/random-agent/src/reconciliation.ts`: export `reconcileRoster(worldApiUrl, agentId, targetCount, activeLoopsCount)` that queries `GET /registry/ghosts` (or equivalent) filtered by `agentId` in the active session; computes delta = `targetCount − existingCount`; spawns delta ghosts via existing spawn path; emits `random-agent.reconciliation.spawning` (delta > 0) or `random-agent.reconciliation.no-op` (delta = 0); returns spawned ghost IDs
 - [ ] T021 [US2] Wire heartbeat + reconciliation into `ghosts/random-agent/src/agent.ts`: after successful registration call `startHeartbeat(...)` with `onSessionChange` callback that calls `reconcileRoster(worldApiUrl, agentId, RANDOM_AGENT_COUNT, loopsByGhostId.size)`; store returned `sessionId` as `activeSessionId` for change detection
 
-**Checkpoint**: `pnpm test` passes in `ghosts/random-agent`. Chaos scenario 1 (agent-host restart) produces `random-agent.heartbeat.session-change` log and wanderers reappear within 3 minutes.
+### Push-notification resilience (FR-007, FR-007a)
+
+- [ ] T036 [P] [US2] Write unit tests for push-failure reconnect in `ghosts/random-agent/src/__tests__/pushResilience.test.ts`: mock agent-host returning HTTP 503 for 3 consecutive push attempts → assert `random-agent.push.degraded` structured event emitted once; mock subsequent push succeeding → assert `random-agent.push.recovered` emitted; assert no crash or unhandled rejection throughout
+- [ ] T037 [P] [US2] Write unit tests for task-not-found handling in `ghosts/random-agent/src/__tests__/pushResilience.test.ts` (same file): mock agent-host returning `{"error":"task not found"}` for a push → assert `ghostIdToTaskId` entry is deleted for that ghost; assert a new task is re-initiated via the existing spawn path; assert total spawn count is 1 (no duplicate)
+- [ ] T038 [US2] Implement push-failure reconnect state in `ghosts/random-agent/src/executor.ts`: track consecutive push-notification failures per ghost; after ≥3 failures emit `random-agent.push.degraded` (once); on next successful push emit `random-agent.push.recovered`; failures are silent retries, not crashes
+- [ ] T039 [US2] Implement task-not-found discard-and-reinitiate in `ghosts/random-agent/src/executor.ts`: in the A2A push ingest handler, detect `task-not-found` response shape from agent-host; call `registerSpawnTask` with a new task ID; re-initiate via `startPushSpawnContext` for that ghost's context; log `random-agent.push.task-restarted` with ghostId
+
+**Checkpoint**: `pnpm test` passes in `ghosts/random-agent`. Chaos scenario 1 (agent-host restart) produces `random-agent.heartbeat.session-change` log and wanderers reappear within 3 minutes. Push-notification `task-not-found` errors no longer accumulate after restart.
 
 ---
 
@@ -106,7 +113,7 @@
 
 ### Tests
 
-- [ ] T022 [US3] Write unit test for startup reconciliation in `server/agent-host/src/__tests__/startupReconciliation.test.ts`: mock catalog with one `rosterAgent` entry (`healthStatus: "unverified"`); mock agent ping succeeds; mock active session exists → assert `spawnRosterForAgent` called; mock agent ping fails → assert entry marked `"inactive"` and `spawnRosterForAgent` NOT called; assert `AGENT_HOST_RECONCILIATION_WAIT_MS` env var logged as deprecated when present
+- [ ] T022 [US3] Write unit test for startup reconciliation in `server/agent-host/src/__tests__/startupReconciliation.test.ts`: mock catalog with one `rosterAgent` entry (`healthStatus: "unverified"`); mock agent ping succeeds; mock active session exists → assert `spawnRosterForAgent` called; mock agent ping fails → assert entry marked `"inactive"` and `spawnRosterForAgent` NOT called; assert `AGENT_HOST_RECONCILIATION_WAIT_MS` env var logged as deprecated when present; assert agent ping succeeds but NO active session exists → `spawnRosterForAgent` NOT called (session-ended edge case)
 - [ ] T023 [P] [US3] Write integration test in `server/agent-host/src/catalog/__tests__/RedisCatalogService.integration.test.ts` (skeleton from T007): implement the persist → clear in-memory → restore round-trip test; implement TTL expiry test (write entry, `EXPIRE` key to 1s, wait 2s, reload → empty)
 
 ### Observability

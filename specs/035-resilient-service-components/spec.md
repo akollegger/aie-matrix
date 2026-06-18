@@ -14,7 +14,7 @@
 
 ### Session 2026-06-18
 
-- Q: Who owns the spawn/no-spawn decision when random-agent re-registers after an agent-host restart — agent-host or random-agent? → A: random-agent owns the decision; it queries the world API for its pre-existing ghost IDs and spawns only the missing remainder. Agent-host notifies the agent of the active session but does not spawn on its behalf.
+- Q: Who owns the spawn/no-spawn decision when random-agent re-registers after an agent-host restart — agent-host or random-agent? → A: Two paths exist. (1) Startup reconciliation: agent-host calls `spawnRosterForAgent`, which fetches `/v1/roster` from the agent and provisions ghosts idempotently — "ghost already active" is a no-op. (2) Heartbeat path: agent-host responds with session state; random-agent queries the world API for pre-existing ghost IDs and spawns only the missing delta. Path 1 handles cold restarts; path 2 handles the case where agent-host restarted but random-agent's ghosts are still live in the world.
 - Q: Should heartbeat reuse the existing registration endpoint or be a separate endpoint? → A: Separate `POST /v1/catalog/:agentId/heartbeat` endpoint. Matches existing Barnacle heartbeat pattern; registration is expensive (fetches agent card, validates, stores) while heartbeat must be lightweight (~100 bytes vs ~2KB). Consul, Kubernetes, and the codebase's own Barnacle pattern all use separate endpoints. Agent-host responds with current session state so agents can self-trigger roster reconciliation.
 - Q: What storage backend should agent-host use for the durable catalog? → A: Redis (already deployed per spec-016, used by world-api for pub/sub). Hash per agent ID with TTL for stale-entry cleanup. Agent-host adds `ioredis` client (already a workspace dep); no new infrastructure required.
 - Q: Does each npc-agent ghost have its own MCP session, or is there one shared connection? → A: One shared MCP connection for all ghosts. Per-ghost tick loop state (running/paused) tracked in-process; reconnect heals all ghosts simultaneously.
@@ -100,9 +100,9 @@ When a dependent service is unavailable, each service continues operating at red
 - **FR-001**: Each agent service MUST re-register with agent-host on a periodic heartbeat (≤60 second interval), independent of startup registration
 - **FR-002**: agent-host MUST persist the agent catalog to durable storage (not `/tmp`) so registrations survive pod restarts
 - **FR-003**: On startup, agent-host MUST restore the catalog from durable storage before beginning the reconciliation pass
-- **FR-004**: On startup with a restored catalog, agent-host MUST health-check each known agent and trigger `spawnRosterForAgent` for any live `rosterAgent` entries if a session is active — without waiting for re-registration
-- **FR-005**: npc-agent MUST detect a broken shared MCP connection and attempt reconnection with exponential backoff (starting at 2s, capping at 60s); a single reconnect restores all ghosts
-- **FR-006**: npc-agent MUST pause all ghost tick loops when the shared MCP connection is broken, and resume all of them once reconnected, rather than generating an error per tick per ghost
+- **FR-004**: On startup with a restored catalog, agent-host MUST health-check each known agent and, for any reachable `rosterAgent` entry when a session is active, call `spawnRosterForAgent` — which fetches `/v1/roster` from the agent and provisions ghosts idempotently ("ghost already has active session" is treated as success). This path applies only at startup; the heartbeat path (FR-001, IC-001) notifies the agent of session state and the agent self-reconciles.
+- **FR-005**: npc-agent MUST detect broken per-ghost MCP connections and attempt reconnection per ghost with exponential backoff (starting at 2s, capping at 60s); each ghost has its own MCP client and reconnects independently
+- **FR-006**: npc-agent MUST pause a ghost's tick loop when that ghost's MCP connection is broken and resume it once reconnected, rather than generating an error per tick for that ghost
 - **FR-007**: random-agent MUST detect consecutive push-notification failures to agent-host and enter a reconnect state, retrying delivery once connectivity is restored
 - **FR-007a**: random-agent MUST detect `task-not-found` responses from agent-host per push attempt, immediately discard that task ID, and re-initiate the task — this handles stale task IDs from any agent-host restart without requiring a full re-registration cycle
 - **FR-008**: random-agent MUST reconcile its active ghost roster after re-registration: query the world API to detect its own pre-existing ghost IDs in the active session, and spawn only the missing remainder rather than a full new roster
@@ -114,7 +114,7 @@ When a dependent service is unavailable, each service continues operating at red
 
 - **Agent Catalog Entry**: Represents a registered agent; includes agent ID, base URL, `rosterAgent` flag, last-seen timestamp, health status (active / inactive / unverified)
 - **Ghost Roster**: The set of ghost IDs owned by an agent within a session; owned and reconciled by the agent itself — agent-host is not authoritative on roster state
-- **MCP Session**: One shared connection between npc-agent and the world MCP server (not per-ghost); has lifecycle states (connected, reconnecting, failed). Per-ghost tick loop state (running / paused) is tracked in-process and all ghosts resume together when the shared connection recovers.
+- **MCP Session**: One `GhostMcpClient` instance per ghost in npc-agent, stored in a module-level `mcpByGhostId` map. Each has its own lifecycle (connected / reconnecting / failed). Ghost tick loops are paused and resumed per-ghost independently; one broken connection does not affect other ghosts.
 - **Heartbeat**: A periodic re-registration message from an agent to agent-host that also serves as a liveness signal
 
 ### Interface Contracts
