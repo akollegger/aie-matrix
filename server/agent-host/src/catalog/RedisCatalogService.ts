@@ -1,5 +1,5 @@
 import type { Redis } from "ioredis";
-import { Effect, Layer } from "effect";
+import { Effect, Exit, Layer } from "effect";
 import type { CatalogFile, ICatalogService } from "./CatalogService.js";
 import { CatalogService, CatalogServiceImpl } from "./CatalogService.js";
 import {
@@ -114,17 +114,10 @@ export class RedisCatalogServiceImpl implements ICatalogService {
   }): Effect.Effect<
     import("../types.js").CatalogEntry,
     AgentCardInvalid | AgentAlreadyRegistered | AgentCardFetchFailed
-  > =>
-    // Use Effect.either before runPromise so typed failures are preserved as values —
-    // runPromise-inside-Effect.promise converts typed failures into Dies otherwise.
-    Effect.flatMap(
-      Effect.promise(() =>
-        this.withLock(() =>
-          Effect.runPromise(Effect.either(this.delegate().register(input)))
-        )
-      ),
-      (either) => either._tag === "Right" ? Effect.succeed(either.right) : Effect.fail(either.left),
-    );
+  > => Effect.flatMap(
+    Effect.promise(() => this.withLock(() => Effect.runPromiseExit(this.delegate().register(input)))),
+    (exit) => Exit.match(exit, { onSuccess: Effect.succeed, onFailure: Effect.failCause }),
+  );
 
   registerMiniGame = (input: {
     agentId: string;
@@ -135,12 +128,8 @@ export class RedisCatalogServiceImpl implements ICatalogService {
     about?: string;
   }): Effect.Effect<import("../types.js").CatalogEntry, AgentAlreadyRegistered> =>
     Effect.flatMap(
-      Effect.promise(() =>
-        this.withLock(() =>
-          Effect.runPromise(Effect.either(this.delegate().registerMiniGame(input)))
-        )
-      ),
-      (either) => either._tag === "Right" ? Effect.succeed(either.right) : Effect.fail(either.left),
+      Effect.promise(() => this.withLock(() => Effect.runPromiseExit(this.delegate().registerMiniGame(input)))),
+      (exit) => Exit.match(exit, { onSuccess: Effect.succeed, onFailure: Effect.failCause }),
     );
 
   list = (): Effect.Effect<
@@ -164,12 +153,8 @@ export class RedisCatalogServiceImpl implements ICatalogService {
 
   deregister = (agentId: string): Effect.Effect<void, AgentNotFound> =>
     Effect.flatMap(
-      Effect.promise(() =>
-        this.withLock(() =>
-          Effect.runPromise(Effect.either(this.delegate().deregister(agentId)))
-        )
-      ),
-      (either) => either._tag === "Right" ? Effect.succeed(either.right) : Effect.fail(either.left),
+      Effect.promise(() => this.withLock(() => Effect.runPromiseExit(this.delegate().deregister(agentId)))),
+      (exit) => Exit.match(exit, { onSuccess: Effect.succeed, onFailure: Effect.failCause }),
     );
 }
 
