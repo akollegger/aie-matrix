@@ -570,7 +570,22 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         const spawned: Array<{ characterId: string; ghostId: string; ok: true }> = [];
         const failed: Array<{ characterId: string; reason: string }> = [];
 
+        // Build set of characterIds already running for this agent so spawnRosterForAgent
+        // is idempotent when called concurrently (e.g. startup reconciliation + registration hook).
+        const runningCharacterIds = new Set<string>();
+        for (const sid of state.byAgent.get(agentId) ?? []) {
+          const s = state.sessions.get(sid);
+          if (s?.characterId !== undefined && (s.status === "running" || s.status === "spawning")) {
+            runningCharacterIds.add(s.characterId);
+          }
+        }
+
         for (const char of roster) {
+          if (runningCharacterIds.has(char.characterId)) {
+            slog("supervisor.roster-spawn-skip-duplicate", { agentId, characterId: char.characterId });
+            spawned.push({ characterId: char.characterId, ghostId: "(already-running)", ok: true });
+            continue;
+          }
           type ProvResult = { ok: true; ghostId: string; credential: WorldCredential } | { ok: false; reason: string };
 
           const prov: ProvResult = yield* Effect.promise(async (): Promise<ProvResult> => {
