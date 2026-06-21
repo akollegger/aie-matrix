@@ -396,6 +396,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
           agentId: input.agentId,
           ghostId: input.ghostId,
           displayName: effectiveDisplayName,
+          ...(input.characterId !== undefined ? { characterId: input.characterId } : {}),
           baseUrl: entry.baseUrl,
           status: "spawning",
           restartCount: 0,
