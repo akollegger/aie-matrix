@@ -742,16 +742,22 @@ async function main(): Promise<void> {
         }
       }
 
-      // Agent-host reverse proxy — admin-only.
-      // The admin panel's agentHostClient.ts points VITE_AGENT_HOST_URL at /agent-host on this
-      // server. We check the caller holds the ADMIN_TOKEN, then forward the stripped path to the
-      // agent-host ClusterIP service with the AGENT_HOST_TOKEN (never exposed to browsers).
+      // Agent-host reverse proxy.
+      // Write ops (anything other than the two public read paths below) require ADMIN_TOKEN.
+      // GET /agent-host/v1/sessions and GET /agent-host/v1/catalog are intentionally public so
+      // the Intermedium spectator client can resolve ghost display names without admin credentials.
       if (url.pathname.startsWith("/agent-host/")) {
-        const adminToken = process.env.ADMIN_TOKEN?.trim();
-        if (!adminToken || req.headers.authorization !== `Bearer ${adminToken}`) {
-          res.writeHead(401, { "Content-Type": "application/json", ...corsHeaders });
-          res.end(JSON.stringify({ error: "UNAUTHORIZED" }));
-          return;
+        const PUBLIC_AGENT_HOST_READS = ["/agent-host/v1/sessions", "/agent-host/v1/catalog"];
+        const isPublicRead =
+          req.method === "GET" &&
+          PUBLIC_AGENT_HOST_READS.some((p) => url.pathname === p);
+        if (!isPublicRead) {
+          const adminToken = process.env.ADMIN_TOKEN?.trim();
+          if (!adminToken || req.headers.authorization !== `Bearer ${adminToken}`) {
+            res.writeHead(401, { "Content-Type": "application/json", ...corsHeaders });
+            res.end(JSON.stringify({ error: "UNAUTHORIZED" }));
+            return;
+          }
         }
         const agentHostBase = process.env.AGENT_HOST_URL?.trim();
         const agentHostToken = process.env.AGENT_HOST_TOKEN?.trim();

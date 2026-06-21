@@ -325,6 +325,9 @@ jobs:
       - name: Build Intermedium
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          # Agent-host is proxied through world-api at /agent-host/*.
+          # GET /v1/sessions and /v1/catalog are public (no bearer needed from the client).
+          VITE_AGENT_HOST_URL: ${{ vars.VITE_API_BASE_URL }}/agent-host
         run: |
           [ -n "$VITE_API_BASE_URL" ] || { echo "ERROR: VITE_API_BASE_URL variable is not set"; exit 1; }
           pnpm --filter ./clients/intermedium build
