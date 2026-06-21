@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { ClientState } from "../types/clientState.js";
 import { usePairing } from "./PairingContext.js";
 import { useGhostIdentity } from "../hooks/useGhostIdentity.js";
@@ -23,6 +23,17 @@ export function ClientStateProvider({ children }: { readonly children: ReactNode
   const { viewState, nav } = useViewState(pairing);
   const [thread] = useState<ClientState["thread"]>(null);
   const [interiority] = useState<ClientState["interiority"]>(null);
+
+  // Re-fetch ghost identities whenever Colyseus reconnects: after a reconnect
+  // ghosts may have new ghostIds (re-spawned NPCs), so the identity map must
+  // be rebuilt to avoid stale name lookups and chat routing failures.
+  const prevLinkState = useRef(colyseusLinkState);
+  useEffect(() => {
+    if (prevLinkState.current !== "connected" && colyseusLinkState === "connected") {
+      void refresh();
+    }
+    prevLinkState.current = colyseusLinkState;
+  }, [colyseusLinkState, refresh]);
 
   const value = useMemo(
     (): ClientState => ({
