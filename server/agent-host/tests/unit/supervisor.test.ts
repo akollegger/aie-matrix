@@ -141,6 +141,100 @@ describe("AgentSupervisor (T030)", () => {
   });
 });
 
+describe("AgentSupervisor.spawnRosterForAgent (idempotency)", () => {
+  const RES15 = testH3r15();
+  let provisionCount: number;
+
+  function makeRosterSup() {
+    provisionCount = 0;
+    const roster = [
+      { characterId: "broker", displayName: "The Broker" },
+      { characterId: "hermit",  displayName: "The Hermit"  },
+    ];
+    let ghostSeq = 0;
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith("/v1/roster") && (!init || init.method === undefined || init.method === "GET")) {
+        return { ok: true, json: async () => roster } as Response;
+      }
+      if (u.endsWith("/registry/ghosts") && init?.method === "POST") {
+        provisionCount++;
+        const ghostId = `ghost-${++ghostSeq}`;
+        return {
+          ok: true,
+          json: async () => ({
+            ghostId,
+            credential: { token: `tok-${ghostId}`, worldApiBaseUrl: "http://127.0.0.1:8787/mcp" },
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    }));
+
+    return makeTestSupervisor({
+      catalog: {
+        get: (_id: string) =>
+          Effect.succeed({
+            agentId: "npc-agent-local",
+            baseUrl: "http://127.0.0.1:4004",
+            agentCard: { name: "npc-agent", matrix: { rosterAgent: true } } as any,
+            registeredAt: new Date().toISOString(),
+            builtIn: false,
+          }),
+        load: () => Effect.succeed({ agents: {} } as any),
+        save: () => Effect.void,
+        register: () => Effect.succeed({} as any),
+        list: () => Effect.succeed([]),
+        deregister: () => Effect.void,
+      } as any,
+      a2a: {
+        createClient: vi.fn().mockReturnValue(Effect.succeed({})),
+        sendSpawnContext: vi.fn().mockReturnValue(Effect.succeed({ taskId: "t", contextId: "c" })),
+        sendSpawnContextNonBlocking: vi.fn().mockReturnValue(Effect.succeed({ taskId: "t", contextId: "c" })),
+        cancelTask: vi.fn().mockReturnValue(Effect.void),
+        pingAgent: vi.fn().mockReturnValue(Effect.void),
+        sendWorldEvent: vi.fn().mockReturnValue(Effect.void),
+      } as any,
+      publicHouseBaseUrl: "http://127.0.0.1:4000",
+      worldHttpBase: "http://127.0.0.1:8787",
+      defaultCapabilityManifest: new Set(),
+      pushIngestToken: "test-token",
+      resolveWorldH3ForSpawn: async () => RES15,
+    });
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("first call spawns all roster characters", async () => {
+    const sup = makeRosterSup();
+    const { spawned, failed } = await Effect.runPromise(
+      sup.spawnRosterForAgent("npc-agent-local", "http://127.0.0.1:4004"),
+    );
+    expect(spawned).toHaveLength(2);
+    expect(failed).toHaveLength(0);
+    expect(provisionCount).toBe(2);
+  });
+
+  it("second call skips already-running characters (no duplicate ghosts)", async () => {
+    const sup = makeRosterSup();
+
+    // First call — spawns both characters.
+    await Effect.runPromise(sup.spawnRosterForAgent("npc-agent-local", "http://127.0.0.1:4004"));
+    const afterFirst = provisionCount;
+
+    // Second call — simulates the registration hook firing after reconciliation already ran.
+    const { spawned, failed } = await Effect.runPromise(
+      sup.spawnRosterForAgent("npc-agent-local", "http://127.0.0.1:4004"),
+    );
+
+    expect(failed).toHaveLength(0);
+    expect(spawned).toHaveLength(2); // counted as ok (already running)
+    // No new ghosts provisioned — characterId guard must have fired for both.
+    expect(provisionCount).toBe(afterFirst);
+  });
+});
+
 describe("AgentSupervisor.deliverWorldEvent (chat pipeline)", () => {
   /**
    * Regression test for the "no ghost responds" bug.
