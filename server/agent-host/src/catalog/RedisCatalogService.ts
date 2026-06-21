@@ -114,7 +114,17 @@ export class RedisCatalogServiceImpl implements ICatalogService {
   }): Effect.Effect<
     import("../types.js").CatalogEntry,
     AgentCardInvalid | AgentAlreadyRegistered | AgentCardFetchFailed
-  > => Effect.promise(() => this.withLock(() => Effect.runPromise(this.delegate().register(input))));
+  > =>
+    // Use Effect.either before runPromise so typed failures are preserved as values —
+    // runPromise-inside-Effect.promise converts typed failures into Dies otherwise.
+    Effect.flatMap(
+      Effect.promise(() =>
+        this.withLock(() =>
+          Effect.runPromise(Effect.either(this.delegate().register(input)))
+        )
+      ),
+      (either) => either._tag === "Right" ? Effect.succeed(either.right) : Effect.fail(either.left),
+    );
 
   registerMiniGame = (input: {
     agentId: string;
@@ -124,7 +134,14 @@ export class RedisCatalogServiceImpl implements ICatalogService {
     builtIn: boolean;
     about?: string;
   }): Effect.Effect<import("../types.js").CatalogEntry, AgentAlreadyRegistered> =>
-    Effect.promise(() => this.withLock(() => Effect.runPromise(this.delegate().registerMiniGame(input))));
+    Effect.flatMap(
+      Effect.promise(() =>
+        this.withLock(() =>
+          Effect.runPromise(Effect.either(this.delegate().registerMiniGame(input)))
+        )
+      ),
+      (either) => either._tag === "Right" ? Effect.succeed(either.right) : Effect.fail(either.left),
+    );
 
   list = (): Effect.Effect<
     ReadonlyArray<{
@@ -146,7 +163,14 @@ export class RedisCatalogServiceImpl implements ICatalogService {
   > => this.delegate().findMiniGameForPlatformClass(platformClass);
 
   deregister = (agentId: string): Effect.Effect<void, AgentNotFound> =>
-    Effect.promise(() => this.withLock(() => Effect.runPromise(this.delegate().deregister(agentId))));
+    Effect.flatMap(
+      Effect.promise(() =>
+        this.withLock(() =>
+          Effect.runPromise(Effect.either(this.delegate().deregister(agentId)))
+        )
+      ),
+      (either) => either._tag === "Right" ? Effect.succeed(either.right) : Effect.fail(either.left),
+    );
 }
 
 export const makeRedisCatalogLayer = (redis: Redis): Layer.Layer<CatalogService> =>
