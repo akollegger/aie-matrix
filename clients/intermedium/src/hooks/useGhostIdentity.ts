@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import type { GhostIdentity } from "../types/ghost.js";
+import { buildIdentityMap } from "./ghostIdentityMap.js";
 
 const empty = new Map<string, GhostIdentity>();
-
-type AgentMeta = { tier: string; about: string };
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -37,27 +36,7 @@ export function useGhostIdentity(ghostHouseUrl: string) {
         ),
       ]);
 
-      const agentMeta = new Map<string, AgentMeta>();
-      for (const a of catalogData.agents ?? []) {
-        agentMeta.set(a.agentId, { tier: a.tier ?? "agent", about: a.about ?? "" });
-      }
-
-      const m = new Map<string, GhostIdentity>();
-      for (const s of sessionsData.sessions ?? []) {
-        const meta = agentMeta.get(s.agentId);
-        const name = s.displayName?.trim()
-          ? s.displayName.trim()
-          : meta?.about?.trim()
-            ? meta.about.trim().slice(0, 200)
-            : s.ghostId.slice(0, 12);
-        m.set(s.ghostId, {
-          ghostId: s.ghostId,
-          agentId: s.agentId,
-          name,
-          ghostClass: meta?.tier && meta.tier.length > 0 ? meta.tier : "agent",
-        });
-      }
-      setIdentities(m);
+      setIdentities(buildIdentityMap(sessionsData.sessions ?? [], catalogData.agents ?? []));
     } catch {
       setIdentities(empty);
     } finally {

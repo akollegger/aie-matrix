@@ -75,6 +75,7 @@ import {
 } from "@aie-matrix/server-conversation";
 import { mintGhostToken } from "@aie-matrix/server-auth";
 import { patchMatchmakeCorsForCredentials } from "./colyseus-cors-patch.js";
+import { isPublicAgentHostRead } from "./agent-host-proxy.js";
 import { errorToResponse, type HttpMappingError } from "./errors.js";
 import { makeServerConfigLayer, type ServerConfigService } from "./services/ServerConfigService.js";
 import {
@@ -747,10 +748,7 @@ async function main(): Promise<void> {
       // GET /agent-host/v1/sessions and GET /agent-host/v1/catalog are intentionally public so
       // the Intermedium spectator client can resolve ghost display names without admin credentials.
       if (url.pathname.startsWith("/agent-host/")) {
-        const PUBLIC_AGENT_HOST_READS = ["/agent-host/v1/sessions", "/agent-host/v1/catalog"];
-        const isPublicRead =
-          req.method === "GET" &&
-          PUBLIC_AGENT_HOST_READS.some((p) => url.pathname === p);
+        const isPublicRead = isPublicAgentHostRead(req.method ?? "", url.pathname);
         if (!isPublicRead) {
           const adminToken = process.env.ADMIN_TOKEN?.trim();
           if (!adminToken || req.headers.authorization !== `Bearer ${adminToken}`) {
