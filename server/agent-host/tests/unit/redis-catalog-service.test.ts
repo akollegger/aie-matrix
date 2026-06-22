@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
+import { AgentNotFound } from "../../src/errors.js";
 
 // ioredis-mock must be imported before the service under test so the
 // dynamic `import("ioredis")` call inside the service receives the mock.
@@ -88,6 +89,24 @@ describe("RedisCatalogServiceImpl", () => {
   it("deregister() fails with AgentNotFound for unknown agentId", async () => {
     const exit = await Effect.runPromiseExit(svc.deregister("no-such-agent"));
     expect(Exit.isFailure(exit)).toBe(true);
+  });
+
+  it("deregister() AgentNotFound is a typed failure, not a Die (regression: runPromise-in-Effect.promise)", async () => {
+    // Regression test for: RedisCatalogService.deregister wrapping Effect.runPromise inside
+    // Effect.promise caused typed AgentNotFound failures to become Dies (defects).
+    // Dies escape Effect.catchAll and crash the Node.js process as unhandled rejections.
+    const exit = await Effect.runPromiseExit(svc.deregister("no-such-agent"));
+    expect(Exit.isFailure(exit)).toBe(true);
+    if (Exit.isFailure(exit)) {
+      // Must NOT be a defect (Die) — must be a typed failure (Fail)
+      expect(Cause.isDie(exit.cause)).toBe(false);
+      expect(Cause.isFailure(exit.cause)).toBe(true);
+      const maybeErr = Cause.failureOption(exit.cause);
+      expect(maybeErr._tag).toBe("Some");
+      if (maybeErr._tag === "Some") {
+        expect(maybeErr.value).toBeInstanceOf(AgentNotFound);
+      }
+    }
   });
 
   it("double-register() of same agentId is idempotent (upsert, no error) when baseUrl matches", async () => {

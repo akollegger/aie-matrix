@@ -16,7 +16,7 @@ export function PersonalPanel() {
   const identity = ghostId ? (identities.get(ghostId) ?? null) : null;
   const tile = ghost ? (tiles.get(ghost.h3Index) ?? null) : null;
 
-  const worldApiUrl = import.meta.env.VITE_WORLD_API_URL ?? "";
+  const worldApiUrl = import.meta.env.VITE_API_BASE_URL ?? "";
   const humanId = useHumanSession();
   const { thread: rawThread, sendMessage } = useA2AConversation(
     viewState.stop === "personal" ? ghostId : null,

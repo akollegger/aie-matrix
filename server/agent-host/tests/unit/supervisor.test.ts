@@ -136,8 +136,128 @@ describe("AgentSupervisor (T030)", () => {
     sup = makeSup(() => cfg);
     const s = await Effect.runPromise(sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred }));
     await new Promise((r) => setTimeout(r, 400));
-    const s2 = sup.getSession(s.sessionId);
-    expect(s2?.status).toBe("failed");
+    // Session is removed from state maps on permanent-fail (not just marked "failed")
+    expect(sup.getSession(s.sessionId)).toBeUndefined();
+  });
+
+  it("removes permanently-failed session from state maps (regression: stale sessions accumulate)", async () => {
+    // Regression: permanent-fail sessions were never removed from state.sessions,
+    // state.byGhostId, or state.byAgent, causing them to accumulate across restarts.
+    const cfg = {
+      ...readSupervisionConfig(),
+      healthIntervalMs: 20,
+      healthTimeoutMs: 200,
+      restartBaseMs: 5,
+      maxRestartsPerHour: 0,
+    };
+    sendSpawnContext
+      .mockReset()
+      .mockReturnValueOnce(Effect.succeed({ taskId: "task-1", contextId: "ctx-1" }))
+      .mockReturnValue(Effect.fail(new Error("nope")));
+    ping.mockReset().mockReturnValue(Effect.fail(new Error("down")));
+    sup = makeSup(() => cfg);
+    const s = await Effect.runPromise(sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred }));
+    // Wait for permanent-fail + cleanup
+    await new Promise((r) => setTimeout(r, 600));
+    // Session must be gone from the map, not just marked "failed"
+    expect(sup.getSession(s.sessionId)).toBeUndefined();
+    // Ghost and agent lookups must also be gone
+    expect(sup.getSessionByGhostId("g1")).toBeUndefined();
+    expect(sup.listSessionIdsByAgent("a1")).toHaveLength(0);
+  });
+});
+
+describe("AgentSupervisor.spawnRosterForAgent (idempotency)", () => {
+  const RES15 = testH3r15();
+  let provisionCount: number;
+
+  function makeRosterSup() {
+    provisionCount = 0;
+    const roster = [
+      { characterId: "broker", displayName: "The Broker" },
+      { characterId: "hermit",  displayName: "The Hermit"  },
+    ];
+    let ghostSeq = 0;
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith("/v1/roster") && (!init || init.method === undefined || init.method === "GET")) {
+        return { ok: true, json: async () => roster } as Response;
+      }
+      if (u.endsWith("/registry/ghosts") && init?.method === "POST") {
+        provisionCount++;
+        const ghostId = `ghost-${++ghostSeq}`;
+        return {
+          ok: true,
+          json: async () => ({
+            ghostId,
+            credential: { token: `tok-${ghostId}`, worldApiBaseUrl: "http://127.0.0.1:8787/mcp" },
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    }));
+
+    return makeTestSupervisor({
+      catalog: {
+        get: (_id: string) =>
+          Effect.succeed({
+            agentId: "npc-agent-local",
+            baseUrl: "http://127.0.0.1:4004",
+            agentCard: { name: "npc-agent", matrix: { rosterAgent: true } } as any,
+            registeredAt: new Date().toISOString(),
+            builtIn: false,
+          }),
+        load: () => Effect.succeed({ agents: {} } as any),
+        save: () => Effect.void,
+        register: () => Effect.succeed({} as any),
+        list: () => Effect.succeed([]),
+        deregister: () => Effect.void,
+      } as any,
+      a2a: {
+        createClient: vi.fn().mockReturnValue(Effect.succeed({})),
+        sendSpawnContext: vi.fn().mockReturnValue(Effect.succeed({ taskId: "t", contextId: "c" })),
+        sendSpawnContextNonBlocking: vi.fn().mockReturnValue(Effect.succeed({ taskId: "t", contextId: "c" })),
+        cancelTask: vi.fn().mockReturnValue(Effect.void),
+        pingAgent: vi.fn().mockReturnValue(Effect.void),
+        sendWorldEvent: vi.fn().mockReturnValue(Effect.void),
+      } as any,
+      publicHouseBaseUrl: "http://127.0.0.1:4000",
+      worldHttpBase: "http://127.0.0.1:8787",
+      defaultCapabilityManifest: new Set(),
+      pushIngestToken: "test-token",
+      resolveWorldH3ForSpawn: async () => RES15,
+    });
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("first call spawns all roster characters", async () => {
+    const sup = makeRosterSup();
+    const { spawned, failed } = await Effect.runPromise(
+      sup.spawnRosterForAgent("npc-agent-local", "http://127.0.0.1:4004"),
+    );
+    expect(spawned).toHaveLength(2);
+    expect(failed).toHaveLength(0);
+    expect(provisionCount).toBe(2);
+  });
+
+  it("second call skips already-running characters (no duplicate ghosts)", async () => {
+    const sup = makeRosterSup();
+
+    // First call — spawns both characters.
+    await Effect.runPromise(sup.spawnRosterForAgent("npc-agent-local", "http://127.0.0.1:4004"));
+    const afterFirst = provisionCount;
+
+    // Second call — simulates the registration hook firing after reconciliation already ran.
+    const { spawned, failed } = await Effect.runPromise(
+      sup.spawnRosterForAgent("npc-agent-local", "http://127.0.0.1:4004"),
+    );
+
+    expect(failed).toHaveLength(0);
+    expect(spawned).toHaveLength(2); // counted as ok (already running)
+    // No new ghosts provisioned — characterId guard must have fired for both.
+    expect(provisionCount).toBe(afterFirst);
   });
 });
 

@@ -221,7 +221,22 @@ function startHealth(
   const loop = sessionHealthLoop(st, s, a2a, catalog, getCfg, agentEndpointBase, pushIngestToken);
   const program = pipe(
     loop,
-    Effect.ensuring(Effect.sync(() => void st.healthFibers.delete(s.sessionId))),
+    Effect.ensuring(
+      Effect.sync(() => {
+        st.healthFibers.delete(s.sessionId);
+        if (s.status === "failed") {
+          st.sessions.delete(s.sessionId);
+          st.mcpToSession.delete(s.mcpToken);
+          st.byGhostId.delete(s.ghostId);
+          st.actionStamps.delete(s.sessionId);
+          const aset = st.byAgent.get(s.agentId);
+          if (aset) {
+            aset.delete(s.sessionId);
+            if (aset.size === 0) st.byAgent.delete(s.agentId);
+          }
+        }
+      }),
+    ),
   );
   return Effect.forkDaemon(program).pipe(
     Effect.tap((f) => Effect.sync(() => st.healthFibers.set(s.sessionId, f))),
@@ -396,6 +411,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
           agentId: input.agentId,
           ghostId: input.ghostId,
           displayName: effectiveDisplayName,
+          ...(input.characterId !== undefined ? { characterId: input.characterId } : {}),
           baseUrl: entry.baseUrl,
           status: "spawning",
           restartCount: 0,
@@ -570,7 +586,22 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         const spawned: Array<{ characterId: string; ghostId: string; ok: true }> = [];
         const failed: Array<{ characterId: string; reason: string }> = [];
 
+        // Build set of characterIds already running for this agent so spawnRosterForAgent
+        // is idempotent when called concurrently (e.g. startup reconciliation + registration hook).
+        const runningCharacterIds = new Set<string>();
+        for (const sid of state.byAgent.get(agentId) ?? []) {
+          const s = state.sessions.get(sid);
+          if (s?.characterId !== undefined && (s.status === "running" || s.status === "spawning")) {
+            runningCharacterIds.add(s.characterId);
+          }
+        }
+
         for (const char of roster) {
+          if (runningCharacterIds.has(char.characterId)) {
+            slog("supervisor.roster-spawn-skip-duplicate", { agentId, characterId: char.characterId });
+            spawned.push({ characterId: char.characterId, ghostId: "(already-running)", ok: true });
+            continue;
+          }
           type ProvResult = { ok: true; ghostId: string; credential: WorldCredential } | { ok: false; reason: string };
 
           const prov: ProvResult = yield* Effect.promise(async (): Promise<ProvResult> => {
