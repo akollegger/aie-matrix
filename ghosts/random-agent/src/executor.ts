@@ -328,6 +328,7 @@ async function startMovementFromSpawn(
     if (mcpByGhostId.get(ghostId) === mcp) {
       mcpByGhostId.delete(ghostId);
     }
+    await mcp.callTool("ghost_despawn", {}).catch(() => {});
     await mcp.disconnect().catch(() => {});
   }
 }

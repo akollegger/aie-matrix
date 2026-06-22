@@ -2206,6 +2206,29 @@ function buildGhostMcpServer(servicesLayer: Layer.Layer<ToolServices>): McpServe
   );
 
   server.registerTool(
+    "ghost_despawn",
+    {
+      description: "Remove this ghost from the world. Call before disconnecting so the ghost entity is cleaned up immediately rather than persisting as a phantom.",
+      inputSchema: {},
+    },
+    async (_input, extra) =>
+      runTool(
+        "ghost_despawn",
+        {},
+        Effect.gen(function* () {
+          yield* requireAuthExtra(extra);
+          const { ghostId } = yield* ghostIdsFromAuthEffect(extra.authInfo!);
+          const bridge = yield* WorldBridgeService;
+          const store = yield* RegistryStoreService;
+          bridge.removeGhostCell(ghostId);
+          store.ghosts.delete(ghostId);
+          return { ok: true };
+        }),
+        extra,
+      ),
+  );
+
+  server.registerTool(
     "finalize-leaderboards",
     {
       description: "Freeze all leaderboards. Admin/scheduler only. Idempotent.",

@@ -449,12 +449,13 @@ function ghostActionLoopOnce(
             reason: e instanceof Error ? e.message : String(e),
           }),
         }),
-        // Release: disconnect unconditionally on fiber exit or interruption.
+        // Release: despawn then disconnect unconditionally on fiber exit or interruption.
         (client) =>
           Effect.promise(() =>
             client
-              .disconnect()
+              .callTool("ghost_despawn", {})
               .catch(() => {})
+              .then(() => client.disconnect().catch(() => {}))
               .then(() => {
                 mcpByGhostId.delete(ctx.ghostId);
               }),
