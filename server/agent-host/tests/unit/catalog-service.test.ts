@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { CatalogServiceImpl } from "../../src/catalog/CatalogService.js";
 import {
-  AgentAlreadyRegistered,
   AgentCardFetchFailed,
   AgentCardInvalid,
   AgentNotFound,
@@ -160,20 +159,19 @@ describe("CatalogServiceImpl", () => {
       expect(err).toBeInstanceOf(AgentCardInvalid);
     });
 
-    it("fails with AgentAlreadyRegistered when a different baseUrl tries to claim a registered agentId", async () => {
+    it("UPSERTS when a different baseUrl registers with the same agentId (pod replacement)", async () => {
       await seedCatalog({ "existing-agent": SEEDED_ENTRY });
       stubFetch(VALID_CARD);
-      const err = await expectFail(
+      // SEEDED_ENTRY baseUrl is 4001 — a new pod at 4002 with the same stable
+      // AGENT_ID is allowed to take over the slot (Kubernetes rolling deploy).
+      const entry = await Effect.runPromise(
         svc.register({
           agentId: "existing-agent",
-          // SEEDED_ENTRY baseUrl is 4001 — a different host trying 4002
-          // is still rejected to prevent agentId hijack.
           baseUrl: "http://127.0.0.1:4002",
           builtIn: false,
         }),
       );
-      expect(err).toBeInstanceOf(AgentAlreadyRegistered);
-      expect((err as AgentAlreadyRegistered).agentId).toBe("existing-agent");
+      expect(entry.baseUrl).toBe("http://127.0.0.1:4002");
     });
 
     it("re-register from same baseUrl UPSERTS the agent card (refresh on restart)", async () => {

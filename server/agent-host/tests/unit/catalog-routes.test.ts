@@ -160,7 +160,7 @@ describe("POST /v1/catalog/register", () => {
     expect(res.body).toMatchObject({ ok: true, agentId: "new-agent" });
   });
 
-  it("409 ALREADY_REGISTERED when a different baseUrl tries to claim a registered agentId", async () => {
+  it("201 UPSERT when a different baseUrl registers with the same agentId (pod replacement)", async () => {
     await seedCatalog(catalogPath, { "existing-agent": SEEDED_ENTRY });
     stubFetchCard(VALID_CARD);
     const rt = await buildRuntime(catalogPath);
@@ -168,12 +168,12 @@ describe("POST /v1/catalog/register", () => {
     const res = await supertest(app)
       .post("/v1/catalog/register")
       .set("Authorization", `Bearer ${DEV_TOKEN}`)
-      // SEEDED_ENTRY's baseUrl is 4001 — re-register from a DIFFERENT baseUrl
-      // (4002) is still rejected as a duplicate to prevent hijack.
+      // SEEDED_ENTRY's baseUrl is 4001 — a new pod at 4002 with the same stable
+      // AGENT_ID is allowed to take over the slot (Kubernetes rolling deploy).
       .send({ agentId: "existing-agent", baseUrl: "http://127.0.0.1:4002" });
     await rt.dispose();
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe("ALREADY_REGISTERED");
+    expect(res.status).toBe(201);
+    expect(res.body.agentId).toBe("existing-agent");
   });
 
   it("re-register from same baseUrl is an UPSERT — refreshes the agent card", async () => {
