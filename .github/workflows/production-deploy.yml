@@ -258,6 +258,18 @@ jobs:
             echo "No active session found — nothing to end."
           fi
 
+          # Wait for the newly-deployed server to be ready before querying maps.
+          # The server pod may not have warmed up immediately after helm --wait.
+          echo "Waiting for server health check…"
+          for i in $(seq 1 30); do
+            STATUS=$(curl -sf "$SERVER_URL/health" | jq -r '.status // empty' 2>/dev/null || true)
+            if [ "$STATUS" = "ok" ]; then
+              echo "Server healthy after ${i}s"
+              break
+            fi
+            sleep 2
+          done
+
           # Select the production map (prefer moscone-aiewf-mini, fall back to
           # any moscone map, then first available).
           MAPS_JSON=$(curl -sf "$SERVER_URL/maps" || echo '{}')
