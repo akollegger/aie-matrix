@@ -55,6 +55,14 @@ const actionFibersByGhostId = new Map<string, Fiber.RuntimeFiber<void, never>>()
 /** Degraded state per ghostId — set when MCP reconnect backoff begins, cleared on recover. */
 const degradedByGhostId = new Set<string>();
 
+/** Ghosts whose action loops exhausted all retries and failed permanently. */
+const permanentlyFailedGhosts = new Set<string>();
+
+/** A2A task ownership: ghostId → taskId (the task keeping the ghost "working"). */
+const ghostIdToTaskId = new Map<string, string>();
+/** Reverse index: taskId → ghostId, for cancelTask lookups. */
+const taskIdToGhostId = new Map<string, string>();
+
 /** Returns the set of ghostIds currently in degraded (reconnecting) state. */
 export function getDegradedGhosts(): ReadonlySet<string> {
   return degradedByGhostId;
@@ -142,6 +150,17 @@ function classifyMessage(msg: Message | undefined): ParsedMessage {
 
 export class NpcAgentExecutor implements AgentExecutor {
   cancelTask = async (taskId: string, eventBus: ExecutionEventBus): Promise<void> => {
+    const ghostId = taskIdToGhostId.get(taskId);
+    taskIdToGhostId.delete(taskId);
+    if (ghostId && ghostIdToTaskId.get(ghostId) === taskId) {
+      ghostIdToTaskId.delete(ghostId);
+      const fiber = actionFibersByGhostId.get(ghostId);
+      if (fiber) {
+        await Effect.runPromise(Fiber.interrupt(fiber));
+      }
+    }
+    // handleSpawnContext is awaiting the fiber; it will see stillOwned=false
+    // and skip publishing. Publish "canceled" here so the A2A task closes cleanly.
     eventBus.publish({
       kind: "status-update",
       taskId,
@@ -335,8 +354,30 @@ export class NpcAgentExecutor implements AgentExecutor {
       ...sharedState.ghostIdByCharacter,
       [sp.ghostCard.characterId, sp.ghostId],
     ]);
-    await launchGhostLoop(sp, characterDef);
-    publishCompleted(taskId, contextId, eventBus);
+
+    // Register task ownership BEFORE the first await so cancelTask() can reach the fiber.
+    const prevTaskId = ghostIdToTaskId.get(sp.ghostId);
+    if (prevTaskId) taskIdToGhostId.delete(prevTaskId);
+    ghostIdToTaskId.set(sp.ghostId, taskId);
+    taskIdToGhostId.set(taskId, sp.ghostId);
+
+    // Await the loop — keeps this A2A task "working" until the ghost exits.
+    // The loop exits when: (a) cancelTask interrupts the fiber, or
+    // (b) the fiber fails permanently after all MCP retries exhaust.
+    const fiber = await launchGhostLoop(sp, characterDef);
+    await Effect.runPromise(Fiber.await(fiber));
+    if (actionFibersByGhostId.get(sp.ghostId) === fiber) {
+      actionFibersByGhostId.delete(sp.ghostId);
+    }
+
+    const stillOwned = ghostIdToTaskId.get(sp.ghostId) === taskId;
+    if (stillOwned) {
+      ghostIdToTaskId.delete(sp.ghostId);
+      taskIdToGhostId.delete(taskId);
+      const terminalState = permanentlyFailedGhosts.has(sp.ghostId) ? "failed" : "completed";
+      permanentlyFailedGhosts.delete(sp.ghostId);
+      publishTerminal(terminalState, taskId, contextId, eventBus);
+    }
   }
 }
 
@@ -502,28 +543,30 @@ function ghostActionLoop(
       ) as unknown as Schedule.Schedule<unknown, McpConnectionBroken, never>,
     ),
     Effect.catchAll((e) =>
-      Effect.sync(() =>
+      Effect.sync(() => {
+        permanentlyFailedGhosts.add(ctx.ghostId);
         console.error(
           JSON.stringify({
             event: "npc-agent.mcp.failed-permanently",
             ghostId: ctx.ghostId,
             error: e instanceof McpConnectionBroken ? e.reason : String(e),
           }),
-        ),
-      ),
+        );
+      }),
     ),
   );
 }
 
 /**
- * Launch a ghost action loop as an Effect fiber. If a loop is already running
- * for the given ghostId, it is interrupted (and its MCP client disconnected)
- * before the new fiber starts.
+ * Fork a ghost action loop fiber. If a loop is already running for the given
+ * ghostId, it is interrupted before the new fiber starts. Returns the new fiber
+ * so the caller can await completion (handleSpawnContext does this to keep the
+ * A2A task in "working" state until the ghost exits).
  */
 async function launchGhostLoop(
   ctx: SpawnContext,
   characterDef: CharacterDefinition,
-): Promise<void> {
+): Promise<Fiber.RuntimeFiber<void, never>> {
   const { ghostId } = ctx;
 
   const existing = actionFibersByGhostId.get(ghostId);
@@ -563,6 +606,8 @@ async function launchGhostLoop(
     characterId: characterDef.id,
     tickMs: ACTION_TICK_MS,
   });
+
+  return fiber;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -624,12 +669,21 @@ function publishCompleted(
   contextId: string | undefined,
   eventBus: ExecutionEventBus,
 ): void {
+  publishTerminal("completed", taskId, contextId, eventBus);
+}
+
+function publishTerminal(
+  state: "completed" | "failed" | "canceled",
+  taskId: string,
+  contextId: string | undefined,
+  eventBus: ExecutionEventBus,
+): void {
   eventBus.publish({
     kind: "status-update",
     taskId,
     contextId: contextId ?? taskId,
     final: true,
-    status: { state: "completed", timestamp: new Date().toISOString() },
+    status: { state, timestamp: new Date().toISOString() },
   } satisfies TaskStatusUpdateEvent);
   eventBus.finished();
 }
@@ -671,6 +725,9 @@ export const _test = {
     actionFibersByGhostId.clear();
     mcpByGhostId.clear();
     dialogStateMap.clear();
+    ghostIdToTaskId.clear();
+    taskIdToGhostId.clear();
+    permanentlyFailedGhosts.clear();
     await Promise.all(fibers.map((f) => Effect.runPromise(Fiber.interrupt(f))));
   },
   launchGhostLoop,
