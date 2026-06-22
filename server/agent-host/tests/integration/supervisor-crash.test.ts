@@ -92,7 +92,8 @@ describe("supervisor crash (integration)", () => {
 
     await new Promise((r) => setTimeout(r, 350));
 
-    expect(supBad.getSession(s1.sessionId)?.status).toBe("failed");
+    // Permanently-failed sessions are removed from state maps
+    expect(supBad.getSession(s1.sessionId)).toBeUndefined();
     expect(supOk.getSession(s2.sessionId)?.status).toBe("running");
 
     await Effect.runPromise(supOk.shutdown(s2.sessionId));

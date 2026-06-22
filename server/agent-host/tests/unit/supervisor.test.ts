@@ -136,8 +136,34 @@ describe("AgentSupervisor (T030)", () => {
     sup = makeSup(() => cfg);
     const s = await Effect.runPromise(sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred }));
     await new Promise((r) => setTimeout(r, 400));
-    const s2 = sup.getSession(s.sessionId);
-    expect(s2?.status).toBe("failed");
+    // Session is removed from state maps on permanent-fail (not just marked "failed")
+    expect(sup.getSession(s.sessionId)).toBeUndefined();
+  });
+
+  it("removes permanently-failed session from state maps (regression: stale sessions accumulate)", async () => {
+    // Regression: permanent-fail sessions were never removed from state.sessions,
+    // state.byGhostId, or state.byAgent, causing them to accumulate across restarts.
+    const cfg = {
+      ...readSupervisionConfig(),
+      healthIntervalMs: 20,
+      healthTimeoutMs: 200,
+      restartBaseMs: 5,
+      maxRestartsPerHour: 0,
+    };
+    sendSpawnContext
+      .mockReset()
+      .mockReturnValueOnce(Effect.succeed({ taskId: "task-1", contextId: "ctx-1" }))
+      .mockReturnValue(Effect.fail(new Error("nope")));
+    ping.mockReset().mockReturnValue(Effect.fail(new Error("down")));
+    sup = makeSup(() => cfg);
+    const s = await Effect.runPromise(sup.spawn({ agentId: "a1", ghostId: "g1", credential: cred }));
+    // Wait for permanent-fail + cleanup
+    await new Promise((r) => setTimeout(r, 600));
+    // Session must be gone from the map, not just marked "failed"
+    expect(sup.getSession(s.sessionId)).toBeUndefined();
+    // Ghost and agent lookups must also be gone
+    expect(sup.getSessionByGhostId("g1")).toBeUndefined();
+    expect(sup.listSessionIdsByAgent("a1")).toHaveLength(0);
   });
 });
 

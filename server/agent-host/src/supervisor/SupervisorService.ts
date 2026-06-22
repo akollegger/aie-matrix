@@ -221,7 +221,22 @@ function startHealth(
   const loop = sessionHealthLoop(st, s, a2a, catalog, getCfg, agentEndpointBase, pushIngestToken);
   const program = pipe(
     loop,
-    Effect.ensuring(Effect.sync(() => void st.healthFibers.delete(s.sessionId))),
+    Effect.ensuring(
+      Effect.sync(() => {
+        st.healthFibers.delete(s.sessionId);
+        if (s.status === "failed") {
+          st.sessions.delete(s.sessionId);
+          st.mcpToSession.delete(s.mcpToken);
+          st.byGhostId.delete(s.ghostId);
+          st.actionStamps.delete(s.sessionId);
+          const aset = st.byAgent.get(s.agentId);
+          if (aset) {
+            aset.delete(s.sessionId);
+            if (aset.size === 0) st.byAgent.delete(s.agentId);
+          }
+        }
+      }),
+    ),
   );
   return Effect.forkDaemon(program).pipe(
     Effect.tap((f) => Effect.sync(() => st.healthFibers.set(s.sessionId, f))),
