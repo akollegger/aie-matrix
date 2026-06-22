@@ -1,20 +1,18 @@
 import { createLogger } from "@aie-matrix/logger";
 
-const log = createLogger("random-agent");
+const log = createLogger("npc-agent");
 
 export type HeartbeatOpts = {
   readonly agentId: string;
   readonly agentHostUrl: string;
   readonly token: string;
   readonly intervalMs?: number;
-  readonly onSessionChange: (newSessionId: string) => void;
   readonly onNotRegistered?: () => void;
 };
 
 export function startHeartbeat(opts: HeartbeatOpts): () => void {
-  const { agentId, agentHostUrl, token, onSessionChange } = opts;
+  const { agentId, agentHostUrl, token } = opts;
   const intervalMs = opts.intervalMs ?? 30_000;
-  let lastSessionId: string | null = null;
   let stopped = false;
   let timer: ReturnType<typeof setTimeout> | null = null;
 
@@ -29,15 +27,9 @@ export function startHeartbeat(opts: HeartbeatOpts): () => void {
         },
         body: JSON.stringify({ ts: new Date().toISOString() }),
       });
-      if (res.ok) {
-        const body = (await res.json()) as { sessionActive: boolean; sessionId?: string };
-        if (body.sessionActive && body.sessionId && body.sessionId !== lastSessionId) {
-          lastSessionId = body.sessionId;
-          onSessionChange(body.sessionId);
-        }
-      } else if (res.status === 404) {
+      if (res.status === 404) {
         // Agent-host was restarted and lost this agent's registration.
-        log.warn({ kind: "random-agent.heartbeat.not-registered", agentId });
+        log.warn({ kind: "npc-agent.heartbeat.not-registered", agentId });
         opts.onNotRegistered?.();
         return; // stop loop — caller restarts it after re-registration
       }

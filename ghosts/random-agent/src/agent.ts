@@ -114,12 +114,42 @@ function startHeartbeatAfterRegistration(): void {
         },
       });
     },
+    onNotRegistered: () => { void reRegister(); },
   });
+}
+
+// Re-register after agent-host bounced and lost this agent's catalog entry.
+// Skips the deregister step (there's nothing to remove) and goes straight to
+// the backoff retry loop so the heartbeat can resume as soon as possible.
+async function reRegister(): Promise<void> {
+  if (!agentHostUrl) return;
+  const headers = { "Content-Type": "application/json", Authorization: `Bearer ${token}` };
+  let attempt = 0;
+  for (;;) {
+    const delayMs = Math.min(5_000 * 2 ** attempt, 120_000);
+    log.warn({ kind: "random-agent.registration.retry", agentId, attempt, delayMs });
+    await new Promise((r) => setTimeout(r, delayMs));
+    attempt++;
+    try {
+      const res = await fetch(`${agentHostUrl}/v1/catalog/register`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ agentId, baseUrl: publicBase }),
+      });
+      if (res.ok || res.status === 201 || res.status === 409) {
+        log.info({ kind: "random-agent.reregistered", agentId });
+        startHeartbeatAfterRegistration();
+        return;
+      }
+    } catch {
+      // agent-host still unreachable
+    }
+  }
 }
 
 async function register(): Promise<void> {
   if (!agentHostUrl) {
-    console.warn(JSON.stringify({ kind: "random-agent.registration-skipped", reason: "AGENT_HOST_URL not set" }));
+    log.warn({ kind: "random-agent.registration-skipped", reason: "AGENT_HOST_URL not set" });
     return;
   }
 
@@ -133,12 +163,13 @@ async function register(): Promise<void> {
   try {
     const del = await fetch(`${agentHostUrl}/v1/catalog/${agentId}`, { method: "DELETE", headers });
     if (del.status === 409) {
-      console.warn(JSON.stringify({ kind: "random-agent.deregister-conflict", agentId, note: "active sessions; skipping deregister" }));
+      log.warn({ kind: "random-agent.deregister-conflict", agentId, note: "active sessions; skipping deregister" });
     }
   } catch {
     // network error during delete — continue to registration attempt
   }
 
+  // Phase 1: fast retry (2 s interval) for up to registerTimeoutMs
   for (;;) {
     try {
       const res = await fetch(`${agentHostUrl}/v1/catalog/register`, {
@@ -147,28 +178,29 @@ async function register(): Promise<void> {
         body: JSON.stringify({ agentId, baseUrl: publicBase }),
       });
       if (res.ok || res.status === 201) {
-        log.info({ kind: "registered", agentId });
+        log.info({ kind: "random-agent.registered", agentId });
         startHeartbeatAfterRegistration();
         return;
       }
       if (res.status === 409) {
         // Already registered (race or restart without clean deregister) — treat as success
-        console.warn(JSON.stringify({ kind: "random-agent.already-registered", agentId }));
+        log.warn({ kind: "random-agent.already-registered", agentId });
         startHeartbeatAfterRegistration();
         return;
       }
-      // 4xx client error that isn't 409 — unlikely to recover, fall through to retry
-      console.warn(JSON.stringify({ kind: "random-agent.registration-error", status: res.status }));
-    } catch (err) {
+      log.warn({ kind: "random-agent.registration-error", status: res.status });
+    } catch {
       // network error — agent-host not yet ready
     }
 
-    if (Date.now() >= deadline) {
-      console.error(JSON.stringify({ kind: "random-agent.registration-timeout", agentId }));
-      process.exit(1);
-    }
+    if (Date.now() >= deadline) break;
     await new Promise((r) => setTimeout(r, 2_000));
   }
+
+  // Phase 2: agent-host was not reachable within the fast window — keep retrying with
+  // exponential backoff rather than exiting. The pod stays alive for health checks.
+  log.warn({ kind: "random-agent.registration-timeout", agentId, note: "switching to backoff retry" });
+  await reRegister();
 }
 
 async function deregister(): Promise<void> {
