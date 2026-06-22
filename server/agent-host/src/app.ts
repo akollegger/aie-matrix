@@ -27,6 +27,24 @@ export type AppOptions = {
 export function createApp(runtime: AppRuntime, opts: AppOptions): express.Express {
   const { devToken, publicBase, worldApiUrl } = opts;
 
+  // Cache for the world-api live session ID — returned by the heartbeat endpoint
+  // so agents can detect session changes. TTL 10s to avoid per-heartbeat traffic.
+  let _liveSessionCache: { id: string; at: number } | null = null;
+  async function getLiveSessionId(): Promise<string | null> {
+    const now = Date.now();
+    if (_liveSessionCache && now - _liveSessionCache.at < 10_000) return _liveSessionCache.id;
+    try {
+      const r = await fetch(`${worldApiUrl}/live?status=active`, { signal: AbortSignal.timeout(3_000) });
+      if (!r.ok) return null;
+      const sessions = (await r.json()) as Array<{ id: string }>;
+      const id = sessions[0]?.id ?? null;
+      if (id) _liveSessionCache = { id, at: now };
+      return id;
+    } catch {
+      return null;
+    }
+  }
+
   const requireBearer = (req: Request): Effect.Effect<void, Unauthorized> =>
     req.headers.authorization === `Bearer ${devToken}`
       ? Effect.void
@@ -369,7 +387,6 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
       Effect.gen(function* () {
         yield* requireBearer(req);
         const catalog = yield* CatalogService;
-        const supervisor = yield* AgentSupervisor;
         const { agentId } = req.params;
         const body = req.body as HeartbeatRequest | null;
 
@@ -391,12 +408,12 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
           });
         }
 
-        // Detect active session (cached at ≤10s via world-api live endpoint)
-        const sessionIds = supervisor.listSessionIdsByAgent(agentId!);
-        const sessionActive = sessionIds.length > 0;
-        const sessionId = sessionIds[0];
+        // Return the world-api live session ID so agents can detect session changes.
+        // Previously this returned internal supervisor session IDs (per-ghost ULIDs)
+        // which agents misinterpreted as world session changes on every re-spawn.
+        const sessionId = yield* Effect.promise(() => getLiveSessionId());
 
-        const responseBody: HeartbeatResponse = sessionActive
+        const responseBody: HeartbeatResponse = sessionId != null
           ? { sessionActive: true, sessionId }
           : { sessionActive: false };
 
