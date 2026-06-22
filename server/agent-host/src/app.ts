@@ -47,6 +47,24 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
     }
   }
 
+  // Cache for the world-api live session ID — returned by the heartbeat endpoint
+  // so agents can detect session changes. TTL 10s to avoid per-heartbeat traffic.
+  let _liveSessionCache: { id: string; at: number } | null = null;
+  async function getLiveSessionId(): Promise<string | null> {
+    const now = Date.now();
+    if (_liveSessionCache && now - _liveSessionCache.at < 10_000) return _liveSessionCache.id;
+    try {
+      const r = await fetch(`${worldApiUrl}/live?status=active`, { signal: AbortSignal.timeout(3_000) });
+      if (!r.ok) return null;
+      const sessions = (await r.json()) as Array<{ id: string }>;
+      const id = sessions[0]?.id ?? null;
+      if (id) _liveSessionCache = { id, at: now };
+      return id;
+    } catch {
+      return null;
+    }
+  }
+
   const requireBearer = (req: Request): Effect.Effect<void, Unauthorized> =>
     req.headers.authorization === `Bearer ${devToken}`
       ? Effect.void
