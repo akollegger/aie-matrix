@@ -312,6 +312,9 @@ jobs:
           envsubst < deploy/k8s/ghosts/peppers-agent.yaml \
             | kubectl apply --namespace ${{ env.NAMESPACE }} -f -
 
+      - name: Apply ingress and BackendConfig
+        run: kubectl apply --namespace ${{ env.NAMESPACE }} -f deploy/k8s/ingress.yaml
+
       # ── Build & deploy front-ends ─────────────────────────────────────────
 
       - name: Build workspace deps for Intermedium
