@@ -1,23 +1,16 @@
 /**
- * Production-grade bootstrapping orchestrator in TypeScript.
- * Compiles to dist/bootstrap-production.js and is packaged in the server image.
- * Automates starting a live session, waiting for registered agents, and spawning:
- *   1. All enabled NPC agent roster characters.
- *   2. 10 random-agent wanderers.
+ * Production bootstrap: ensures the world server is healthy and a live session exists.
+ * Agent-host and agents self-register and spawn their roster via spec-038 resilience.
  */
 
 const httpPort = process.env.AIE_MATRIX_HTTP_PORT || "8787";
-const housePort = process.env.AGENT_HOST_PORT || "4000";
-const npcAgentPort = process.env.NPC_AGENT_PORT || "4004";
 
 const worldBase = process.env.WORLD_API_URL || `http://server:${httpPort}`;
-const houseBase = process.env.AGENT_HOST_URL || `http://agent-host:${housePort}`;
 
 const adminToken = process.env.ADMIN_TOKEN || "";
-const token = process.env.AGENT_HOST_TOKEN || "";
 
-if (!adminToken || !token) {
-  console.error("[bootstrap] Error: ADMIN_TOKEN and AGENT_HOST_TOKEN are required in the environment.");
+if (!adminToken) {
+  console.error("[bootstrap] Error: ADMIN_TOKEN is required in the environment.");
   process.exit(1);
 }
 
@@ -26,22 +19,12 @@ const adminHeaders = {
   Authorization: `Bearer ${adminToken}`,
 };
 
-const agentHeaders = {
-  "Content-Type": "application/json",
-  Authorization: `Bearer ${token}`,
-};
-
 interface SessionRecord {
   id: string;
 }
 
 interface MapItem {
   id: string;
-}
-
-interface CatalogAgent {
-  agentId: string;
-  baseUrl: string;
 }
 
 async function waitUntilReady(url: string, label: string, maxMs = 300_000): Promise<void> {
@@ -124,29 +107,6 @@ async function startSessionIfNeeded(): Promise<string> {
   return session.id;
 }
 
-async function waitForNpcAgentInCatalog(maxMs = 60_000): Promise<string | null> {
-  const start = Date.now();
-  while (Date.now() - start < maxMs) {
-    try {
-      const r = await fetch(`${houseBase}/v1/catalog`, { headers: agentHeaders });
-      if (r.ok) {
-        const catalog = (await r.json()) as { agents?: Record<string, CatalogAgent> };
-        const agents = catalog.agents ?? catalog ?? [];
-        const found = Object.values(agents).find(
-          (a) => typeof a === "object" && a !== null && String(a.baseUrl ?? "").includes(`:${npcAgentPort}`),
-        );
-        if (found) {
-          console.info(`[bootstrap] npc-agent found in catalog: ${found.agentId}`);
-          return found.agentId;
-        }
-      }
-    } catch {
-      /* retry */
-    }
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  return null;
-}
 
 async function main() {
   try {
