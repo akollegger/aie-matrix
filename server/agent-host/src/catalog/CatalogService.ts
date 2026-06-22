@@ -130,17 +130,13 @@ export class CatalogServiceImpl implements ICatalogService {
       const b = normalizeBaseUrl(baseUrl);
       const disk = yield* this.load();
       const existing = disk.agents[agentId];
-      // Re-registration from a DIFFERENT baseUrl is rejected — that
-      // would let one host silently take over another's agentId. But
-      // re-registration from the SAME baseUrl is an UPSERT: the
-      // agent restarted with a new agent card (e.g. new requiredTools),
-      // refresh the catalog so the changes go live without manual
-      // catalog.json edits.
-      // Agent variant has `kind?: "agent"` (optional), so treat
-      // anything that isn't a mini-game as an agent entry.
-      if (existing && existing.kind !== "mini-game" && existing.baseUrl !== b) {
-        return yield* Effect.fail(new AgentAlreadyRegistered({ agentId }));
-      }
+      // Re-registration from the SAME baseUrl is an UPSERT: the agent restarted
+      // with a new agent card — refresh the catalog so changes go live without
+      // manual catalog.json edits.
+      // Re-registration from a DIFFERENT baseUrl is also allowed as an UPSERT:
+      // this is the Kubernetes rolling-deploy case where a new pod uses the same
+      // stable AGENT_ID but has a new pod IP. The new entry replaces the old one;
+      // the old pod deregisters on SIGTERM and its ghost tasks fail out naturally.
       if (existing && existing.kind === "mini-game") {
         // A mini-game owns this id; the agent register path can't
         // overwrite it. Surface as already-registered (the only error

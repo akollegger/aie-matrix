@@ -52,11 +52,9 @@ spec:
                   fieldPath: status.podIP
             - name: RANDOM_AGENT_PUBLIC_BASE_URL
               value: "http://$(MY_POD_IP):4001"
-            # Pod name via downward API — becomes unique agentId suffix
-            - name: HOSTNAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
+            # Stable agent ID so rolling deploys upsert rather than duplicate
+            - name: AGENT_ID
+              value: "random-agent"
             - name: RANDOM_AGENT_COUNT
               value: "10"
           readinessProbe:
