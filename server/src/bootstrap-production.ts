@@ -152,49 +152,13 @@ async function main() {
   try {
     console.info("[bootstrap] Starting production bootstrap sequence…");
     await waitUntilReady(`${worldBase}/health`, "world server");
-    await waitUntilReady(`${houseBase}/v1/catalog`, "agent-host", 180_000);
 
+    // Start (or confirm) the live session. Agent-host and agents are deployed
+    // after this job completes and will reconcile their own roster via the
+    // startup-reconciliation path (spec-038). No need to wait for agent-host here.
     await startSessionIfNeeded();
 
-    console.info("[bootstrap] Bootstrapping NPC agent roster…");
-    const npcAgentId = await waitForNpcAgentInCatalog();
-    if (npcAgentId) {
-      const npcSp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/${npcAgentId}`, {
-        method: "POST",
-        headers: agentHeaders,
-        body: JSON.stringify({}),
-      });
-      if (npcSp.ok) {
-        const result = (await npcSp.json()) as { spawned?: unknown[]; failed?: unknown[] };
-        const spawnedCount = result.spawned?.length ?? 0;
-        const failedCount = result.failed?.length ?? 0;
-        console.info(`[bootstrap] npc-agent roster: ${spawnedCount} characters spawned, ${failedCount} failed.`);
-      } else {
-        console.error(`[bootstrap] npc-agent spawn failed: ${npcSp.status}`, await npcSp.text());
-      }
-    } else {
-      console.warn("[bootstrap] npc-agent did not register in catalog. Skipping NPC spawn.");
-    }
-
-    console.info("[bootstrap] Bootstrapping 10 random-agent wanderers…");
-    let randomSpawned = 0;
-    for (let i = 0; i < 10; i++) {
-      try {
-        const sp = await fetch(`${houseBase}/v1/sessions/spawn-trusted/random-agent`, {
-          method: "POST",
-          headers: agentHeaders,
-          body: JSON.stringify({ displayName: `wanderer-${i + 1}` }),
-        });
-        if (sp.ok) {
-          randomSpawned++;
-        } else {
-          console.error(`[bootstrap] spawn random-agent ${i + 1} failed: ${sp.status}`, await sp.text());
-        }
-      } catch (err) {
-        console.error(`[bootstrap] Error spawning random-agent ${i + 1}:`, err);
-      }
-    }
-    console.info(`[bootstrap] Bootstrapping complete. Spawned ${randomSpawned}/10 random-agents.`);
+    console.info("[bootstrap] Session ready. Agent-host and agents will self-register and spawn roster.");
     process.exit(0);
   } catch (err) {
     console.error("[bootstrap] Fatal error in bootstrap script:", err);
