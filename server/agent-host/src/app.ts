@@ -260,6 +260,13 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
             ? (req.headers["x-a2a-notification-token"] as string)
             : null;
         if (a2aToken !== null && a2aToken.length > 0) {
+          // Accept the shared AGENT_HOST_TOKEN sent as X-A2A-Notification-Token
+          // by the A2A SDK's DefaultPushNotificationSender (its default header name).
+          if (devToken.length > 0 && a2aToken === devToken) {
+            res.status(204).end();
+            return;
+          }
+          // Legacy path: per-session MCP token (if ever used)
           const session = supervisor.getByMcpToken(a2aToken);
           if (session) {
             res.status(204).end();

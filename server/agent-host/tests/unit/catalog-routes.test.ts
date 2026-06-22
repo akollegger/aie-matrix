@@ -421,3 +421,50 @@ describe("DELETE /v1/catalog/:agentId", () => {
     expect(res.body.code).toBe("UNAUTHORIZED");
   });
 });
+
+describe("POST /v1/internal/a2a-agent-push", () => {
+  let tmpDir: string;
+  let catalogPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "catalog-routes-push-test-"));
+    catalogPath = join(tmpDir, "catalog.json");
+  });
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("204 when X-A2A-Notification-Token equals devToken (A2A SDK DefaultPushNotificationSender path)", async () => {
+    const rt = await buildRuntime(catalogPath);
+    const app = createApp(rt, BASE_OPTS);
+    const res = await supertest(app)
+      .post("/v1/internal/a2a-agent-push")
+      .set("X-A2A-Notification-Token", DEV_TOKEN)
+      .send({ id: "task-1", status: { state: "completed" } });
+    await rt.dispose();
+    expect(res.status).toBe(204);
+  });
+
+  it("204 when Authorization: Bearer devToken is used", async () => {
+    const rt = await buildRuntime(catalogPath);
+    const app = createApp(rt, BASE_OPTS);
+    const res = await supertest(app)
+      .post("/v1/internal/a2a-agent-push")
+      .set("Authorization", `Bearer ${DEV_TOKEN}`)
+      .send({ id: "task-1", status: { state: "completed" } });
+    await rt.dispose();
+    expect(res.status).toBe(204);
+  });
+
+  it("401 when token is wrong or absent", async () => {
+    const rt = await buildRuntime(catalogPath);
+    const app = createApp(rt, BASE_OPTS);
+    const res = await supertest(app)
+      .post("/v1/internal/a2a-agent-push")
+      .set("X-A2A-Notification-Token", "wrong-token")
+      .send({ id: "task-1", status: { state: "completed" } });
+    await rt.dispose();
+    expect(res.status).toBe(401);
+  });
+});
