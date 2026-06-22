@@ -22,10 +22,12 @@ export type AppOptions = {
   readonly devToken: string;
   readonly publicBase: string;
   readonly worldApiUrl: string;
+  /** Delay between spawn-on-registration retries when world-api is unreachable. Defaults to 5000ms. */
+  readonly spawnRetryDelayMs?: number;
 };
 
 export function createApp(runtime: AppRuntime, opts: AppOptions): express.Express {
-  const { devToken, publicBase, worldApiUrl } = opts;
+  const { devToken, publicBase, worldApiUrl, spawnRetryDelayMs = 5_000 } = opts;
 
   // Cache for the world-api live session ID — returned by the heartbeat endpoint
   // so agents can detect session changes. TTL 10s to avoid per-heartbeat traffic.
@@ -443,30 +445,40 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
         res.status(201).json({ ok: true, agentId: out.agentId });
 
         // If this is a roster agent, trigger spawn now if a session is already active.
-        // Fire-and-forget: failures are logged but don't affect the registration response.
+        // Retries with backoff when world-api is transiently unreachable (e.g. server
+        // pod restarting during a rolling deploy). Gives up only when world-api responds
+        // authoritatively with no active session.
         const isRoster =
           out.kind !== "mini-game" &&
           (out.agentCard as { matrix?: { rosterAgent?: boolean } }).matrix?.rosterAgent === true;
         if (isRoster) {
           void (async () => {
-            try {
-              const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
-                signal: AbortSignal.timeout(5_000),
-              });
-              if (!liveRes.ok) return;
-              const sessions = (await liveRes.json()) as Array<{ id: string }>;
-              if (!Array.isArray(sessions) || sessions.length === 0) return;
-              await runtime.runPromise(
-                Effect.flatMap(AgentSupervisor, (s) => s.spawnRosterForAgent(out.agentId, out.baseUrl)),
-              );
-            } catch (e) {
-              console.error(
-                JSON.stringify({
-                  kind: "agent-host.registration-spawn-hook.error",
-                  agentId: out.agentId,
-                  message: e instanceof Error ? e.message : String(e),
-                }),
-              );
+            let attempt = 0;
+            for (;;) {
+              try {
+                const liveRes = await fetch(`${worldApiUrl}/live?status=active`, {
+                  signal: AbortSignal.timeout(5_000),
+                });
+                if (!liveRes.ok) return; // authoritative non-OK — give up
+                const sessions = (await liveRes.json()) as Array<{ id: string }>;
+                if (!Array.isArray(sessions) || sessions.length === 0) return; // no session — give up
+                await runtime.runPromise(
+                  Effect.flatMap(AgentSupervisor, (s) => s.spawnRosterForAgent(out.agentId, out.baseUrl)),
+                );
+                return; // success
+              } catch (e) {
+                console.error(
+                  JSON.stringify({
+                    kind: "agent-host.registration-spawn-hook.error",
+                    agentId: out.agentId,
+                    attempt,
+                    message: e instanceof Error ? e.message : String(e),
+                  }),
+                );
+              }
+              const delayMs = Math.min(spawnRetryDelayMs * 2 ** attempt, 60_000);
+              await new Promise<void>((r) => setTimeout(r, delayMs));
+              attempt++;
             }
           })();
         }

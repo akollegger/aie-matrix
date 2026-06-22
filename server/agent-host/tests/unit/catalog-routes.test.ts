@@ -254,6 +254,44 @@ describe("POST /v1/catalog/register", () => {
       await rt.dispose();
     });
 
+    it("retries spawn when world-api is initially unreachable then recovers", async () => {
+      const spawnRosterFn = vi.fn();
+      // First live check throws (world-api down), second returns an active session.
+      let liveCallCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url: string) => {
+          if (String(url).includes("/live")) {
+            liveCallCount++;
+            if (liveCallCount === 1) return Promise.reject(new Error("fetch failed"));
+            return Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: "session-1" }]) });
+          }
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(ROSTER_CARD) });
+        }),
+      );
+      const layer = Layer.mergeAll(
+        CatalogServiceLive(catalogPath),
+        makeStubSupervisorWithSpyRoster(spawnRosterFn),
+        McpProxyServiceLive,
+      );
+      const rt = ManagedRuntime.make(layer);
+      // spawnRetryDelayMs=10 makes the retry fire in ~10ms instead of 5s
+      const app = createApp(rt, { ...BASE_OPTS, spawnRetryDelayMs: 10 });
+
+      const res = await supertest(app)
+        .post("/v1/catalog/register")
+        .set("Authorization", `Bearer ${DEV_TOKEN}`)
+        .send({ agentId: "roster-agent", baseUrl: "http://127.0.0.1:4001" });
+
+      expect(res.status).toBe(201);
+      // Retry fires after spawnRetryDelayMs — give it a generous window
+      await vi.waitFor(
+        () => expect(spawnRosterFn).toHaveBeenCalledWith("roster-agent", "http://127.0.0.1:4001"),
+        { timeout: 2_000 },
+      );
+      await rt.dispose();
+    });
+
     it("does not call spawnRosterForAgent when a roster agent registers but no session is active", async () => {
       const spawnRosterFn = vi.fn();
       stubFetchCardAndLive(ROSTER_CARD, []); // empty sessions
