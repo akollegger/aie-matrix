@@ -1025,6 +1025,15 @@ async function main(): Promise<void> {
   log.info({ kind: "listening", feature: "map-assets", url: `GET http://127.0.0.1:${httpPort}/maps/...` });
 }
 
+// Prevent unhandled async rejections from crashing the pod — log and continue.
+// Startup failures still call process.exit(1) explicitly before reaching here.
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("[aie-matrix] unhandledRejection — kept alive", { reason, promise });
+});
+process.on("uncaughtException", (err) => {
+  console.error("[aie-matrix] uncaughtException — kept alive", err);
+});
+
 void main().catch((err) => {
   console.error(err);
   process.exit(1);
