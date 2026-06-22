@@ -609,7 +609,7 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
               const r = await fetch(`${deps.worldHttpBase}/registry/ghosts`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ agentId }),
+                body: JSON.stringify({ agentId, displayName: char.displayName }),
               });
               if (!r.ok) {
                 const body = await r.text().catch(() => "");
