@@ -43,11 +43,9 @@ spec:
                   fieldPath: status.podIP
             - name: NPC_AGENT_PUBLIC_BASE_URL
               value: "http://$(MY_POD_IP):4004"
-            # Pod name via downward API — becomes unique agentId suffix
-            - name: HOSTNAME
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.name
+            # Stable agent ID so rolling deploys upsert rather than duplicate
+            - name: AGENT_ID
+              value: "npc-agent"
           readinessProbe:
             httpGet:
               path: /health

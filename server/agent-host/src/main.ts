@@ -171,17 +171,29 @@ const server = app.listen(port, "0.0.0.0", () => {
       try {
         const catalog = await runtime.runPromise(pipe(CatalogService, Effect.map((c) => c)));
         const supervisor = await runtime.runPromise(pipe(AgentSupervisor, Effect.map((s) => s)));
-        await runStartupReconciliation({
-          worldApiUrl,
-          catalog: {
-            load: () => runtime.runPromise(catalog.load()),
-            save: (file) => runtime.runPromise(catalog.save(file)),
-          },
-          supervisor: {
-            spawnRosterForAgent: (agentId, baseUrl) =>
-              runtime.runPromise(supervisor.spawnRosterForAgent(agentId, baseUrl)),
-          },
-        });
+        const catalogAdapter = {
+          load: () => runtime.runPromise(catalog.load()),
+          save: (file: Parameters<typeof catalog.save>[0]) => runtime.runPromise(catalog.save(file)),
+        };
+        const supervisorAdapter = {
+          spawnRosterForAgent: (agentId: string, baseUrl: string) =>
+            runtime.runPromise(supervisor.spawnRosterForAgent(agentId, baseUrl)),
+        };
+        // Retry if world-api was unreachable at boot — transient condition after pod restarts.
+        // Stop retrying on authoritative skips (no session, no roster agents) or on success.
+        let attempt = 0;
+        for (;;) {
+          const result = await runStartupReconciliation({
+            worldApiUrl,
+            catalog: catalogAdapter,
+            supervisor: supervisorAdapter,
+          });
+          if (result.skipped !== "live-check-failed") break;
+          const delayMs = Math.min(5_000 * 2 ** attempt, 60_000);
+          log.warn({ kind: "agent-host.startup-reconciliation.retry", attempt, delayMs, reason: "live-check-failed" });
+          await new Promise((r) => setTimeout(r, delayMs));
+          attempt++;
+        }
       } catch (e) {
         console.error(
           JSON.stringify({

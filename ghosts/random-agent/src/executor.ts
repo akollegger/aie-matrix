@@ -138,9 +138,18 @@ function cancelMovementForGhost(ghostId: string, reason: string): void {
 async function startMovementFromSpawn(
   getMoveIntervalMs: () => string | undefined,
   ctx: SpawnContext,
+  getMcpErrorRetryMs: () => number = () => 5_000,
 ): Promise<void> {
   const { ghostId } = ctx;
   cancelMovementForGhost(ghostId, "spawn-replace");
+
+  // Register the cancel handle BEFORE any await so cancelTask() can reach it
+  // immediately after "working" is published. If cancel fires before connect()
+  // completes, `go` will be false and the while loop exits without running.
+  let go = true;
+  let wakeUp: (() => void) | null = null;
+  const handle: MoveLoop = { cancel: () => { go = false; wakeUp?.(); } };
+  loopsByGhostId.set(ghostId, handle);
 
   const mcp = new GhostMcpClient({
     worldApiBaseUrl: ctx.houseEndpoints.mcp,
@@ -150,10 +159,6 @@ async function startMovementFromSpawn(
   await mcp.announce("", ctx.ghostCard?.glyph ?? "👻").catch(() => {});
   mcpByGhostId.set(ghostId, mcp);
   const moveMs = Math.max(200, parseInt(getMoveIntervalMs() ?? "2000", 10) || 2000);
-  let go = true;
-  let wakeUp: (() => void) | null = null;
-  const handle: MoveLoop = { cancel: () => { go = false; wakeUp?.(); } };
-  loopsByGhostId.set(ghostId, handle);
   log.info({ kind: "movement.start", ghostId, intervalMs: moveMs });
   // Track pending proposals this ghost initiated so we can randomly decline them
   const pendingProposals: string[] = [];
@@ -248,9 +253,26 @@ async function startMovementFromSpawn(
   // Initial group membership load — fire-and-forget so startup isn't delayed (T048)
   void refreshGroupMemberships().catch(() => {});
 
+  let consecutiveMcpErrors = 0;
+  const MCP_ERROR_THRESHOLD = 3;
+
   try {
     while (go) {
-      const w = (await mcp.callTool("whereami", {})) as { h3Index?: string; tileId?: string; occupants?: string[] };
+      let w: { h3Index?: string; tileId?: string; occupants?: string[] };
+      try {
+        w = (await mcp.callTool("whereami", {})) as { h3Index?: string; tileId?: string; occupants?: string[] };
+        consecutiveMcpErrors = 0;
+      } catch (e) {
+        consecutiveMcpErrors++;
+        const msg = e instanceof Error ? e.message : String(e);
+        log.warn({ kind: "movement.mcp-error", ghostId, tool: "whereami", consecutiveMcpErrors, message: msg.slice(0, 200) });
+        if (consecutiveMcpErrors >= MCP_ERROR_THRESHOLD) {
+          log.warn({ kind: "movement.mcp-fatal", ghostId, note: "too many consecutive errors — exiting loop for re-spawn" });
+          throw new Error(`MCP unrecoverable after ${consecutiveMcpErrors} errors: ${msg}`);
+        }
+        await new Promise((r) => setTimeout(r, getMcpErrorRetryMs()));
+        continue;
+      }
       const cell = w.h3Index && w.h3Index.length > 0 ? w.h3Index : w.tileId;
       if (typeof cell === "string") {
         assertH3Res15(cell, "whereami", ghostId);
@@ -306,6 +328,7 @@ async function startMovementFromSpawn(
     if (mcpByGhostId.get(ghostId) === mcp) {
       mcpByGhostId.delete(ghostId);
     }
+    await mcp.callTool("ghost_despawn", {}).catch(() => {});
     await mcp.disconnect().catch(() => {});
   }
 }
@@ -313,6 +336,7 @@ async function startMovementFromSpawn(
 export class RandomWandererExecutor implements AgentExecutor {
   constructor(
     private readonly getMoveInterval: () => string | undefined = () => process.env.RANDOM_AGENT_MOVE_MS,
+    private readonly getMcpErrorRetryMs: () => number = () => 5_000,
   ) {}
 
   async execute(requestContext: RequestContext, eventBus: ExecutionEventBus): Promise<void> {
@@ -346,25 +370,30 @@ export class RandomWandererExecutor implements AgentExecutor {
       // Await the movement loop — keeps this A2A task in "working" state so
       // cancelTask() can cancel it cleanly. The loop exits when:
       //   (a) cancelMovementForGhost sets go=false (via cancelTask), or
-      //   (b) the loop throws (unrecoverable error).
-      await startMovementFromSpawn(this.getMoveInterval, sp).catch((e: unknown) =>
-        console.error(`[random-agent] movement ghostId=${sp.ghostId}`, e),
-      );
+      //   (b) the loop throws (unrecoverable MCP error → agent-host re-spawns).
+      let loopError: unknown = null;
+      await startMovementFromSpawn(this.getMoveInterval, sp, this.getMcpErrorRetryMs).catch((e: unknown) => {
+        loopError = e;
+        log.warn({ kind: "movement.loop-exited-with-error", ghostId: sp.ghostId, message: e instanceof Error ? e.message : String(e) });
+      });
 
       // If cancelTask already ran it has claimed the metadata and published "canceled".
-      // Only publish "completed" if we still own the metadata entry.
+      // Only publish a terminal event if we still own the metadata entry.
       const stillOwned = spawnTaskMeta.get(t.id)?.ghostId === sp.ghostId;
       if (stillOwned) {
         spawnTaskMeta.delete(t.id);
         if (ghostIdToTaskId.get(sp.ghostId) === t.id) {
           ghostIdToTaskId.delete(sp.ghostId);
         }
+        // Publish "failed" when the loop threw so agent-host re-spawns the ghost.
+        // Publish "completed" only on clean cancellation (go=false via cancelTask).
+        const terminalState = loopError !== null ? "failed" : "completed";
         const done: TaskStatusUpdateEvent = {
           kind: "status-update",
           taskId: t.id,
           contextId: contextId ?? t.contextId,
           final: true,
-          status: { state: "completed", timestamp: new Date().toISOString() },
+          status: { state: terminalState, timestamp: new Date().toISOString() },
         };
         eventBus.publish(done);
       }

@@ -100,6 +100,32 @@ describe("startHeartbeat", () => {
     stop();
   });
 
+  it("calls onNotRegistered and stops the loop on 404", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: false, status: 404 });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const onSessionChange = vi.fn();
+    const onNotRegistered = vi.fn();
+    const stop = startHeartbeat({
+      agentId: "test-agent",
+      agentHostUrl: "http://localhost:4000",
+      token: "secret",
+      intervalMs: 100,
+      onSessionChange,
+      onNotRegistered,
+    });
+
+    // Fire first beat
+    await vi.advanceTimersByTimeAsync(10);
+    expect(onNotRegistered).toHaveBeenCalledTimes(1);
+
+    // Advance further — loop should have stopped, no additional fetches
+    await vi.advanceTimersByTimeAsync(200);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    stop();
+  });
+
   it("silently retries (no crash) when heartbeat HTTP fails", async () => {
     const fetchMock = vi.fn().mockRejectedValue(new Error("ECONNREFUSED"));
     vi.stubGlobal("fetch", fetchMock);

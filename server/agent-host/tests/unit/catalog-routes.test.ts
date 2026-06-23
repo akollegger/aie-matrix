@@ -160,7 +160,7 @@ describe("POST /v1/catalog/register", () => {
     expect(res.body).toMatchObject({ ok: true, agentId: "new-agent" });
   });
 
-  it("409 ALREADY_REGISTERED when a different baseUrl tries to claim a registered agentId", async () => {
+  it("201 UPSERT when a different baseUrl registers with the same agentId (pod replacement)", async () => {
     await seedCatalog(catalogPath, { "existing-agent": SEEDED_ENTRY });
     stubFetchCard(VALID_CARD);
     const rt = await buildRuntime(catalogPath);
@@ -168,12 +168,12 @@ describe("POST /v1/catalog/register", () => {
     const res = await supertest(app)
       .post("/v1/catalog/register")
       .set("Authorization", `Bearer ${DEV_TOKEN}`)
-      // SEEDED_ENTRY's baseUrl is 4001 — re-register from a DIFFERENT baseUrl
-      // (4002) is still rejected as a duplicate to prevent hijack.
+      // SEEDED_ENTRY's baseUrl is 4001 — a new pod at 4002 with the same stable
+      // AGENT_ID is allowed to take over the slot (Kubernetes rolling deploy).
       .send({ agentId: "existing-agent", baseUrl: "http://127.0.0.1:4002" });
     await rt.dispose();
-    expect(res.status).toBe(409);
-    expect(res.body.code).toBe("ALREADY_REGISTERED");
+    expect(res.status).toBe(201);
+    expect(res.body.agentId).toBe("existing-agent");
   });
 
   it("re-register from same baseUrl is an UPSERT — refreshes the agent card", async () => {
@@ -251,6 +251,44 @@ describe("POST /v1/catalog/register", () => {
       expect(res.status).toBe(201);
       // Wait for the fire-and-forget async block to complete
       await vi.waitFor(() => expect(spawnRosterFn).toHaveBeenCalledWith("roster-agent", "http://127.0.0.1:4001"));
+      await rt.dispose();
+    });
+
+    it("retries spawn when world-api is initially unreachable then recovers", async () => {
+      const spawnRosterFn = vi.fn();
+      // First live check throws (world-api down), second returns an active session.
+      let liveCallCount = 0;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation((url: string) => {
+          if (String(url).includes("/live")) {
+            liveCallCount++;
+            if (liveCallCount === 1) return Promise.reject(new Error("fetch failed"));
+            return Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: "session-1" }]) });
+          }
+          return Promise.resolve({ ok: true, json: () => Promise.resolve(ROSTER_CARD) });
+        }),
+      );
+      const layer = Layer.mergeAll(
+        CatalogServiceLive(catalogPath),
+        makeStubSupervisorWithSpyRoster(spawnRosterFn),
+        McpProxyServiceLive,
+      );
+      const rt = ManagedRuntime.make(layer);
+      // spawnRetryDelayMs=10 makes the retry fire in ~10ms instead of 5s
+      const app = createApp(rt, { ...BASE_OPTS, spawnRetryDelayMs: 10 });
+
+      const res = await supertest(app)
+        .post("/v1/catalog/register")
+        .set("Authorization", `Bearer ${DEV_TOKEN}`)
+        .send({ agentId: "roster-agent", baseUrl: "http://127.0.0.1:4001" });
+
+      expect(res.status).toBe(201);
+      // Retry fires after spawnRetryDelayMs — give it a generous window
+      await vi.waitFor(
+        () => expect(spawnRosterFn).toHaveBeenCalledWith("roster-agent", "http://127.0.0.1:4001"),
+        { timeout: 2_000 },
+      );
       await rt.dispose();
     });
 
@@ -381,5 +419,52 @@ describe("DELETE /v1/catalog/:agentId", () => {
     await rt.dispose();
     expect(res.status).toBe(401);
     expect(res.body.code).toBe("UNAUTHORIZED");
+  });
+});
+
+describe("POST /v1/internal/a2a-agent-push", () => {
+  let tmpDir: string;
+  let catalogPath: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "catalog-routes-push-test-"));
+    catalogPath = join(tmpDir, "catalog.json");
+  });
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("204 when X-A2A-Notification-Token equals devToken (A2A SDK DefaultPushNotificationSender path)", async () => {
+    const rt = await buildRuntime(catalogPath);
+    const app = createApp(rt, BASE_OPTS);
+    const res = await supertest(app)
+      .post("/v1/internal/a2a-agent-push")
+      .set("X-A2A-Notification-Token", DEV_TOKEN)
+      .send({ id: "task-1", status: { state: "completed" } });
+    await rt.dispose();
+    expect(res.status).toBe(204);
+  });
+
+  it("204 when Authorization: Bearer devToken is used", async () => {
+    const rt = await buildRuntime(catalogPath);
+    const app = createApp(rt, BASE_OPTS);
+    const res = await supertest(app)
+      .post("/v1/internal/a2a-agent-push")
+      .set("Authorization", `Bearer ${DEV_TOKEN}`)
+      .send({ id: "task-1", status: { state: "completed" } });
+    await rt.dispose();
+    expect(res.status).toBe(204);
+  });
+
+  it("401 when token is wrong or absent", async () => {
+    const rt = await buildRuntime(catalogPath);
+    const app = createApp(rt, BASE_OPTS);
+    const res = await supertest(app)
+      .post("/v1/internal/a2a-agent-push")
+      .set("X-A2A-Notification-Token", "wrong-token")
+      .send({ id: "task-1", status: { state: "completed" } });
+    await rt.dispose();
+    expect(res.status).toBe(401);
   });
 });
