@@ -206,6 +206,27 @@ End a live session.
 2. Broadcast `world.session-ended` via Redis pub/sub.
 3. Does not archive maps; map lifecycle is independent.
 
+#### `POST /live/ensure`
+
+Idempotent session bootstrap. Returns the existing active session if one exists; creates a new one if none does. Use this instead of `POST /live` for automated startup paths (deploy hooks, CI) to prevent duplicate sessions.
+
+```json
+{
+  "name": "deploy-main",
+  "maps": [{ "mapId": "moscone-west-l2", "role": "primary" }]
+}
+```
+
+Server steps:
+1. Query `(:LiveSession { status: "active" }) ORDER BY startedAt DESC LIMIT 1`.
+2. If found: return the session as-is with HTTP `200 OK`. Body includes `"created": false`.
+3. If not found: execute the same steps as `POST /live` (resolve maps, create session node, seed graph, broadcast `world.session-started`). Return HTTP `201 Created`. Body includes `"created": true`.
+4. If multiple active sessions exist (error state): return the most recent, HTTP `200 OK`, with an additional `"warning": "multiple-active-sessions"` field. Log `world.session.ensure.multiple-active` server-side.
+
+Response body (both 200 and 201): the full session object plus `created` and optional `warning` fields.
+
+This endpoint is **idempotent** — calling it N times with the same default parameters has the same effect as calling it once.
+
 ### Service startup and session binding
 
 Session binding differs by consumer type:
@@ -222,13 +243,14 @@ elif LIVE_SESSION_ID is set:
   primaryMap = session.maps.find(m => m.role === "primary")
   loadFromGCS(primaryMap.gcsPath)
 else:
-  # Tier 2/3 with single session (degenerate case convenience)
-  sessions = GET /live?status=active
-  if sessions.length != 1: fail loudly
+  # Tier 2/3 degenerate case — call POST /live/ensure with default name/map
+  # The world proceeds with whichever session is authoritative (existing or newly created).
+  result = POST /live/ensure { name: deployName, maps: [{ mapId: defaultMapId, role: "primary" }] }
+  session = result.session
   # same as above from here
 ```
 
-The "take first if exactly one" path is a Tier 1/2 convenience for the simple case. In any deployment with more than one active session, `LIVE_SESSION_ID` is required and its absence is a startup error, not a guess.
+The `POST /live/ensure` path in the degenerate case guarantees the system always has exactly one active session to bind to, regardless of deploy ordering. `LIVE_SESSION_ID` remains the recommended explicit path for multi-session deployments.
 
 Both load paths call the same internal `loadHexMap(bytes, options)`.
 

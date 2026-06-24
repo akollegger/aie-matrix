@@ -164,12 +164,35 @@ export function makeLocalLiveSessionLayer(): Layer.Layer<
           return { session: currentSession, removedCells: [], addedCells: [] };
         });
 
+      const ensure = (
+        name: string,
+        maps: Array<{ mapId: string; role: string }>,
+      ): Effect.Effect<{ session: SessionRecord; created: boolean; warning?: string }, LiveSessionMapNotPublishedError> =>
+        Effect.gen(function* () {
+          if (currentSession !== null && currentSession.status === "active") {
+            return { session: currentSession, created: false };
+          }
+          const session = yield* start(name, maps);
+          return { session, created: true };
+        });
+
+      const reset = (): Effect.Effect<{ sessionsEnded: number; ledgerEntriesCleared: number; groupsCleared: number }> =>
+        Effect.sync(() => {
+          const wasActive = currentSession?.status === "active" ? 1 : 0;
+          if (currentSession !== null) {
+            currentSession = { ...currentSession, status: "ended", endedAt: new Date().toISOString() };
+          }
+          return { sessionsEnded: wasActive, ledgerEntriesCleared: 0, groupsCleared: 0 };
+        });
+
       return {
         start,
+        ensure,
         list,
         get,
         switchMaps,
         end,
+        reset,
       };
     }),
   );

@@ -24,6 +24,11 @@ export interface LiveSessionOps {
     name: string,
     maps: Array<{ mapId: string; role: string }>,
   ): Effect.Effect<SessionRecord, LiveSessionMapNotPublishedError>;
+  /** Idempotent bootstrap: returns existing active session or creates one. See RFC-0013. */
+  ensure(
+    name: string,
+    maps: Array<{ mapId: string; role: string }>,
+  ): Effect.Effect<{ session: SessionRecord; created: boolean; warning?: string }, LiveSessionMapNotPublishedError>;
   list(status?: "active" | "ended"): Effect.Effect<readonly SessionRecord[], never>;
   get(id: string): Effect.Effect<SessionRecord, LiveSessionNotFoundError>;
   switchMaps(
@@ -34,6 +39,8 @@ export interface LiveSessionOps {
     LiveSessionNotFoundError | LiveSessionMapNotPublishedError
   >;
   end(id: string): Effect.Effect<void, LiveSessionNotFoundError | LiveSessionAlreadyEndedError>;
+  /** Destructive world reset: ends all active sessions, clears ledger + groups, emits world.reset. See RFC-0014. */
+  reset(): Effect.Effect<{ sessionsEnded: number; ledgerEntriesCleared: number; groupsCleared: number }>;
 }
 
 export class LiveSessionService extends Context.Tag("aie-matrix/LiveSessionService")<
@@ -341,7 +348,67 @@ export function makeLiveSessionLayer(driver: Driver): Layer.Layer<LiveSessionSer
           });
         });
 
-      return { start, list, get, switchMaps, end };
+      const ensure = (
+        name: string,
+        maps: Array<{ mapId: string; role: string }>,
+      ): Effect.Effect<{ session: SessionRecord; created: boolean; warning?: string }, LiveSessionMapNotPublishedError> =>
+        Effect.gen(function* () {
+          const active = yield* list("active");
+          if (active.length === 1) {
+            return { session: active[0]!, created: false };
+          }
+          if (active.length > 1) {
+            const sorted = [...active].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+            return { session: sorted[0]!, created: false, warning: "multiple-active-sessions" };
+          }
+          const session = yield* start(name, maps);
+          return { session, created: true };
+        });
+
+      const reset = (): Effect.Effect<{ sessionsEnded: number; ledgerEntriesCleared: number; groupsCleared: number }> =>
+        Effect.gen(function* () {
+          const result = yield* Effect.promise(async () => {
+            const session = driver.session({ defaultAccessMode: neo4j.session.WRITE });
+            try {
+              const sessionsEnded = await session.executeWrite(async (tx) => {
+                const r = await tx.run(
+                  `MATCH (s:LiveSession { status: "active" })
+                   SET s.status = "ended", s.endedAt = datetime()
+                   RETURN count(s) AS n`,
+                );
+                return (r.records[0]?.get("n") as { toNumber(): number } | undefined)?.toNumber() ?? 0;
+              });
+
+              const ledgerEntriesCleared = await session.executeWrite(async (tx) => {
+                const r = await tx.run(
+                  `MATCH (s:LiveSession)-[:LEDGER_HEAD|NEXT_ENTRY*]->(e:LedgerEntry)
+                   DETACH DELETE e
+                   RETURN count(e) AS n`,
+                );
+                return (r.records[0]?.get("n") as { toNumber(): number } | undefined)?.toNumber() ?? 0;
+              });
+
+              const groupsCleared = await session.executeWrite(async (tx) => {
+                const r = await tx.run(
+                  `MATCH (g:Group)
+                   DETACH DELETE g
+                   RETURN count(g) AS n`,
+                );
+                return (r.records[0]?.get("n") as { toNumber(): number } | undefined)?.toNumber() ?? 0;
+              });
+
+              return { sessionsEnded, ledgerEntriesCleared, groupsCleared };
+            } finally {
+              await session.close();
+            }
+          });
+
+          yield* redis.publish(WORLD_EVENTS_CHANNEL, { type: "world.reset" });
+
+          return result;
+        });
+
+      return { start, ensure, list, get, switchMaps, end, reset };
     }),
   );
 }

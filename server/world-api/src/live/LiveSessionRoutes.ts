@@ -88,11 +88,42 @@ async function readJsonBody(req: IncomingMessage): Promise<unknown> {
  * - `GET /live/@current/map`   — gram of the primary map of the current live session
  *                                (Tier 1 fallback: serves MapService.activeMapId() when no session)
  * - `POST /live`               — start a session (admin)
+ * - `POST /live/ensure`        — idempotent session bootstrap (admin, RFC-0013)
  * - `GET /live`                — list sessions (public)
  * - `GET /live/:id`            — get session (public)
  * - `PATCH /live/:id/maps`     — switch maps (admin)
  * - `DELETE /live/:id`         — end session (admin)
  */
+
+/**
+ * Handles admin routes:
+ * - `POST /admin/reset` — destructive world reset: ends all active sessions,
+ *                         clears ledger + groups, emits world.reset (RFC-0014)
+ */
+export function tryHandleAdmin(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL,
+  corsHeaders: Record<string, string>,
+): Effect.Effect<boolean, never, LiveSessionService> {
+  const { pathname } = url;
+
+  if (req.method === "POST" && (pathname === "/admin/reset" || pathname === "/admin/reset/")) {
+    return Effect.gen(function* () {
+      const authResult = yield* Effect.either(checkAdminToken(req));
+      if (authResult._tag === "Left") {
+        sendJson(res, 401, { error: "AdminAuthError", reason: authResult.left.reason }, corsHeaders);
+        return true as const;
+      }
+      const svc = yield* LiveSessionService;
+      const result = yield* svc.reset();
+      sendJson(res, 200, result, corsHeaders);
+      return true as const;
+    });
+  }
+
+  return Effect.succeed(false);
+}
 export function tryHandleLiveSession(
   req: IncomingMessage,
   res: ServerResponse,
@@ -224,6 +255,69 @@ export function tryHandleLiveSession(
           targetGhostId: "broadcast",
           payload: { sessionId: record.id },
         });
+      }
+      return true as const;
+    });
+  }
+
+  // POST /live/ensure — idempotent session bootstrap (RFC-0013)
+  if (req.method === "POST" && (pathname === "/live/ensure" || pathname === "/live/ensure/")) {
+    return Effect.gen(function* () {
+      yield* checkAdminToken(req);
+      const body = yield* Effect.tryPromise({
+        try: () => readJsonBody(req),
+        catch: (e) => new Error(e instanceof Error ? e.message : String(e)),
+      }).pipe(Effect.orDie);
+      const { name, maps } = body as { name?: string; maps?: Array<{ mapId: string; role: string }> };
+      if (!name || typeof name !== "string") {
+        sendJson(res, 400, { error: "BadRequest", message: '"name" is required' }, corsHeaders);
+        return true as const;
+      }
+      const svc = yield* LiveSessionService;
+      const result = yield* svc.ensure(name, maps ?? []).pipe(
+        Effect.catchTag("LiveSessionMapNotPublishedError", (e) => {
+          sendJson(res, 422, { error: "LiveSessionMapNotPublishedError", mapId: e.mapId }, corsHeaders);
+          return Effect.succeed(null);
+        }),
+      );
+      if (result !== null) {
+        if (result.warning) {
+          log.warn({ kind: "world.session.ensure.multiple-active", warning: result.warning });
+        }
+        const status = result.created ? 201 : 200;
+        sendJson(res, status, { ...result.session, created: result.created, ...(result.warning ? { warning: result.warning } : {}) }, corsHeaders);
+        // If newly created, reload Colyseus map (same as POST /live)
+        if (result.created) {
+          const primaryMap = result.session.maps.find((m) => m.role === "primary") ?? result.session.maps[0];
+          if (primaryMap) {
+            yield* Effect.gen(function* () {
+              const mapSvc = yield* MapManagementService;
+              const worldBridge = yield* WorldBridgeService;
+              const gramBytes = yield* mapSvc.download(primaryMap.mapId).pipe(
+                Effect.catchAll(() => Effect.succeed(null as Buffer | null)),
+              );
+              if (gramBytes !== null) {
+                const newMap = yield* Effect.tryPromise({
+                  try: () => loadGramMap(gramBytes.toString("utf8")),
+                  catch: () => null,
+                }).pipe(Effect.catchAll(() => Effect.succeed(null)));
+                if (newMap !== null) {
+                  worldBridge.setLoadedMap(newMap);
+                  const ledger = yield* LedgerService;
+                  const itemSeeds = deriveItemSeeds(newMap.itemPlacements ?? []);
+                  yield* ledger.init(itemSeeds).pipe(Effect.catchAll(() => Effect.void));
+                  log.info({ kind: "map-reloaded-on-ensure", sessionId: result.session.id, mapId: primaryMap.mapId });
+                }
+              }
+            }).pipe(Effect.catchAll(() => Effect.void));
+          }
+          const worldBridge2 = yield* WorldBridgeService;
+          worldBridge2.fanoutWorldV1({
+            t: "session.start",
+            targetGhostId: "broadcast",
+            payload: { sessionId: result.session.id },
+          });
+        }
       }
       return true as const;
     });

@@ -224,7 +224,7 @@ export {
   type SessionRecord,
 } from "./live/LiveSessionService.js";
 export { makeLocalLiveSessionLayer } from "./live/LocalLiveSessionService.js";
-export { tryHandleLiveSession } from "./live/LiveSessionRoutes.js";
+export { tryHandleLiveSession, tryHandleAdmin } from "./live/LiveSessionRoutes.js";
 export {
   LiveSessionNotFoundError,
   LiveSessionMapNotPublishedError,
