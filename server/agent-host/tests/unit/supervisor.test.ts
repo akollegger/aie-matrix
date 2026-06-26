@@ -261,6 +261,126 @@ describe("AgentSupervisor.spawnRosterForAgent (idempotency)", () => {
   });
 });
 
+describe("AgentSupervisor.despawnByAgent (pod-restart scenario)", () => {
+  /**
+   * Regression test for the "only 9 ghosts after pod reschedule" incident (2026-06-26).
+   *
+   * Root cause: when a pod (e.g. random-agent) restarts, agent-host still holds the old
+   * sessions as "running" because health checks haven't fired yet (default interval: 30s).
+   * When the pod re-registers and spawnRosterForAgent is called, the duplicate check
+   * finds the stale "running" sessions and skips all characters — leaving 0 fresh ghosts
+   * spawned instead of the expected 10.
+   *
+   * Fix: the registration hook calls despawnByAgent before spawnRosterForAgent so stale
+   * sessions are cleared synchronously before the duplicate check runs.
+   */
+  const RES15 = testH3r15();
+  let provisionCount: number;
+
+  function makePodRestartSup() {
+    provisionCount = 0;
+    const roster = [
+      { characterId: "wanderer-1", displayName: "Wanderer One" },
+      { characterId: "wanderer-2", displayName: "Wanderer Two" },
+    ];
+    let ghostSeq = 0;
+
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const u = String(url);
+      if (u.endsWith("/v1/roster") && (!init || !init.method || init.method === "GET")) {
+        return { ok: true, json: async () => roster } as Response;
+      }
+      if (u.endsWith("/registry/ghosts") && init?.method === "POST") {
+        provisionCount++;
+        const ghostId = `ghost-${++ghostSeq}`;
+        return {
+          ok: true,
+          json: async () => ({
+            ghostId,
+            credential: { token: `tok-${ghostId}`, worldApiBaseUrl: "http://127.0.0.1:8787/mcp" },
+          }),
+        } as Response;
+      }
+      return { ok: false, status: 404 } as Response;
+    }));
+
+    return makeTestSupervisor({
+      catalog: {
+        get: (_id: string) =>
+          Effect.succeed({
+            agentId: "random-agent",
+            baseUrl: "http://random-agent:4001",
+            agentCard: { name: "random-agent", matrix: { rosterAgent: true } } as any,
+            registeredAt: new Date().toISOString(),
+            builtIn: false,
+          }),
+        load: () => Effect.succeed({ agents: {} } as any),
+        save: () => Effect.void,
+        register: () => Effect.succeed({} as any),
+        list: () => Effect.succeed([]),
+        deregister: () => Effect.void,
+      } as any,
+      a2a: {
+        createClient: vi.fn().mockReturnValue(Effect.succeed({})),
+        sendSpawnContext: vi.fn().mockReturnValue(Effect.succeed({ taskId: "t", contextId: "c" })),
+        sendSpawnContextNonBlocking: vi.fn().mockReturnValue(Effect.succeed({ taskId: "t", contextId: "c" })),
+        cancelTask: vi.fn().mockReturnValue(Effect.void),
+        pingAgent: vi.fn().mockReturnValue(Effect.void),
+        sendWorldEvent: vi.fn().mockReturnValue(Effect.void),
+      } as any,
+      publicHouseBaseUrl: "http://127.0.0.1:4000",
+      worldHttpBase: "http://127.0.0.1:8787",
+      defaultCapabilityManifest: new Set(),
+      pushIngestToken: "test-token",
+      resolveWorldH3ForSpawn: async () => RES15,
+    });
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("[BUG] re-registration without cleanup skips all characters as duplicates", async () => {
+    const sup = makePodRestartSup();
+
+    // First spawn — simulates original pod startup; both wanderers get ghosts.
+    await Effect.runPromise(sup.spawnRosterForAgent("random-agent", "http://random-agent:4001"));
+    expect(provisionCount).toBe(2);
+
+    // Pod restarts: agent re-registers, triggers spawnRosterForAgent again.
+    // The old sessions are still "running" — health check hasn't fired.
+    const { spawned } = await Effect.runPromise(
+      sup.spawnRosterForAgent("random-agent", "http://random-agent:4001"),
+    );
+
+    // BUG: both characters are skipped as duplicates, no fresh ghosts provisioned.
+    expect(provisionCount).toBe(2); // no new provisions
+    expect(spawned.every(s => s.ghostId === "(already-running)")).toBe(true);
+  });
+
+  it("[FIX] despawnByAgent + re-register provisions fresh ghosts for all characters", async () => {
+    const sup = makePodRestartSup();
+
+    // Original pod startup.
+    await Effect.runPromise(sup.spawnRosterForAgent("random-agent", "http://random-agent:4001"));
+    expect(provisionCount).toBe(2);
+
+    // Pod restarts: registration hook calls despawnByAgent BEFORE spawnRosterForAgent.
+    await Effect.runPromise(sup.despawnByAgent("random-agent"));
+
+    // Small delay so background cleanup removes sessions from state maps.
+    await new Promise((r) => setTimeout(r, 50));
+
+    const { spawned, failed } = await Effect.runPromise(
+      sup.spawnRosterForAgent("random-agent", "http://random-agent:4001"),
+    );
+
+    // FIX: both wanderers get fresh ghosts.
+    expect(failed).toHaveLength(0);
+    expect(spawned).toHaveLength(2);
+    expect(provisionCount).toBe(4); // 2 original + 2 fresh
+    expect(spawned.every(s => s.ghostId !== "(already-running)")).toBe(true);
+  });
+});
+
 describe("AgentSupervisor.deliverWorldEvent (chat pipeline)", () => {
   /**
    * Regression test for the "no ghost responds" bug.

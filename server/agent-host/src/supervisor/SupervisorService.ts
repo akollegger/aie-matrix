@@ -315,6 +315,9 @@ export interface IAgentSupervisor {
   readonly listSessions: () => ReadonlyArray<{ sessionId: string; ghostId: string; agentId: string; status: AgentSessionStatus }>;
   /** Routes IC-004 world events to the A2A push session for the target ghost, if any. */
   readonly deliverWorldEvent: (event: WorldEvent) => Effect.Effect<void>;
+  /** Clear all sessions owned by an agent. Called on re-registration so stale sessions
+   *  from a dead pod don't block fresh spawns in spawnRosterForAgent. */
+  readonly despawnByAgent: (agentId: string) => Effect.Effect<void>;
   /** Spawn all characters for a roster agent without creating an orchestrator ghost.
    *  Fetches GET {agentBaseUrl}/v1/roster, provisions a ghost per character, spawns each. */
   readonly spawnRosterForAgent: (agentId: string, agentBaseUrl: string) => Effect.Effect<{
@@ -566,6 +569,40 @@ function makeAgentSupervisor(deps: Deps, state: SupervisorState): IAgentSupervis
         displayName: s.displayName,
         ...(s.characterId !== undefined ? { characterId: s.characterId } : {}),
       })),
+
+    despawnByAgent: (agentId) =>
+      Effect.gen(function* () {
+        const sessionIds = [...(state.byAgent.get(agentId) ?? [])];
+        for (const sessionId of sessionIds) {
+          const s = state.sessions.get(sessionId);
+          if (!s) continue;
+          const hf = state.healthFibers.get(sessionId);
+          if (hf) {
+            yield* Fiber.interrupt(hf);
+            state.healthFibers.delete(sessionId);
+          }
+          s.status = "shutdown";
+          // Background cleanup mirrors shutdown() — avoids blocking the caller.
+          const cleanup = Effect.gen(function* () {
+            if (s.spawnClient && s.currentTaskId) {
+              yield* a2a.cancelTask(s.spawnClient, s.currentTaskId).pipe(Effect.orElse(() => Effect.void));
+              yield* Effect.sleep(Duration.millis(100));
+            }
+            s.spawnClient = undefined;
+            state.sessions.delete(sessionId);
+            state.mcpToSession.delete(s.mcpToken);
+            state.byGhostId.delete(s.ghostId);
+            state.actionStamps.delete(sessionId);
+            const aset = state.byAgent.get(agentId);
+            if (aset) {
+              aset.delete(sessionId);
+              if (aset.size === 0) state.byAgent.delete(agentId);
+            }
+          });
+          yield* Effect.forkDaemon(cleanup);
+        }
+        slog("supervisor.despawn-by-agent", { agentId, count: sessionIds.length });
+      }),
 
     spawnRosterForAgent: (agentId, agentBaseUrl) =>
       Effect.gen(function* () {
