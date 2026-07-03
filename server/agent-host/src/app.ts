@@ -470,6 +470,12 @@ export function createApp(runtime: AppRuntime, opts: AppOptions): express.Expres
                 const sessions = (await liveRes.json()) as Array<{ id: string }>;
                 if (!Array.isArray(sessions) || sessions.length === 0) return; // no session — give up
                 await runtime.runPromise(
+                  Effect.flatMap(AgentSupervisor, (s) => s.despawnByAgent(out.agentId)),
+                );
+                // Small delay so background session cleanup removes entries from state maps
+                // before spawnRosterForAgent runs the duplicate check.
+                await new Promise<void>((r) => setTimeout(r, 200));
+                await runtime.runPromise(
                   Effect.flatMap(AgentSupervisor, (s) => s.spawnRosterForAgent(out.agentId, out.baseUrl)),
                 );
                 return; // success

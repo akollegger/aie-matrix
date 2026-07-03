@@ -59,6 +59,7 @@ import {
   tryHandleMapGet,
   tryHandleMapManagement,
   tryHandleLiveSession,
+  tryHandleAdmin,
   type MovementRulesService,
   type RegistryStoreService,
   type WorldBridgeService,
@@ -648,8 +649,9 @@ async function main(): Promise<void> {
       if (sessions.length === 1) {
         sessionToBind = sessions[0]!.id;
       } else if (sessions.length > 1) {
-        console.error("[aie-matrix] Multiple active sessions found. Set LIVE_SESSION_ID.");
-        process.exit(1);
+        const sorted = [...sessions].sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+        sessionToBind = sorted[0]!.id;
+        console.warn(JSON.stringify({ kind: "world.multiple-active-sessions", count: sessions.length, bindingTo: sessionToBind }));
       }
       // sessions.length === 0 is ok — no session yet, server starts without binding
     }
@@ -787,6 +789,30 @@ async function main(): Promise<void> {
         res.writeHead(upstream.status, { "Content-Type": ct, ...corsHeaders });
         res.end(upstreamBody);
         return;
+      }
+
+      // Admin routes (POST /admin/reset, etc.)
+      if (url.pathname === "/admin" || url.pathname === "/admin/" || url.pathname.startsWith("/admin/")) {
+        if (req.method === "POST") {
+          const traceId = randomUUID();
+          const handled = await runWithRequestTrace(traceId, () =>
+            runtime.runPromise(
+              tryHandleAdmin(req, res, url, corsHeaders).pipe(
+                Effect.catchAll((e) =>
+                  Effect.sync(() => {
+                    if (!res.headersSent && !res.writableEnded) {
+                      const { status, body } = errorToResponse(e as HttpMappingError);
+                      res.writeHead(status, { "Content-Type": "application/json", ...corsHeaders });
+                      res.end(body);
+                    }
+                    return true as const;
+                  }),
+                ),
+              ),
+            ),
+          );
+          if (handled) return;
+        }
       }
 
       // Map management routes — BEFORE the read-only map GET handler.

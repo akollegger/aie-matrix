@@ -58,6 +58,7 @@ function makeStubSupervisorLayer(activeSessions: Record<string, string[]> = {}) 
     listSessionIdsByAgent: (agentId: string) => activeSessions[agentId] ?? [],
     listSessions: () => [],
     deliverWorldEvent: () => Effect.void,
+    despawnByAgent: () => Effect.void,
     spawnRosterForAgent: () => Effect.succeed({ spawned: [], failed: [] }),
   });
 }
@@ -75,6 +76,7 @@ function makeStubSupervisorWithSpyRoster(
     listSessionIdsByAgent: (agentId: string) => activeSessions[agentId] ?? [],
     listSessions: () => [],
     deliverWorldEvent: () => Effect.void,
+    despawnByAgent: () => Effect.void,
     spawnRosterForAgent: (agentId: string, agentBaseUrl: string) => {
       spawnRosterFn(agentId, agentBaseUrl);
       return Effect.succeed({ spawned: [], failed: [] });

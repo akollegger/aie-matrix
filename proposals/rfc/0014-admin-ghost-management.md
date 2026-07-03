@@ -97,6 +97,33 @@ Lists all currently active supervision sessions managed by the agent-host.
 
 ---
 
+### Panel: System Reset
+
+Gives operators a one-click path to clear all active sessions and transient world state when Neo4j accumulates stale data (e.g., after a bad deploy, duplicate sessions, or test pollution). This is a destructive operation and must be protected by an explicit confirmation step.
+
+**Data source:** `POST /admin/reset` (world-api, admin-token gated)
+
+The endpoint server-side:
+1. Marks all `(:LiveSession { status: "active" })` nodes as `status: "ended"`.
+2. Deletes all `(:LedgerEntry)` chains reachable from those sessions via `[:LEDGER_HEAD|NEXT_ENTRY*]`.
+3. Deletes all `(:Group)` nodes (ephemeral social state, not session-scoped in Neo4j).
+4. Publishes `{ type: "world.reset" }` to the `aie-matrix:world-events` Redis channel so agents can reconcile.
+5. Returns `{ sessionsEnded: N, ledgerEntriesCleared: N, groupsCleared: N }`.
+
+`(:Ghost)` nodes are identity stubs with no session relationship and are **not** deleted. `(:Map)` and `(:CalendarEvent)` nodes are also preserved.
+
+**UI:**
+- Collapsible **Danger Zone** section at the bottom of the Sessions tab (or a dedicated tab), visually distinct (red border or warning color).
+- A **Reset World** button (red, clearly labeled as destructive).
+- On click: modal dialog with warning text and a text input — operator must type `RESET` to unlock the confirm button.
+- On confirm: calls `POST /admin/reset` with `Authorization: Bearer $VITE_ADMIN_TOKEN`.
+- On success: show summary inline (`N sessions ended, N ledger entries cleared, N groups cleared`).
+- On error: inline error message.
+
+**Note:** After a reset, operators should call `POST /live/ensure` (RFC-0013) to bootstrap a fresh session before re-enabling agent spawning.
+
+---
+
 ### Configuration
 
 The admin SPA already reads `VITE_WORLD_API_URL` and `VITE_MAP_API_BASE_URL` from its Vite env. Two new env vars are added:
