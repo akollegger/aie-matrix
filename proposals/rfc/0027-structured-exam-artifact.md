@@ -1,6 +1,6 @@
 # RFC-0027: Structured Exam Artifact Format
 
-**Status:** draft  
+**Status:** resolved (implemented by [031-exam-npcs](../../specs/031-exam-npcs/), 2026-06-16)  
 **Date:** 2026-06-15  
 **Authors:** @akollegger  
 **Depends on:** [RFC-0022](0022-eval-contract-protocol.md) (Eval Contract Protocol — commit-reveal addendum)  
@@ -173,6 +173,8 @@ This collapses the tradeoff the earlier drafts agonized over. As of `@relateby/p
 
 ### Recommendation (for discussion)
 
+> **Superseded by the [Resolution](#resolution).** The recommendation below — commit canonical `Pattern<Subject>` JSON as the hash target — was *not* the path taken. The implementation kept gram authoring but chose **markdown+frontmatter snippet bytes** as the artifact-of-record instead, sidestepping the `@relateby/pattern` 0.6.0 migration this recommendation depended on. The text below is retained as the deliberation that led there; read the Resolution for what was actually built.
+
 > *Author exams in gram (`.exam.gram`); commit the canonical `Pattern<Subject>` JSON as the artifact-of-record and hash target. Authoring keeps gram's ergonomics and native structure; the committed bytes are structure-preserving ordinary JSON that any party verifies and interprets with stock tools.*
 
 This is no longer the "compromise that re-incurs the re-inflation tax" earlier drafts described — because the committed JSON is the canonical pattern serialization, the structure is *not* thrown away. It is close to strictly dominant: gram authoring (Q1/Q3/Q4/Q5) **and** a stock-JSON verification boundary (Q2), with WASM confined to authors who choose gram source.
@@ -206,24 +208,60 @@ This recommendation is explicitly open. The requirements and scenarios above are
 
 ## Resolution
 
-**Status:** Resolved by feature 031-exam-npcs (2026-06-16).
+**Status:** Resolved and implemented by feature [031-exam-npcs](../../specs/031-exam-npcs/) (2026-06-16). This section is the authoritative description of what shipped; where it differs from the body above (Recommendation, Appendix D, Appendix G), the resolution governs.
 
 The format debate is closed. The resolution is:
 
-- **Authoring format**: Humans author `.exam.gram` files using the gram syntax defined in Appendix D.
-- **Exchange artifact**: The quizmaster NPC compiles the gram source at startup into per-question **markdown+frontmatter snippets** — one `.md` string per `Problem` node. This is the format described in `specs/031-exam-npcs/contracts/exam-snippet-format.md`.
-- **Hash target**: The artifact hash (`artifactRef`, `disclosureRef`) is computed over the **concatenation of UTF-8 snippet bytes**, ordered lexicographically by problem `id`. This is the canonical computation regardless of which view (prompt-only or full) is being hashed.
+- **Authoring format**: Humans author `.exam.gram` files in gram — but using a **simplified inline grammar**, *not* the rubric-as-relationship model sketched in Appendix D (see "Divergence from Appendix D" below). The shipped example is [`bitcoin-basics.exam.gram`](../../ghosts/npc-agent/catalog/bitcoin-basics.exam.gram).
+- **Exchange artifact**: The quizmaster NPC compiles the gram source at startup into per-question **markdown+frontmatter snippets** — one `.md` string per `Problem` node. The format is specified in [`specs/031-exam-npcs/contracts/exam-snippet-format.md`](../../specs/031-exam-npcs/contracts/exam-snippet-format.md) and implemented in [`snippet-compiler.ts`](../../ghosts/npc-agent/src/exam/snippet-compiler.ts).
+- **Hash target**: The artifact hash (`artifactRef`, `disclosureRef`) is computed over the **concatenation of UTF-8 snippet bytes**, ordered lexicographically by problem `id` — `hex(sha256(Buffer.concat(...)))`, implemented in [`hash-artifact.ts`](../../ghosts/npc-agent/src/exam/hash-artifact.ts). This is the canonical computation regardless of which view (prompt-only or full) is being hashed. It is *not* the canonical `Pattern<Subject>` JSON of Appendix G.
 - **Decoupling**: The authoring format (gram) and the hash target (markdown+frontmatter bytes) are deliberately decoupled. Gram is for humans; the snippet bytes are the commitment artifact. An auditor verifying `sha256(bytes) === disclosureRef` needs no gram toolchain — only `shasum`.
+- **Contract envelope**: `EvalContract` gains nullable `artifactRef` / `disclosureRef` fields ([`shared/types/src/eval-contract.ts`](../../shared/types/src/eval-contract.ts)), persisted in Neo4j and passed through the `eval_contract_open` MCP tool. They are `null` for non-exam (broker) contracts.
+
+### Divergence from Appendix D — the shipped gram grammar
+
+Appendix D models each rubric as a *relationship* (`(q1)-[:ExactMatch]->(opts)`) with a shared `(opts:Options)` pool and `Stage` groupings. The implementation chose a flatter, inline shape instead:
+
+```gram
+{ kind: "matrix-exam", schema_version: "1" }
+
+(q1:Problem { type: "multiple_choice", weight: 2, correct: "a",
+  prompt: "Which consensus algorithm does Bitcoin use?",
+  options: { a: "Proof of Work", b: "Proof of Stake", c: "DPoS", d: "PBFT" } })
+
+(q2:Problem { type: "short_answer", weight: 1, correct: "Satoshi Nakamoto",
+  prompt: "Name the pseudonymous creator of Bitcoin." })
+
+(q3:Problem { type: "numerical", weight: 1, correct: 21000000, tolerance: 0,
+  prompt: "What is the maximum supply of Bitcoin in whole units?" })
+
+[exam:Exam | q1, q2, q3]
+```
+
+What changed from Appendix D, and why:
+
+- **Rubric is an inline property, not a relationship.** `correct` (and `tolerance` for numerical) live on the `Problem` node, not on a `:ExactMatch` / `:Numerical` edge. Consequence: R3's prompt-only derivation became a **field-strip** (omit `correct`/`tolerance` from the snippet) rather than a structural "drop the rubric relationships" cut. The separability requirement (R3) still holds — it is enforced at the *snippet* layer, not the gram layer.
+- **Options are an inline map, not a shared pool.** `options` is a map property on the problem; there is no `(opts:Options)` reuse-by-identity. Q3 (composition/reuse) is therefore not exercised by the MVP, which had no option-pool sharing to express.
+- **Exam grouping is flat; no `Stage`.** A single `[exam:Exam | ...]` grouping with a leading `{ kind, schema_version }` metadata record. R4 (progressive multi-stage disclosure) is **deferred** — the MVP is single-stage.
+
+### Submission format (resolves OQ-8)
+
+The contestant submission is a markdown+frontmatter snippet per answered problem (the full snippet plus an `answer` field), joined and stored on `EvalContract.submission`. Scoring (`scoreAnswer` / `computeVerdict` in [`quizmaster-behavior.ts`](../../ghosts/npc-agent/src/behavior/quizmaster-behavior.ts)) covers only the **auto-gradable subset**: `exact_match` for `multiple_choice` / `short_answer` (case-insensitive) and tolerance-based comparison for `numerical`. The weighted aggregate `Σ(score·weight)/Σ(weight)` is unchanged from the body. **`model_graded` / `open_ended` auto-evaluation is deferred** — the MVP ships only deterministic scoring.
 
 **Resolved Open Questions:**
 - **OQ-1** (parser dependency): Resolved. The hash target is markdown+frontmatter bytes, not canonical `Pattern<Subject>` JSON. No gram parser is required at the verification boundary.
 - **OQ-7** (reconcile Appendix G): Resolved. Appendix G described a JSON-based artifact that is superseded by the markdown+frontmatter format. The `@relateby/pattern@0.6.0` migration is deferred (see research.md in 031-exam-npcs).
+- **OQ-8** (submission format): Resolved — see "Submission format" above.
 
-**Deferred Open Questions (unchanged):** OQ-2, OQ-3, OQ-4, OQ-5, OQ-6, OQ-8.
+**Deferred Open Questions (unchanged):** OQ-2, OQ-3, OQ-4, OQ-5, OQ-6.
+
+**Deferred capability (tracked here, not as a numbered OQ):** model-graded/open-ended scoring and R4 progressive multi-stage exams are out of MVP scope; the snippet format and hash computation already accommodate them when added.
 
 ---
 
 ## Open Questions
+
+> **Note:** OQ-1, OQ-7, and OQ-8 are resolved by the [Resolution](#resolution). OQ-2–OQ-6 remain open. The text below is preserved as written at draft time.
 
 1. **Parser dependency for the artifact-of-record — largely resolved.** Earlier drafts framed this as "commit gram source (forces `@relateby/pattern` on everyone) vs. commit lossy JSON." The `@relateby/pattern` **0.6.0** split resolves it: commit the **canonical `Pattern<Subject>` JSON** ([published schema](https://github.com/gram-data/tree-sitter-gram/blob/main/docs/pattern.schema.json)), which is structure-preserving and parseable with stock JSON — no WASM at the verification boundary (see Recommendation and the consumer model). The residual question is only whether to *also* publish the gram source alongside the canonical JSON for human readability, and which of the two (if any) the `artifactRef` should bind — they have different bytes and therefore different hashes.
 
@@ -418,6 +456,8 @@ GIFT's `::title::` is a *display title*, not a stable machine identifier — Moo
 
 ## Appendix D — gram
 
+> **Note:** This appendix explores the *rubric-as-relationship* gram model. The shipped implementation kept gram authoring but adopted a flatter **inline** grammar (rubric/options as `Problem` properties) — see the [Resolution](#divergence-from-appendix-d--the-shipped-gram-grammar). This appendix is retained as the design exploration.
+
 The project's hierarchical pattern notation (not a graph notation): structural composition with path-element sugar, a defined canonical serialization via `@relateby/pattern`, already used for `.map.gram`, `.character.gram`, and schedules.
 
 ### D.S2 / D.S4 — Mixed, staged exam
@@ -572,6 +612,8 @@ Prompt-only derivation is the same field-strip as JSON (delete `rubric:` keys). 
 ---
 
 ## Appendix G — Canonical artifact-of-record and demo
+
+> **Superseded by the [Resolution](#resolution).** This appendix describes a canonical `Pattern<Subject>` JSON artifact-of-record that was *not* adopted. The shipped hash target is concatenated markdown+frontmatter snippet bytes (see [`exam-snippet-format.md`](../../specs/031-exam-npcs/contracts/exam-snippet-format.md)), which needs no `@relateby/pattern` 0.6.0 migration. Retained as the explored alternative.
 
 The recommended artifact-of-record is the **canonical `Pattern<Subject>` JSON** that `@relateby/pattern` emits from the Appendix D gram. The document is a top-level array of patterns; each pattern is `{ subject: { identity, labels, properties }, elements: [...] }`. Per [`StandardGraph`](https://github.com/relateby/pattern-rs/blob/main/typescript/packages/pattern/src/standard-graph.ts), `elements.length` classifies a pattern — **0 = node, 2 = relationship (`[source, target]` by order), N = grouping/path** — and endpoints/members appear as identity-stubs reconciled with their full definitions by identity merge. (Exact key order and whitespace are the serializer's to define; per the R8 note, the committed bytes are hashed as-is — no byte-canonicalization is required.)
 
